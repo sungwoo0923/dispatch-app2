@@ -15086,6 +15086,17 @@ const applySmart4 = async (target, setTarget, text) => {
       setSmartQ4(""); setSmartList4([]);
     }
  } else if (plate||name||phone) {
+    if (plate && !name) {
+      // 차량번호만 입력 → 신규 등록 팝업
+      openNewDriverModal(plate, async (driverInfo) => {
+        const fmt = formatPhone(driverInfo.전화번호);
+        const rawPhone = fmt.replace(/[^\d]/g, "");
+        await upsertDriver({ 차량번호: plate, 이름: driverInfo.이름, 전화번호: rawPhone, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+        setTarget(p=>({...p, 차량번호:plate, 이름:driverInfo.이름, 전화번호:fmt, 배차상태:"배차완료"}));
+      });
+      setSmartQ4(""); setSmartList4([]);
+      return;
+    }
     if (plate && name) {
       await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
     }
@@ -18651,7 +18662,7 @@ value={copyTarget?.화물수량 || ""}
       {editPopupOpen && editTarget && (
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[780px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
@@ -19601,16 +19612,16 @@ value={copyTarget?.화물수량 || ""}
                 )}
               </div>
               {(editTarget.차량번호||editTarget.이름) && (
-                <div className="flex items-center gap-2 mt-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                  <span className="text-emerald-600">✓</span>
-                  <div className="flex-1 text-[12px]">
-                    <span className="font-bold">{editTarget.이름||"-"}</span>
-                    <span className="text-gray-400 mx-1">|</span>
-                    <span className="text-gray-600">{editTarget.차량번호}</span>
-                    <span className="text-gray-400 mx-1">|</span>
-                    <span className="text-gray-600">{editTarget.전화번호}</span>
+                <div className="flex items-center gap-2 mt-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-lg px-3 py-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#1B2B4B] shrink-0"></div>
+                  <div className="flex-1 text-[12px] text-slate-700">
+                    <span className="font-bold text-[#1B2B4B]">{editTarget.이름||"-"}</span>
+                    <span className="text-slate-300 mx-1.5">|</span>
+                    <span>{editTarget.차량번호}</span>
+                    <span className="text-slate-300 mx-1.5">|</span>
+                    <span>{editTarget.전화번호}</span>
                   </div>
-                  <button type="button" onClick={()=>{setEditTarget(p=>({...p,차량번호:"",이름:"",전화번호:"",배차상태:"배차중"})); setSmartQ4("");}} className="text-gray-400 hover:text-red-500">✕</button>
+                  <button type="button" onClick={()=>{setEditTarget(p=>({...p,차량번호:"",이름:"",전화번호:"",배차상태:"배차중"})); setSmartQ4("");}} className="text-slate-400 hover:text-slate-600 text-[14px] leading-none transition">×</button>
                 </div>
               )}
             </div>
@@ -23082,6 +23093,17 @@ const applySmart5 = async (target, setTarget, text) => {
       setSmartQ5(""); setSmartList5([]);
     }
 } else if (plate||name||phone) {
+    if (plate && !name) {
+      // 차량번호만 입력 → 신규 등록 팝업
+      openNewDriverModal(plate, async (driverInfo) => {
+        const fmt = formatPhone(driverInfo.전화번호);
+        const rawPhone = fmt.replace(/[^\d]/g, "");
+        await upsertDriver({ 차량번호: plate, 이름: driverInfo.이름, 전화번호: rawPhone, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+        setTarget(p=>({...p, 차량번호:plate, 이름:driverInfo.이름, 전화번호:fmt, 배차상태:"배차완료"}));
+      });
+      setSmartQ5(""); setSmartList5([]);
+      return;
+    }
     if (plate && name) {
       await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
     }
@@ -25364,7 +25386,7 @@ return (
       {/* ===================== 선택수정(팝업) ===================== */}
       {editPopupOpen && editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[780px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
@@ -26042,16 +26064,16 @@ return (
                 )}
               </div>
               {(editTarget.차량번호||editTarget.이름) && (
-                <div className="flex items-center gap-2 mt-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                  <span className="text-emerald-600">✓</span>
-                  <div className="flex-1 text-[12px]">
-                    <span className="font-bold">{editTarget.이름||"-"}</span>
-                    <span className="text-gray-400 mx-1">|</span>
-                    <span className="text-gray-600">{editTarget.차량번호}</span>
-                    <span className="text-gray-400 mx-1">|</span>
-                    <span className="text-gray-600">{editTarget.전화번호}</span>
+                <div className="flex items-center gap-2 mt-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-lg px-3 py-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#1B2B4B] shrink-0"></div>
+                  <div className="flex-1 text-[12px] text-slate-700">
+                    <span className="font-bold text-[#1B2B4B]">{editTarget.이름||"-"}</span>
+                    <span className="text-slate-300 mx-1.5">|</span>
+                    <span>{editTarget.차량번호}</span>
+                    <span className="text-slate-300 mx-1.5">|</span>
+                    <span>{editTarget.전화번호}</span>
                   </div>
-                  <button type="button" onClick={()=>{setEditTarget(p=>({...p,차량번호:"",이름:"",전화번호:"",배차상태:"배차중"})); setSmartQ5("");}} className="text-gray-400 hover:text-red-500">✕</button>
+                  <button type="button" onClick={()=>{setEditTarget(p=>({...p,차량번호:"",이름:"",전화번호:"",배차상태:"배차중"})); setSmartQ5("");}} className="text-slate-400 hover:text-slate-600 text-[14px] leading-none transition">×</button>
                 </div>
               )}
             </div>
@@ -26125,32 +26147,13 @@ return (
   }
 
   // ❌ 아무도 없으면 신규 등록
-  const ok = window.confirm(
-    `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
-  );
-  if (!ok) return;
-
-  const 이름 = prompt("기사명 입력:");
-const 전화번호 = prompt("전화번호 입력:");
-if (!이름 || !전화번호) return;
-
-// 🔥 추가
-const formattedPhone = formatPhone(전화번호);
-const rawPhone = formattedPhone.replace(/[^\d]/g, "");
-
-  upsertDriver({
-  차량번호: raw,
-  이름,
-  전화번호: rawPhone, // 숫자만 저장
-});
-
-  setMatchedDrivers([]);
-setEditTarget((p) => ({
-  ...p,
-  이름,
-  전화번호: formattedPhone, // 하이픈 포함
-  배차상태: "배차완료",
-}));
+  openNewDriverModal(raw, async (driverInfo) => {
+    const fmt = formatPhone(driverInfo.전화번호);
+    const rawPhone = fmt.replace(/[^\d]/g, "");
+    await upsertDriver({ 차량번호: raw, 이름: driverInfo.이름, 전화번호: rawPhone, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+    setMatchedDrivers([]);
+    setEditTarget((p) => ({ ...p, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료", updatedAt: Date.now() }));
+  });
 }}
 
               />
@@ -27152,38 +27155,13 @@ setCopyPlaceOptions(list);
       // 기존 기사 있으면 끝
       if (match) return;
 
-      const ok = window.confirm(
-        `[${copyTarget?.차량번호}] 등록된 기사가 없습니다.\n신규 기사로 등록하시겠습니까?`
-      );
-
-
-      if (!ok) return;
-
-      const name = prompt("기사명 입력");
-      if (!name) return;
-
-const phone = prompt("전화번호 입력");
-if (!phone) return;
-
-// 🔥 핵심
-const formattedPhone = formatPhone(phone);
-const rawPhone = formattedPhone.replace(/[^\d]/g, "");
-
-// DB 저장
-upsertDriver({
-  차량번호: copyTarget?.차량번호,
-  이름: name,
-  전화번호: rawPhone,
-});
-
-// UI 반영
-setCopyTarget(prev => ({
-  ...prev,
-  차량번호: copyTarget?.차량번호,
-  이름: name,
-  전화번호: formattedPhone, // ✅ 여기!
-  배차상태: "배차완료"
-}));
+      const plateVal2 = copyTarget?.차량번호;
+      openNewDriverModal(plateVal2, async (driverInfo) => {
+        const fmt = formatPhone(driverInfo.전화번호);
+        const rawPhone = fmt.replace(/[^\d]/g, "");
+        await upsertDriver({ 차량번호: plateVal2, 이름: driverInfo.이름, 전화번호: rawPhone, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+        setCopyTarget(prev => ({ ...prev, 차량번호: plateVal2, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료" }));
+      });
 
     }}
   />
