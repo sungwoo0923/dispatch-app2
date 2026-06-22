@@ -2587,7 +2587,7 @@ return (
 
         {menu === "운임조회" && <FreightRateInquiry />}
 
-        {menu === "회사관리" && <CompanyProfile userCompany={userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""} />}
+        {menu === "회사관리" && <CompanyProfile userCompany={userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""} role={role} userId={auth?.currentUser?.uid || localStorage.getItem("uid") || ""} />}
 
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
 
@@ -40369,47 +40369,95 @@ React.useEffect(() => {
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
 
 // ===================== 회사 정보 관리 =====================
-function CompanyProfile({ userCompany = "" }) {
+function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const companyName = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+  const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
+  const isAdmin = role === "admin" || role === "totalMaster";
+
   const [appData, setAppData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [uploading, setUploading] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState("");
-  const [alert, setAlert] = React.useState("");
+  const [dragOver, setDragOver] = React.useState(false);
+  const [alertMsg, setAlertMsg] = React.useState("");
   const fileRef = React.useRef(null);
 
-  const showMsg = (msg) => { setAlert(msg); setTimeout(() => setAlert(""), 3000); };
+  // 수정 요청 상태
+  const [editModalOpen, setEditModalOpen] = React.useState(false);
+  const [editForm, setEditForm] = React.useState({});
+  const [submittingEdit, setSubmittingEdit] = React.useState(false);
 
+  // 수정 요청 결과 알림 (이 계정의 처리된 요청)
+  const [resolvedNotice, setResolvedNotice] = React.useState(null);
+
+  const showMsg = (msg) => { setAlertMsg(msg); setTimeout(() => setAlertMsg(""), 3500); };
+
+  // 회사 정보 로드: type === "신규" 문서 우선
   React.useEffect(() => {
     if (!companyName) { setLoading(false); return; }
-    getDocs(collection(db, "transportApplications")).then(snap => {
+    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const found = docs.find(d =>
+      // 신규 가입 문서 (최초 등록 정보) 우선
+      let found = docs.find(d =>
+        (d.companyName || "").trim() === companyName.trim() && d.type === "신규" && d.status === "approved"
+      );
+      // 없으면 type === "신규" 중 아무거나
+      if (!found) found = docs.find(d =>
+        (d.companyName || "").trim() === companyName.trim() && d.type === "신규"
+      );
+      // 그래도 없으면 같은 회사명 아무거나
+      if (!found) found = docs.find(d =>
         (d.companyName || "").trim() === companyName.trim() && d.status === "approved"
       );
       setAppData(found || null);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    });
+    return () => unsub();
   }, [companyName]);
 
+  // 이 계정의 처리된 수정 요청 실시간 감지
+  React.useEffect(() => {
+    if (!currentUserId) return;
+    const unsub = onSnapshot(collection(db, "companyEditRequests"), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const resolved = docs.find(d =>
+        d.requestedByUserId === currentUserId &&
+        (d.status === "approved" || d.status === "rejected") &&
+        !d.notifiedRequester
+      );
+      if (resolved) setResolvedNotice(resolved);
+    });
+    return () => unsub();
+  }, [currentUserId]);
+
+  // 파일을 base64로 변환 후 Firestore 저장 (Storage quota 우회)
   const handleFileUpload = async (file) => {
     if (!file) return;
     const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP, PDF 파일만 업로드 가능합니다."); return; }
-    if (file.size > 10 * 1024 * 1024) { showMsg("파일 크기는 10MB 이하여야 합니다."); return; }
+    if (file.size > 3 * 1024 * 1024) { showMsg("파일 크기는 3MB 이하여야 합니다. (Firestore 저장 방식)"); return; }
     setUploading(true);
     setUploadProgress("업로드 중...");
     try {
-      const storageRef = ref(storage, `company-docs/${companyName}/사업자등록증_${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      // base64로 변환
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
       if (appData?.id) {
-        await updateDoc(doc(db, "transportApplications", appData.id), { 사업자등록증URL: url, 사업자등록증파일명: file.name, 사업자등록증업로드일: new Date().toISOString() });
-        setAppData(prev => ({ ...prev, 사업자등록증URL: url, 사업자등록증파일명: file.name }));
+        await updateDoc(doc(db, "transportApplications", appData.id), {
+          사업자등록증Base64: base64,
+          사업자등록증파일명: file.name,
+          사업자등록증업로드일: new Date().toISOString(),
+          사업자등록증타입: file.type,
+        });
+        setAppData(prev => ({ ...prev, 사업자등록증Base64: base64, 사업자등록증파일명: file.name, 사업자등록증타입: file.type }));
       }
       showMsg("사업자등록증이 업로드되었습니다.");
     } catch (err) {
-      showMsg("업로드 실패: " + err.message);
+      showMsg("업로드 실패: " + (err.message || "알 수 없는 오류"));
     } finally {
       setUploading(false);
       setUploadProgress("");
@@ -40417,11 +40465,12 @@ function CompanyProfile({ userCompany = "" }) {
   };
 
   const handleCopyImage = async () => {
-    if (!appData?.사업자등록증URL) return;
+    const src = appData?.사업자등록증Base64 || appData?.사업자등록증URL;
+    if (!src) return;
     try {
-      const res = await fetch(appData.사업자등록증URL);
-      const blob = await res.blob();
-      if (blob.type.startsWith("image/")) {
+      if (src.startsWith("data:image/")) {
+        const res = await fetch(src);
+        const blob = await res.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         showMsg("이미지가 클립보드에 복사되었습니다.");
       } else {
@@ -40433,36 +40482,136 @@ function CompanyProfile({ userCompany = "" }) {
   };
 
   const handleDownload = () => {
-    if (!appData?.사업자등록증URL) return;
+    const src = appData?.사업자등록증Base64 || appData?.사업자등록증URL;
+    if (!src) return;
     const a = document.createElement("a");
-    a.href = appData.사업자등록증URL;
+    a.href = src;
     a.download = appData.사업자등록증파일명 || "사업자등록증";
-    a.target = "_blank";
+    if (!src.startsWith("data:")) a.target = "_blank";
     a.click();
+  };
+
+  const openEditModal = () => {
+    setEditForm({
+      companyName: appData?.companyName || "",
+      representative: appData?.representative || appData?.대표자 || appData?.ceo || "",
+      address: appData?.address || appData?.주소 || "",
+      businessNumber: appData?.businessNumber || appData?.사업자번호 || "",
+      phone: appData?.phone || appData?.연락처 || "",
+      email: appData?.email || "",
+    });
+    setEditModalOpen(true);
+  };
+
+  const submitEditRequest = async () => {
+    if (submittingEdit) return;
+    setSubmittingEdit(true);
+    try {
+      await addDoc(collection(db, "companyEditRequests"), {
+        companyName,
+        requestedByUserId: currentUserId,
+        requestedByEmail: appData?.email || auth?.currentUser?.email || "",
+        originalData: {
+          companyName: appData?.companyName || "",
+          representative: appData?.representative || appData?.대표자 || "",
+          address: appData?.address || appData?.주소 || "",
+          businessNumber: appData?.businessNumber || appData?.사업자번호 || "",
+          phone: appData?.phone || appData?.연락처 || "",
+          email: appData?.email || "",
+        },
+        requestedData: editForm,
+        status: "pending",
+        createdAt: serverTimestamp(),
+        notifiedRequester: false,
+        transportApplicationId: appData?.id || "",
+      });
+      setEditModalOpen(false);
+      showMsg("수정 요청이 제출되었습니다. 최고관리자 승인 후 반영됩니다.");
+    } catch (err) {
+      showMsg("요청 제출 실패: " + (err.message || "알 수 없는 오류"));
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  const dismissNotice = async () => {
+    if (resolvedNotice?.id) {
+      await updateDoc(doc(db, "companyEditRequests", resolvedNotice.id), { notifiedRequester: true }).catch(() => {});
+    }
+    setResolvedNotice(null);
   };
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400 text-[14px]">불러오는 중...</div>;
 
   const InfoRow = ({ label, value }) => (
-    <div className="flex items-center py-3 border-b border-gray-100 last:border-0">
+    <div className="flex items-start py-3 border-b border-gray-100 last:border-0">
       <span className="w-32 text-[13px] font-semibold text-gray-500 shrink-0">{label}</span>
       <span className="text-[14px] text-gray-900">{value || "-"}</span>
     </div>
   );
 
+  const filePreviewSrc = appData?.사업자등록증Base64 || appData?.사업자등록증URL;
+  const isImage = filePreviewSrc && (
+    (appData?.사업자등록증타입 || "").startsWith("image/") ||
+    /\.(jpg|jpeg|png|webp)/i.test(appData?.사업자등록증파일명 || "")
+  );
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-5">
-      {alert && (
+      {/* 토스트 알림 */}
+      {alertMsg && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] bg-[#1B2B4B] text-white px-5 py-3 rounded-xl shadow-lg text-[13px] font-medium">
-          {alert}
+          {alertMsg}
+        </div>
+      )}
+
+      {/* 수정 요청 결과 알림 팝업 */}
+      {resolvedNotice && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]" onClick={dismissNotice}>
+          <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">회사 정보 수정 요청 결과</h3>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border ${resolvedNotice.status === "approved" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                <span className={`text-[13px] font-bold ${resolvedNotice.status === "approved" ? "text-emerald-700" : "text-red-700"}`}>
+                  {resolvedNotice.status === "approved" ? "승인됨" : "거절됨"}
+                </span>
+              </div>
+              {resolvedNotice.status === "rejected" && resolvedNotice.rejectReason && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                  <div className="text-[11px] font-semibold text-gray-400 mb-1">거절 사유</div>
+                  <div className="text-[13px] text-gray-800">{resolvedNotice.rejectReason}</div>
+                </div>
+              )}
+              {resolvedNotice.status === "approved" && (
+                <div className="text-[13px] text-gray-600">회사 정보가 요청하신 내용으로 반영되었습니다.</div>
+              )}
+            </div>
+            <div className="px-6 pb-5">
+              <button className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition" onClick={dismissNotice}>
+                확인
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* 회사 기본 정보 */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-[#1B2B4B] px-6 py-4">
-          <h2 className="text-white font-bold text-[16px]">회사 기본 정보</h2>
-          <p className="text-white/55 text-[12px] mt-0.5">승인된 가입 정보를 기반으로 표시됩니다</p>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-white font-bold text-[16px]">회사 기본 정보</h2>
+            <p className="text-white/55 text-[12px] mt-0.5">최초 가입 시 등록된 회사 정보입니다</p>
+          </div>
+          {isAdmin && appData && (
+            <button
+              className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold rounded-lg transition border border-white/20"
+              onClick={openEditModal}
+            >
+              수정 요청
+            </button>
+          )}
         </div>
         {appData ? (
           <div className="px-6 py-2">
@@ -40477,12 +40626,13 @@ function CompanyProfile({ userCompany = "" }) {
             <InfoRow label="사업자번호" value={appData.businessNumber || appData.사업자번호} />
             <InfoRow label="연락처" value={appData.phone || appData.연락처} />
             <InfoRow label="이메일" value={appData.email} />
-            <InfoRow label="가입 유형" value={appData.type} />
-            <InfoRow label="승인일" value={appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : "-"} />
+            <InfoRow label="가입 유형" value={appData.type === "신규" ? "신규 가입" : appData.type === "기존" ? "기존 이용" : appData.type} />
+            <InfoRow label="승인일" value={appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : (appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : "-")} />
           </div>
         ) : (
           <div className="px-6 py-8 text-center text-gray-400 text-[14px]">
-            승인된 회사 정보를 찾을 수 없습니다.
+            등록된 회사 정보를 찾을 수 없습니다.<br />
+            <span className="text-[12px] text-gray-300 mt-1 block">가입 신청 승인 후 표시됩니다.</span>
           </div>
         )}
       </div>
@@ -40492,22 +40642,26 @@ function CompanyProfile({ userCompany = "" }) {
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-white font-bold text-[16px]">사업자등록증</h2>
-            <p className="text-white/55 text-[12px] mt-0.5">파일 업로드 후 다운로드 및 클립보드 복사 가능</p>
+            <p className="text-white/55 text-[12px] mt-0.5">JPG/PNG/PDF (3MB 이하) 업로드 또는 파일을 드래그하세요</p>
           </div>
           <button
-            className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold rounded-lg transition border border-white/20"
+            className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold rounded-lg transition border border-white/20 disabled:opacity-50"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
           >
-            {uploading ? uploadProgress : "파일 업로드"}
+            {uploading ? uploadProgress : "파일 선택"}
           </button>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
             onChange={e => handleFileUpload(e.target.files?.[0])} />
         </div>
-        <div className="px-6 py-5">
-          {appData?.사업자등록증URL ? (
+        <div className="px-6 py-5"
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
+        >
+          {filePreviewSrc ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <div className={`flex items-center justify-between p-4 rounded-xl border ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "bg-gray-50 border-gray-200"}`}>
                 <div>
                   <div className="text-[14px] font-semibold text-gray-800">{appData.사업자등록증파일명 || "사업자등록증"}</div>
                   {appData.사업자등록증업로드일 && (
@@ -40517,11 +40671,13 @@ function CompanyProfile({ userCompany = "" }) {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition"
-                    onClick={handleCopyImage}>
-                    이미지 복사
-                  </button>
+                  {isImage && (
+                    <button
+                      className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition"
+                      onClick={handleCopyImage}>
+                      이미지 복사
+                    </button>
+                  )}
                   <button
                     className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
                     onClick={handleDownload}>
@@ -40529,45 +40685,75 @@ function CompanyProfile({ userCompany = "" }) {
                   </button>
                 </div>
               </div>
-              {appData.사업자등록증URL.match(/\.(jpg|jpeg|png|webp)/i) && (
+              {isImage && (
                 <div className="border border-gray-200 rounded-xl overflow-hidden max-h-[400px] flex items-center justify-center bg-gray-50">
-                  <img src={appData.사업자등록증URL} alt="사업자등록증" className="max-h-[400px] object-contain" />
+                  <img src={filePreviewSrc} alt="사업자등록증" className="max-h-[400px] object-contain" />
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
-                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div
+              className={`flex flex-col items-center justify-center py-10 text-center border-2 border-dashed rounded-xl transition cursor-pointer ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+              onClick={() => fileRef.current?.click()}
+            >
+              <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
+                <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <p className="text-[14px] font-semibold text-gray-600">업로드된 사업자등록증이 없습니다</p>
-              <p className="text-[12px] text-gray-400 mt-1">위 버튼을 눌러 파일을 업로드하세요 (JPG, PNG, PDF)</p>
+              <p className="text-[14px] font-semibold text-gray-600">파일을 여기에 드래그하거나 클릭하여 업로드</p>
+              <p className="text-[12px] text-gray-400 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* 이용 안내 */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-[#1B2B4B] px-6 py-4">
-          <h2 className="text-white font-bold text-[16px]">이용 안내</h2>
-        </div>
-        <div className="px-6 py-4 space-y-2">
-          {[
-            "회사 코드는 로그인 시 필요한 고유 코드입니다. 분실 시 관리자에게 문의하세요.",
-            "사업자등록증은 이미지(JPG/PNG) 또는 PDF로 업로드할 수 있습니다.",
-            "업로드된 이미지는 클립보드 복사 기능을 통해 다른 곳에 붙여넣을 수 있습니다.",
-            "회사 정보 변경이 필요한 경우 관리자에게 문의하세요.",
-          ].map((text, i) => (
-            <div key={i} className="flex gap-2 text-[13px] text-gray-600">
-              <span className="text-gray-300 shrink-0">—</span>
-              <span>{text}</span>
+      {/* 수정 요청 모달 */}
+      {editModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]" onClick={() => setEditModalOpen(false)}>
+          <div className="bg-white rounded-2xl w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">회사 정보 수정 요청</h3>
+                <p className="text-white/55 text-[12px] mt-0.5">최고관리자 승인 후 반영됩니다</p>
+              </div>
+              <button className="text-white/50 hover:text-white text-lg transition" onClick={() => setEditModalOpen(false)}>✕</button>
             </div>
-          ))}
+            <div className="px-6 py-5 space-y-3 max-h-[60vh] overflow-y-auto">
+              {[
+                { label: "회사명", key: "companyName" },
+                { label: "대표자", key: "representative" },
+                { label: "주소", key: "address" },
+                { label: "사업자번호", key: "businessNumber" },
+                { label: "연락처", key: "phone" },
+                { label: "이메일", key: "email" },
+              ].map(({ label, key }) => (
+                <div key={key}>
+                  <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                    value={editForm[key] || ""}
+                    onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="px-6 pb-5 flex gap-3 border-t border-gray-100 pt-4">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+                onClick={() => setEditModalOpen(false)}>
+                취소
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-50"
+                disabled={submittingEdit}
+                onClick={submitEditRequest}>
+                {submittingEdit ? "요청 중..." : "수정 요청 제출"}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

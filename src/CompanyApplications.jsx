@@ -55,6 +55,7 @@ export default function CompanyApplications() {
   const [companyApps, setCompanyApps] = useState([]);
   const [transportApps, setTransportApps] = useState([]);
   const [driverApps, setDriverApps] = useState([]);
+  const [editRequests, setEditRequests] = useState([]);
 
   const [statusFilter, setStatusFilter] = useState("pending");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -67,6 +68,9 @@ export default function CompanyApplications() {
   const [showCodeLookup, setShowCodeLookup] = useState(false);
   const [codeLookupQuery, setCodeLookupQuery] = useState("");
   const [appUserPerms, setAppUserPerms] = useState(null);
+  const [reviewingEdit, setReviewingEdit] = useState(null);
+  const [editRejectReason, setEditRejectReason] = useState("");
+  const [showEditRejectInput, setShowEditRejectInput] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
@@ -100,6 +104,15 @@ export default function CompanyApplications() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "companyEditRequests"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setEditRequests(list);
+    });
+    return () => unsub();
+  }, []);
+
   // 관리 모달에서 화주 유저 권한 로드
   useEffect(() => {
     if (!managingApp?.userId || activeTab !== "화주") { setAppUserPerms(null); return; }
@@ -116,9 +129,55 @@ export default function CompanyApplications() {
     setManagingApp(null);
     setShowRejectModal(false);
     setRejectReason("");
+    setReviewingEdit(null);
+    setEditRejectReason("");
+    setShowEditRejectInput(false);
   };
 
-  const activeData = activeTab === "화주" ? companyApps : activeTab === "운송" ? transportApps : driverApps;
+  const approveEditRequest = async (req) => {
+    setProcessing(true);
+    try {
+      const d = req.requestedData || {};
+      if (req.transportApplicationId) {
+        const updatePayload = {};
+        if (d.companyName) updatePayload.companyName = d.companyName;
+        if (d.representative) { updatePayload.representative = d.representative; updatePayload.대표자 = d.representative; }
+        if (d.address) { updatePayload.address = d.address; updatePayload.주소 = d.address; }
+        if (d.businessNumber) { updatePayload.businessNumber = d.businessNumber; updatePayload.사업자번호 = d.businessNumber; }
+        if (d.phone) { updatePayload.phone = d.phone; updatePayload.연락처 = d.phone; }
+        if (d.email) updatePayload.email = d.email;
+        await updateDoc(doc(db, "transportApplications", req.transportApplicationId), updatePayload);
+      }
+      await updateDoc(doc(db, "companyEditRequests", req.id), {
+        status: "approved",
+        processedAt: serverTimestamp(),
+        notifiedRequester: false,
+      });
+      setReviewingEdit(null);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const rejectEditRequest = async (req, reason) => {
+    setProcessing(true);
+    try {
+      await updateDoc(doc(db, "companyEditRequests", req.id), {
+        status: "rejected",
+        rejectReason: reason || "",
+        processedAt: serverTimestamp(),
+        notifiedRequester: false,
+      });
+      setReviewingEdit(null);
+      setEditRejectReason("");
+      setShowEditRejectInput(false);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const activeData = activeTab === "화주" ? companyApps : activeTab === "운송" ? transportApps : activeTab === "기사" ? driverApps : editRequests;
+  const pendingEditCount = editRequests.filter(r => r.status === "pending").length;
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -370,6 +429,7 @@ export default function CompanyApplications() {
           >
             회사코드 조회
           </button>
+          {activeTab !== "수정요청" && (
           <div className="grid grid-cols-4 gap-3">
             {statsCards.map(({ label, value, color, bg }) => (
               <div key={label} className={`${bg} rounded-xl px-4 py-2.5 text-center`}>
@@ -378,6 +438,7 @@ export default function CompanyApplications() {
               </div>
             ))}
           </div>
+          )}
         </div>
       </div>
 
@@ -387,22 +448,157 @@ export default function CompanyApplications() {
           { key: "화주", label: "화주 신청" },
           { key: "운송", label: "운송 신청" },
           { key: "기사", label: "기사 신청" },
-        ].map(({ key, label }) => (
+          { key: "수정요청", label: "수정 요청", badge: pendingEditCount },
+        ].map(({ key, label, badge }) => (
           <button
             key={key}
             onClick={() => handleTabChange(key)}
-            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${
+            className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${
               activeTab === key
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"
             }`}
           >
             {label}
+            {badge > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* 필터 */}
+      {/* 수정 요청 탭 */}
+      {activeTab === "수정요청" && (
+        <div className="space-y-3">
+          {editRequests.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 py-16 text-center text-gray-400 text-[13px]">
+              수정 요청 내역이 없습니다
+            </div>
+          ) : (
+            editRequests
+              .filter(r => statusFilter === "all" ? true : r.status === statusFilter)
+              .map(req => (
+              <div key={req.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <div className="text-[14px] font-bold text-gray-900">{req.companyName || "-"}</div>
+                      <div className="text-[12px] text-gray-400 mt-0.5">
+                        {req.requestedByEmail || "-"} &nbsp;|&nbsp; {req.createdAt?.seconds ? new Date(req.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${req.status === "approved" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : req.status === "rejected" ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                      {req.status === "approved" ? "승인됨" : req.status === "rejected" ? "거절됨" : "검토 대기"}
+                    </span>
+                  </div>
+                  {req.status === "pending" && (
+                    <button
+                      className="px-4 py-2 bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[12px] font-semibold rounded-lg transition"
+                      onClick={() => { setReviewingEdit(req); setEditRejectReason(""); setShowEditRejectInput(false); }}>
+                      검토
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* 수정 요청 검토 모달 */}
+          {reviewingEdit && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]" onClick={() => setReviewingEdit(null)}>
+              <div className="bg-white rounded-2xl w-[560px] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
+                  <div>
+                    <h3 className="text-white font-bold text-[15px]">회사 정보 수정 요청 검토</h3>
+                    <p className="text-white/55 text-[12px] mt-0.5">{reviewingEdit.companyName} — {reviewingEdit.requestedByEmail}</p>
+                  </div>
+                  <button className="text-white/50 hover:text-white text-lg transition" onClick={() => setReviewingEdit(null)}>✕</button>
+                </div>
+                <div className="px-6 py-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      ["회사명", "companyName"],
+                      ["대표자", "representative"],
+                      ["주소", "address"],
+                      ["사업자번호", "businessNumber"],
+                      ["연락처", "phone"],
+                      ["이메일", "email"],
+                    ].map(([label, key]) => {
+                      const orig = (reviewingEdit.originalData || {})[key] || "-";
+                      const req = (reviewingEdit.requestedData || {})[key] || "-";
+                      const changed = orig !== req;
+                      return (
+                        <div key={key} className={`rounded-xl p-3 border ${changed ? "border-[#1B2B4B]/30 bg-[#1B2B4B]/5" : "border-gray-100 bg-gray-50"}`}>
+                          <div className="text-[11px] font-semibold text-gray-400 mb-1">{label}</div>
+                          <div className="text-[12px] text-gray-500 line-through">{orig}</div>
+                          <div className={`text-[13px] font-bold ${changed ? "text-[#1B2B4B]" : "text-gray-600"}`}>{req}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {showEditRejectInput && (
+                    <div>
+                      <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">거절 사유</label>
+                      <div className="flex gap-2 mb-2 flex-wrap">
+                        {["정보 불일치", "서류 미첨부", "사업자번호 오류", "직접 입력"].map(r => (
+                          <button key={r} className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${editRejectReason === r ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+                            onClick={() => setEditRejectReason(r === "직접 입력" ? "" : r)}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
+                        rows={2}
+                        placeholder="거절 사유 입력"
+                        value={editRejectReason}
+                        onChange={e => setEditRejectReason(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 pb-5 flex gap-3 border-t border-gray-100 pt-4">
+                  {!showEditRejectInput ? (
+                    <>
+                      <button
+                        className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+                        onClick={() => setShowEditRejectInput(true)}>
+                        거절
+                      </button>
+                      <button
+                        className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-50"
+                        disabled={processing}
+                        onClick={() => approveEditRequest(reviewingEdit)}>
+                        {processing ? "처리 중..." : "승인"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+                        onClick={() => setShowEditRejectInput(false)}>
+                        취소
+                      </button>
+                      <button
+                        className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold transition disabled:opacity-50"
+                        disabled={processing || !editRejectReason.trim()}
+                        onClick={() => rejectEditRequest(reviewingEdit, editRejectReason)}>
+                        {processing ? "처리 중..." : "거절 확정"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 기존 탭 필터 + 테이블 */}
+      <div style={{ display: activeTab === "수정요청" ? "none" : "block" }}>
       <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 mb-4 flex items-center gap-3 flex-wrap">
         <div className="flex gap-1.5">
           {[["all", "전체"], ["pending", "대기"], ["approved", "승인"], ["rejected", "거절"]].map(([v, l]) => (
@@ -984,5 +1180,6 @@ export default function CompanyApplications() {
         );
       })()}
     </div>
+      </div>
   );
 }
