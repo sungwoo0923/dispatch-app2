@@ -12745,6 +12745,152 @@ function _creatorLabel(r) {
   return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
 }
 
+// ===== 신규 기사 등록 모달 컴포넌트 =====
+function NewDriverModal({ data, onClose, onConfirm }) {
+  const [form, setForm] = React.useState({
+    차량번호: data.차량번호 || "",
+    이름: "",
+    전화번호: "",
+    등급: "일반",
+    메모: "",
+  });
+
+  const isDuplicate = data.mode === "duplicate";
+  const existing = data.existingDriver;
+
+  const handleSubmit = (mode) => {
+    if (!form.이름.trim()) { alert("기사명을 입력해주세요."); return; }
+    onConfirm(form, mode);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] p-4">
+      <div className="bg-white rounded-2xl w-[460px] shadow-2xl overflow-hidden">
+        {/* 헤더 */}
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <div>
+            <div className="text-white font-bold text-[16px]">
+              {isDuplicate ? "기사 정보 확인" : "신규 기사 등록"}
+            </div>
+            <div className="text-white/60 text-[12px] mt-0.5">
+              {isDuplicate
+                ? `차량번호 [${data.차량번호}]에 등록된 기사가 있습니다`
+                : `차량번호 [${data.차량번호}]를 신규 등록합니다`}
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg transition">×</button>
+        </div>
+
+        <div className="p-6">
+          {/* 중복 기사 정보 표시 */}
+          {isDuplicate && existing && (
+            <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">기존 등록 기사</div>
+              <div className="flex items-center gap-3">
+                <div>
+                  <div className="text-[14px] font-bold text-slate-800">{existing.이름 || "-"}</div>
+                  <div className="text-[12px] text-slate-500">{existing.전화번호 || "-"}</div>
+                </div>
+                {existing.등급 && (
+                  <span className="ml-auto px-2 py-0.5 bg-slate-200 text-slate-600 text-[11px] font-semibold rounded">{existing.등급}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 신규 입력 폼 */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-500 mb-1">차량번호</label>
+              <input
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] bg-slate-50 text-slate-700"
+                value={form.차량번호}
+                readOnly
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-500 mb-1">기사명 <span className="text-red-400">*</span></label>
+              <input
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                placeholder="기사명 입력"
+                value={form.이름}
+                onChange={e => setForm(p => ({ ...p, 이름: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-500 mb-1">전화번호</label>
+              <input
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                placeholder="전화번호 입력"
+                inputMode="numeric"
+                value={form.전화번호}
+                onChange={e => setForm(p => ({ ...p, 전화번호: e.target.value.replace(/[^\d-]/g, "") }))}
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-500 mb-1">등급</label>
+              <select
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white"
+                value={form.등급}
+                onChange={e => setForm(p => ({ ...p, 등급: e.target.value }))}
+              >
+                {["일반", "우수", "VIP", "블랙", "신규"].map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-500 mb-1">메모</label>
+              <textarea
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
+                placeholder="메모 입력 (선택)"
+                rows={2}
+                value={form.메모}
+                onChange={e => setForm(p => ({ ...p, 메모: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          {/* 버튼 */}
+          <div className="mt-5 flex gap-2">
+            {isDuplicate ? (
+              <>
+                <button
+                  onClick={() => handleSubmit("new")}
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
+                >
+                  별도 등록
+                </button>
+                <button
+                  onClick={() => handleSubmit("overwrite")}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-[13px] font-bold hover:bg-slate-200 border border-slate-200 transition"
+                >
+                  기존 덮어쓰기
+                </button>
+                <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 text-[13px] font-bold hover:bg-slate-50 transition">
+                  취소
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleSubmit("new")}
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
+                >
+                  등록
+                </button>
+                <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 text-[13px] font-bold hover:bg-slate-50 transition">
+                  취소
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 오전/오후 토글 + 시간 선택 컴포넌트
 function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
   const [ampm, setAmpm] = React.useState(() => {
@@ -14954,6 +15100,20 @@ const applySmart4 = async (target, setTarget, text) => {
 const [driverConfirmOpen, setDriverConfirmOpen] = React.useState(false);
 const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
 const [driverConfirmRowId, setDriverConfirmRowId] = React.useState(null);
+const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
+const [newDriverModalData, setNewDriverModalData] = React.useState(null);
+// { 차량번호, mode: 'new'|'duplicate', existingDriver: null|object, onConfirm: fn }
+const openNewDriverModal = React.useCallback((차량번호, onConfirm) => {
+  const existing = (drivers || []).filter(d =>
+    (d.차량번호 || "").replace(/\s/g, "") === (차량번호 || "").replace(/\s/g, "")
+  );
+  if (existing.length > 0) {
+    setNewDriverModalData({ 차량번호, mode: "duplicate", existingDriver: existing[0], onConfirm });
+  } else {
+    setNewDriverModalData({ 차량번호, mode: "new", existingDriver: null, onConfirm });
+  }
+  setNewDriverModalOpen(true);
+}, [drivers]);
 const [quickRegMode, setQuickRegMode] = React.useState(false);
 const [quickRegName, setQuickRegName] = React.useState("");
 const [quickRegPhone, setQuickRegPhone] = React.useState("");
@@ -17823,36 +17983,13 @@ checkWarningStatus(c.거래처명, "거래처");
           // 기존 기사면 아무 작업 안함
           if (match) return;
 
-          const ok = window.confirm(
-            `[${e.target.value}] 등록된 기사가 없습니다.\n신규 기사로 등록하시겠습니까?`
-          );
-          if (!ok) return;
-
-          const name = prompt("기사명 입력");
-          if (!name) return;
-
-const phone = prompt("전화번호 입력");
-if (!phone) return;
-
-// 🔥 핵심
-const formattedPhone = formatPhone(phone);
-const rawPhone = formattedPhone.replace(/[^\d]/g, "");
-
-// 기사 등록
-upsertDriver({
-  차량번호: e.target.value,
-  이름: name,
-  전화번호: rawPhone, // DB는 숫자만
-});
-
-// 복사패널 상태 업데이트
-setCopyTarget(prev => ({
-  ...prev,
-  차량번호: e.target.value,
-  이름: name,
-  전화번호: formattedPhone, // UI는 하이픈 포함
-  배차상태: "배차완료"
-}));
+          const plateVal = e.target.value;
+          openNewDriverModal(plateVal, async (driverInfo) => {
+            const fmt = formatPhone(driverInfo.전화번호);
+            const raw = fmt.replace(/[^\d]/g, "");
+            await upsertDriver({ 차량번호: plateVal, 이름: driverInfo.이름, 전화번호: raw, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+            setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료" }));
+          });
         }}
         onChange={(e) => {
           const v = e.target.value;
@@ -19551,38 +19688,12 @@ value={copyTarget?.화물수량 || ""}
   // 0명 → 신규 등록 (단, 이미 이름이 있으면 스킵)
   if (editTarget?.이름?.trim()) return;
 
-  const ok = window.confirm(
-    `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
-  );
-  if (!ok) return;
-
-
-  const 이름 = prompt("기사명 입력");
-  if (!이름) return;
-
-const 전화번호 = prompt("전화번호 입력");
-if (!전화번호) return;
-
-// 🔥 1. 포맷 적용 (UI용)
-const formattedPhone = formatPhone(전화번호);
-
-// 🔥 2. 숫자만 추출 (DB 저장용)
-const rawPhone = formattedPhone.replace(/[^\d]/g, "");
-
-  upsertDriver({
-  차량번호: raw,
-  이름,
-  전화번호: rawPhone, // DB는 숫자만
-});
-
-setEditTarget((p) => ({
-  ...p,
-  차량번호: raw,
-  이름,
-  전화번호: formattedPhone, // UI는 하이픈 포함
-  배차상태: "배차완료",
-  updatedAt: Date.now(),
-}));
+  openNewDriverModal(raw, async (driverInfo) => {
+    const fmt = formatPhone(driverInfo.전화번호);
+    const rawPhone = fmt.replace(/[^\d]/g, "");
+    await upsertDriver({ 차량번호: raw, 이름: driverInfo.이름, 전화번호: rawPhone, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+    setEditTarget((p) => ({ ...p, 차량번호: raw, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료", updatedAt: Date.now() }));
+  });
 }}
               />
               {driverPick && (
@@ -19644,7 +19755,7 @@ setEditTarget((p) => ({
                 <label>청구운임</label>
                 <input
   className="border p-2 rounded w-full"
-  value={editTarget.청구운임 ?? ""}
+  value={editTarget.청구운임 ? Number(editTarget.청구운임).toLocaleString() : ""}
   onChange={(e) => {
     const raw = e.target.value
       .replace(/[^\d-]/g, "")   // 숫자 + -
@@ -19668,7 +19779,7 @@ setEditTarget((p) => ({
                 <label>기사운임</label>
                 <input
   className="border p-2 rounded w-full"
-  value={editTarget.기사운임 ?? ""}
+  value={editTarget.기사운임 ? Number(editTarget.기사운임).toLocaleString() : ""}
   onChange={(e) => {
     const raw = e.target.value
       .replace(/[^\d-]/g, "")
@@ -26101,7 +26212,7 @@ setEditTarget((p) => ({
                 <label>청구운임</label>
                 <input
   className="border p-2 rounded w-full"
-  value={editTarget.청구운임 ?? ""}
+  value={editTarget.청구운임 ? Number(editTarget.청구운임).toLocaleString() : ""}
   onChange={(e) => {
     const raw = e.target.value
       .replace(/[^\d-]/g, "")   // 숫자 + -
@@ -26125,7 +26236,7 @@ setEditTarget((p) => ({
                 <label>기사운임</label>
                 <input
   className="border p-2 rounded w-full"
-  value={editTarget.기사운임 ?? ""}
+  value={editTarget.기사운임 ? Number(editTarget.기사운임).toLocaleString() : ""}
   onChange={(e) => {
     const raw = e.target.value
       .replace(/[^\d-]/g, "")
@@ -39932,6 +40043,19 @@ React.useEffect(() => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ===== 신규 기사 등록 모달 ===== */}
+      {newDriverModalOpen && newDriverModalData && (
+        <NewDriverModal
+          data={newDriverModalData}
+          onClose={() => { setNewDriverModalOpen(false); setNewDriverModalData(null); }}
+          onConfirm={(driverInfo, mode) => {
+            newDriverModalData.onConfirm(driverInfo, mode);
+            setNewDriverModalOpen(false);
+            setNewDriverModalData(null);
+          }}
+        />
       )}
 
     </div>
