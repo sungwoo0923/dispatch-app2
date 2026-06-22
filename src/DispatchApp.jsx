@@ -3770,10 +3770,10 @@ const findPlaceByName = (name) => {
 };
 
 const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
-const [newClientModalData, setNewClientModalData] = React.useState({ name: "", addr: "", manager: "", phone: "" });
+const [newClientModalData, setNewClientModalData] = React.useState({ name: "", addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" });
 
 const openNewPlacePrompt = (name) => {
-  setNewClientModalData({ name: name || "", addr: "", manager: "", phone: "" });
+  setNewClientModalData({ name: name || "", addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" });
   setNewClientModalOpen(true);
 };
 
@@ -3800,7 +3800,7 @@ const isSameAddr = (a = "", b = "") => {
   return shorter.length >= 10 && longer.startsWith(shorter);
 };
 
-const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
+const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution, extraFields) => {
   if (!name) return;
 
   // "keep_new" = keep existing place unchanged, create brand new separate record
@@ -3886,9 +3886,10 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     업체명: name,
     주소: finalAddr,
     contacts,
-    등급: existing?.등급 || "일반",
+    등급: extraFields?.등급 || existing?.등급 || "일반",
     등급변경일: existing?.등급변경일 || null,
-    메모: existing?.메모 || "",
+    메모: extraFields?.메모 || existing?.메모 || "",
+    이메일: extraFields?.이메일 || existing?.이메일 || "",
   });
 };
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
@@ -10988,17 +10989,58 @@ setConfirmChange(null);
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
               placeholder="010-0000-0000 (선택)"
               value={newClientModalData.phone}
-              onChange={e => setNewClientModalData(p => ({ ...p, phone: e.target.value }))}
-              onKeyDown={async e => {
-                if (e.key === "Enter") {
-                  if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
-                  await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone);
-                  showAlert("신규 거래처 등록이 완료되었습니다.");
-                  setNewClientModalOpen(false);
-                }
-              }}
+              onChange={e => setNewClientModalData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+              onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-email")?.focus(); } }}
             />
           </div>
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+          <input
+            id="nc-email"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="example@email.com (선택)"
+            value={newClientModalData.email}
+            onChange={e => setNewClientModalData(p => ({ ...p, email: e.target.value }))}
+            onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-grade")?.focus(); } }}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+            <select
+              id="nc-grade"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
+              value={newClientModalData.grade}
+              onChange={e => setNewClientModalData(p => ({ ...p, grade: e.target.value }))}
+              onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-memo")?.focus(); } }}
+            >
+              <option value="일반">일반</option>
+              <option value="VIP">VIP</option>
+              <option value="주의">주의</option>
+              <option value="블랙">블랙</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+          <textarea
+            id="nc-memo"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
+            placeholder="메모 (선택)"
+            rows={2}
+            value={newClientModalData.memo}
+            onChange={e => setNewClientModalData(p => ({ ...p, memo: e.target.value }))}
+            onKeyDown={async e => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
+                await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone, null, undefined, { 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
+                showAlert("신규 거래처 등록이 완료되었습니다.");
+                setNewClientModalOpen(false);
+              }
+            }}
+          />
         </div>
       </div>
       <div className="px-6 pb-5 flex gap-3">
@@ -11011,7 +11053,7 @@ setConfirmChange(null);
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
           onClick={async () => {
             if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
-            await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone);
+            await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone, null, undefined, { 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
             showAlert("신규 거래처 등록이 완료되었습니다.");
             setNewClientModalOpen(false);
           }}>
@@ -20476,7 +20518,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
             placeholder="010-0000-0000"
             value={quickRegPhone}
-            onChange={e => setQuickRegPhone(e.target.value)}
+            onChange={e => setQuickRegPhone(formatPhone(e.target.value))}
           />
         </div>
         <div className="flex gap-2 pt-1">
@@ -28190,7 +28232,7 @@ setCopyPlaceOptions(list);
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         placeholder="010-0000-0000"
                         value={quickRegPhone5}
-                        onChange={e => setQuickRegPhone5(e.target.value)}
+                        onChange={e => setQuickRegPhone5(formatPhone(e.target.value))}
                       />
                     </div>
                     <div className="flex gap-2 pt-1">
@@ -29518,6 +29560,120 @@ function MemoCell({ text }) {
           </div>
         </div>
       )}
+
+      {/* ===================== 기사확인 팝업 (DispatchStatus 패널용) ===================== */}
+      {driverConfirmOpen5 && driverConfirmInfo5 && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]"
+          onClick={() => setDriverConfirmOpen5(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-[500px] shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white font-bold text-[15px]">기사 정보 확인</h3>
+              <button className="text-white/50 hover:text-white text-lg transition" onClick={() => setDriverConfirmOpen5(false)}>✕</button>
+            </div>
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-2 flex-nowrap">
+                <span className="px-2.5 py-1 rounded-lg bg-[#1B2B4B]/10 text-[#1B2B4B] text-[12px] font-bold whitespace-nowrap shrink-0">미등록 차량</span>
+                <span className="text-[12px] text-gray-500 whitespace-nowrap">기사 정보가 없습니다. 빠른등록 후 배차하세요.</span>
+              </div>
+            </div>
+            <div className="px-6 py-5">
+              <div className="bg-[#f8f9fb] border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-500 w-20">차량번호</span>
+                  <span className="flex-1 text-[14px] font-bold text-[#1B2B4B] text-right">{driverConfirmInfo5.차량번호 || "-"}</span>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 pb-5 space-y-3">
+              {quickRegMode5 ? (
+                <div className="border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
+                  <div className="bg-[#1B2B4B]/5 px-4 py-2.5 border-b border-[#1B2B4B]/15">
+                    <span className="text-[12px] font-bold text-[#1B2B4B]">신규 기사 정보 입력</span>
+                    <span className="text-[11px] text-[#1B2B4B]/60 ml-2">{driverConfirmInfo5.차량번호}</span>
+                  </div>
+                  <div className="p-4 space-y-2.5">
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500 block mb-1">기사명</label>
+                      <input
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        placeholder="홍길동"
+                        value={quickRegName5}
+                        onChange={e => setQuickRegName5(e.target.value)}
+                        autoFocus
+                        onKeyDown={async e => {
+                          if (e.key === "Enter" && quickRegName5.trim()) {
+                            const formatted = formatPhone(quickRegPhone5);
+                            const raw = formatted.replace(/[^\d]/g, "");
+                            await upsertDriver({ 차량번호: driverConfirmInfo5.차량번호, 이름: quickRegName5, 전화번호: raw });
+                            if (driverPanelCallbackRef5.current) {
+                              await driverPanelCallbackRef5.current(quickRegName5, formatted);
+                              driverPanelCallbackRef5.current = null;
+                            }
+                            setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5("");
+                            setDriverConfirmOpen5(false);
+                            showAlert(`기사 "${quickRegName5}" 등록 완료`);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500 block mb-1">전화번호</label>
+                      <input
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        placeholder="010-0000-0000"
+                        value={quickRegPhone5}
+                        onChange={e => setQuickRegPhone5(formatPhone(e.target.value))}
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[12px] font-semibold transition"
+                        onClick={() => { setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5(""); }}>
+                        취소
+                      </button>
+                      <button
+                        className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${quickRegName5.trim() ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-gray-300 cursor-not-allowed"}`}
+                        disabled={!quickRegName5.trim()}
+                        onClick={async () => {
+                          const formatted = formatPhone(quickRegPhone5);
+                          const raw = formatted.replace(/[^\d]/g, "");
+                          await upsertDriver({ 차량번호: driverConfirmInfo5.차량번호, 이름: quickRegName5, 전화번호: raw });
+                          if (driverPanelCallbackRef5.current) {
+                            await driverPanelCallbackRef5.current(quickRegName5, formatted);
+                            driverPanelCallbackRef5.current = null;
+                          }
+                          setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5("");
+                          setDriverConfirmOpen5(false);
+                          showAlert(`기사 "${quickRegName5}" 등록 완료`);
+                        }}>
+                        등록 완료
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+                    onClick={() => { setDriverConfirmOpen5(false); setQuickRegName5(""); setQuickRegPhone5(""); }}>
+                    취소
+                  </button>
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+                    onClick={() => setQuickRegMode5(true)}>
+                    빠른 기사 등록
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -29958,119 +30114,6 @@ function NewOrderPopup({
         />
       )}
 
-      {/* ===================== 기사확인 팝업 (DispatchStatus) ===================== */}
-      {driverConfirmOpen5 && driverConfirmInfo5 && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]"
-          onClick={() => setDriverConfirmOpen5(false)}
-        >
-          <div
-            className="bg-white rounded-2xl w-[500px] shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[15px]">기사 정보 확인</h3>
-              <button className="text-white/50 hover:text-white text-lg transition" onClick={() => setDriverConfirmOpen5(false)}>✕</button>
-            </div>
-            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-              <div className="flex items-center gap-2 flex-nowrap">
-                <span className="px-2.5 py-1 rounded-lg bg-[#1B2B4B]/10 text-[#1B2B4B] text-[12px] font-bold whitespace-nowrap shrink-0">미등록 차량</span>
-                <span className="text-[12px] text-gray-500 whitespace-nowrap">기사 정보가 없습니다. 빠른등록 후 배차하세요.</span>
-              </div>
-            </div>
-            <div className="px-6 py-5">
-              <div className="bg-[#f8f9fb] border border-gray-200 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-500 w-20">차량번호</span>
-                  <span className="flex-1 text-[14px] font-bold text-[#1B2B4B] text-right">{driverConfirmInfo5.차량번호 || "-"}</span>
-                </div>
-              </div>
-            </div>
-            <div className="px-6 pb-5 space-y-3">
-              {quickRegMode5 ? (
-                <div className="border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
-                  <div className="bg-[#1B2B4B]/5 px-4 py-2.5 border-b border-[#1B2B4B]/15">
-                    <span className="text-[12px] font-bold text-[#1B2B4B]">신규 기사 정보 입력</span>
-                    <span className="text-[11px] text-[#1B2B4B]/60 ml-2">{driverConfirmInfo5.차량번호}</span>
-                  </div>
-                  <div className="p-4 space-y-2.5">
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500 block mb-1">기사명</label>
-                      <input
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
-                        placeholder="홍길동"
-                        value={quickRegName5}
-                        onChange={e => setQuickRegName5(e.target.value)}
-                        autoFocus
-                        onKeyDown={async e => {
-                          if (e.key === "Enter" && quickRegName5.trim()) {
-                            const formatted = formatPhone(quickRegPhone5);
-                            const raw = formatted.replace(/[^\d]/g, "");
-                            await upsertDriver({ 차량번호: driverConfirmInfo5.차량번호, 이름: quickRegName5, 전화번호: raw });
-                            if (driverPanelCallbackRef5.current) {
-                              await driverPanelCallbackRef5.current(quickRegName5, formatted);
-                              driverPanelCallbackRef5.current = null;
-                            }
-                            setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5("");
-                            setDriverConfirmOpen5(false);
-                            showAlert(`기사 "${quickRegName5}" 등록 완료`);
-                          }
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500 block mb-1">전화번호</label>
-                      <input
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
-                        placeholder="010-0000-0000"
-                        value={quickRegPhone5}
-                        onChange={e => setQuickRegPhone5(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[12px] font-semibold transition"
-                        onClick={() => { setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5(""); }}>
-                        취소
-                      </button>
-                      <button
-                        className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${quickRegName5.trim() ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-gray-300 cursor-not-allowed"}`}
-                        disabled={!quickRegName5.trim()}
-                        onClick={async () => {
-                          const formatted = formatPhone(quickRegPhone5);
-                          const raw = formatted.replace(/[^\d]/g, "");
-                          await upsertDriver({ 차량번호: driverConfirmInfo5.차량번호, 이름: quickRegName5, 전화번호: raw });
-                          if (driverPanelCallbackRef5.current) {
-                            await driverPanelCallbackRef5.current(quickRegName5, formatted);
-                            driverPanelCallbackRef5.current = null;
-                          }
-                          setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5("");
-                          setDriverConfirmOpen5(false);
-                          showAlert(`기사 "${quickRegName5}" 등록 완료`);
-                        }}>
-                        등록 완료
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex gap-3">
-                  <button
-                    className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
-                    onClick={() => { setDriverConfirmOpen5(false); setQuickRegName5(""); setQuickRegPhone5(""); }}>
-                    취소
-                  </button>
-                  <button
-                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
-                    onClick={() => setQuickRegMode5(true)}>
-                    빠른 기사 등록
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
