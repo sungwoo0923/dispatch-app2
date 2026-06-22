@@ -5314,8 +5314,8 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [driverName, setDriverName] = useState(order.기사명 || order.이름 || "");
   const [driverPhone, setDriverPhone] = useState(order.전화번호 || "");
-  const [claim, setClaim] = useState(String(order.청구운임 || ""));
-  const [fee, setFee] = useState(String(order.기사운임 || ""));
+  const [claim, setClaim] = useState(order.청구운임 ? Number(order.청구운임).toLocaleString() : "");
+  const [fee, setFee] = useState(order.기사운임 ? Number(order.기사운임).toLocaleString() : "");
   const [payType, setPayType] = useState(order.지급방식 || "");
   const [dispType, setDispType] = useState(order.배차방식 || "");
   const [saving, setSaving] = useState(false);
@@ -5426,11 +5426,11 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className={labelCls}>청구운임</label>
-            <input type="number" className={inputCls} placeholder="0" value={claim} onChange={e => setClaim(e.target.value)} inputMode="numeric" />
+            <input type="text" className={inputCls} placeholder="0" inputMode="numeric" value={claim} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setClaim(v ? Number(v).toLocaleString() : ""); }} />
           </div>
           <div>
             <label className={labelCls}>기사운임</label>
-            <input type="number" className={inputCls} placeholder="0" value={fee} onChange={e => setFee(e.target.value)} inputMode="numeric" />
+            <input type="text" className={inputCls} placeholder="0" inputMode="numeric" value={fee} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setFee(v ? Number(v).toLocaleString() : ""); }} />
           </div>
         </div>
 
@@ -9246,9 +9246,10 @@ const pickDrop = (c) => {
           input={
             <input
               className="w-full border rounded px-2 py-1 text-right text-sm"
-              value={form.청구운임 || ""}
+              inputMode="numeric"
+              value={form.청구운임 ? Number(form.청구운임).toLocaleString() : ""}
               onChange={(e) =>
-                updateMoney("청구운임", e.target.value)
+                updateMoney("청구운임", e.target.value.replace(/[^\d]/g, ""))
               }
             />
           }
@@ -9258,9 +9259,10 @@ const pickDrop = (c) => {
           input={
             <input
               className="w-full border rounded px-2 py-1 text-right text-sm"
-              value={form.기사운임 || ""}
+              inputMode="numeric"
+              value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
               onChange={(e) =>
-                updateMoney("기사운임", e.target.value)
+                updateMoney("기사운임", e.target.value.replace(/[^\d]/g, ""))
               }
             />
           }
