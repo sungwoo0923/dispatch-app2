@@ -15060,6 +15060,20 @@ const results = plate
 setSmartList4(results.slice(0,8));
 };
 
+const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
+const [newDriverModalData, setNewDriverModalData] = React.useState(null);
+const openNewDriverModal = React.useCallback((차량번호, onConfirm) => {
+  const existing = (drivers || []).filter(d =>
+    (d.차량번호 || "").replace(/\s/g, "") === (차량번호 || "").replace(/\s/g, "")
+  );
+  if (existing.length > 0) {
+    setNewDriverModalData({ 차량번호, mode: "duplicate", existingDriver: existing[0], onConfirm });
+  } else {
+    setNewDriverModalData({ 차량번호, mode: "new", existingDriver: null, onConfirm });
+  }
+  setNewDriverModalOpen(true);
+}, [drivers]);
+
 const applySmart4 = async (target, setTarget, text) => {
   if (!text.trim()) return;
   const { phone, plate, name } = parseDriverText4(text);
@@ -15111,20 +15125,6 @@ const applySmart4 = async (target, setTarget, text) => {
 const [driverConfirmOpen, setDriverConfirmOpen] = React.useState(false);
 const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
 const [driverConfirmRowId, setDriverConfirmRowId] = React.useState(null);
-const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
-const [newDriverModalData, setNewDriverModalData] = React.useState(null);
-// { 차량번호, mode: 'new'|'duplicate', existingDriver: null|object, onConfirm: fn }
-const openNewDriverModal = React.useCallback((차량번호, onConfirm) => {
-  const existing = (drivers || []).filter(d =>
-    (d.차량번호 || "").replace(/\s/g, "") === (차량번호 || "").replace(/\s/g, "")
-  );
-  if (existing.length > 0) {
-    setNewDriverModalData({ 차량번호, mode: "duplicate", existingDriver: existing[0], onConfirm });
-  } else {
-    setNewDriverModalData({ 차량번호, mode: "new", existingDriver: null, onConfirm });
-  }
-  setNewDriverModalOpen(true);
-}, [drivers]);
 const [quickRegMode, setQuickRegMode] = React.useState(false);
 const [quickRegName, setQuickRegName] = React.useState("");
 const [quickRegPhone, setQuickRegPhone] = React.useState("");
