@@ -2166,8 +2166,6 @@ useEffect(() => {
 
 const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
-const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
-const [newDriverModalData, setNewDriverModalData] = React.useState(null);
 const [hasUpdate, setHasUpdate] = React.useState(false);
 React.useEffect(() => {
   const handler = () => setHasUpdate(true);
@@ -15062,6 +15060,8 @@ const results = plate
 setSmartList4(results.slice(0,8));
 };
 
+const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
+const [newDriverModalData, setNewDriverModalData] = React.useState(null);
 const openNewDriverModal = (차량번호, onConfirm) => {
   const existing = (drivers || []).filter(d =>
     (d.차량번호 || "").replace(/\s/g, "") === (차량번호 || "").replace(/\s/g, "")
@@ -21775,6 +21775,19 @@ function MemoMore({ text = "" }) {
           </div>
         </div>
       )}
+
+      {/* ===== 신규 기사 등록 모달 (RealtimeStatus) ===== */}
+      {newDriverModalOpen && newDriverModalData && (
+        <NewDriverModal
+          data={newDriverModalData}
+          onClose={() => { setNewDriverModalOpen(false); setNewDriverModalData(null); }}
+          onConfirm={(driverInfo, mode) => {
+            newDriverModalData.onConfirm(driverInfo, mode);
+            setNewDriverModalOpen(false);
+            setNewDriverModalData(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -23008,6 +23021,19 @@ const [copyFareFilter, setCopyFareFilter] = React.useState("all");
   }, [dispatchData]);
   // ===================== 📋 기사복사 모달 상태 =====================
 const [copyModalOpen, setCopyModalOpen] = React.useState(false);
+const [newDriverModalOpen5, setNewDriverModalOpen5] = React.useState(false);
+const [newDriverModalData5, setNewDriverModalData5] = React.useState(null);
+const openNewDriverModal = (차량번호, onConfirm) => {
+  const existing = (drivers || []).filter(d =>
+    (d.차량번호 || "").replace(/\s/g, "") === (차량번호 || "").replace(/\s/g, "")
+  );
+  if (existing.length > 0) {
+    setNewDriverModalData5({ 차량번호, mode: "duplicate", existingDriver: existing[0], onConfirm });
+  } else {
+    setNewDriverModalData5({ 차량번호, mode: "new", existingDriver: null, onConfirm });
+  }
+  setNewDriverModalOpen5(true);
+};
   // ===== 스마트 기사 검색 (PART 5) =====
 const [smartQ5, setSmartQ5] = React.useState("");
 const [smartList5, setSmartList5] = React.useState([]);
@@ -29774,6 +29800,19 @@ function NewOrderPopup({
         </div>
       </div>
 
+
+      {/* ===== 신규 기사 등록 모달 (DispatchStatus) ===== */}
+      {newDriverModalOpen5 && newDriverModalData5 && (
+        <NewDriverModal
+          data={newDriverModalData5}
+          onClose={() => { setNewDriverModalOpen5(false); setNewDriverModalData5(null); }}
+          onConfirm={(driverInfo, mode) => {
+            newDriverModalData5.onConfirm(driverInfo, mode);
+            setNewDriverModalOpen5(false);
+            setNewDriverModalData5(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -40022,18 +40061,6 @@ React.useEffect(() => {
         </div>
       )}
 
-      {/* ===== 신규 기사 등록 모달 ===== */}
-      {newDriverModalOpen && newDriverModalData && (
-        <NewDriverModal
-          data={newDriverModalData}
-          onClose={() => { setNewDriverModalOpen(false); setNewDriverModalData(null); }}
-          onConfirm={(driverInfo, mode) => {
-            newDriverModalData.onConfirm(driverInfo, mode);
-            setNewDriverModalOpen(false);
-            setNewDriverModalData(null);
-          }}
-        />
-      )}
 
     </div>
   );
