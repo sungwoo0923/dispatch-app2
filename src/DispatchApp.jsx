@@ -18002,6 +18002,20 @@ checkWarningStatus(c.거래처명, "거래처");
             setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료" }));
           });
         }}
+        onBlur={(e) => {
+          const plate = normalizePlate(e.target.value);
+          if (!plate) return;
+          if (copyTarget?.이름?.trim()) return;
+          const match = (drivers || []).find(d => normalizePlate(d.차량번호) === plate);
+          if (match) return;
+          const plateVal = e.target.value;
+          openNewDriverModal(plateVal, async (driverInfo) => {
+            const fmt = formatPhone(driverInfo.전화번호);
+            const raw = fmt.replace(/[^\d]/g, "");
+            await upsertDriver({ 차량번호: plateVal, 이름: driverInfo.이름, 전화번호: raw, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+            setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료" }));
+          });
+        }}
         onChange={(e) => {
           const v = e.target.value;
           const plate = normalizePlate(v);
@@ -19706,6 +19720,20 @@ value={copyTarget?.화물수량 || ""}
     setEditTarget((p) => ({ ...p, 차량번호: raw, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료", updatedAt: Date.now() }));
   });
 }}
+                onBlur={(e) => {
+                  const raw = e.target.value.trim();
+                  const clean = raw.replace(/\s+/g, "");
+                  if (!clean) return;
+                  if (editTarget?.이름?.trim()) return;
+                  const matches = (drivers || []).filter(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean);
+                  if (matches.length > 0) return;
+                  openNewDriverModal(raw, async (driverInfo) => {
+                    const fmt = formatPhone(driverInfo.전화번호);
+                    const rawPhone = fmt.replace(/[^\d]/g, "");
+                    await upsertDriver({ 차량번호: raw, 이름: driverInfo.이름, 전화번호: rawPhone, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+                    setEditTarget((p) => ({ ...p, 차량번호: raw, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료", updatedAt: Date.now() }));
+                  });
+                }}
               />
               {driverPick && (
   <div className="mt-2 border rounded-md bg-white shadow-sm">
@@ -20210,7 +20238,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
           className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]"
           tabIndex={-1}
           ref={(el) => {
-            if (el) setTimeout(() => el.focus(), 0);
+            if (el && !el.contains(document.activeElement)) setTimeout(() => el.focus(), 0);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && driverConfirmInfo.type !== "new") {
@@ -20230,7 +20258,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
 
           {/* 팝업 컨테이너 */}
           <div
-            className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden"
+            className="bg-white rounded-2xl w-[500px] shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
 
@@ -20247,21 +20275,21 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
 
             {/* 상태 표시 */}
 <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-  <div className="flex items-center gap-2">
+  <div className="flex items-center gap-2 flex-nowrap">
     {driverConfirmInfo.type === "new" ? (
-      <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold">
+      <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold whitespace-nowrap shrink-0">
         미등록 차량
       </span>
     ) : driverConfirmInfo.type === "mismatch" ? (
-      <span className="px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-[12px] font-bold">
+      <span className="px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-[12px] font-bold whitespace-nowrap shrink-0">
         기사정보 불일치
       </span>
     ) : (
-      <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[12px] font-bold">
+      <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[12px] font-bold whitespace-nowrap shrink-0">
         등록 기사
       </span>
     )}
-    <span className="text-[12px] text-gray-500">
+    <span className="text-[12px] text-gray-500 whitespace-nowrap">
       {driverConfirmInfo.type === "new"
         ? "기사 정보가 없습니다. 빠른등록 후 배차하세요."
         : driverConfirmInfo.type === "mismatch"
@@ -26181,7 +26209,21 @@ return (
     setEditTarget((p) => ({ ...p, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료", updatedAt: Date.now() }));
   });
 }}
-
+                onBlur={(e) => {
+                  const raw = e.target.value.trim();
+                  const clean = raw.replace(/\s+/g, "");
+                  if (!clean) return;
+                  if (editTarget?.이름?.trim()) return;
+                  const matches = (drivers || []).filter(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean);
+                  if (matches.length > 0) return;
+                  openNewDriverModal(raw, async (driverInfo) => {
+                    const fmt = formatPhone(driverInfo.전화번호);
+                    const rawPhone = fmt.replace(/[^\d]/g, "");
+                    await upsertDriver({ 차량번호: raw, 이름: driverInfo.이름, 전화번호: rawPhone, 등급: driverInfo.등급, 메모: driverInfo.메모 });
+                    setMatchedDrivers([]);
+                    setEditTarget((p) => ({ ...p, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료", updatedAt: Date.now() }));
+                  });
+                }}
               />
 {matchedDrivers.length > 1 && (
   <div className="mt-2 border rounded bg-white shadow">
@@ -27950,7 +27992,7 @@ setCopyPlaceOptions(list);
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]"
           tabIndex={-1}
-          ref={el => { if(el) setTimeout(() => el.focus(), 0); }}
+          ref={el => { if(el && !el.contains(document.activeElement)) setTimeout(() => el.focus(), 0); }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && driverConfirmInfo.type !== "new") {
               const d = driverConfirmInfo.driver;
@@ -27967,7 +28009,7 @@ setCopyPlaceOptions(list);
           onClick={() => setDriverConfirmInfo(null)}
         >
           <div
-            className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden"
+            className="bg-white rounded-2xl w-[500px] shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             {/* 헤더 */}
@@ -27982,13 +28024,13 @@ setCopyPlaceOptions(list);
 
             {/* 상태 표시 */}
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-nowrap">
                 {driverConfirmInfo.type === "new" ? (
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold">미등록 차량</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold whitespace-nowrap shrink-0">미등록 차량</span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[12px] font-bold">등록 기사</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[12px] font-bold whitespace-nowrap shrink-0">등록 기사</span>
                 )}
-                <span className="text-[12px] text-gray-500">
+                <span className="text-[12px] text-gray-500 whitespace-nowrap">
                   {driverConfirmInfo.type === "new"
                     ? "기사 정보가 없습니다. 빠른등록 후 배차하세요."
                     : "아래 정보로 배차를 진행합니다."}
