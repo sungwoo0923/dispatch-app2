@@ -13965,64 +13965,8 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     })
     .join("\n\n");
 
-  // 기사전달용: 계산서+직접배차 → 사업자등록증, 선불/착불+직접배차 → 계좌이미지
-  if (mode === "driver") {
-    const selRow = selected.length === 1 ? rows.find(r => r._id === selected[0]) : null;
-    const pay4 = selRow?.지급방식 || "";
-    const isDirect4 = (selRow?.배차방식 || "") === "직접배차";
-    const doDriverCopy4 = async () => {
-      async function copyTextWithImg4(plainText, imgBlob) {
-        try {
-          if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
-            await navigator.clipboard.write([new ClipboardItem({
-              "text/plain": new Blob([plainText], { type: "text/plain" }),
-              [imgBlob.type]: imgBlob,
-            })]);
-          } else { await navigator.clipboard.writeText(plainText); }
-        } catch { await navigator.clipboard.writeText(plainText); }
-      }
-      if (isDirect4 && pay4 === "계산서" && companyBankData4?.사업자등록증Base64) {
-        try {
-          const res = await fetch(companyBankData4.사업자등록증Base64);
-          const blob = await res.blob();
-          await copyTextWithImg4(text, blob);
-          showAlert("오더 내용과 사업자등록증 이미지가 함께 복사되었습니다.");
-        } catch { await navigator.clipboard.writeText(text); showAlert("이미지 첨부 실패, 텍스트만 복사되었습니다."); }
-      } else if (isDirect4 && (pay4 === "선불" || pay4 === "착불") && companyBankData4?.계좌번호) {
-        try {
-          const 청구운임4 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
-          const 기사운임4 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
-          const 차액4 = 청구운임4 - 기사운임4;
-          const canvas4 = document.createElement("canvas");
-          canvas4.width = 600; canvas4.height = 300;
-          const c4 = canvas4.getContext("2d");
-          c4.fillStyle = "#f8f9fb"; c4.fillRect(0, 0, 600, 300);
-          c4.fillStyle = "#1B2B4B"; c4.fillRect(0, 0, 600, 56);
-          c4.fillStyle = "#fff"; c4.font = "bold 22px sans-serif"; c4.textAlign = "center";
-          c4.fillText("기사 운임 정산 안내", 300, 36);
-          const row4 = (label, val, y, hi) => {
-            c4.fillStyle = hi ? "#eef1f8" : "#fff"; c4.fillRect(20, y, 560, 44);
-            c4.strokeStyle = "#e5e7eb"; c4.lineWidth = 1; c4.strokeRect(20, y, 560, 44);
-            c4.fillStyle = "#6b7280"; c4.font = "14px sans-serif"; c4.textAlign = "left"; c4.fillText(label, 36, y+27);
-            c4.fillStyle = hi ? "#1B2B4B" : "#111"; c4.font = hi ? "bold 16px sans-serif" : "15px sans-serif"; c4.textAlign = "right"; c4.fillText(val, 564, y+27);
-          };
-          row4("청구운임", 청구운임4.toLocaleString()+"원", 72, false);
-          row4("기사운임", 기사운임4.toLocaleString()+"원", 120, false);
-          row4("기사 입금액 (청구 - 기사)", 차액4.toLocaleString()+"원", 168, true);
-          row4("입금 계좌", `${companyBankData4.계좌은행||""} ${companyBankData4.계좌번호}`, 216, false);
-          row4("예금주", companyBankData4.예금주||"", 264, false);
-          const blob4 = await new Promise(res => canvas4.toBlob(res, "image/png"));
-          await copyTextWithImg4(text, blob4);
-          showAlert("오더 내용과 운임 정산 이미지가 함께 복사되었습니다.");
-        } catch { await navigator.clipboard.writeText(text); showAlert("이미지 생성 실패, 텍스트만 복사되었습니다."); }
-      } else {
-        await navigator.clipboard.writeText(text);
-      }
-    };
-    doDriverCopy4();
-  } else {
-    navigator.clipboard.writeText(text);
-  }
+  // 모든 모드에서 텍스트 복사
+  navigator.clipboard.writeText(text);
 
   setSelected([]);
   setCopyModalOpen(false);
@@ -14047,6 +13991,62 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       console.error("Clipboard read error", e);
     }
   }, 3000);
+};
+
+// 계좌 정산 이미지 복사 (Part 4)
+const copyAccountImage4 = async () => {
+  if (!selected.length) { showAlert("오더를 선택하세요."); return; }
+  const selRow = rows.find(r => r._id === selected[0]);
+  if (!companyBankData4?.계좌번호) { showAlert("회사관리에 계좌 정보를 먼저 등록해 주세요."); return; }
+  try {
+    const 청구 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
+    const 기사 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
+    const 차액 = 청구 - 기사;
+    const W = 640, rows4H = 5, rowH = 52, headerH = 64, padding = 24;
+    const H = headerH + rows4H * rowH + padding;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#f8f9fb"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#1B2B4B"; ctx.fillRect(0, 0, W, headerH);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 20px 'Malgun Gothic', sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("기사 운임 정산 안내", W / 2, 38);
+    const drawRow4 = (label, val, idx, highlight) => {
+      const y = headerH + idx * rowH;
+      ctx.fillStyle = highlight ? "#e8ecf5" : (idx % 2 === 0 ? "#fff" : "#fafafa");
+      ctx.fillRect(0, y, W, rowH);
+      ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y + rowH); ctx.lineTo(W, y + rowH); ctx.stroke();
+      ctx.fillStyle = "#6b7280"; ctx.font = "14px 'Malgun Gothic', sans-serif"; ctx.textAlign = "left";
+      ctx.fillText(label, 28, y + rowH / 2 + 5);
+      ctx.fillStyle = highlight ? "#1B2B4B" : "#111827";
+      ctx.font = highlight ? "bold 16px 'Malgun Gothic', sans-serif" : "15px 'Malgun Gothic', sans-serif";
+      ctx.textAlign = "right"; ctx.fillText(val, W - 28, y + rowH / 2 + 5);
+    };
+    drawRow4("청구운임", 청구.toLocaleString() + "원", 0, false);
+    drawRow4("기사운임", 기사.toLocaleString() + "원", 1, false);
+    drawRow4("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 2, true);
+    drawRow4("입금 계좌", `${companyBankData4.계좌은행 || ""} ${companyBankData4.계좌번호}`, 3, false);
+    drawRow4("예금주", companyBankData4.예금주 || "", 4, false);
+    const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    setCopyModalOpen(false);
+    showAlert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+  } catch { showAlert("이미지 복사에 실패했습니다."); }
+};
+
+// 사업자등록증 이미지 복사 (Part 4)
+const copyBizImage4 = async () => {
+  const src = companyBankData4?.사업자등록증Base64;
+  if (!src) { showAlert("회사관리에 사업자등록증을 먼저 등록해 주세요."); return; }
+  try {
+    const res = await fetch(src);
+    const blob = await res.blob();
+    const imgType = blob.type.startsWith("image/") ? blob.type : "image/png";
+    await navigator.clipboard.write([new ClipboardItem({ [imgType]: blob })]);
+    setCopyModalOpen(false);
+    showAlert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+  } catch { showAlert("사업자등록증 복사에 실패했습니다. PDF는 이미지 복사를 지원하지 않습니다."); }
 };
 
   // 이미 본 알림(id 저장)
@@ -21246,6 +21246,17 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
               <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
                 기사 전달용 (상세 + 전달메시지)
               </button>
+              <div className="border-t border-gray-100 pt-2 mt-1 space-y-2">
+                <p className="text-[11px] text-gray-400 text-center">이미지 복사 (카카오톡 전용)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={copyAccountImage4} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
+                    계좌 이미지
+                  </button>
+                  <button onClick={copyBizImage4} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
+                    사업자등록증
+                  </button>
+                </div>
+              </div>
               <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
                 취소
               </button>
@@ -23766,103 +23777,8 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 
     // 기사전달용: 계산서+직접배차 → 사업자등록증 이미지 첨부
     // 기사전달용: 선불/착불+직접배차 → 계좌 정보 이미지 생성 및 첨부
-    if (mode === "driver") {
-      const selId = [...selected][0];
-      const selRow = selId ? dispatchData.find(d => getId(d) === selId) : null;
-      const pay = selRow?.지급방식 || "";
-      const dispatch방식 = selRow?.배차방식 || "";
-      const isDirect = dispatch방식 === "직접배차";
-
-      // 이미지 + 텍스트를 함께 클립보드에 쓰는 헬퍼
-      async function copyTextWithImageBlob(plainText, imgBlob) {
-        try {
-          if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
-            await navigator.clipboard.write([new ClipboardItem({
-              "text/plain": new Blob([plainText], { type: "text/plain" }),
-              [imgBlob.type]: imgBlob,
-            })]);
-          } else {
-            await navigator.clipboard.writeText(plainText);
-          }
-        } catch {
-          await navigator.clipboard.writeText(plainText);
-        }
-      }
-
-      if (isDirect && pay === "계산서" && companyBankData?.사업자등록증Base64) {
-        // 사업자등록증 base64 → blob 변환 후 복사
-        try {
-          const res = await fetch(companyBankData.사업자등록증Base64);
-          const blob = await res.blob();
-          await copyTextWithImageBlob(text, blob);
-          showAlert("오더 내용과 사업자등록증 이미지가 함께 복사되었습니다.");
-        } catch {
-          await navigator.clipboard.writeText(text);
-          showAlert("이미지 첨부 실패, 텍스트만 복사되었습니다.");
-        }
-      } else if (isDirect && (pay === "선불" || pay === "착불") && companyBankData?.계좌번호) {
-        // 계좌 정보 이미지 생성 (Canvas)
-        try {
-          const 청구운임 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
-          const 기사운임 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
-          const 차액 = 청구운임 - 기사운임;
-          const 은행 = companyBankData.계좌은행 || "";
-          const 계좌 = companyBankData.계좌번호 || "";
-          const 예금주 = companyBankData.예금주 || "";
-
-          const canvas = document.createElement("canvas");
-          canvas.width = 600;
-          canvas.height = 300;
-          const ctx = canvas.getContext("2d");
-
-          // 배경
-          ctx.fillStyle = "#f8f9fb";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // 헤더 바
-          ctx.fillStyle = "#1B2B4B";
-          ctx.fillRect(0, 0, canvas.width, 56);
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 22px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText("기사 운임 정산 안내", canvas.width / 2, 36);
-
-          // 구분선
-          const drawRow = (label, value, y, highlight) => {
-            ctx.fillStyle = highlight ? "#eef1f8" : "#ffffff";
-            ctx.fillRect(20, y, canvas.width - 40, 44);
-            ctx.strokeStyle = "#e5e7eb";
-            ctx.lineWidth = 1;
-            ctx.strokeRect(20, y, canvas.width - 40, 44);
-            ctx.fillStyle = "#6b7280";
-            ctx.font = "14px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
-            ctx.textAlign = "left";
-            ctx.fillText(label, 36, y + 27);
-            ctx.fillStyle = highlight ? "#1B2B4B" : "#111827";
-            ctx.font = highlight ? "bold 16px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" : "15px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
-            ctx.textAlign = "right";
-            ctx.fillText(value, canvas.width - 36, y + 27);
-          };
-
-          drawRow("청구운임", 청구운임.toLocaleString() + "원", 72, false);
-          drawRow("기사운임", 기사운임.toLocaleString() + "원", 120, false);
-          drawRow("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 168, true);
-          drawRow("입금 계좌", `${은행} ${계좌}`, 216, false);
-          drawRow("예금주", 예금주, 264, false);
-
-          const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-          await copyTextWithImageBlob(text, blob);
-          showAlert("오더 내용과 운임 정산 이미지가 함께 복사되었습니다.");
-        } catch {
-          await navigator.clipboard.writeText(text);
-          showAlert("이미지 생성 실패, 텍스트만 복사되었습니다.");
-        }
-      } else {
-        navigator.clipboard.writeText(text);
-      }
-    } else {
-      navigator.clipboard.writeText(text);
-    }
+    // 모든 모드 텍스트 복사
+    navigator.clipboard.writeText(text);
 
     setSelected(new Set());
     setCopyModalOpen(false);
@@ -23882,6 +23798,64 @@ if (row?.업체전달상태 !== "전달완료") {
   });
 }
 };
+
+  // 계좌 정산 이미지 복사 (Part 5)
+  const copyAccountImage5 = async () => {
+    if (!selected.size) { showAlert("오더를 선택하세요."); return; }
+    const selId = [...selected][0];
+    const selRow = dispatchData.find(d => getId(d) === selId);
+    if (!companyBankData?.계좌번호) { showAlert("회사관리에 계좌 정보를 먼저 등록해 주세요."); return; }
+    try {
+      const 청구 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
+      const 기사 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
+      const 차액 = 청구 - 기사;
+      const W = 640, rowH = 52, headerH = 64;
+      const H = headerH + 5 * rowH + 24;
+      const canvas = document.createElement("canvas");
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#f8f9fb"; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#1B2B4B"; ctx.fillRect(0, 0, W, headerH);
+      ctx.fillStyle = "#fff"; ctx.font = "bold 20px 'Malgun Gothic', sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("기사 운임 정산 안내", W / 2, 38);
+      const dr5 = (label, val, idx, hi) => {
+        const y = headerH + idx * rowH;
+        ctx.fillStyle = hi ? "#e8ecf5" : (idx % 2 === 0 ? "#fff" : "#fafafa");
+        ctx.fillRect(0, y, W, rowH);
+        ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, y + rowH); ctx.lineTo(W, y + rowH); ctx.stroke();
+        ctx.fillStyle = "#6b7280"; ctx.font = "14px 'Malgun Gothic', sans-serif"; ctx.textAlign = "left";
+        ctx.fillText(label, 28, y + rowH / 2 + 5);
+        ctx.fillStyle = hi ? "#1B2B4B" : "#111827";
+        ctx.font = hi ? "bold 16px 'Malgun Gothic', sans-serif" : "15px 'Malgun Gothic', sans-serif";
+        ctx.textAlign = "right"; ctx.fillText(val, W - 28, y + rowH / 2 + 5);
+      };
+      dr5("청구운임", 청구.toLocaleString() + "원", 0, false);
+      dr5("기사운임", 기사.toLocaleString() + "원", 1, false);
+      dr5("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 2, true);
+      dr5("입금 계좌", `${companyBankData.계좌은행 || ""} ${companyBankData.계좌번호}`, 3, false);
+      dr5("예금주", companyBankData.예금주 || "", 4, false);
+      const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setCopyModalOpen(false);
+      showAlert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+    } catch { showAlert("이미지 복사에 실패했습니다."); }
+  };
+
+  // 사업자등록증 이미지 복사 (Part 5)
+  const copyBizImage5 = async () => {
+    const src = companyBankData?.사업자등록증Base64;
+    if (!src) { showAlert("회사관리에 사업자등록증을 먼저 등록해 주세요."); return; }
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const imgType = blob.type.startsWith("image/") ? blob.type : "image/png";
+      await navigator.clipboard.write([new ClipboardItem({ [imgType]: blob })]);
+      setCopyModalOpen(false);
+      showAlert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+    } catch { showAlert("사업자등록증 복사에 실패했습니다. PDF는 이미지 복사를 지원하지 않습니다."); }
+  };
+
   // 🚀 운임 조회 실행 함수
   const handleFareSearch = () => {
     if (!editTarget) return;
@@ -28641,6 +28615,17 @@ setCopyPlaceOptions(list);
               <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
                 기사 전달용 (상세 + 전달메시지)
               </button>
+              <div className="border-t border-gray-100 pt-2 mt-1 space-y-2">
+                <p className="text-[11px] text-gray-400 text-center">이미지 복사 (카카오톡 전용)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={copyAccountImage5} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
+                    계좌 이미지
+                  </button>
+                  <button onClick={copyBizImage5} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
+                    사업자등록증
+                  </button>
+                </div>
+              </div>
               <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
                 취소
               </button>
