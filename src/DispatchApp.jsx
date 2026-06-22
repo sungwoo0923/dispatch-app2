@@ -2444,6 +2444,7 @@ return (
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 role={role}
+                userCompany={userCompany}
                 dispatchData={dispatchDataFiltered}
                 timeOptions={timeOptions}
                 tonOptions={tonOptions}
@@ -13585,6 +13586,18 @@ const checkWarningStatus = (name, type) => {
 const [copyModalOpen, setCopyModalOpen] = useState(false);
 const [filterErrorIds, setFilterErrorIds] = useState(null); // null=전체, 배열=오류오더만
 const [reVerifyToast, setReVerifyToast] = useState(null);   // 재검증 완료 토스트
+const [companyBankData4, setCompanyBankData4] = React.useState(null);
+React.useEffect(() => {
+  const cname = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+  if (!cname) return;
+  const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const found = docs.find(d => (d.companyName || "").trim() === cname.trim() && d.type === "신규") ||
+                  docs.find(d => (d.companyName || "").trim() === cname.trim());
+    setCompanyBankData4(found || null);
+  });
+  return () => unsub();
+}, [userCompany]);
 
 const getYoil = (dateStr) => {
   const date = new Date(dateStr);
@@ -13951,7 +13964,66 @@ ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     })
     .join("\n\n");
-  navigator.clipboard.writeText(text);
+
+  // 기사전달용: 계산서+직접배차 → 사업자등록증, 선불/착불+직접배차 → 계좌이미지
+  if (mode === "driver") {
+    const selRow = selected.length === 1 ? rows.find(r => r._id === selected[0]) : null;
+    const pay4 = selRow?.지급방식 || "";
+    const isDirect4 = (selRow?.배차방식 || "") === "직접배차";
+    const doDriverCopy4 = async () => {
+      async function copyTextWithImg4(plainText, imgBlob) {
+        try {
+          if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+            await navigator.clipboard.write([new ClipboardItem({
+              "text/plain": new Blob([plainText], { type: "text/plain" }),
+              [imgBlob.type]: imgBlob,
+            })]);
+          } else { await navigator.clipboard.writeText(plainText); }
+        } catch { await navigator.clipboard.writeText(plainText); }
+      }
+      if (isDirect4 && pay4 === "계산서" && companyBankData4?.사업자등록증Base64) {
+        try {
+          const res = await fetch(companyBankData4.사업자등록증Base64);
+          const blob = await res.blob();
+          await copyTextWithImg4(text, blob);
+          showAlert("오더 내용과 사업자등록증 이미지가 함께 복사되었습니다.");
+        } catch { await navigator.clipboard.writeText(text); showAlert("이미지 첨부 실패, 텍스트만 복사되었습니다."); }
+      } else if (isDirect4 && (pay4 === "선불" || pay4 === "착불") && companyBankData4?.계좌번호) {
+        try {
+          const 청구운임4 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
+          const 기사운임4 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
+          const 차액4 = 청구운임4 - 기사운임4;
+          const canvas4 = document.createElement("canvas");
+          canvas4.width = 600; canvas4.height = 300;
+          const c4 = canvas4.getContext("2d");
+          c4.fillStyle = "#f8f9fb"; c4.fillRect(0, 0, 600, 300);
+          c4.fillStyle = "#1B2B4B"; c4.fillRect(0, 0, 600, 56);
+          c4.fillStyle = "#fff"; c4.font = "bold 22px sans-serif"; c4.textAlign = "center";
+          c4.fillText("기사 운임 정산 안내", 300, 36);
+          const row4 = (label, val, y, hi) => {
+            c4.fillStyle = hi ? "#eef1f8" : "#fff"; c4.fillRect(20, y, 560, 44);
+            c4.strokeStyle = "#e5e7eb"; c4.lineWidth = 1; c4.strokeRect(20, y, 560, 44);
+            c4.fillStyle = "#6b7280"; c4.font = "14px sans-serif"; c4.textAlign = "left"; c4.fillText(label, 36, y+27);
+            c4.fillStyle = hi ? "#1B2B4B" : "#111"; c4.font = hi ? "bold 16px sans-serif" : "15px sans-serif"; c4.textAlign = "right"; c4.fillText(val, 564, y+27);
+          };
+          row4("청구운임", 청구운임4.toLocaleString()+"원", 72, false);
+          row4("기사운임", 기사운임4.toLocaleString()+"원", 120, false);
+          row4("기사 입금액 (청구 - 기사)", 차액4.toLocaleString()+"원", 168, true);
+          row4("입금 계좌", `${companyBankData4.계좌은행||""} ${companyBankData4.계좌번호}`, 216, false);
+          row4("예금주", companyBankData4.예금주||"", 264, false);
+          const blob4 = await new Promise(res => canvas4.toBlob(res, "image/png"));
+          await copyTextWithImg4(text, blob4);
+          showAlert("오더 내용과 운임 정산 이미지가 함께 복사되었습니다.");
+        } catch { await navigator.clipboard.writeText(text); showAlert("이미지 생성 실패, 텍스트만 복사되었습니다."); }
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+    };
+    doDriverCopy4();
+  } else {
+    navigator.clipboard.writeText(text);
+  }
+
   setSelected([]);
   setCopyModalOpen(false);
   const rowId = selected[0];
@@ -22100,6 +22172,7 @@ function generateTimeOptions() {
 }
 function DispatchStatus({
   role,
+  userCompany = "",
   dispatchData = [],
   focusOrderId,
   clearFocusOrder,
@@ -22114,6 +22187,18 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
+const [companyBankData, setCompanyBankData] = React.useState(null);
+React.useEffect(() => {
+  const cname = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+  if (!cname) return;
+  const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const found = docs.find(d => (d.companyName || "").trim() === cname.trim() && d.type === "신규") ||
+                  docs.find(d => (d.companyName || "").trim() === cname.trim());
+    setCompanyBankData(found || null);
+  });
+  return () => unsub();
+}, [userCompany]);
 const mergedClients = React.useMemo(() => {
   const map = new Map();
   (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
@@ -23381,7 +23466,7 @@ const getPalletCount = (text = "") => {
   // ===============================
   // 📋 기사복사 (PART 5 최종)
   // ===============================
-  const copyMessage = (mode) => {
+  const copyMessage = async (mode) => {
     if (!selected.size) {
       showAlert("복사할 항목을 선택하세요.");
       return;
@@ -23679,33 +23764,102 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       })
       .join("\n\n");
 
-    // 🖼️ 이미지와 텍스트를 함께 클립보드에 복사하는 함수
-        async function copyWithImage(plainText) {
-      try {
-        // 1. 이미지 가져오기 (누락되었던 부분)
-        const response = await fetch('/거래명세서.jpg');
-        if (!response.ok) throw new Error("이미지를 불러올 수 없습니다.");
-        const blob = await response.blob();
-        
-        // 2. 클립보드 아이템 생성 (텍스트와 이미지를 모두 포함)
-        const data = [new ClipboardItem({
-          "text/plain": new Blob([plainText], { type: "text/plain" }),
-          [blob.type]: blob
-        })];
-        
-        await navigator.clipboard.write(data);
-        showAlert("텍스트와 거래명세서 안내 이미지가 함께 복사되었습니다!");
-      } catch (err) {
-        console.error("이미지 복사 실패:", err);
-        // 실패 시 텍스트만이라도 복사
-        await navigator.clipboard.writeText(plainText);
-        showAlert("이미지 복사 실패로 텍스트만 복사되었습니다.");
-      }
-    }
-
-    // 기사 전달용(driver) 모드일 때 이미지를 포함하여 복사
+    // 기사전달용: 계산서+직접배차 → 사업자등록증 이미지 첨부
+    // 기사전달용: 선불/착불+직접배차 → 계좌 정보 이미지 생성 및 첨부
     if (mode === "driver") {
-      copyWithImage(text);
+      const selId = [...selected][0];
+      const selRow = selId ? dispatchData.find(d => getId(d) === selId) : null;
+      const pay = selRow?.지급방식 || "";
+      const dispatch방식 = selRow?.배차방식 || "";
+      const isDirect = dispatch방식 === "직접배차";
+
+      // 이미지 + 텍스트를 함께 클립보드에 쓰는 헬퍼
+      async function copyTextWithImageBlob(plainText, imgBlob) {
+        try {
+          if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+            await navigator.clipboard.write([new ClipboardItem({
+              "text/plain": new Blob([plainText], { type: "text/plain" }),
+              [imgBlob.type]: imgBlob,
+            })]);
+          } else {
+            await navigator.clipboard.writeText(plainText);
+          }
+        } catch {
+          await navigator.clipboard.writeText(plainText);
+        }
+      }
+
+      if (isDirect && pay === "계산서" && companyBankData?.사업자등록증Base64) {
+        // 사업자등록증 base64 → blob 변환 후 복사
+        try {
+          const res = await fetch(companyBankData.사업자등록증Base64);
+          const blob = await res.blob();
+          await copyTextWithImageBlob(text, blob);
+          showAlert("오더 내용과 사업자등록증 이미지가 함께 복사되었습니다.");
+        } catch {
+          await navigator.clipboard.writeText(text);
+          showAlert("이미지 첨부 실패, 텍스트만 복사되었습니다.");
+        }
+      } else if (isDirect && (pay === "선불" || pay === "착불") && companyBankData?.계좌번호) {
+        // 계좌 정보 이미지 생성 (Canvas)
+        try {
+          const 청구운임 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
+          const 기사운임 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
+          const 차액 = 청구운임 - 기사운임;
+          const 은행 = companyBankData.계좌은행 || "";
+          const 계좌 = companyBankData.계좌번호 || "";
+          const 예금주 = companyBankData.예금주 || "";
+
+          const canvas = document.createElement("canvas");
+          canvas.width = 600;
+          canvas.height = 300;
+          const ctx = canvas.getContext("2d");
+
+          // 배경
+          ctx.fillStyle = "#f8f9fb";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // 헤더 바
+          ctx.fillStyle = "#1B2B4B";
+          ctx.fillRect(0, 0, canvas.width, 56);
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 22px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("기사 운임 정산 안내", canvas.width / 2, 36);
+
+          // 구분선
+          const drawRow = (label, value, y, highlight) => {
+            ctx.fillStyle = highlight ? "#eef1f8" : "#ffffff";
+            ctx.fillRect(20, y, canvas.width - 40, 44);
+            ctx.strokeStyle = "#e5e7eb";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(20, y, canvas.width - 40, 44);
+            ctx.fillStyle = "#6b7280";
+            ctx.font = "14px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText(label, 36, y + 27);
+            ctx.fillStyle = highlight ? "#1B2B4B" : "#111827";
+            ctx.font = highlight ? "bold 16px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" : "15px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+            ctx.textAlign = "right";
+            ctx.fillText(value, canvas.width - 36, y + 27);
+          };
+
+          drawRow("청구운임", 청구운임.toLocaleString() + "원", 72, false);
+          drawRow("기사운임", 기사운임.toLocaleString() + "원", 120, false);
+          drawRow("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 168, true);
+          drawRow("입금 계좌", `${은행} ${계좌}`, 216, false);
+          drawRow("예금주", 예금주, 264, false);
+
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+          await copyTextWithImageBlob(text, blob);
+          showAlert("오더 내용과 운임 정산 이미지가 함께 복사되었습니다.");
+        } catch {
+          await navigator.clipboard.writeText(text);
+          showAlert("이미지 생성 실패, 텍스트만 복사되었습니다.");
+        }
+      } else {
+        navigator.clipboard.writeText(text);
+      }
     } else {
       navigator.clipboard.writeText(text);
     }
@@ -29466,101 +29620,6 @@ setCopyPlaceOptions(list);
   );
 })()}
 
-    </div>
-
-  );
-}
-
-/* ---------------------- 주소 더보기 ---------------------- */
-function AddressCell({ text = "", max = 5 }) {
-  const [open, setOpen] = React.useState(false);
-  const clean = String(text || "");
-  const isLong = clean.length > max;
-  const short = isLong ? clean.slice(0, max) + "…" : clean;
-
-  if (!clean) return <span className="text-gray-400">-</span>;
-
-  return (
-    <div className="relative inline-block">
-      <span>{short}</span>
-      {isLong && (
-        <button onClick={() => setOpen(true)} className="text-[11px] text-[#1B2B4B] ml-1 underline hover:opacity-70">
-          더보기
-        </button>
-      )}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-[#1B2B4B] px-6 py-4">
-              <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
-            </div>
-            <div className="px-6 py-5">
-              <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{clean}</p>
-            </div>
-            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
-              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ---------------------- 메모 더보기 ---------------------- */
-function MemoCell({ text }) {
-  const [showFull, setShowFull] = React.useState(false);
-  if (!text) return <span className="text-gray-400">-</span>;
-
-  const clean = String(text);
-  const short = clean.length > 5 ? clean.slice(0, 5) + "…" : clean;
-
-  return (
-    <>
-      <span>{showFull ? clean : short}</span>
-
-      {clean.length > 5 && !showFull && (
-        <button
-          onClick={() => setShowFull(true)}
-          className="text-blue-600 text-xs ml-1 underline"
-        >
-          더보기
-        </button>
-      )}
-
-      {showFull && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={() => setShowFull(false)}   // ✅ 바깥 클릭 닫기
-        >
-          <div
-            className="bg-white p-4 rounded-lg shadow-lg w-[400px]"
-            onClick={(e) => e.stopPropagation()} // ✅ 내부 클릭 전파 차단
-          >
-            <h3 className="font-semibold mb-2">메모 내용</h3>
-
-            <div className="text-sm whitespace-pre-wrap">
-              {clean}
-            </div>
-
-            <div className="text-right mt-3">
-              <button
-                onClick={() => setShowFull(false)} // ✅ 🔥 이게 핵심
-                className="px-3 py-1 bg-blue-600 text-white rounded"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ===================== 기사확인 팝업 (DispatchStatus 패널용) ===================== */}
       {driverConfirmOpen5 && driverConfirmInfo5 && (
         <div
@@ -29670,6 +29729,100 @@ function MemoCell({ text }) {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+
+  );
+}
+
+/* ---------------------- 주소 더보기 ---------------------- */
+function AddressCell({ text = "", max = 5 }) {
+  const [open, setOpen] = React.useState(false);
+  const clean = String(text || "");
+  const isLong = clean.length > max;
+  const short = isLong ? clean.slice(0, max) + "…" : clean;
+
+  if (!clean) return <span className="text-gray-400">-</span>;
+
+  return (
+    <div className="relative inline-block">
+      <span>{short}</span>
+      {isLong && (
+        <button onClick={() => setOpen(true)} className="text-[11px] text-[#1B2B4B] ml-1 underline hover:opacity-70">
+          더보기
+        </button>
+      )}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{clean}</p>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------- 메모 더보기 ---------------------- */
+function MemoCell({ text }) {
+  const [showFull, setShowFull] = React.useState(false);
+  if (!text) return <span className="text-gray-400">-</span>;
+
+  const clean = String(text);
+  const short = clean.length > 5 ? clean.slice(0, 5) + "…" : clean;
+
+  return (
+    <>
+      <span>{showFull ? clean : short}</span>
+
+      {clean.length > 5 && !showFull && (
+        <button
+          onClick={() => setShowFull(true)}
+          className="text-blue-600 text-xs ml-1 underline"
+        >
+          더보기
+        </button>
+      )}
+
+      {showFull && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowFull(false)}   // ✅ 바깥 클릭 닫기
+        >
+          <div
+            className="bg-white p-4 rounded-lg shadow-lg w-[400px]"
+            onClick={(e) => e.stopPropagation()} // ✅ 내부 클릭 전파 차단
+          >
+            <h3 className="font-semibold mb-2">메모 내용</h3>
+
+            <div className="text-sm whitespace-pre-wrap">
+              {clean}
+            </div>
+
+            <div className="text-right mt-3">
+              <button
+                onClick={() => setShowFull(false)} // ✅ 🔥 이게 핵심
+                className="px-3 py-1 bg-blue-600 text-white rounded"
+              >
+                닫기
+              </button>
             </div>
           </div>
         </div>
@@ -40382,6 +40535,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const [alertMsg, setAlertMsg] = React.useState("");
   const fileRef = React.useRef(null);
 
+  // 계좌번호 상태
+  const [bankForm, setBankForm] = React.useState({ bank: "", accountNumber: "", accountHolder: "" });
+  const [bankConfirmOpen, setBankConfirmOpen] = React.useState(false);
+  const [bankSaving, setBankSaving] = React.useState(false);
+
   // 수정 요청 상태
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [editForm, setEditForm] = React.useState({});
@@ -40531,6 +40689,35 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
       showMsg("요청 제출 실패: " + (err.message || "알 수 없는 오류"));
     } finally {
       setSubmittingEdit(false);
+    }
+  };
+
+  // appData 로드 시 계좌 정보 초기화
+  React.useEffect(() => {
+    if (appData) {
+      setBankForm({
+        bank: appData.계좌은행 || "",
+        accountNumber: appData.계좌번호 || "",
+        accountHolder: appData.예금주 || "",
+      });
+    }
+  }, [appData?.id]);
+
+  const saveBank = async () => {
+    if (!appData?.id) return;
+    setBankSaving(true);
+    try {
+      await updateDoc(doc(db, "transportApplications", appData.id), {
+        계좌은행: bankForm.bank,
+        계좌번호: bankForm.accountNumber,
+        예금주: bankForm.accountHolder,
+      });
+      setBankConfirmOpen(false);
+      showMsg("계좌 정보가 저장되었습니다.");
+    } catch (err) {
+      showMsg("저장 실패: " + (err.message || "알 수 없는 오류"));
+    } finally {
+      setBankSaving(false);
     }
   };
 
@@ -40707,6 +40894,109 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           )}
         </div>
       </div>
+
+      {/* 계좌번호 관리 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4">
+          <h2 className="text-white font-bold text-[16px]">계좌 정보</h2>
+          <p className="text-white/55 text-[12px] mt-0.5">직접배차 기사 전달용 계좌 정보입니다</p>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">은행</label>
+              <select
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
+                value={bankForm.bank}
+                onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
+              >
+                <option value="">은행 선택</option>
+                {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">계좌번호</label>
+              <input
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                placeholder="숫자만 입력 (하이픈 제외)"
+                value={bankForm.accountNumber}
+                onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">예금주</label>
+            <input
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+              placeholder="예금주 이름 입력"
+              value={bankForm.accountHolder}
+              onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
+            />
+          </div>
+          {appData?.계좌은행 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+              <div className="text-[11px] font-semibold text-gray-400 mb-1">현재 등록된 계좌</div>
+              <div className="text-[14px] font-bold text-[#1B2B4B]">{appData.계좌은행} {appData.계좌번호}</div>
+              <div className="text-[13px] text-gray-600 mt-0.5">예금주: {appData.예금주 || "-"}</div>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <button
+              className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40"
+              disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
+              onClick={() => {
+                if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return;
+                setBankConfirmOpen(true);
+              }}
+            >
+              저장
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 계좌 확인 팝업 */}
+      {bankConfirmOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]" onClick={() => setBankConfirmOpen(false)}>
+          <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">계좌 정보 확인</h3>
+              <p className="text-white/55 text-[12px] mt-0.5">입력하신 정보가 맞는지 확인해 주세요</p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-500 w-20">은행</span>
+                  <span className="text-[14px] font-bold text-[#1B2B4B]">{bankForm.bank}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                  <span className="text-[13px] font-semibold text-gray-500 w-20">계좌번호</span>
+                  <span className="text-[14px] font-bold text-[#1B2B4B] font-mono">{bankForm.accountNumber}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                  <span className="text-[13px] font-semibold text-gray-500 w-20">예금주</span>
+                  <span className="text-[14px] font-bold text-[#1B2B4B]">{bankForm.accountHolder}</span>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex gap-3 border-t border-gray-100 pt-4">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+                onClick={() => setBankConfirmOpen(false)}>
+                아니오, 다시 수정
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-50"
+                disabled={bankSaving}
+                onClick={saveBank}>
+                {bankSaving ? "저장 중..." : "예, 저장합니다"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 수정 요청 모달 */}
       {editModalOpen && (
