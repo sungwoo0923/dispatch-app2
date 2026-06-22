@@ -2166,6 +2166,8 @@ useEffect(() => {
 
 const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
+const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
+const [newDriverModalData, setNewDriverModalData] = React.useState(null);
 const [hasUpdate, setHasUpdate] = React.useState(false);
 React.useEffect(() => {
   const handler = () => setHasUpdate(true);
@@ -15060,9 +15062,7 @@ const results = plate
 setSmartList4(results.slice(0,8));
 };
 
-const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
-const [newDriverModalData, setNewDriverModalData] = React.useState(null);
-const openNewDriverModal = React.useCallback((차량번호, onConfirm) => {
+const openNewDriverModal = (차량번호, onConfirm) => {
   const existing = (drivers || []).filter(d =>
     (d.차량번호 || "").replace(/\s/g, "") === (차량번호 || "").replace(/\s/g, "")
   );
@@ -15072,7 +15072,7 @@ const openNewDriverModal = React.useCallback((차량번호, onConfirm) => {
     setNewDriverModalData({ 차량번호, mode: "new", existingDriver: null, onConfirm });
   }
   setNewDriverModalOpen(true);
-}, [drivers]);
+};
 
 const applySmart4 = async (target, setTarget, text) => {
   if (!text.trim()) return;
