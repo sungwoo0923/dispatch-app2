@@ -23113,7 +23113,6 @@ const applySmart5 = async (target, setTarget, text) => {
 };
 
   // 🚚 기사 선택 / 확인 팝업 상태 추가  ⭐⭐
-  const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
 const [driverSelectInfo, setDriverSelectInfo] = React.useState(null);
 const [quickRegMode5, setQuickRegMode5] = React.useState(false);
 const [quickRegName5, setQuickRegName5] = React.useState("");
