@@ -237,6 +237,41 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
   );
 }
 
+function MobilePagination({ page, total, onChange }) {
+  if (total <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-1 py-3">
+      {Array.from({ length: total }, (_, i) => i + 1).map(p => (
+        <button key={p} onClick={() => onChange(p)}
+          className={`w-7 h-7 rounded-full text-xs font-semibold ${p === page ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}
+        >{p}</button>
+      ))}
+    </div>
+  );
+}
+
+function MobileApprovalBadge({ status }) {
+  if (!status || status === "pending") return <span className="text-[11px] text-gray-300">대기</span>;
+  const map = { approved: ["승인", "#1B2B4B", "bg-[#EEF1F7] text-[#1B2B4B]"], rejected: ["반려", "#DC2626", "bg-red-50 text-red-600"], hold: ["보류", "#6B7280", "bg-gray-100 text-gray-500"] };
+  const [label, , cls] = map[status] || ["대기", "", ""];
+  return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${cls}`}>{label}</span>;
+}
+
+function MobileApprovalStamp({ status }) {
+  if (!status || status === "pending") return null;
+  const map = { approved: ["승 인", "#1B2B4B"], rejected: ["반 려", "#DC2626"], hold: ["보 류", "#6B7280"] };
+  const [label, color] = map[status] || [];
+  if (!label) return null;
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+      <div style={{ border: `3px solid ${color}`, color, transform: "rotate(-12deg)", opacity: 0.85 }}
+        className="w-20 h-20 rounded-full flex items-center justify-center">
+        <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "0.2em" }}>{label}</span>
+      </div>
+    </div>
+  );
+}
+
 function BackIconButton({ onClick }) {
   return (
     <button
@@ -753,7 +788,13 @@ const [selectedNotice, setSelectedNotice] = useState(null);
 const [noticeOpen, setNoticeOpen] = useState(false);
 const [noticeForm, setNoticeForm] = useState({ title: "", author: "", content: "" });
 const [scheduleOpen, setScheduleOpen] = useState(false);
-const [scheduleForm, setScheduleForm] = useState({ type: "휴가", start: "", end: "", memo: "" });
+const [scheduleForm, setScheduleForm] = useState({ type: "휴가", start: "", end: "", memo: "", approverUid: "", approverName: "" });
+const [noticePage, setNoticePage] = useState(1);
+const NOTICE_PAGE_SIZE = 5;
+const [schedulePage, setSchedulePage] = useState(1);
+const SCHEDULE_PAGE_SIZE = 5;
+const [handoverPage, setHandoverPage] = useState(1);
+const HANDOVER_PAGE_SIZE = 5;
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
   // -------------------------------------------------------------
@@ -2848,6 +2889,9 @@ onGoSchedule={() => {
                 start: scheduleForm.start,
                 end: scheduleForm.end || scheduleForm.start,
                 memo: scheduleForm.memo,
+                approverUid: scheduleForm.approverUid,
+                approverName: scheduleForm.approverName,
+                approvalStatus: "pending",
                 createdAt: serverTimestamp(),
               });
             }
