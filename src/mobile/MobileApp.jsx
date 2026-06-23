@@ -1745,6 +1745,7 @@ const groupedByDate = useMemo(() => {
   // 5. 저장 / 수정
   // --------------------------------------------------
   const handleSave = async () => {
+    if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     // 필수값 체크
     if (!form.상차지명 || !form.하차지명) {
       alert("상차지 / 하차지는 필수입니다.");
@@ -2001,6 +2002,7 @@ const handleOrderDuplicateWithDriver = (order) => {
 };
 
 const deleteSingleOrder = async (order) => {
+  if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
   const col = order.__col || collName;
   const id = order.id || order._id;
   if (!col || !id) return;
@@ -2046,6 +2048,7 @@ const deleteSingleOrder = async (order) => {
   // 6. 기사 배차 / 배차취소(상태는 배차중으로만) / 오더삭제
   // --------------------------------------------------
   const assignDriver = async ({ 차량번호, 이름, 전화번호 }) => {
+    if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!selectedOrder) return;
 
     const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
@@ -2094,6 +2097,7 @@ const deleteSingleOrder = async (order) => {
   };
 
   const cancelAssign = async () => {
+    if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!selectedOrder) return;
 
     await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
@@ -2132,6 +2136,7 @@ const deleteSingleOrder = async (order) => {
   };
 
   const confirmDeleteMobile = async () => {
+    if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!deleteConfirmMobile) return;
     await deleteDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id));
     setDeleteConfirmMobile(null);
@@ -2148,6 +2153,7 @@ const deleteSingleOrder = async (order) => {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
 
   const deleteSelectedOrders = async (selectedOrders) => {
+    if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.`)) return;
     try {
       for (const order of selectedOrders) {
@@ -2750,6 +2756,7 @@ onGoSchedule={() => {
         <div className="flex gap-2 pt-2 border-t border-gray-100">
           <button
             onClick={async () => {
+              if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
               if (!window.confirm("삭제할까요?")) return;
               await deleteDoc(doc(db, "schedules", selectedSchedule.id));
               setSelectedSchedule(null);
@@ -2822,6 +2829,7 @@ onGoSchedule={() => {
         />
         <button
           onClick={async () => {
+            if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
             if (!scheduleForm.start) { alert("시작일을 선택해주세요."); return; }
             const me = mobileUsers.find(u => u.id === currentUser?.uid);
             const userName = me?.name || "사용자";

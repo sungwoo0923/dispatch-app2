@@ -1949,7 +1949,7 @@ useEffect(() => {
     });
 
     // 관리자/경리회계는 회사 내 전체 데이터
-    if (role === "admin" || role === "test") return byCompany;
+    if (role === "admin" || role === "test" || role === "viewer") return byCompany;
 
     // 일반 계정은 회사 내 본인 데이터만
     return byCompany.filter(o =>
@@ -2182,6 +2182,15 @@ React.useEffect(() => {
   // ---------------- 역할별 차단 메뉴 ----------------
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
   const isViewer = role === "viewer";
+  const _viewerBlock = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
+  const addDispatchSafe = isViewer ? _viewerBlock : addDispatch;
+  const patchDispatchSafe = isViewer ? _viewerBlock : patchDispatch;
+  const removeDispatchSafe = isViewer ? _viewerBlock : removeDispatch;
+  const upsertDriverSafe = isViewer ? _viewerBlock : upsertDriver;
+  const removeDriverSafe = isViewer ? _viewerBlock : removeDriver;
+  const upsertClientSafe = isViewer ? _viewerBlock : upsertClient;
+  const removeClientSafe = isViewer ? _viewerBlock : removeClient;
+  const upsertPlaceSafe = isViewer ? _viewerBlock : upsertPlace;
   // user(실무자): 배차/기사/거래처 업무 가능, 재무/관리 메뉴 차단
   const userBlockedMenus = [
     "매출관리", "정산관리", "관리자메뉴",
@@ -2405,15 +2414,16 @@ return (
             dispatchData={dispatchDataFiltered}
             drivers={drivers}
             clients={clients}
-            addDispatch={addDispatch}
+            addDispatch={addDispatchSafe}
             upsertDriver={upsertDriver}
             upsertClient={upsertClient}
-            patchDispatch={patchDispatch}
-            removeDispatch={removeDispatch}
+            patchDispatch={patchDispatchSafe}
+            removeDispatch={removeDispatchSafe}
             upsertPlace={upsertPlace}
             placeRows={places}
             role={role}
             isTest={isTest}
+            isViewer={isViewer}
             showAlert={showAlert}
             userCompany={userCompany || localStorage.getItem("userCompany") || ""}
           />
@@ -2429,9 +2439,9 @@ return (
             drivers={drivers}
             clients={clients}
             placeRows={places}
-            addDispatch={addDispatch}
-            patchDispatch={patchDispatch}
-            removeDispatch={removeDispatch}
+            addDispatch={addDispatchSafe}
+            patchDispatch={patchDispatchSafe}
+            removeDispatch={removeDispatchSafe}
             upsertDriver={upsertDriver}
             darkMode={darkMode}
             isViewer={isViewer}
@@ -2464,9 +2474,9 @@ return (
                 clients={clients}
                 places={places}
                 placeRows={places}
-                addDispatch={addDispatch}
-                patchDispatch={patchDispatch}
-                removeDispatch={removeDispatch}
+                addDispatch={addDispatchSafe}
+                patchDispatch={patchDispatchSafe}
+                removeDispatch={removeDispatchSafe}
                 upsertDriver={upsertDriver}
                 focusOrderId={focusOrderId}
                 clearFocusOrder={() => setFocusOrderId(null)}
@@ -2477,8 +2487,8 @@ return (
               <UnassignedStatus
                 role={role}
                 dispatchData={dispatchDataFiltered}
-                patchDispatch={patchDispatch}
-                removeDispatch={removeDispatch}
+                patchDispatch={patchDispatchSafe}
+                removeDispatch={removeDispatchSafe}
                 drivers={drivers}
                 clients={clients}
                 places={places}
@@ -2494,8 +2504,8 @@ return (
         {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
           <DriverManagement
             drivers={drivers}
-            upsertDriver={upsertDriver}
-            removeDriver={removeDriver}
+            upsertDriver={upsertDriverSafe}
+            removeDriver={removeDriverSafe}
           />
         )}
 
@@ -2516,9 +2526,9 @@ return (
             <ClientManagement
               key={거래처관리Tab}
               clients={clients}
-              upsertClient={upsertClient}
-              removeClient={removeClient}
-              upsertPlace={upsertPlace}
+              upsertClient={upsertClientSafe}
+              removeClient={removeClientSafe}
+              upsertPlace={upsertPlaceSafe}
               places={places}
               showAlert={showAlert}
               initialTab={거래처관리Tab === "기본거래처" ? "기본" : "하차지"}
@@ -2621,7 +2631,7 @@ return (
               setClients={(next) => next.forEach(upsertClient)}
               upsertClient={upsertClient}
               showAlert={showAlert}
-              patchDispatch={patchDispatch}
+              patchDispatch={patchDispatchSafe}
               cardImage={cardImage}
               setCardImage={setCardImage}
               cardImageUploading={cardImageUploading}
@@ -2632,7 +2642,7 @@ return (
             <div className="p-4">
               <PaymentManagement
                 dispatchData={dispatchDataFiltered}
-                patchDispatch={patchDispatch}
+                patchDispatch={patchDispatchSafe}
               />
             </div>
           )}
@@ -3020,6 +3030,7 @@ return (
     placeRows = [],
     role = "admin",
     isTest = false,
+    isViewer = false,
     showAlert = (msg) => showAlert(msg),  // ★ 추가 (폴백 포함)
     userCompany = "",
   }) {
@@ -3563,7 +3574,7 @@ const primary =
 
 
     // 관리자 여부 체크
-const isAdmin = role === "admin" || role === "totalMaster";
+const isAdmin = role === "admin" || role === "totalMaster" || isViewer;
 
 // 기존 필터 상태 (유지)
 const [filterType, setFilterType] = React.useState(null);
@@ -5616,6 +5627,7 @@ const palletFareRules = {
 };
     const handleSubmit = async (e) => {
   e.preventDefault();
+  if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
   if (!validateRequired(form)) return;
   if (!validateDateTime(form)) return;
 
@@ -5624,6 +5636,7 @@ const palletFareRules = {
 
 // ⭐ 실제 저장 함수
 const doSave = async () => {
+  if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
   if (isSaving) return;
   setIsSaving(true);
 
@@ -11771,9 +11784,9 @@ setConfirmChange(null);
       placeRows={placeRows}
       timeOptions={timeOptions}
       tonOptions={tonOptions}
-      addDispatch={addDispatch}
-      patchDispatch={patchDispatch}
-      removeDispatch={removeDispatch}
+      addDispatch={addDispatchSafe}
+      patchDispatch={patchDispatchSafe}
+      removeDispatch={removeDispatchSafe}
       upsertDriver={upsertDriver}
       filterType={filterType}
       filterValue={filterValue}
@@ -16604,6 +16617,7 @@ const handleCloseFileUpload = async (e) => {
   // 🔥 팝업에서 실제 삭제 실행
   // =======================
   const executeDelete = async () => {
+    if (isViewer) return showAlert("조회전용 권한으로 삭제할 수 없습니다.");
 
     const ids = deleteList.map(r => r._id);
 
@@ -20240,6 +20254,7 @@ value={copyTarget?.화물수량 || ""}
               <button
   className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
   onClick={async () => {
+    if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
     // ✅ 저장 직전 경유지 + 화물내용 최종 동기화
 const syncedEditTarget = {
   ...editTarget,
@@ -25817,7 +25832,7 @@ return (
           setShowCreate={setShowCreate}
           newOrder={newOrder}
           setNewOrder={setNewOrder}
-          addDispatch={addDispatch}
+          addDispatch={addDispatchSafe}
           clients={clients}
           drivers={drivers}        // ⭐ 추가
           upsertDriver={upsertDriver} // ⭐ 신규 기사 등록에 필요

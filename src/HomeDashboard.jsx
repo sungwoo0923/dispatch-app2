@@ -95,7 +95,7 @@ function BoardTable({ headers, rows }) {
       <thead>
         <tr className="bg-gray-50 border-b border-gray-200">
           {headers.map((h, i) => (
-            <th key={i} className={`px-3 py-2.5 font-semibold text-gray-500 text-[12px] ${h.align || "text-center"}`}
+            <th key={i} className={`px-3 py-2.5 font-semibold text-gray-500 text-[12px] whitespace-nowrap ${h.align || "text-center"}`}
               style={{ width: h.width }}>
               {h.label}
             </th>
@@ -156,6 +156,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   };
 
   const [period, setPeriod] = useState("7d");
+  const isViewer = role === "viewer";
   const [boardTab, setBoardTab] = React.useState("공지사항");
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeForm, setNoticeForm] = React.useState({ title: "", author: "", content: "" });
@@ -583,9 +584,9 @@ React.useEffect(() => {
             })}
           </div>
           <div className="ml-auto">
-            {boardTab === "공지사항" && <RegBtn onClick={() => setNoticeOpen(true)} />}
-            {boardTab === "휴가/외근" && <RegBtn onClick={() => setScheduleOpen(true)} />}
-            {boardTab === "인수인계" && (
+            {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => setNoticeOpen(true)} />}
+            {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => setScheduleOpen(true)} />}
+            {!isViewer && boardTab === "인수인계" && (
               <RegBtn onClick={() => {
                 const me = users.find(u => u.id === user?.uid);
                 setSelectedHandover(null);
@@ -681,10 +682,10 @@ React.useEffect(() => {
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[44px]">No</th>
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[90px]">등록날짜</th>
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[68px]">등록시간</th>
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[70px]">작성자</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[44px]">No</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[90px]">등록날짜</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">등록시간</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">작성자</th>
                       <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500">내용</th>
                     </tr>
                   </thead>
@@ -761,10 +762,12 @@ React.useEffect(() => {
             <div><div className="text-[13px] text-gray-400 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
             <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
           </div>
+          {!isViewer && (
           <div className="flex gap-2 mt-4 pt-4 border-t">
             <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
             <button onClick={() => { setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
           </div>
+          )}
         </Modal>
       )}
 
@@ -801,10 +804,12 @@ React.useEffect(() => {
             <div><div className="text-[13px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
             {selectedSchedule.memo && <div><div className="text-[13px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
           </div>
+          {!isViewer && (
           <div className="flex gap-2 mt-4 pt-4 border-t">
             <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
             <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "" }); setScheduleOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
           </div>
+          )}
         </Modal>
       )}
 
@@ -861,10 +866,12 @@ React.useEffect(() => {
                 <div><div className="text-[13px] text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
                 <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
               </div>
+              {!isViewer && (
               <div className="flex gap-2 mt-4 pt-4 border-t">
                 <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
                 <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
               </div>
+              )}
             </>
           )}
         </Modal>
