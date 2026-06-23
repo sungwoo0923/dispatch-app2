@@ -257,6 +257,7 @@ React.useEffect(() => {
     if (seen[shownKey] || _dismissedToasts.has(shownKey) || getPermDismissed().has(shownKey)) return;
 
     markToastSeen(shownKey); // setTimeout 이전에 기록 (race condition 방지)
+    addPermDismissed(shownKey); // 영구 기록 — 탭 닫아도 재표시 안 함
     setTimeout(() => {
       setToast({
         type,
@@ -283,7 +284,7 @@ React.useEffect(() => {
       const data = { id: added.doc.id, ...added.doc.data() };
       const seenKeyS = `schedule_${data.id}`;
       if (getSeenToasts()[seenKeyS] || _dismissedToasts.has(seenKeyS) || getPermDismissed().has(seenKeyS)) return;
-      markToastSeen(seenKeyS);
+      markToastSeen(seenKeyS); addPermDismissed(seenKeyS);
       setToast({ type: "schedule", data });
     });
     return () => unsub();
@@ -307,7 +308,7 @@ React.useEffect(() => {
       const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
       const seenKeyN = `notice_${data.id}`;
       if (getSeenToasts()[seenKeyN] || _dismissedToasts.has(seenKeyN) || getPermDismissed().has(seenKeyN)) return;
-      markToastSeen(seenKeyN);
+      markToastSeen(seenKeyN); addPermDismissed(seenKeyN);
       setToast({ type: "notice", data });
     });
     return () => unsub();
@@ -331,7 +332,7 @@ React.useEffect(() => {
       const data = { id: added.doc.id, ...added.doc.data() };
       const seenKeyH = `handover_${data.id}`;
       if (getSeenToasts()[seenKeyH] || _dismissedToasts.has(seenKeyH) || getPermDismissed().has(seenKeyH)) return;
-      markToastSeen(seenKeyH);
+      markToastSeen(seenKeyH); addPermDismissed(seenKeyH);
       setToast({ type: "handover", data });
     });
     return () => unsub();
