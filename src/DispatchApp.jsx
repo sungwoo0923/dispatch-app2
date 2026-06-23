@@ -9739,200 +9739,127 @@ className={`
       <>
       
            {/* ==================== 상단: 입력폼 + Dashboard ==================== */}
-<div className="flex items-start gap-6 w-full">
-  
+<div className="flex items-start gap-4 w-full">
 
-<div className="flex-1 flex flex-col overflow-hidden">
-
+<div className="flex-1 flex flex-col overflow-hidden min-w-0">
   {renderForm()}
 </div>
 
-  {/* ================= Premium Today Dashboard v7 — Bold & Clear ================= */}
-<div
-  className="w-[1300px] flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200/50 bg-[#fafafa] flex flex-col self-start"
-  style={{ maxHeight: "fit-content" }}
->
+  {/* ================= Today 대시보드 ================= */}
+<div className="w-[280px] flex-shrink-0 flex flex-col gap-2.5 self-start">
 
-  {/* ── 헤더 ── */}
-  <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-    <div className="flex items-center gap-2.5">
-      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-      <span className="text-[15px] font-bold text-white">Today</span>
+  {/* 헤더 */}
+  <div className="bg-[#1B2B4B] rounded-xl px-4 py-3 flex items-center justify-between">
+    <div>
+      <div className="text-[11px] text-white/50 font-semibold">TODAY</div>
+      <div className="text-[13px] text-white font-bold">{today}</div>
     </div>
-    <div className="flex items-center gap-3">
-      <span className="text-white/35 text-[13px] font-mono">{today}</span>
-      <input
-        type="time"
-        value={alertTime}
-        onChange={(e) => { setAlertTime(e.target.value); setAlertShown(false); }}
-        className="bg-white/8 text-white/70 text-[12px] rounded-md px-2 py-1 outline-none border border-white/10 w-[80px]"
-      />
+    <div className="text-right">
+      <div className="text-[11px] text-white/50 font-semibold">배차 진행률</div>
+      <div className="flex items-baseline gap-1 justify-end">
+        <span className="text-[22px] font-black text-white leading-none">{rate}</span>
+        <span className="text-[13px] font-bold text-white/50">%</span>
+      </div>
     </div>
   </div>
-  <div className="flex-1 overflow-y-auto p-4 space-y-3">
 
-    {/* ── 배차 진행률 ── */}
-    <div className="bg-white rounded-xl border border-gray-100 p-5">
-      <div className="flex items-end justify-between mb-3">
-        <div>
-          <div className="text-[13px] text-gray-500 font-semibold mb-1">배차 진행률</div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-[36px] font-black text-[#1B2B4B] leading-none">{rate}</span>
-            <span className="text-[16px] font-bold text-gray-300">%</span>
-          </div>
+  {/* 진행률 바 */}
+  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+    <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-1000" style={{ width: `${rate}%` }} />
+  </div>
+
+  {/* 상태 3개 */}
+  <div className="grid grid-cols-3 gap-2">
+    {[
+      { label: "배차중", val: doing, dot: "bg-[#1B2B4B]", pulse: doing > 0, list: todayRows.filter(r => r.배차상태 === "배차중") },
+      { label: "미배차", val: pending, dot: "bg-gray-400", pulse: false, list: todayRows.filter(r => !r.차량번호?.trim()) },
+      { label: "긴급", val: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length, dot: "bg-red-500", pulse: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length > 0, list: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료") },
+    ].map(({ label, val, dot, pulse, list }) => (
+      <button key={label} type="button"
+        onClick={() => setStatusPopup({ title: `${label} 리스트`, list })}
+        className="bg-white border border-gray-100 rounded-xl p-3 text-center hover:shadow-sm transition">
+        <div className={`w-1.5 h-1.5 rounded-full ${dot} ${pulse ? "animate-pulse" : ""} mx-auto mb-1.5`} />
+        <div className="text-[22px] font-black text-[#1B2B4B] leading-none">{val}</div>
+        <div className="text-[10px] text-gray-400 font-semibold mt-1">{label}</div>
+      </button>
+    ))}
+  </div>
+
+  {/* KPI 4개 */}
+  <div className="grid grid-cols-2 gap-2">
+    {[
+      { label: "총 오더", val: total, unit: "건" },
+      { label: "완료", val: done, unit: "건" },
+      { label: "기사수", val: driverCount, unit: "명" },
+      { label: "진행중", val: doing, unit: "건" },
+    ].map(({ label, val, unit }) => (
+      <div key={label} className="bg-white border border-gray-100 rounded-xl py-2.5 px-3 text-center">
+        <div className="text-[18px] font-extrabold text-[#1B2B4B] leading-none">
+          {val}<span className="text-[10px] font-semibold text-gray-300 ml-0.5">{unit}</span>
         </div>
-        <div className="text-[14px] text-gray-400 font-semibold">
-          <span className="font-bold text-[#1B2B4B]">{done}</span>
-          <span className="text-gray-300"> / </span>
-          <span>{total}</span>
-        </div>
+        <div className="text-[10px] text-gray-400 font-semibold mt-1">{label}</div>
       </div>
-      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full bg-[#1B2B4B] transition-all duration-1000"
-          style={{ width: `${rate}%` }}
-        />
-      </div>
+    ))}
+  </div>
+
+  {/* 오늘 운임 */}
+  <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+    <div className="px-4 py-2.5 border-b border-gray-50">
+      <span className="text-[12px] font-bold text-[#1B2B4B]">오늘 운임</span>
     </div>
-
-    {/* ── 상태 카드 3개 ── */}
-    <div className="grid grid-cols-3 gap-3">
-      {[
-        {
-          label: "배차중", val: doing,
-          sub: doing > 0 ? "진행 중" : "없음",
-          dot: "bg-[#1B2B4B]",
-          pulse: doing > 0,
-          list: todayRows.filter(r => r.배차상태 === "배차중"),
-        },
-        {
-          label: "미배차", val: pending,
-          sub: pending > 0 ? "대기 중" : "없음",
-          dot: "bg-gray-400",
-          pulse: false,
-          list: todayRows.filter(r => !r.차량번호?.trim()),
-        },
-        {
-          label: "긴급",
-          val: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length,
-          sub: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length > 0 ? "즉시 처리" : "없음",
-          dot: "bg-red-500",
-          pulse: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length > 0,
-          list: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료"),
-        },
-      ].map(({ label, val, sub, dot, pulse, list }) => (
-        <button
-          key={label}
-          type="button"
-          onClick={() => setStatusPopup({ title: `${label} 리스트`, list })}
-          className="bg-white rounded-xl border border-gray-100 p-4 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <div className={`w-2 h-2 rounded-full ${dot} ${pulse ? "animate-pulse" : ""}`} />
-            <span className="text-[13px] font-semibold text-gray-400">{label}</span>
-          </div>
-          <div className="text-[28px] font-black text-[#1B2B4B] leading-none">{val}</div>
-          <div className="text-[11px] text-gray-300 mt-1.5 font-medium">{sub}</div>
-        </button>
-      ))}
+    {[
+      { label: "청구", val: todayRevenue },
+      { label: "기사비용", val: todayDriverCost },
+      { label: "수수료", val: todayRevenue - todayDriverCost },
+    ].map(({ label, val }) => (
+      <div key={label} className="px-4 py-2 flex justify-between items-center border-b border-gray-50 last:border-0">
+        <span className="text-[11px] text-gray-500 font-medium">{label}</span>
+        <span className="text-[13px] font-bold text-[#1B2B4B] tabular-nums">
+          {val.toLocaleString()}<span className="text-gray-300 font-normal text-[10px] ml-0.5">원</span>
+        </span>
+      </div>
+    ))}
+    <div className="px-4 py-2.5 bg-[#1B2B4B] flex justify-between items-center">
+      <span className="text-[11px] text-white/60 font-semibold">마진율</span>
+      <span className="text-[16px] font-black text-white">{todayMarginRate.toFixed(1)}%</span>
     </div>
+  </div>
 
-    {/* ── KPI 스트립 ── */}
-    <div className="grid grid-cols-4 gap-2">
-      {[
-        { label: "총 오더", val: total, unit: "건" },
-        { label: "완료", val: done, unit: "건" },
-        { label: "기사수", val: driverCount, unit: "명" },
-        { label: "진행중", val: doing, unit: "건" },
-      ].map(({ label, val, unit }) => (
-        <div key={label} className="bg-white rounded-lg border border-gray-100 py-3 px-4 text-center">
-          <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-none">
-            {val}<span className="text-[12px] font-semibold text-gray-300 ml-1">{unit}</span>
-          </div>
-          <div className="text-[12px] text-gray-400 mt-1.5 font-semibold">{label}</div>
-        </div>
-      ))}
+  {/* 거래처 TOP 5 */}
+  <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+    <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
+      <span className="text-[12px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
+      <span className="text-[10px] text-gray-300 font-medium">오늘 오더</span>
     </div>
-
-    {/* ── 오늘 운임 ── */}
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-gray-50">
-        <span className="text-[14px] font-bold text-[#1B2B4B]">오늘 운임</span>
-      </div>
-      <div className="divide-y divide-gray-50">
-        {[
-          { label: "청구", val: todayRevenue },
-          { label: "기사비용", val: todayDriverCost },
-          { label: "수수료", val: todayRevenue - todayDriverCost },
-        ].map(({ label, val }) => (
-          <div key={label} className="px-5 py-3 flex justify-between items-center">
-            <span className="text-[13px] text-gray-500 font-medium">{label}</span>
-            <span className="text-[15px] font-bold text-[#1B2B4B] tabular-nums">
-              {val.toLocaleString()}<span className="text-gray-300 font-normal text-[12px] ml-0.5">원</span>
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="px-5 py-3.5 bg-[#1B2B4B] flex justify-between items-center">
-        <span className="text-[13px] text-white/60 font-semibold">마진율</span>
-        <span className="text-[18px] font-black text-white">{todayMarginRate.toFixed(1)}%</span>
-      </div>
-    </div>
-
-        {/* ── 거래처 TOP 5 (세로 막대 차트) ── */}
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
-        <span className="text-[14px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
-        <span className="text-[11px] text-gray-300 font-medium">오늘 오더 기준</span>
-      </div>
-      <div className="px-5 py-4">
-        {(() => {
-          const counts = {};
-          todayRows.forEach(r => {
-            const name = r.거래처명?.trim();
-            if (name) counts[name] = (counts[name] || 0) + 1;
-          });
-          const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-          const max = sorted[0]?.[1] || 1;
-
-          if (sorted.length === 0) {
-            return <div className="text-center py-6 text-[13px] text-gray-300">오늘 오더가 없습니다</div>;
-          }
-
-          return (
-            <div className="flex items-end justify-between gap-4" style={{ height: "170px" }}>
-              {sorted.map(([name, count], i) => {
-                const heightPct = (count / max) * 100;
-                const opacities = [1, 0.8, 0.6, 0.45, 0.35];
-                return (
-                  <div key={name} className="flex-1 flex flex-col items-center max-w-[120px]" style={{ height: "170px" }}>
-                    {/* count label — 고정 영역 */}
-                    <div style={{ height: "22px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <span className="text-[12px] font-bold text-[#1B2B4B]">{count}건</span>
-                    </div>
-                    {/* bar — 남은 공간에서 하단 정렬 */}
-                    <div className="flex-1 w-full flex flex-col justify-end items-center" style={{ paddingBottom: "4px" }}>
-                      <div
-                        className="w-9 rounded-t-md transition-all duration-700 bg-[#1B2B4B]"
-                        style={{
-                          height: `${Math.max(heightPct, 8)}%`,
-                          opacity: opacities[i] || 0.3,
-                        }}
-                      />
-                    </div>
-                    {/* name label — 고정 영역 */}
-                    <div style={{ height: "22px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "100%" }}>
-                      <span className="text-[11px] text-gray-600 font-semibold truncate w-full text-center">{name}</span>
-                    </div>
+    <div className="px-4 py-3">
+      {(() => {
+        const counts = {};
+        todayRows.forEach(r => { const name = r.거래처명?.trim(); if (name) counts[name] = (counts[name] || 0) + 1; });
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const max = sorted[0]?.[1] || 1;
+        if (sorted.length === 0) return <div className="text-center py-4 text-[12px] text-gray-300">오늘 오더 없음</div>;
+        return (
+          <div className="space-y-2">
+            {sorted.map(([name, count], i) => (
+              <div key={name} className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-gray-300 w-3 shrink-0">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[11px] font-semibold text-gray-700 truncate max-w-[140px]">{name}</span>
+                    <span className="text-[11px] font-bold text-[#1B2B4B] shrink-0 ml-1">{count}건</span>
                   </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-      </div>
+                  <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#1B2B4B] rounded-full" style={{ width: `${(count / max) * 100}%`, opacity: 1 - i * 0.15 }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   </div>
+
 </div>
 
 </div>
