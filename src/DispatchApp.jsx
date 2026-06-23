@@ -41077,12 +41077,14 @@ React.useEffect(() => {
                             </td>
                           ))}
                           {["대표자","업태","종목","주소"].map(key => (
-                            <td key={key} className="px-2 py-2.5 text-center max-w-[120px]">
+                            <td key={key} className="px-2 py-2.5 text-center" style={{ maxWidth: 120, overflow: "hidden" }}>
                               {(r[key] || "").length > 15 ? (
-                                <span className="text-[13px] text-gray-700 whitespace-nowrap">
-                                  {(r[key] || "").slice(0, 15)}…
-                                  <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r[key]); }}>더보기</button>
-                                </span>
+                                <div className="flex items-center justify-center gap-1">
+                                  <span className="text-[13px] text-gray-700 whitespace-nowrap overflow-hidden" style={{ maxWidth: 72, textOverflow: "ellipsis", display: "inline-block" }}>
+                                    {(r[key] || "").slice(0, 15)}
+                                  </span>
+                                  <button className="shrink-0 text-[12px] text-[#1B2B4B] font-semibold underline whitespace-nowrap" onClick={(e) => { e.stopPropagation(); setMemoPopup(r[key]); }}>더보기</button>
+                                </div>
                               ) : (
                                 <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
                               )}
