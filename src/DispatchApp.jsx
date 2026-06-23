@@ -17684,12 +17684,9 @@ flashRow(savedId);
     React.startTransition(() => {
       setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
     });
-    // Firestore 저장은 다음 이벤트 루프로 넘겨 UI 블로킹 방지
-    setTimeout(() => {
-      patchDispatch(savedId, payload).catch(console.error);
-      if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
-      if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
-    }, 0);
+    patchDispatch(savedId, payload).catch(console.error);
+    if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
+    if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
@@ -20325,13 +20322,12 @@ setTimeout(() => {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
 }, 400);
 
-// ✅ rows 낙관적 업데이트 (낮은 우선순위)
+// ✅ rows 낙관적 업데이트
 React.startTransition(() => {
   setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
 });
 
-// ✅ 백그라운드 저장 (다음 이벤트루프 - UI 블로킹 방지)
-setTimeout(() => {
+// ✅ 백그라운드 저장
 if (payload.차량번호 && payload.이름) {
   const existingD = driverMap.get((payload.차량번호||"").replace(/\s+/g,""));
   if (!existingD || existingD.length === 0) {
@@ -20344,7 +20340,6 @@ if (editTarget.거래처명) {
 }
 if (editTarget.상차지명) upsertPlace?.({ 업체명: editTarget.상차지명, 주소: editTarget.상차지주소||"", 담당자: editTarget.상차지담당자||"", 담당자번호: editTarget.상차지담당자번호||"" }).catch(console.error);
 if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명, 주소: editTarget.하차지주소||"", 담당자: editTarget.하차지담당자||"", 담당자번호: editTarget.하차지담당자번호||"" }).catch(console.error);
-}, 0);
                 }}
               >
                 저장
