@@ -665,11 +665,19 @@ const removeDispatch = async (arg) => {
 };
 
   const upsertDriver = async (driver) => {
-  const id = driver.id || crypto.randomUUID();
-  if (!id) throw new Error("driver id 없음");
   const viewCompany = role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
     : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+
+  // ★ id가 없을 때: 차량번호 기준으로 기존 기사 찾기 (중복 생성 방지)
+  let id = driver.id;
+  if (!id && driver.차량번호) {
+    const normPlate = (s="") => String(s).replace(/\s+/g, "").toUpperCase();
+    const existing = drivers.find(d => normPlate(d.차량번호) === normPlate(driver.차량번호));
+    if (existing?.id) id = existing.id;
+  }
+  if (!id) id = crypto.randomUUID();
+
   const data = {
     ...driver,
     id,
@@ -39483,6 +39491,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [selectedMonths, setSelectedMonths] = React.useState(new Set());
   const [q, setQ] = React.useState("");
+  const [qField, setQField] = React.useState("전체");
   const [searched, setSearched] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   const [gradeFilter, setGradeFilter] = React.useState("전체");
@@ -39491,6 +39500,14 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const perPage = 100;
+
+  // 기사정리 팝업 상태
+  const [cleanupOpen, setCleanupOpen] = React.useState(false);
+  const [cleanupTab, setCleanupTab] = React.useState("연락처정규화"); // "연락처정규화" | "중복기사정리"
+  const [cleanupQ, setCleanupQ] = React.useState("");
+  const [cleanupQField, setCleanupQField] = React.useState("전체");
+  const [cleanupSelected, setCleanupSelected] = React.useState(new Set()); // ids to delete (duplicates)
+  const [cleanupDone, setCleanupDone] = React.useState(false);
 
   // 전화번호 정규화: 010-XXXX-XXXX 형식으로 변환
   const normalizePhone = (raw) => {
@@ -39533,9 +39550,8 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const filtered = React.useMemo(() => {
     if (q.trim() && searched) {
       const nq = norm(q);
-      let list = drivers.filter(r =>
-        ["차량번호","이름","전화번호","메모"].some(k => norm(r[k]||"").includes(nq))
-      );
+      const fields = qField === "전체" ? ["차량번호","이름","전화번호","메모"] : [qField === "기사명" ? "이름" : qField === "연락처" ? "전화번호" : qField];
+      let list = drivers.filter(r => fields.some(k => norm(r[k]||"").includes(nq)));
       if (gradeFilter !== "전체") list = list.filter(r => (r.등급||"일반") === gradeFilter);
       return list;
     }
@@ -39544,7 +39560,44 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
       return drivers;
     }
     return [];
-  }, [drivers, q, searched, gradeFilter, showAll]);
+  }, [drivers, q, qField, searched, gradeFilter, showAll]);
+
+  // ★ 연락처 정규화 대상
+  const phoneNormTargets = React.useMemo(() => {
+    const cq = norm(cleanupQ);
+    return drivers
+      .filter(d => {
+        if (!d.전화번호) return false;
+        if (normalizePhone(d.전화번호) === d.전화번호) return false;
+        if (!cq) return true;
+        const fields = cleanupQField === "전체" ? ["차량번호","이름","전화번호"] : [cleanupQField === "기사명" ? "이름" : cleanupQField === "연락처" ? "전화번호" : cleanupQField];
+        return fields.some(k => norm(d[k]||"").includes(cq));
+      });
+  }, [drivers, cleanupQ, cleanupQField]);
+
+  // ★ 중복기사 그룹 (차량번호 기준, 동일 차량번호 2개 이상)
+  const dupGroups = React.useMemo(() => {
+    const cq = norm(cleanupQ);
+    const map = new Map();
+    for (const d of drivers) {
+      const key = norm(d.차량번호 || "");
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(d);
+    }
+    let groups = [...map.entries()]
+      .filter(([, list]) => list.length > 1)
+      .map(([, list]) => list);
+    if (cq) {
+      groups = groups.filter(list =>
+        list.some(d => {
+          const fields = cleanupQField === "전체" ? ["차량번호","이름","전화번호"] : [cleanupQField === "기사명" ? "이름" : cleanupQField === "연락처" ? "전화번호" : cleanupQField];
+          return fields.some(k => norm(d[k]||"").includes(cq));
+        })
+      );
+    }
+    return groups;
+  }, [drivers, cleanupQ, cleanupQField]);
 
   React.useEffect(() => setPage(1), [q, gradeFilter, showAll, searched]);
 
@@ -39672,11 +39725,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             엑셀 다운로드
           </button>
           <button
-            onClick={bulkNormalizePhones}
+            onClick={() => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }}
             className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
-            title="형식이 잘못된 전화번호를 010-XXXX-XXXX 형식으로 일괄 변환"
           >
-            전화번호 일괄 정규화
+            기사정리
           </button>
           <button onClick={removeSelected} className="px-4 py-2 rounded-lg bg-red-600 text-white text-[13px] font-bold hover:bg-red-700 transition">
             선택 삭제
@@ -39746,9 +39798,19 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
       {/* 검색 + 필터 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4 flex items-center gap-3 flex-wrap">
         <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
+          <select
+            className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
+            value={qField}
+            onChange={e => { setQField(e.target.value); setSearched(false); }}
+          >
+            <option value="전체">전체</option>
+            <option value="차량번호">차량번호</option>
+            <option value="기사명">기사명</option>
+            <option value="연락처">연락처</option>
+          </select>
           <input
-            className="px-3 h-full text-[13px] w-52 outline-none"
-            placeholder="차량번호 / 이름 / 전화번호 검색"
+            className="px-3 h-full text-[13px] w-48 outline-none"
+            placeholder="검색어 입력..."
             value={q}
             onChange={e => { setQ(e.target.value); setSearched(false); }}
             onKeyDown={e => { if (e.key==="Enter") setSearched(true); }}
@@ -39864,6 +39926,197 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ===== 기사정리 팝업 ===== */}
+      {cleanupOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50" onClick={() => setCleanupOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-white font-bold text-[16px]">기사정리</h3>
+                <p className="text-white/50 text-[12px] mt-0.5">연락처 정규화 및 중복 기사 통합 관리</p>
+              </div>
+              <button onClick={() => setCleanupOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            {/* 탭 */}
+            <div className="flex border-b border-gray-200 shrink-0">
+              {["연락처정규화","중복기사정리"].map(tab => (
+                <button key={tab} onClick={() => { setCleanupTab(tab); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }}
+                  className={`px-6 py-3 text-[13px] font-bold transition border-b-2 ${cleanupTab === tab ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+                  {tab}
+                </button>
+              ))}
+            </div>
+            {/* 검색바 */}
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
+              <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
+                <select className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
+                  value={cleanupQField} onChange={e => setCleanupQField(e.target.value)}>
+                  <option value="전체">전체</option>
+                  <option value="차량번호">차량번호</option>
+                  <option value="기사명">기사명</option>
+                  <option value="연락처">연락처</option>
+                </select>
+                <input className="px-3 h-full text-[13px] w-44 outline-none"
+                  placeholder="검색어 입력..."
+                  value={cleanupQ}
+                  onChange={e => setCleanupQ(e.target.value)} />
+              </div>
+              {cleanupTab === "연락처정규화" && phoneNormTargets.length > 0 && (
+                <button
+                  onClick={async () => {
+                    for (const d of phoneNormTargets) {
+                      await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
+                    }
+                    setCleanupDone(true);
+                    showAlert(`${phoneNormTargets.length}건 정규화 완료`);
+                  }}
+                  className="ml-auto px-4 py-1.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">
+                  전체 정규화 ({phoneNormTargets.length}건)
+                </button>
+              )}
+              {cleanupTab === "중복기사정리" && cleanupSelected.size > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`선택한 ${cleanupSelected.size}건의 중복 기사를 삭제하시겠습니까?`)) return;
+                    for (const id of cleanupSelected) await removeDriver(id);
+                    setCleanupSelected(new Set());
+                    setCleanupDone(true);
+                    showAlert(`${cleanupSelected.size}건 삭제 완료`);
+                  }}
+                  className="ml-auto px-4 py-1.5 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition">
+                  선택 삭제 ({cleanupSelected.size}건)
+                </button>
+              )}
+            </div>
+            {/* 본문 */}
+            <div className="overflow-y-auto flex-1">
+              {cleanupTab === "연락처정규화" && (
+                phoneNormTargets.length === 0 ? (
+                  <div className="flex items-center justify-center h-40 text-[13px] text-gray-400">
+                    {cleanupDone ? "모든 연락처가 정규화되었습니다." : "정규화가 필요한 연락처가 없습니다."}
+                  </div>
+                ) : (
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="sticky top-0 bg-[#1B2B4B]">
+                      <tr>
+                        {["차량번호","기사명","현재 연락처","정규화 후"].map(h => (
+                          <th key={h} className="px-4 py-3 text-white font-bold text-left whitespace-nowrap">{h}</th>
+                        ))}
+                        <th className="px-4 py-3 text-white font-bold text-center whitespace-nowrap">개별 정규화</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {phoneNormTargets.map((d, i) => (
+                        <tr key={d.id || i} className={`border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"}`}>
+                          <td className="px-4 py-3 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{d.차량번호 || "-"}</td>
+                          <td className="px-4 py-3 text-[13px] text-gray-800 whitespace-nowrap">{d.이름 || "-"}</td>
+                          <td className="px-4 py-3 text-[13px] text-gray-500 whitespace-nowrap">{d.전화번호}</td>
+                          <td className="px-4 py-3 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{normalizePhone(d.전화번호)}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button onClick={async () => {
+                              await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
+                              showAlert("정규화 완료");
+                            }} className="px-3 py-1 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
+                              정규화
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              )}
+
+              {cleanupTab === "중복기사정리" && (
+                dupGroups.length === 0 ? (
+                  <div className="flex items-center justify-center h-40 text-[13px] text-gray-400">
+                    {cleanupDone ? "중복 기사가 정리되었습니다." : "중복된 기사가 없습니다."}
+                  </div>
+                ) : (
+                  <div className="p-4 space-y-4">
+                    {dupGroups.map((group, gi) => {
+                      // 가장 최신 (updatedAt 기준) 을 대표로
+                      const sorted = [...group].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                      const representative = sorted[0];
+                      return (
+                        <div key={gi} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                          <div className="bg-[#1B2B4B]/5 px-4 py-2 flex items-center gap-3 border-b border-gray-100">
+                            <span className="text-[13px] font-bold text-[#1B2B4B]">{representative.차량번호 || "차량번호 없음"}</span>
+                            <span className="text-[12px] text-gray-500">{representative.이름 || ""}</span>
+                            <span className="ml-auto text-[12px] text-gray-400">총 {group.length}건 (중복 {group.length - 1}건)</span>
+                            <button
+                              onClick={async () => {
+                                const toDelete = sorted.slice(1).map(d => d.id).filter(Boolean);
+                                if (!toDelete.length) return;
+                                if (!window.confirm(`"${representative.차량번호}" 기사를 1건으로 정리합니다. 나머지 ${toDelete.length}건을 삭제합니까?`)) return;
+                                for (const id of toDelete) await removeDriver(id);
+                                showAlert(`정리 완료 — ${toDelete.length}건 삭제`);
+                              }}
+                              className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
+                              이 그룹 정리
+                            </button>
+                          </div>
+                          <table className="w-full text-sm border-collapse">
+                            <thead>
+                              <tr className="border-b border-gray-100">
+                                <th className="px-3 py-2 text-center w-8">
+                                  <input type="checkbox"
+                                    checked={sorted.slice(1).every(d => d.id && cleanupSelected.has(d.id))}
+                                    onChange={e => {
+                                      const ids = sorted.slice(1).map(d => d.id).filter(Boolean);
+                                      setCleanupSelected(prev => {
+                                        const n = new Set(prev);
+                                        if (e.target.checked) ids.forEach(id => n.add(id));
+                                        else ids.forEach(id => n.delete(id));
+                                        return n;
+                                      });
+                                    }} />
+                                </th>
+                                {["차량번호","기사명","연락처","등급","비고"].map(h => (
+                                  <th key={h} className="px-3 py-2 text-[12px] font-bold text-gray-500 text-left whitespace-nowrap">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sorted.map((d, di) => (
+                                <tr key={d.id || di} className={`border-b border-gray-50 ${di === 0 ? "bg-[#1B2B4B]/5" : ""}`}>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {di === 0 ? (
+                                      <span className="text-[11px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/10 px-1.5 py-0.5 rounded">유지</span>
+                                    ) : (
+                                      <input type="checkbox"
+                                        checked={!!d.id && cleanupSelected.has(d.id)}
+                                        onChange={e => {
+                                          if (!d.id) return;
+                                          setCleanupSelected(prev => {
+                                            const n = new Set(prev);
+                                            e.target.checked ? n.add(d.id) : n.delete(d.id);
+                                            return n;
+                                          });
+                                        }} />
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{d.차량번호 || "-"}</td>
+                                  <td className="px-3 py-2.5 text-[13px] text-gray-800 whitespace-nowrap">{d.이름 || "-"}</td>
+                                  <td className="px-3 py-2.5 text-[13px] text-gray-600 whitespace-nowrap">{d.전화번호 || "-"}</td>
+                                  <td className="px-3 py-2.5 text-[13px] text-gray-500 whitespace-nowrap">{d.등급 || "일반"}</td>
+                                  <td className="px-3 py-2.5 text-[12px] text-gray-400">{di === 0 ? "대표 (최신)" : "삭제 대상"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
         </div>
       )}
 
