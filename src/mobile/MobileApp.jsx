@@ -272,6 +272,17 @@ function MobileApprovalStamp({ status }) {
   );
 }
 
+function getOverallApprovalStatus(s) {
+  const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, name: s.approverName, status: s.approvalStatus || "pending" }] : []);
+  if (approvers.length === 0) return "none";
+  const statuses = approvers.map(a => a.status || "pending");
+  if (statuses.every(st => st === "approved")) return "approved";
+  if (statuses.some(st => st === "rejected")) return "rejected";
+  if (statuses.every(st => st === "hold")) return "hold";
+  if (statuses.some(st => st !== "pending")) return "in_progress";
+  return "pending";
+}
+
 function BackIconButton({ onClick }) {
   return (
     <button
@@ -788,7 +799,7 @@ const [selectedNotice, setSelectedNotice] = useState(null);
 const [noticeOpen, setNoticeOpen] = useState(false);
 const [noticeForm, setNoticeForm] = useState({ title: "", author: "", content: "" });
 const [scheduleOpen, setScheduleOpen] = useState(false);
-const [scheduleForm, setScheduleForm] = useState({ type: "휴가", start: "", end: "", memo: "", approverUid: "", approverName: "" });
+const [scheduleForm, setScheduleForm] = useState({ type: "휴가", start: "", end: "", memo: "", approvers: [] });
 const [noticePage, setNoticePage] = useState(1);
 const NOTICE_PAGE_SIZE = 5;
 const [schedulePage, setSchedulePage] = useState(1);
@@ -1086,6 +1097,23 @@ useEffect(() => {
   );
   return () => unsub();
 }, []);
+// 자동 마이그레이션: 6월 16일 이전 일정 승인 처리
+React.useEffect(() => {
+  schedules.forEach(s => {
+    const endDate = s.end || s.start || "";
+    if (endDate && endDate <= "2026-06-16") {
+      const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, name: s.approverName, status: s.approvalStatus }] : []);
+      const needsMigration = approvers.length === 0 || approvers.some(a => a.status === "pending");
+      if (needsMigration) {
+        const updatedApprovers = approvers.length > 0
+          ? approvers.map(a => ({ ...a, status: "approved" }))
+          : [{ uid: "migrated", name: "자동승인", status: "approved" }];
+        updateDoc(doc(db, "schedules", s.id), { approvers: updatedApprovers, approvalStatus: "approved" }).catch(() => {});
+      }
+    }
+  });
+}, [schedules]);
+
 // --------------------------------------------------
 // 📝 인수인계 실시간 구독 (★ 여기 추가 ★)
 // --------------------------------------------------
@@ -2659,7 +2687,7 @@ onGoSchedule={() => {
   const accentCls = cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600";
   return (
   <div className="px-4 py-3">
-    {!isViewer && (
+    {role !== "viewer" && (
     <button onClick={() => { setSelectedNotice(null); setNoticeForm({ title: "", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" }); setNoticeOpen(true); }}
       className={`w-full py-2.5 rounded-xl mb-3 ${accentCls} text-white text-sm font-semibold`}
     >+ 공지사항 등록</button>
@@ -2667,7 +2695,7 @@ onGoSchedule={() => {
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
       <div className={`grid text-[11px] font-semibold text-white px-3 py-2.5 ${accentCls}`}
         style={{ gridTemplateColumns: "72px 1fr 56px" }}>
-        <span>날짜</span><span>제목</span><span className="text-right">작성자</span>
+        <span>날짜</span><span className="text-center">제목</span><span className="text-right">작성자</span>
       </div>
       {notices.length === 0 ? (
         <div className="text-sm text-gray-400 text-center py-6">등록된 공지가 없습니다.</div>
@@ -2678,7 +2706,7 @@ onGoSchedule={() => {
           <span className="text-[11px] text-gray-400 shrink-0">
             {n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }).replace(". ", "/").replace(".", "") : "-"}
           </span>
-          <span className="text-[13px] font-semibold text-gray-800 truncate pr-2">{n.title || "공지사항"}</span>
+          <span className="text-[13px] font-semibold text-gray-800 truncate pr-2 text-center">{n.title || "공지사항"}</span>
           <span className="text-[11px] text-gray-500 text-right truncate">{n.author || "-"}</span>
         </button>
       ))}
@@ -2694,7 +2722,7 @@ onGoSchedule={() => {
     <button
       onClick={() => {
         setSelectedSchedule(null);
-        setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approverUid: "", approverName: "" });
+        setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] });
         setScheduleOpen(true);
       }}
       className={`w-full py-2.5 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-sm font-semibold`}
@@ -2721,10 +2749,19 @@ onGoSchedule={() => {
                 <tr key={s.id} onClick={() => setSelectedSchedule(s)} className="cursor-pointer active:bg-blue-50">
                   <td className="px-2 py-2.5 text-center font-bold text-gray-800">{(s.startDate || s.start || "").slice(5).replace("-", ".")}</td>
                   <td className="px-2 py-2.5 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${(s.type || s.title) === "휴가" ? "bg-blue-100 text-blue-700" : (s.type || s.title) === "외근" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{s.type || s.title}</span>
+                    <span className="text-[12px] font-semibold text-gray-700">{s.type || s.title}</span>
                   </td>
                   <td className="px-2 py-2.5 text-center text-gray-600">{s.name || s.writer || "-"}</td>
-                  <td className="px-2 py-2.5 text-center"><MobileApprovalBadge status={s.approvalStatus} /></td>
+                  <td className="px-2 py-2.5 text-center">{(() => {
+                    const myApprover = (s.approvers || []).find(a => a.uid === currentUser?.uid && a.status === "pending");
+                    if (myApprover) return (
+                      <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                        결재대기
+                      </button>
+                    );
+                    return <MobileApprovalBadge status={getOverallApprovalStatus(s)} />;
+                  })()}</td>
                 </tr>
               ))}
             </tbody>
@@ -2744,7 +2781,7 @@ onGoSchedule={() => {
         <button onClick={() => setSelectedSchedule(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div className="p-5 space-y-3 text-sm relative">
-        <MobileApprovalStamp status={selectedSchedule?.approvalStatus} />
+        <MobileApprovalStamp status={getOverallApprovalStatus(selectedSchedule)} />
         <div>
           <div className="text-[11px] text-gray-400 mb-0.5">구분</div>
           <div className="font-semibold">{selectedSchedule.type || selectedSchedule.title}</div>
@@ -2759,7 +2796,7 @@ onGoSchedule={() => {
         </div>
         <div>
           <div className="text-[11px] text-gray-400 mb-0.5">결재자</div>
-          <div>{selectedSchedule?.approverName || "미지정"}</div>
+          <div>{(selectedSchedule.approvers || []).map(a => a.name).join(", ") || selectedSchedule?.approverName || "미지정"}</div>
         </div>
         {(selectedSchedule.memo || selectedSchedule.reason) && (
           <div>
@@ -2769,13 +2806,26 @@ onGoSchedule={() => {
             </div>
           </div>
         )}
-        {currentUser?.uid === selectedSchedule?.approverUid && (
-          <div className="flex gap-2">
-            <button onClick={async () => { await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvalStatus: "approved" }); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-xl bg-[#EEF1F7] text-[#1B2B4B] text-sm font-semibold">승인</button>
-            <button onClick={async () => { await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvalStatus: "rejected" }); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-xl bg-red-50 text-red-600 text-sm font-semibold">반려</button>
-            <button onClick={async () => { await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvalStatus: "hold" }); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-500 text-sm font-semibold">보류</button>
-          </div>
-        )}
+        {(() => {
+          const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
+          const myIdx = approvers.findIndex(a => a.uid === currentUser?.uid && a.status === "pending");
+          if (myIdx === -1) return null;
+          return (
+            <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+              {["approved", "rejected", "hold"].map(status => (
+                <button key={status} onClick={async () => {
+                  const newApprovers = [...approvers];
+                  newApprovers[myIdx] = { ...newApprovers[myIdx], status };
+                  await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
+                  setSelectedSchedule(null);
+                }} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
+                  status === "approved" ? "bg-[#EEF1F7] text-[#1B2B4B]" :
+                  status === "rejected" ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"
+                }`}>{status === "approved" ? "승인" : status === "rejected" ? "반려" : "보류"}</button>
+              ))}
+            </div>
+          );
+        })()}
         <div className="flex gap-2 pt-2 border-t border-gray-100">
           <button
             onClick={async () => {
@@ -2793,8 +2843,7 @@ onGoSchedule={() => {
                 start: selectedSchedule.startDate || selectedSchedule.start || "",
                 end: selectedSchedule.endDate || selectedSchedule.end || "",
                 memo: selectedSchedule.memo || selectedSchedule.reason || "",
-                approverUid: selectedSchedule.approverUid || "",
-                approverName: selectedSchedule.approverName || "",
+                approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []),
               });
               setScheduleOpen(true);
             }}
@@ -2852,12 +2901,41 @@ onGoSchedule={() => {
           value={scheduleForm.memo}
           onChange={e => setScheduleForm(f => ({ ...f, memo: e.target.value }))}
         />
+        <div className="space-y-2">
+          <div className="text-[11px] text-gray-400 font-semibold">결재자 ({scheduleForm.approvers.length}/3)</div>
+          {scheduleForm.approvers.map((a, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <select
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
+                value={a.uid}
+                onChange={e => {
+                  const u = mobileUsers.find(u => (u.uid || u.id) === e.target.value);
+                  const updated = [...scheduleForm.approvers];
+                  updated[i] = { uid: u?.uid || u?.id || "", name: u?.name || "" };
+                  setScheduleForm(f => ({ ...f, approvers: updated }));
+                }}
+              >
+                <option value="">결재자 선택</option>
+                {mobileUsers.map(u => <option key={u.id} value={u.uid || u.id}>{u.name}</option>)}
+              </select>
+              <button onClick={() => setScheduleForm(f => ({ ...f, approvers: f.approvers.filter((_, j) => j !== i) }))}
+                className="text-red-400 text-lg font-bold px-1">×</button>
+            </div>
+          ))}
+          {scheduleForm.approvers.length < 3 && (
+            <button onClick={() => setScheduleForm(f => ({ ...f, approvers: [...f.approvers, { uid: "", name: "" }] }))}
+              className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-gray-500 text-sm">
+              + 결재자 추가
+            </button>
+          )}
+        </div>
         <button
           onClick={async () => {
             if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
             if (!scheduleForm.start) { alert("시작일을 선택해주세요."); return; }
             const me = mobileUsers.find(u => u.id === currentUser?.uid);
             const userName = me?.name || "사용자";
+            const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: "pending" }));
             if (selectedSchedule?.id) {
               await updateDoc(doc(db, "schedules", selectedSchedule.id), {
                 type: scheduleForm.type,
@@ -2865,6 +2943,7 @@ onGoSchedule={() => {
                 start: scheduleForm.start,
                 end: scheduleForm.end || scheduleForm.start,
                 memo: scheduleForm.memo,
+                approvers: approversData,
               });
             } else {
               await addDoc(collection(db, "schedules"), {
@@ -2873,8 +2952,7 @@ onGoSchedule={() => {
                 start: scheduleForm.start,
                 end: scheduleForm.end || scheduleForm.start,
                 memo: scheduleForm.memo,
-                approverUid: scheduleForm.approverUid,
-                approverName: scheduleForm.approverName,
+                approvers: approversData,
                 approvalStatus: "pending",
                 createdAt: serverTimestamp(),
               });
@@ -2923,6 +3001,7 @@ onGoSchedule={() => {
               <tr className="bg-[#1B2B4B] text-white">
                 <th className="px-2 py-2 text-center font-semibold w-20">날짜</th>
                 <th className="px-2 py-2 text-center font-semibold">인수인계</th>
+                <th className="px-2 py-2 text-center font-semibold w-14">작성자</th>
                 <th className="px-2 py-2 text-center font-semibold w-16">받는이</th>
                 <th className="px-2 py-2 text-center font-semibold w-14">읽음</th>
               </tr>
@@ -2950,7 +3029,8 @@ onGoSchedule={() => {
                       {(isReceiver || isAuthor) && <div className={`absolute left-0 top-0 bottom-0 w-1 ${receiverRead ? "bg-emerald-400" : "bg-red-400"}`} />}
                       {getHandoverDate(h).slice(5).replace("-", ".")}
                     </td>
-                    <td className="px-2 py-2.5 text-gray-800 font-medium">인수인계</td>
+                    <td className="px-2 py-2.5 text-center text-gray-800 font-medium">인수인계</td>
+                    <td className="px-2 py-2.5 text-center text-gray-600">{h.author || "-"}</td>
                     <td className="px-2 py-2.5 text-center text-gray-600">{h.receiver || "-"}</td>
                     <td className="px-2 py-2.5 text-center">
                       {(isReceiver || isAuthor) ? (
