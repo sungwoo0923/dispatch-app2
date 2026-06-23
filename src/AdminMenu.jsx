@@ -127,15 +127,22 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
     );
   }, [users, isTotalMaster, effectiveCompany]);
 
+  const ROLE_ORDER = ["totalMaster","admin","user","test","viewer","driver","shipper"];
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return visibleUsers.filter((u) => {
-      const matchSearch = !q
-        ? true
-        : [u.email, u.name, u.phone, u.role, u.companyName].join(" ").toLowerCase().includes(q);
-      const matchRole = roleFilter === "all" ? true : u.role === roleFilter;
-      return matchSearch && matchRole;
-    });
+    return visibleUsers
+      .filter((u) => {
+        const matchSearch = !q
+          ? true
+          : [u.email, u.name, u.phone, u.role, u.companyName].join(" ").toLowerCase().includes(q);
+        const matchRole = roleFilter === "all" ? true : u.role === roleFilter;
+        return matchSearch && matchRole;
+      })
+      .sort((a, b) => {
+        const ia = ROLE_ORDER.indexOf(a.role || "user");
+        const ib = ROLE_ORDER.indexOf(b.role || "user");
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
   }, [search, visibleUsers, roleFilter]);
 
   // 연동운송사 탭 데이터
@@ -427,7 +434,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
                           <td className="px-4 py-3 text-center text-[13px] font-semibold text-gray-800">{u.name || <span className="text-gray-300">-</span>}</td>
                           <td className="px-4 py-3 text-center text-[13px] text-gray-600">{u.phone || <span className="text-gray-300">-</span>}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/30">
+                            <span className="text-[13px] font-bold text-[#1B2B4B]">
                               {ROLE_LABELS[u.role || "user"] || u.role || "실무자"}
                             </span>
                           </td>

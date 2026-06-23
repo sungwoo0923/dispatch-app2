@@ -493,40 +493,68 @@ React.useEffect(() => {
       </div>
 
       {/* ===== 하단: 미배차 현황 + Top5 ===== */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* 미배차 현황 ticker */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* 미배차 현황 ticker — col-span-2 */}
+        <div className="col-span-2">
         <SectionCard title={`미배차 현황 (${allPendingOrders.length}건)`}>
           {allPendingOrders.length === 0 ? (
             <div className="flex items-center justify-center h-[220px] text-[13px] text-gray-400">미배차 오더가 없습니다</div>
           ) : (
-            <div className="relative overflow-hidden" style={{ height: 220 }}>
+            <div className="relative" style={{ minHeight: 220 }}>
+              {/* column headers */}
+              <div className="grid text-[11px] font-bold text-gray-400 border-b border-gray-100 pb-1 mb-1"
+                style={{ gridTemplateColumns: "80px 60px 80px 60px 90px 1fr 1fr 80px 70px 52px 70px" }}>
+                <span>상차일</span>
+                <span>상차시간</span>
+                <span>하차일</span>
+                <span>하차시간</span>
+                <span>거래처명</span>
+                <span>상차지명</span>
+                <span>하차지명</span>
+                <span>화물내용</span>
+                <span>차량종류</span>
+                <span>톤수</span>
+                <span>배차상태</span>
+              </div>
               {/* ticker rows */}
               <div
                 key={tickerPage}
                 style={{ animation: "tickerSlideUp 0.45s cubic-bezier(0.4,0,0.2,1)" }}
               >
-                {allPendingOrders.slice(tickerPage * TICKER_PAGE_SIZE, tickerPage * TICKER_PAGE_SIZE + TICKER_PAGE_SIZE).map((d, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 px-2 py-2.5 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition rounded"
-                    onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
-                  >
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 shrink-0">미배차</span>
-                    <span className="text-[12px] font-semibold text-gray-500 shrink-0 w-[72px]">{(d?.상차일자 || d?.상차일 || d?.상차 || "-").slice(5)}</span>
-                    <span className="text-[13px] font-bold text-gray-800 truncate flex-1">{d?.상차지명 || "-"}</span>
-                    <span className="text-[11px] text-gray-400">→</span>
-                    <span className="text-[13px] text-gray-600 truncate flex-1">{d?.하차지명 || "-"}</span>
-                    <span className="text-[12px] text-gray-500 shrink-0">{d?.화물내용 || ""}</span>
-                  </div>
-                ))}
+                {allPendingOrders.slice(tickerPage * TICKER_PAGE_SIZE, tickerPage * TICKER_PAGE_SIZE + TICKER_PAGE_SIZE).map((d, i) => {
+                  const 상차일 = (d?.상차일자 || d?.상차일 || d?.상차 || "").slice(5);
+                  const 하차일 = (d?.하차일자 || d?.하차일 || "").slice(5);
+                  const status = d?.배차상태 || "미배차";
+                  return (
+                    <div
+                      key={i}
+                      className="grid items-center py-2 border-b border-gray-50 last:border-0 hover:bg-gray-50/80 cursor-pointer transition"
+                      style={{ gridTemplateColumns: "80px 60px 80px 60px 90px 1fr 1fr 80px 70px 52px 70px" }}
+                      onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
+                    >
+                      <span className="text-[12px] text-gray-700 font-semibold">{상차일}</span>
+                      <span className="text-[12px] text-gray-600">{d?.상차시간 || ""}</span>
+                      <span className="text-[12px] text-gray-700">{하차일}</span>
+                      <span className="text-[12px] text-gray-600">{d?.하차시간 || ""}</span>
+                      <span className="text-[12px] font-semibold text-[#1B2B4B] truncate pr-1">{d?.거래처명 || ""}</span>
+                      <span className="text-[12px] text-gray-700 truncate pr-1">{d?.상차지명 || ""}</span>
+                      <span className="text-[12px] text-gray-600 truncate pr-1">{d?.하차지명 || ""}</span>
+                      <span className="text-[12px] text-gray-600 truncate pr-1">{d?.화물내용 || ""}</span>
+                      <span className="text-[12px] text-gray-600">{d?.차량종류 || ""}</span>
+                      <span className="text-[12px] text-gray-600">{d?.차량톤수 || ""}</span>
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${status === "배차완료" ? "text-[#1B2B4B]" : status === "배차중" ? "text-[#2d4470]" : "text-[#1B2B4B]/70"}`}>{status}</span>
+                    </div>
+                  );
+                })}
               </div>
               {/* page indicator */}
               {totalTickerPages > 1 && (
-                <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 pb-1">
-                  {Array.from({ length: totalTickerPages }).map((_, i) => (
+                <div className="flex justify-center gap-1 pt-2">
+                  {Array.from({ length: Math.min(totalTickerPages, 12) }).map((_, i) => (
                     <div
                       key={i}
-                      className="rounded-full transition-all duration-300"
+                      className="rounded-full transition-all duration-300 cursor-pointer"
+                      onClick={() => setTickerPage(i)}
                       style={{
                         width: i === tickerPage ? 16 : 6,
                         height: 6,
@@ -540,11 +568,12 @@ React.useEffect(() => {
           )}
           <style>{`
             @keyframes tickerSlideUp {
-              from { opacity: 0; transform: translateY(18px); }
+              from { opacity: 0; transform: translateY(14px); }
               to   { opacity: 1; transform: translateY(0); }
             }
           `}</style>
         </SectionCard>
+        </div>
 
         {/* Top5 거래처 */}
         <SectionCard title="Top 5 거래처">

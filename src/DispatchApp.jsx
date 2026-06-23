@@ -2143,6 +2143,7 @@ useEffect(() => {
 
     // ★ 특정 오더 ID로 필터링 (거래명세서에서 이동 시)
   const [focusOrderId, setFocusOrderId] = useState(null);
+  const [homeClickedOrder, setHomeClickedOrder] = useState(null);
 
   useEffect(() => {
     window.__setMainTab = (tab) => setMenu(tab);
@@ -2419,11 +2420,7 @@ return (
             pending={pendingToday}
             delayed={0}
             dispatchData={dispatchDataFiltered}
-            onOrderDoubleClick={(order) => {
-              const id = order?.id || order?.docId;
-              if (id) setFocusOrderId(id);
-              setMenu("배차현황");
-            }}
+            onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
           />
         </div>
 
@@ -2729,6 +2726,63 @@ return (
         )}
       </main>
       </div>
+      {/* ===== 홈 오더 미리보기 모달 ===== */}
+      {homeClickedOrder && (
+        <div className="fixed inset-0 z-[99990] flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={() => setHomeClickedOrder(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-white font-bold text-[16px]">오더 복사 / 수정 패널</h3>
+                <p className="text-white/50 text-[12px] mt-0.5">{homeClickedOrder.거래처명} · {homeClickedOrder.상차지명} → {homeClickedOrder.하차지명}</p>
+              </div>
+              <button onClick={() => setHomeClickedOrder(null)} className="text-white/60 hover:text-white text-xl transition">✕</button>
+            </div>
+            <div className="px-6 py-5 overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  ["거래처명", homeClickedOrder.거래처명],
+                  ["배차상태", homeClickedOrder.배차상태],
+                  ["상차일", homeClickedOrder.상차일],
+                  ["상차시간", homeClickedOrder.상차시간],
+                  ["하차일", homeClickedOrder.하차일],
+                  ["하차시간", homeClickedOrder.하차시간],
+                  ["상차지명", homeClickedOrder.상차지명],
+                  ["하차지명", homeClickedOrder.하차지명],
+                  ["화물내용", homeClickedOrder.화물내용],
+                  ["차량종류", homeClickedOrder.차량종류],
+                  ["차량톤수", homeClickedOrder.차량톤수],
+                  ["청구운임", homeClickedOrder.청구운임 ? Number(homeClickedOrder.청구운임).toLocaleString() + "원" : ""],
+                  ["배차기사", homeClickedOrder.이름 || homeClickedOrder.기사명],
+                  ["차량번호", homeClickedOrder.차량번호],
+                  ["메모", homeClickedOrder.메모],
+                ].map(([label, value]) => value ? (
+                  <div key={label} className="flex items-start border-b border-gray-50 pb-2">
+                    <span className="w-24 text-[12px] font-semibold text-gray-400 shrink-0">{label}</span>
+                    <span className="text-[13px] text-gray-800 font-medium">{value}</span>
+                  </div>
+                ) : null)}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
+              <button
+                onClick={() => {
+                  const id = homeClickedOrder?._id || homeClickedOrder?.id || homeClickedOrder?.docId;
+                  if (id) setFocusOrderId(id);
+                  setMenu("배차현황");
+                  setHomeClickedOrder(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
+              >
+                배차현황에서 수정 / 복사
+              </button>
+              <button onClick={() => setHomeClickedOrder(null)} className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ⭐⭐⭐ 내 정보 패널 (슬라이드 사이드바) ⭐⭐⭐ */}
       <div
         className="fixed inset-0 z-50 flex justify-end"
@@ -11120,9 +11174,9 @@ setConfirmChange(null);
               onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-memo")?.focus(); } }}
             >
               <option value="일반">일반</option>
-              <option value="VIP">VIP</option>
-              <option value="주의">주의</option>
               <option value="블랙">블랙</option>
+              <option value="주의">주의</option>
+              <option value="이탈">이탈</option>
             </select>
           </div>
         </div>
@@ -33880,7 +33934,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   }, [dispatchData, q, startDate, endDate, filterType, filterValue]);
 
   const headers = [
-    "순번","등록일","경과","상차일","상차시간","하차시간","거래처명",
+    "순번","등록일","경과","상차일","상차시간","하차일","하차시간","거래처명",
     "상차지명","상차지주소","하차지명","하차지주소",
     "차량종류","차량톤수","화물내용","배차상태","메모",
   ];
@@ -34054,6 +34108,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </td>
                       <td className={cellBase}>{r.상차일 || ""}</td>
                       <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 || ""}</td>
+                      <td className={cellBase}>{r.하차일 || ""}</td>
                       <td className={cellBase}>{r.하차시간 || ""}</td>
                       <td className={`${cellBase} font-semibold text-gray-800`}>{r.거래처명 || ""}</td>
                       <td className={`${cellBase} font-medium`}>{r.상차지명 || ""}</td>
@@ -39898,8 +39953,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [selected, setSelected] = React.useState(new Set());
   const [newForm, setNewForm] = React.useState({
     거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "",
-    주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "",
+    주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "", 등급: "일반",
   });
+  const [showNewClientModal, setShowNewClientModal] = React.useState(false);
+  const [editingClientId, setEditingClientId] = React.useState(null);
 
   // ═══════════════════════════════════════════════════
   // 하차지에서 불러오기 팝업
@@ -39949,7 +40006,8 @@ React.useEffect(() => {
     const 거래처명 = (newForm.거래처명 || "").trim();
     if (!거래처명) return showAlert("거래처명은 필수입니다.");
     await upsertClient?.({ ...newForm, id: 거래처명 });
-   setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "" });
+    setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "", 등급: "일반" });
+    setShowNewClientModal(false);
     showAlert("등록 완료");
   };
 
@@ -40298,25 +40356,27 @@ React.useEffect(() => {
             </div>
             <button onClick={() => setPlaceSearched(true)}
               className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">검색</button>
-            <button onClick={() => setShowNewPlaceForm(v => !v)}
-              className={`h-[34px] px-4 rounded-lg text-sm font-semibold border transition ${
-                showNewPlaceForm ? "bg-gray-200 text-gray-700 border-gray-300" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-              }`}>
-              {showNewPlaceForm ? "취소" : "+ 신규등록"}
-            </button>
-            <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
-              업로드
-              <input type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
-            </label>
-            <button onClick={downloadPlaceExcel}
-              className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
-            <button onClick={removeSelectedPlaces}
-              className="h-[34px] px-4 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition">
-              선택삭제 {placeSelected.size > 0 && `(${placeSelected.size})`}
-            </button>
             {(placeSearched || placeGradeFilter !== "전체") && (
-              <span className="text-xs text-gray-400 ml-auto">검색결과 {filteredPlaces.length}건</span>
+              <span className="text-xs text-gray-400">검색결과 {filteredPlaces.length}건</span>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={() => setShowNewPlaceForm(v => !v)}
+                className={`h-[34px] px-4 rounded-lg text-sm font-semibold border transition ${
+                  showNewPlaceForm ? "bg-gray-200 text-gray-700 border-gray-300" : "border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+                }`}>
+                {showNewPlaceForm ? "취소" : "+ 신규등록"}
+              </button>
+              <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
+                엑셀 업로드
+                <input type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
+              </label>
+              <button onClick={downloadPlaceExcel}
+                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
+              <button onClick={removeSelectedPlaces}
+                className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
+                선택삭제 {placeSelected.size > 0 && `(${placeSelected.size})`}
+              </button>
+            </div>
           </div>
 
           {/* 신규 등록 폼 */}
@@ -40500,6 +40560,7 @@ React.useEffect(() => {
       {subTab === "기본" && (
         <div className="space-y-3">
 
+          {/* 툴바 */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
               <span className="px-3 bg-[#1B2B4B] text-white text-[12px] font-semibold h-full flex items-center">검색</span>
@@ -40508,45 +40569,78 @@ React.useEffect(() => {
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <span className="text-sm text-gray-400">{filtered.length}건</span>
-            <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
-              className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">
-              하차지에서 불러오기
-            </button>
-            <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
-              엑셀 업로드
-              <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
-            </label>
-            <button onClick={downloadClientExcel}
-              className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
-            <button onClick={removeSelectedFn}
-              className="h-[34px] px-4 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition">
-              선택삭제 {selected.size > 0 && `(${selected.size})`}
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
+                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
+                하차지에서 불러오기
+              </button>
+              <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
+                엑셀 업로드
+                <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
+              </label>
+              <button onClick={downloadClientExcel}
+                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
+              <button onClick={removeSelectedFn}
+                className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
+                선택삭제 {selected.size > 0 && `(${selected.size})`}
+              </button>
+              <button onClick={() => setShowNewClientModal(true)}
+                className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">
+                + 신규등록
+              </button>
+            </div>
           </div>
 
-          {/* 신규 등록 폼 */}
-          <div className="bg-white rounded-xl border border-[#1B2B4B]/20 p-4">
-            <div className="text-sm font-bold text-[#1B2B4B] mb-3">신규 기본 거래처 등록</div>
-            <div className="grid grid-cols-4 gap-3 mb-3">
-{[["거래처명*","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["주소","주소"],["담당자","담당자"],["연락처","연락처"],["이메일","이메일"]].map(([label, key]) => (
-                <div key={key}>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">{label}</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={newForm[key]||""}
-                    onChange={(e) => setNewForm(p => ({ ...p, [key]: e.target.value }))} />
+          {/* 신규등록 팝업 */}
+          {showNewClientModal && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowNewClientModal(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[15px]">신규 기본 거래처 등록</h3>
+                  <button onClick={() => setShowNewClientModal(false)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
-              ))}
-            </div>
-            <div className="flex gap-3 items-end">
-              <div className="flex-1">
-                <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
-                <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                  value={newForm.메모||""}
-                  onChange={(e) => setNewForm(p => ({ ...p, 메모: e.target.value }))} />
+                <div className="px-6 py-5 grid grid-cols-2 gap-4">
+                  {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["담당자","담당자"],["연락처","연락처"],["이메일","이메일"]].map(([label, key]) => (
+                    <div key={key}>
+                      <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
+                      <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                        value={newForm[key]||""}
+                        onChange={(e) => setNewForm(p => ({ ...p, [key]: e.target.value }))} />
+                    </div>
+                  ))}
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      value={newForm.주소||""}
+                      onChange={(e) => setNewForm(p => ({ ...p, 주소: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
+                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                      value={newForm.등급||"일반"}
+                      onChange={(e) => setNewForm(p => ({ ...p, 등급: e.target.value }))}>
+                      <option value="일반">일반</option>
+                      <option value="블랙">블랙</option>
+                      <option value="주의">주의</option>
+                      <option value="이탈">이탈</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      value={newForm.메모||""}
+                      onChange={(e) => setNewForm(p => ({ ...p, 메모: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="px-6 pb-5 flex gap-3">
+                  <button onClick={() => setShowNewClientModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+                  <button onClick={addNew}
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">등록</button>
+                </div>
               </div>
-              <button onClick={addNew} className="px-6 py-2 rounded-lg bg-[#1B2B4B] text-white text-sm font-bold hover:bg-[#243a60] transition whitespace-nowrap">등록</button>
             </div>
-          </div>
+          )}
 
           {/* 테이블 */}
           {filtered.length > 0 ? (
@@ -40559,7 +40653,7 @@ React.useEffect(() => {
                         <input type="checkbox" onChange={toggleAll}
                           checked={filtered.length > 0 && selected.size === filtered.length} />
                       </th>
-                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","메모"].map(h => (
+                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","메모","수정"].map(h => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -40567,25 +40661,76 @@ React.useEffect(() => {
                   <tbody>
                     {filtered.map((r, i) => {
                       const id = r.id || r.거래처명;
+                      const isEditing = editingClientId === id;
                       return (
-                        <tr key={id} className={`hover:bg-blue-50/60 transition border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"}`}>
+                        <tr key={id}
+                          className={`transition border-b border-gray-100 ${isEditing ? "bg-blue-50/40" : i%2?"bg-gray-50/50":"bg-white"} hover:bg-blue-50/30`}
+                          onDoubleClick={() => setEditingClientId(id)}>
                           <td className="px-3 py-2.5 text-center">
                             <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
                           </td>
-                          {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","메모"].map(key => (
+                          {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(key => (
                             <td key={key} className="px-2 py-2.5">
-                              <input className="border border-gray-200 rounded px-2 py-1 text-sm focus:border-[#1B2B4B] outline-none"
-                                style={{ minWidth: key === "주소" ? 200 : key === "거래처명" ? 150 : 90 }}
-                                value={r[key] || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setRows(prev => prev.map(r2 =>
-                                    (r2.id || r2.거래처명) === id ? { ...r2, [key]: val } : r2
-                                  ));
-                                }}
-                                onBlur={(e) => handleBlur(r, key, e.target.value)} />
+                              {isEditing ? (
+                                <input className="border border-[#1B2B4B]/40 rounded px-2 py-1 text-[13px] focus:border-[#1B2B4B] outline-none bg-white"
+                                  style={{ minWidth: key === "주소" ? 200 : key === "거래처명" ? 150 : 90 }}
+                                  value={r[key] || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setRows(prev => prev.map(r2 => (r2.id || r2.거래처명) === id ? { ...r2, [key]: val } : r2));
+                                  }}
+                                  onBlur={(e) => handleBlur(r, key, e.target.value)} />
+                              ) : (
+                                <span className="text-[13px] text-gray-700 px-1">{r[key] || ""}</span>
+                              )}
                             </td>
                           ))}
+                          <td className="px-2 py-2.5 text-center">
+                            {isEditing ? (
+                              <select className="border border-[#1B2B4B]/40 rounded px-2 py-1 text-[12px] focus:border-[#1B2B4B] outline-none bg-white"
+                                value={r.등급 || "일반"}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setRows(prev => prev.map(r2 => (r2.id || r2.거래처명) === id ? { ...r2, 등급: val } : r2));
+                                  handleBlur(r, "등급", val);
+                                }}>
+                                <option value="일반">일반</option>
+                                <option value="블랙">블랙</option>
+                                <option value="주의">주의</option>
+                                <option value="이탈">이탈</option>
+                              </select>
+                            ) : (
+                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${r.등급 === "블랙" ? "bg-gray-900 text-white" : r.등급 === "주의" ? "text-orange-700" : r.등급 === "이탈" ? "text-red-600" : "text-[#1B2B4B]"}`}>
+                                {r.등급 || "일반"}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2.5">
+                            {isEditing ? (
+                              <input className="border border-[#1B2B4B]/40 rounded px-2 py-1 text-[13px] focus:border-[#1B2B4B] outline-none bg-white w-32"
+                                value={r.메모 || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setRows(prev => prev.map(r2 => (r2.id || r2.거래처명) === id ? { ...r2, 메모: val } : r2));
+                                }}
+                                onBlur={(e) => handleBlur(r, "메모", e.target.value)} />
+                            ) : (
+                              <span className="text-[13px] text-gray-500 px-1">{r.메모 || ""}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2.5 text-center">
+                            {isEditing ? (
+                              <button onClick={() => setEditingClientId(null)}
+                                className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
+                                완료
+                              </button>
+                            ) : (
+                              <button onClick={() => setEditingClientId(id)}
+                                className="px-3 py-1 rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] text-[12px] font-semibold hover:bg-[#1B2B4B]/10 transition">
+                                수정
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -41241,127 +41386,142 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           )}
         </div>
 
-        <div className="p-5 grid grid-cols-3 gap-5">
-          {/* 왼쪽: 기본 정보 */}
-          <div className="col-span-1 space-y-1">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">기본 정보</p>
+        {/* ── 기본 정보 + 사업자등록증 ── */}
+        <div className="p-6 grid grid-cols-5 gap-8 border-b border-gray-100">
+          {/* 기본 정보 (col-span-3) */}
+          <div className="col-span-3">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">기본 정보</p>
             {appData ? (
-              <>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-0">
                 {[
                   { label: "회사명", value: appData.companyName },
-                  { label: "회사 코드", value: <span className="font-mono font-bold text-[#1B2B4B] tracking-wider bg-[#1B2B4B]/5 px-1.5 py-0.5 rounded text-[12px]">{appData.companyCode || "-"}</span> },
+                  { label: "회사 코드", value: <span className="font-mono font-bold text-[#1B2B4B] tracking-wider bg-[#1B2B4B]/5 px-2 py-0.5 rounded text-[13px]">{appData.companyCode || "-"}</span> },
                   { label: "대표자", value: appData.representative || appData.대표자 || appData.ceo },
                   { label: "사업자번호", value: appData.businessNumber || appData.사업자번호 },
                   { label: "연락처", value: appData.phone || appData.연락처 },
                   { label: "이메일", value: appData.email },
-                  { label: "주소", value: appData.address || appData.주소 },
                   { label: "가입 유형", value: appData.type === "신규" ? "신규 가입" : appData.type === "기존" ? "기존 이용" : appData.type },
                   { label: "승인일", value: appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : (appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : "-") },
                 ].map(({ label, value }) => (
-                  <div key={label} className="flex items-start py-1.5 border-b border-gray-50 last:border-0">
-                    <span className="w-24 text-[12px] font-semibold text-gray-400 shrink-0">{label}</span>
-                    <span className="text-[13px] text-gray-800 break-all">{value || "-"}</span>
+                  <div key={label} className="flex items-start py-3 border-b border-gray-50">
+                    <span className="w-24 text-[12px] font-semibold text-gray-400 shrink-0 pt-0.5">{label}</span>
+                    <span className="text-[14px] text-gray-800 font-medium">{value || "-"}</span>
                   </div>
                 ))}
-              </>
+                <div className="col-span-2 flex items-start py-3">
+                  <span className="w-24 text-[12px] font-semibold text-gray-400 shrink-0 pt-0.5">주소</span>
+                  <span className="text-[14px] text-gray-800 font-medium">{appData.address || appData.주소 || "-"}</span>
+                </div>
+              </div>
             ) : (
-              <div className="text-[13px] text-gray-400 py-4">가입 승인 후 표시됩니다.</div>
+              <div className="text-[14px] text-gray-400 py-8 text-center">가입 승인 후 표시됩니다.</div>
             )}
           </div>
 
-          {/* 중간: 사업자등록증 + 계좌 */}
-          <div className="col-span-1 space-y-4">
-            {/* 사업자등록증 */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
-                <button
-                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition disabled:opacity-40"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                >
-                  {uploading ? uploadProgress : "파일 선택"}
-                </button>
-                <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
-                  onChange={e => handleFileUpload(e.target.files?.[0])} />
-              </div>
-              {/* 사업자등록증 미리보기 */}
-              <div
-                className={`border-2 border-dashed rounded-xl transition ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
+          {/* 사업자등록증 (col-span-2) */}
+          <div className="col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
+              <button
+                className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
               >
-                {filePreviewSrc ? (
-                  <div className="p-2 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] font-semibold text-gray-700 truncate">{appData.사업자등록증파일명 || "사업자등록증"}</span>
-                      <div className="flex gap-1 shrink-0">
-                        {isImage && <button className="px-2 py-1 text-[11px] rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}>복사</button>}
-                        <button className="px-2 py-1 text-[11px] rounded bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}>다운로드</button>
-                      </div>
-                    </div>
-                    {isImage && (
-                      <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[140px] object-contain rounded-lg bg-gray-50" />
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-6 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                    <svg className="w-8 h-8 text-gray-300 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p className="text-[12px] text-gray-400">클릭 또는 드래그하여 업로드</p>
-                  </div>
-                )}
-              </div>
+                {uploading ? uploadProgress : "파일 선택"}
+              </button>
+              <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+                onChange={e => handleFileUpload(e.target.files?.[0])} />
             </div>
+            <div
+              className={`border-2 border-dashed rounded-xl transition min-h-[200px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
+            >
+              {filePreviewSrc ? (
+                <div className="p-3 space-y-3 flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
+                    <div className="flex gap-1.5 shrink-0">
+                      {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}>이미지 복사</button>}
+                      <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}>다운로드</button>
+                    </div>
+                  </div>
+                  {isImage && (
+                    <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[220px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
+                  <svg className="w-10 h-10 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
+                  <p className="text-[12px] text-gray-400 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
-            {/* 계좌 정보 */}
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">계좌 정보</p>
-              <div className="space-y-2">
-                <select
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white"
-                  value={bankForm.bank}
-                  onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
-                >
-                  <option value="">은행 선택</option>
-                  {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
+        {/* ── 계좌 정보 + 매출관리 비밀번호 ── */}
+        <div className="p-6 grid grid-cols-2 gap-8">
+          {/* 계좌 정보 */}
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">계좌 정보</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">은행</label>
+                  <select
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
+                    value={bankForm.bank}
+                    onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
+                  >
+                    <option value="">은행 선택</option>
+                    {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">예금주</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                    placeholder="예금주 이름"
+                    value={bankForm.accountHolder}
+                    onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">계좌번호</label>
                 <input
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="계좌번호"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  placeholder="숫자만 입력 (하이픈 제외)"
                   value={bankForm.accountNumber}
                   onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
                 />
-                <input
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="예금주"
-                  value={bankForm.accountHolder}
-                  onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
-                />
-                {appData?.계좌은행 && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    <div className="text-[11px] font-semibold text-gray-400 mb-0.5">현재 등록된 계좌</div>
-                    <div className="text-[13px] font-bold text-[#1B2B4B]">{appData.계좌은행} {appData.계좌번호}</div>
-                    <div className="text-[12px] text-gray-500">예금주: {appData.예금주 || "-"}</div>
-                  </div>
-                )}
-                <button
-                  className="w-full py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40"
-                  disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
-                  onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
-                >
-                  계좌 저장
-                </button>
               </div>
+              {appData?.계좌은행 && (
+                <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/10 rounded-xl px-4 py-3">
+                  <div className="text-[11px] font-semibold text-gray-400 mb-1">현재 등록된 계좌</div>
+                  <div className="text-[15px] font-bold text-[#1B2B4B]">{appData.계좌은행} {appData.계좌번호}</div>
+                  <div className="text-[13px] text-gray-500 mt-0.5">예금주: {appData.예금주 || "-"}</div>
+                </div>
+              )}
+              <button
+                className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
+                disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
+                onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
+              >
+                계좌 저장
+              </button>
             </div>
           </div>
 
-          {/* 오른쪽: 매출관리 비밀번호 */}
-          <div className="col-span-1">
+          {/* 매출관리 비밀번호 */}
+          <div>
             {isAdmin && <RevenuePasswordSection companyName={companyName} />}
           </div>
         </div>
