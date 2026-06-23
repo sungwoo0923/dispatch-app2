@@ -39958,6 +39958,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   });
   const [showNewClientModal, setShowNewClientModal] = React.useState(false);
   const [editingClientId, setEditingClientId] = React.useState(null);
+  const [editClientModal, setEditClientModal] = React.useState(null); // row data for popup
+  const [memoPopup, setMemoPopup] = React.useState(null); // memo text for popup
 
   // ═══════════════════════════════════════════════════
   // 하차지에서 불러오기 팝업
@@ -40010,6 +40012,16 @@ React.useEffect(() => {
     setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "", 등급: "일반" });
     setShowNewClientModal(false);
     showAlert("등록 완료");
+  };
+
+  const saveEditClient = async () => {
+    if (!editClientModal) return;
+    const id = editClientModal.id || editClientModal.거래처명;
+    if (!id) return;
+    await upsertClient?.({ ...editClientModal, id });
+    setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...editClientModal } : r));
+    setEditClientModal(null);
+    showAlert("수정 완료");
   };
 
   const removeSelectedFn = async () => {
@@ -40585,6 +40597,17 @@ React.useEffect(() => {
                 className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
                 선택삭제 {selected.size > 0 && `(${selected.size})`}
               </button>
+              <button
+                onClick={() => {
+                  if (selected.size === 0) return showAlert("수정할 거래처를 선택하세요.");
+                  if (selected.size > 1) return showAlert("한 번에 1건만 수정할 수 있습니다.");
+                  const id = [...selected][0];
+                  const row = rows.find(r => (r.id || r.거래처명) === id);
+                  if (row) setEditClientModal({ ...row });
+                }}
+                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
+                선택수정 {selected.size === 1 && "(1)"}
+              </button>
               <button onClick={() => setShowNewClientModal(true)}
                 className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">
                 + 신규등록
@@ -40643,6 +40666,76 @@ React.useEffect(() => {
             </div>
           )}
 
+          {/* 수정 팝업 */}
+          {editClientModal && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditClientModal(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[15px]">거래처 수정 — {editClientModal.거래처명}</h3>
+                  <button onClick={() => setEditClientModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+                </div>
+                <div className="px-6 py-5 grid grid-cols-2 gap-4">
+                  {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["담당자","담당자"],["연락처","연락처"],["이메일","이메일"]].map(([label, key]) => (
+                    <div key={key}>
+                      <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
+                      <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                        value={editClientModal[key]||""}
+                        onChange={(e) => setEditClientModal(p => ({ ...p, [key]: e.target.value }))} />
+                    </div>
+                  ))}
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      value={editClientModal.주소||""}
+                      onChange={(e) => setEditClientModal(p => ({ ...p, 주소: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
+                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                      value={editClientModal.등급||"일반"}
+                      onChange={(e) => setEditClientModal(p => ({ ...p, 등급: e.target.value }))}>
+                      <option value="일반">일반</option>
+                      <option value="블랙">블랙</option>
+                      <option value="주의">주의</option>
+                      <option value="이탈">이탈</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      value={editClientModal.메모||""}
+                      onChange={(e) => setEditClientModal(p => ({ ...p, 메모: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="px-6 pb-5 flex gap-3">
+                  <button onClick={() => setEditClientModal(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+                  <button onClick={saveEditClient}
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 메모 더보기 팝업 */}
+          {memoPopup !== null && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setMemoPopup(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[15px]">메모</h3>
+                  <button onClick={() => setMemoPopup(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+                </div>
+                <div className="px-6 py-5">
+                  <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap">{memoPopup}</p>
+                </div>
+                <div className="px-6 pb-5">
+                  <button onClick={() => setMemoPopup(null)}
+                    className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">닫기</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 테이블 */}
           {filtered.length > 0 ? (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
@@ -40654,7 +40747,7 @@ React.useEffect(() => {
                         <input type="checkbox" onChange={toggleAll}
                           checked={filtered.length > 0 && selected.size === filtered.length} />
                       </th>
-                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","메모","수정"].map(h => (
+                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","메모"].map(h => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -40665,71 +40758,29 @@ React.useEffect(() => {
                       const isEditing = editingClientId === id;
                       return (
                         <tr key={id}
-                          className={`transition border-b border-gray-100 ${isEditing ? "bg-blue-50/40" : i%2?"bg-gray-50/50":"bg-white"} hover:bg-blue-50/30`}
-                          onDoubleClick={() => setEditingClientId(id)}>
+                          className={`transition border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"} hover:bg-blue-50/30 cursor-pointer`}
+                          onDoubleClick={() => setEditClientModal({ ...r })}>
                           <td className="px-3 py-2.5 text-center">
-                            <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
+                            <input type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
                           </td>
                           {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(key => (
                             <td key={key} className="px-2 py-2.5">
-                              {isEditing ? (
-                                <input className="border border-[#1B2B4B]/40 rounded px-2 py-1 text-[13px] focus:border-[#1B2B4B] outline-none bg-white"
-                                  style={{ minWidth: key === "주소" ? 200 : key === "거래처명" ? 150 : 90 }}
-                                  value={r[key] || ""}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setRows(prev => prev.map(r2 => (r2.id || r2.거래처명) === id ? { ...r2, [key]: val } : r2));
-                                  }}
-                                  onBlur={(e) => handleBlur(r, key, e.target.value)} />
-                              ) : (
-                                <span className="text-[13px] text-gray-700 px-1">{r[key] || ""}</span>
-                              )}
+                              <span className="text-[13px] text-gray-700 px-1 whitespace-nowrap">{r[key] || ""}</span>
                             </td>
                           ))}
                           <td className="px-2 py-2.5 text-center">
-                            {isEditing ? (
-                              <select className="border border-[#1B2B4B]/40 rounded px-2 py-1 text-[12px] focus:border-[#1B2B4B] outline-none bg-white"
-                                value={r.등급 || "일반"}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setRows(prev => prev.map(r2 => (r2.id || r2.거래처명) === id ? { ...r2, 등급: val } : r2));
-                                  handleBlur(r, "등급", val);
-                                }}>
-                                <option value="일반">일반</option>
-                                <option value="블랙">블랙</option>
-                                <option value="주의">주의</option>
-                                <option value="이탈">이탈</option>
-                              </select>
-                            ) : (
-                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${r.등급 === "블랙" ? "bg-gray-900 text-white" : r.등급 === "주의" ? "text-orange-700" : r.등급 === "이탈" ? "text-red-600" : "text-[#1B2B4B]"}`}>
-                                {r.등급 || "일반"}
+                            <span className={`text-[12px] font-bold ${r.등급 === "블랙" ? "text-gray-900" : r.등급 === "주의" ? "text-orange-700" : r.등급 === "이탈" ? "text-red-600" : "text-[#1B2B4B]"}`}>
+                              {r.등급 || "일반"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2.5 max-w-[160px]">
+                            {(r.메모 || "").length > 18 ? (
+                              <span className="text-[13px] text-gray-500">
+                                {(r.메모 || "").slice(0, 18)}…
+                                <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r.메모); }}>더보기</button>
                               </span>
-                            )}
-                          </td>
-                          <td className="px-2 py-2.5">
-                            {isEditing ? (
-                              <input className="border border-[#1B2B4B]/40 rounded px-2 py-1 text-[13px] focus:border-[#1B2B4B] outline-none bg-white w-32"
-                                value={r.메모 || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setRows(prev => prev.map(r2 => (r2.id || r2.거래처명) === id ? { ...r2, 메모: val } : r2));
-                                }}
-                                onBlur={(e) => handleBlur(r, "메모", e.target.value)} />
                             ) : (
-                              <span className="text-[13px] text-gray-500 px-1">{r.메모 || ""}</span>
-                            )}
-                          </td>
-                          <td className="px-2 py-2.5 text-center">
-                            {isEditing ? (
-                              <button onClick={() => setEditingClientId(null)}
-                                className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
-                                완료
-                              </button>
-                            ) : (
-                              <button onClick={() => setEditingClientId(id)}
-                                className="px-3 py-1 rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] text-[12px] font-semibold hover:bg-[#1B2B4B]/10 transition">
-                                수정
-                              </button>
+                              <span className="text-[13px] text-gray-500">{r.메모 || ""}</span>
                             )}
                           </td>
                         </tr>
@@ -41387,88 +41438,52 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           )}
         </div>
 
-        {/* ── 기본 정보 + 사업자등록증 ── */}
-        <div className="p-6 grid grid-cols-5 gap-8 border-b border-gray-100">
-          {/* 기본 정보 (col-span-3) */}
-          <div className="col-span-3">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">기본 정보</p>
-            {appData ? (
-              <div className="grid grid-cols-2 gap-x-8 gap-y-0">
+        {/* ── 기본 정보 (가로형 테이블) ── */}
+        <div className="border-b border-gray-100">
+          {appData ? (
+            <>
+              {/* 1행: 회사명 / 대표자 / 사업자번호 / 연락처 / 이메일 */}
+              <div className="grid grid-cols-5 divide-x divide-gray-100">
                 {[
                   { label: "회사명", value: appData.companyName },
-                  { label: "회사 코드", value: <span className="font-mono font-bold text-[#1B2B4B] tracking-wider bg-[#1B2B4B]/5 px-2 py-0.5 rounded text-[13px]">{appData.companyCode || "-"}</span> },
                   { label: "대표자", value: appData.representative || appData.대표자 || appData.ceo },
                   { label: "사업자번호", value: appData.businessNumber || appData.사업자번호 },
                   { label: "연락처", value: appData.phone || appData.연락처 },
                   { label: "이메일", value: appData.email },
-                  { label: "가입 유형", value: appData.type === "신규" ? "신규 가입" : appData.type === "기존" ? "기존 이용" : appData.type },
-                  { label: "승인일", value: appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : (appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : "-") },
                 ].map(({ label, value }) => (
-                  <div key={label} className="flex items-start py-3 border-b border-gray-50">
-                    <span className="w-24 text-[12px] font-semibold text-gray-400 shrink-0 pt-0.5">{label}</span>
-                    <span className="text-[14px] text-gray-800 font-medium">{value || "-"}</span>
+                  <div key={label} className="px-5 py-4">
+                    <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">{label}</div>
+                    <div className="text-[14px] font-semibold text-gray-800">{value || "-"}</div>
                   </div>
                 ))}
-                <div className="col-span-2 flex items-start py-3">
-                  <span className="w-24 text-[12px] font-semibold text-gray-400 shrink-0 pt-0.5">주소</span>
-                  <span className="text-[14px] text-gray-800 font-medium">{appData.address || appData.주소 || "-"}</span>
+              </div>
+              {/* 2행: 주소 / 회사코드 / 가입유형 / 승인일 */}
+              <div className="grid grid-cols-4 divide-x divide-gray-100 border-t border-gray-100">
+                <div className="px-5 py-4 col-span-2">
+                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">주소</div>
+                  <div className="text-[14px] font-semibold text-gray-800">{appData.address || appData.주소 || "-"}</div>
+                </div>
+                <div className="px-5 py-4">
+                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">회사 코드</div>
+                  <div className="text-[14px] font-mono font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 inline-block px-2 py-0.5 rounded">{appData.companyCode || "-"}</div>
+                </div>
+                <div className="px-5 py-4">
+                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">승인일</div>
+                  <div className="text-[14px] font-semibold text-gray-800">
+                    {appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : "-"}
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="text-[14px] text-gray-400 py-8 text-center">가입 승인 후 표시됩니다.</div>
-            )}
-          </div>
-
-          {/* 사업자등록증 (col-span-2) */}
-          <div className="col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
-              <button
-                className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-              >
-                {uploading ? uploadProgress : "파일 선택"}
-              </button>
-              <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
-                onChange={e => handleFileUpload(e.target.files?.[0])} />
-            </div>
-            <div
-              className={`border-2 border-dashed rounded-xl transition min-h-[200px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
-              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
-            >
-              {filePreviewSrc ? (
-                <div className="p-3 space-y-3 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
-                    <div className="flex gap-1.5 shrink-0">
-                      {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}>이미지 복사</button>}
-                      <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}>다운로드</button>
-                    </div>
-                  </div>
-                  {isImage && (
-                    <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[220px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
-                  )}
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                  <svg className="w-10 h-10 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
-                  <p className="text-[12px] text-gray-400 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
-                </div>
-              )}
-            </div>
-          </div>
+            </>
+          ) : (
+            <div className="px-6 py-10 text-[14px] text-gray-400 text-center">가입 승인 후 표시됩니다.</div>
+          )}
         </div>
 
-        {/* ── 계좌 정보 + 매출관리 비밀번호 ── */}
-        <div className="p-6 grid grid-cols-2 gap-8">
+        {/* ── 하단 3열: 계좌정보 | 사업자등록증 | 매출비밀번호 ── */}
+        <div className="grid grid-cols-3 divide-x divide-gray-100">
           {/* 계좌 정보 */}
-          <div>
+          <div className="p-6">
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">계좌 정보</p>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -41521,8 +41536,53 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             </div>
           </div>
 
+          {/* 사업자등록증 */}
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
+              <button
+                className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? uploadProgress : "파일 선택"}
+              </button>
+              <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+                onChange={e => handleFileUpload(e.target.files?.[0])} />
+            </div>
+            <div
+              className={`border-2 border-dashed rounded-xl transition min-h-[180px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
+            >
+              {filePreviewSrc ? (
+                <div className="p-3 space-y-3 flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
+                    <div className="flex gap-1.5 shrink-0">
+                      {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}>이미지 복사</button>}
+                      <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}>다운로드</button>
+                    </div>
+                  </div>
+                  {isImage && (
+                    <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[200px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
+                  <svg className="w-10 h-10 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
+                  <p className="text-[12px] text-gray-400 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* 매출관리 비밀번호 */}
-          <div>
+          <div className="p-6">
             {isAdmin && <RevenuePasswordSection companyName={companyName} />}
           </div>
         </div>

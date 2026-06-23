@@ -172,12 +172,13 @@ body {
 }
 
 @keyframes rowSlideIn {
-  0% { opacity: 0.4; transform: translateY(-12px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% { opacity: 0; transform: translateY(-18px); background-color: rgba(27, 43, 75, 0.06); }
+  60% { opacity: 1; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); background-color: transparent; }
 }
 
 .row-highlight {
-  animation: rowSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: rowSlideIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 
