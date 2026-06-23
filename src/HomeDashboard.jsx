@@ -764,10 +764,19 @@ React.useEffect(() => {
                       <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(s.createdAt)}</td>
                       <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{s.name || "-"}</td>
                       <td className="px-3 py-2.5 text-center text-[12px]">
-                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${s.type === "휴가" ? "bg-blue-100 text-blue-700" : s.type === "외근" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{s.type}</span>
+                        <span className="text-[12px] font-semibold text-gray-700">{s.type || s.title}</span>
                       </td>
                       <td className="px-3 py-2.5 text-[13px] font-medium text-gray-800">{s.start?.replaceAll("-", ".")}</td>
-                      <td className="px-3 py-2.5 text-center"><ApprovalBadge status={s.approvalStatus} /></td>
+                      <td className="px-3 py-2.5 text-center">{(() => {
+                        const myApprover = (s.approvers || []).find(a => a.uid === auth.currentUser?.uid && a.status === "pending");
+                        if (myApprover) return (
+                          <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                            결재대기
+                          </button>
+                        );
+                        return <ApprovalBadge status={getOverallApprovalStatus(s)} />;
+                      })()}</td>
                     </tr>
                   ))}
                 />
@@ -895,22 +904,44 @@ React.useEffect(() => {
               <input type="date" className={formInput} value={scheduleForm.end} onChange={e => setScheduleForm({ ...scheduleForm, end: e.target.value })} />
             </div>
             <textarea placeholder="메모 (선택)" rows={3} className={formInput} value={scheduleForm.memo} onChange={e => setScheduleForm({ ...scheduleForm, memo: e.target.value })} />
-            <select className={formInput} value={scheduleForm.approverName} onChange={e => {
-              const u = users.find(u => u.name === e.target.value);
-              setScheduleForm({ ...scheduleForm, approverName: u?.name || "", approverUid: u?.uid || u?.id || "" });
-            }}>
-              <option value="">결재자 선택 (선택사항)</option>
-              {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-            </select>
+            <div className="space-y-2">
+              <div className="text-[12px] text-gray-500 font-semibold">결재자 ({scheduleForm.approvers.length}/3)</div>
+              {scheduleForm.approvers.map((a, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <select
+                    className={formInput}
+                    value={a.uid}
+                    onChange={e => {
+                      const u = users.find(u => (u.uid || u.id) === e.target.value);
+                      const updated = [...scheduleForm.approvers];
+                      updated[i] = { uid: u?.uid || u?.id || "", name: u?.name || "" };
+                      setScheduleForm({ ...scheduleForm, approvers: updated });
+                    }}
+                  >
+                    <option value="">결재자 선택</option>
+                    {users.map(u => <option key={u.id} value={u.uid || u.id}>{u.name}</option>)}
+                  </select>
+                  <button onClick={() => setScheduleForm({ ...scheduleForm, approvers: scheduleForm.approvers.filter((_, j) => j !== i) })}
+                    className="text-red-400 text-lg font-bold px-1">×</button>
+                </div>
+              ))}
+              {scheduleForm.approvers.length < 3 && (
+                <button onClick={() => setScheduleForm({ ...scheduleForm, approvers: [...scheduleForm.approvers, { uid: "", name: "" }] })}
+                  className="w-full py-1.5 rounded-lg border border-dashed border-gray-300 text-gray-500 text-[13px]">
+                  + 결재자 추가
+                </button>
+              )}
+            </div>
             <button onClick={async () => {
               const me = users.find(u => u.id === user?.uid);
               const userName = me?.name || "사용자";
+              const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: "pending" }));
               if (selectedSchedule?.id) {
-                await updateDoc(doc(db, "schedules", selectedSchedule.id), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo });
+                await updateDoc(doc(db, "schedules", selectedSchedule.id), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData });
               } else {
-                await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approverUid: scheduleForm.approverUid, approverName: scheduleForm.approverName, approvalStatus: "pending", createdAt: serverTimestamp(), companyName: getViewCompany() });
+                await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData, approvalStatus: "pending", createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
-              setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approverUid: "", approverName: "" }); setScheduleOpen(false);
+              setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(false);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
           </div>
         </Modal>
@@ -919,24 +950,37 @@ React.useEffect(() => {
       {selectedSchedule && (
         <Modal title="일정 상세" onClose={() => setSelectedSchedule(null)}>
           <div className="relative space-y-3 text-[14px]">
-            <ApprovalStamp status={selectedSchedule?.approvalStatus} />
+            <ApprovalStamp status={getOverallApprovalStatus(selectedSchedule)} />
             <div><div className="text-[13px] text-gray-400 mb-0.5">구분</div><div className="font-semibold">{selectedSchedule.type}</div></div>
             <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedSchedule.name}</div></div>
             <div><div className="text-[13px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">결재자</div><div>{selectedSchedule?.approverName || "미지정"}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">결재자</div><div>{(selectedSchedule.approvers || []).map(a => a.name).join(", ") || selectedSchedule?.approverName || "미지정"}</div></div>
             {selectedSchedule.memo && <div><div className="text-[13px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
           </div>
-          {auth.currentUser?.uid === selectedSchedule?.approverUid && (
-            <div className="flex gap-2 mt-3">
-              <button onClick={async () => { await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvalStatus: "approved" }); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg bg-[#EEF1F7] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#dce3ef] transition">승인</button>
-              <button onClick={async () => { await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvalStatus: "rejected" }); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg bg-red-50 text-red-600 text-[13px] font-semibold hover:bg-red-100 transition">반려</button>
-              <button onClick={async () => { await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvalStatus: "hold" }); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-500 text-[13px] font-semibold hover:bg-gray-200 transition">보류</button>
-            </div>
-          )}
+          {(() => {
+            const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
+            const myIdx = approvers.findIndex(a => a.uid === auth.currentUser?.uid && a.status === "pending");
+            if (myIdx === -1) return null;
+            return (
+              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                {["approved", "rejected", "hold"].map(status => (
+                  <button key={status} onClick={async () => {
+                    const newApprovers = [...approvers];
+                    newApprovers[myIdx] = { ...newApprovers[myIdx], status };
+                    await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
+                    setSelectedSchedule(null);
+                  }} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
+                    status === "approved" ? "bg-[#EEF1F7] text-[#1B2B4B]" :
+                    status === "rejected" ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"
+                  }`}>{status === "approved" ? "승인" : status === "rejected" ? "반려" : "보류"}</button>
+                ))}
+              </div>
+            );
+          })()}
           {!isViewer && (
           <div className="flex gap-2 mt-4 pt-4 border-t">
             <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-            <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approverUid: selectedSchedule.approverUid || "", approverName: selectedSchedule.approverName || "" }); setScheduleOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+            <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
           </div>
           )}
         </Modal>
