@@ -14339,6 +14339,7 @@ const [rows, setRows] = React.useState(() => {
     (dispatchData || []).filter(r => r?.상차일 && relevantDates.has(r.상차일))
   );
 });
+const [movedRowId, setMovedRowId] = React.useState(null);
 React.useEffect(() => { setReady(true); }, []); // eslint-disable-line
  const [selected, setSelected] = React.useState([]);
 const selectedSet = React.useMemo(() => new Set(selected), [selected]);

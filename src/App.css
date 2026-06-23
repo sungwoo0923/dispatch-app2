@@ -171,6 +171,15 @@ body {
   animation: flashHighlight 1.2s ease-out forwards;
 }
 
+@keyframes rowSlideIn {
+  0% { opacity: 0.4; transform: translateY(-12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.row-highlight {
+  animation: rowSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 
 /* ================================
    🌙 다크 테마 (프리미엄 느낌)
