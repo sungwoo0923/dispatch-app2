@@ -3575,6 +3575,10 @@ const primary =
 
     // 관리자 여부 체크
 const isAdmin = role === "admin" || role === "totalMaster" || isViewer;
+const _viewerBlockDM = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
+const addDispatchSafe = isViewer ? _viewerBlockDM : addDispatch;
+const patchDispatchSafe = isViewer ? _viewerBlockDM : patchDispatch;
+const removeDispatchSafe = isViewer ? _viewerBlockDM : removeDispatch;
 
 // 기존 필터 상태 (유지)
 const [filterType, setFilterType] = React.useState(null);
