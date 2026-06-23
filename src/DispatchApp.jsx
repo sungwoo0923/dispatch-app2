@@ -14042,13 +14042,26 @@ const copyAccountImage4 = async () => {
   } catch { showAlert("이미지 복사에 실패했습니다."); }
 };
 
+// base64 또는 URL → Blob 변환 헬퍼
+const srcToBlob = async (src) => {
+  if (src.startsWith("data:")) {
+    const [header, b64] = src.split(",");
+    const mime = header.match(/:(.*?);/)?.[1] || "image/png";
+    const binary = atob(b64);
+    const arr = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+  const res = await fetch(src);
+  return res.blob();
+};
+
 // 사업자등록증 이미지 복사 (Part 4)
 const copyBizImage4 = async () => {
   const src = companyBankData4?.사업자등록증Base64;
   if (!src) { showAlert("회사관리에 사업자등록증을 먼저 등록해 주세요."); return; }
   try {
-    const res = await fetch(src);
-    const blob = await res.blob();
+    const blob = await srcToBlob(src);
     const imgType = blob.type.startsWith("image/") ? blob.type : "image/png";
     await navigator.clipboard.write([new ClipboardItem({ [imgType]: blob })]);
     setCopyModalOpen(false);
@@ -23880,13 +23893,26 @@ if (mode === "driver") {
     } catch { showAlert("이미지 복사에 실패했습니다."); }
   };
 
+  // base64 또는 URL → Blob 변환 헬퍼 (Part 5)
+  const srcToBlob5 = async (src) => {
+    if (src.startsWith("data:")) {
+      const [header, b64] = src.split(",");
+      const mime = header.match(/:(.*?);/)?.[1] || "image/png";
+      const binary = atob(b64);
+      const arr = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+      return new Blob([arr], { type: mime });
+    }
+    const res = await fetch(src);
+    return res.blob();
+  };
+
   // 사업자등록증 이미지 복사 (Part 5)
   const copyBizImage5 = async () => {
     const src = companyBankData?.사업자등록증Base64;
     if (!src) { showAlert("회사관리에 사업자등록증을 먼저 등록해 주세요."); return; }
     try {
-      const res = await fetch(src);
-      const blob = await res.blob();
+      const blob = await srcToBlob5(src);
       const imgType = blob.type.startsWith("image/") ? blob.type : "image/png";
       await navigator.clipboard.write([new ClipboardItem({ [imgType]: blob })]);
       setCopyModalOpen(false);
