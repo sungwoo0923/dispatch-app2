@@ -40271,8 +40271,9 @@ React.useEffect(() => {
     if (!editClientModal) return;
     const id = editClientModal.id || editClientModal.거래처명;
     if (!id) return;
-    await upsertClient?.({ ...editClientModal, id });
-    setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...editClientModal } : r));
+    const { _dragOver, ...data } = editClientModal;
+    await upsertClient?.({ ...data, id });
+    setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...data } : r));
     setEditClientModal(null);
     showAlert("수정 완료");
   };
@@ -40922,8 +40923,8 @@ React.useEffect(() => {
           {/* 수정 팝업 */}
           {editClientModal && (
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditClientModal(null)}>
-              <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
                   <h3 className="text-white font-bold text-[15px]">거래처 수정 — {editClientModal.거래처명}</h3>
                   <button onClick={() => setEditClientModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
@@ -40958,6 +40959,60 @@ React.useEffect(() => {
                     <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 메모: e.target.value }))} />
+                  </div>
+
+                  {/* 파일/이미지 업로드 */}
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-2">첨부파일 (사업자등록증 등)</label>
+                    <div
+                      className={`border-2 border-dashed rounded-xl p-5 text-center transition cursor-pointer ${editClientModal._dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-[#1B2B4B]/50"}`}
+                      onDragOver={(e) => { e.preventDefault(); setEditClientModal(p => ({ ...p, _dragOver: true })); }}
+                      onDragLeave={() => setEditClientModal(p => ({ ...p, _dragOver: false }))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setEditClientModal(p => ({ ...p, _dragOver: false }));
+                        const file = e.dataTransfer.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setEditClientModal(p => ({ ...p, 첨부파일Base64: ev.target.result, 첨부파일명: file.name, 첨부파일타입: file.type }));
+                        reader.readAsDataURL(file);
+                      }}
+                      onClick={() => document.getElementById("clientFileInput").click()}
+                    >
+                      <input id="clientFileInput" type="file" accept="image/*,.pdf" className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setEditClientModal(p => ({ ...p, 첨부파일Base64: ev.target.result, 첨부파일명: file.name, 첨부파일타입: file.type }));
+                          reader.readAsDataURL(file);
+                          e.target.value = "";
+                        }} />
+                      {editClientModal.첨부파일Base64 ? (
+                        <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                          {editClientModal.첨부파일타입?.startsWith("image/") ? (
+                            <img src={editClientModal.첨부파일Base64} alt="첨부" className="max-h-40 mx-auto rounded-lg border border-gray-200 object-contain" />
+                          ) : (
+                            <div className="flex items-center justify-center gap-2 py-3">
+                              <span className="text-[13px] text-gray-600 font-semibold">{editClientModal.첨부파일명}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-center gap-3">
+                            <span className="text-[12px] text-gray-400">{editClientModal.첨부파일명}</span>
+                            <button
+                              className="text-[12px] text-red-500 font-semibold hover:text-red-700"
+                              onClick={() => setEditClientModal(p => ({ ...p, 첨부파일Base64: null, 첨부파일명: null, 첨부파일타입: null }))}>
+                              삭제
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-[13px] text-gray-400 font-semibold">클릭하거나 파일을 여기로 끌어오세요</p>
+                          <p className="text-[11px] text-gray-300 mt-1">이미지 (JPG, PNG) 또는 PDF</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="px-6 pb-5 flex gap-3">
@@ -41016,9 +41071,26 @@ React.useEffect(() => {
                           <td className="px-3 py-2.5 text-center">
                             <input type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
                           </td>
-                          {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(key => (
-                            <td key={key} className="px-2 py-2.5">
-                              <span className="text-[13px] text-gray-700 px-1 whitespace-nowrap">{r[key] || ""}</span>
+                          {["거래처명","사업자번호"].map(key => (
+                            <td key={key} className="px-2 py-2.5 text-center">
+                              <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
+                            </td>
+                          ))}
+                          {["대표자","업태","종목","주소"].map(key => (
+                            <td key={key} className="px-2 py-2.5 text-center max-w-[120px]">
+                              {(r[key] || "").length > 15 ? (
+                                <span className="text-[13px] text-gray-700 whitespace-nowrap">
+                                  {(r[key] || "").slice(0, 15)}…
+                                  <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r[key]); }}>더보기</button>
+                                </span>
+                              ) : (
+                                <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
+                              )}
+                            </td>
+                          ))}
+                          {["담당자","연락처","이메일"].map(key => (
+                            <td key={key} className="px-2 py-2.5 text-center">
+                              <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
                             </td>
                           ))}
                           <td className="px-2 py-2.5 text-center">
@@ -41026,7 +41098,7 @@ React.useEffect(() => {
                               {r.등급 || "일반"}
                             </span>
                           </td>
-                          <td className="px-2 py-2.5 max-w-[160px]">
+                          <td className="px-2 py-2.5 text-center max-w-[160px]">
                             {(r.메모 || "").length > 18 ? (
                               <span className="text-[13px] text-gray-500">
                                 {(r.메모 || "").slice(0, 18)}…
