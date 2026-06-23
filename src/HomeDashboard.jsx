@@ -124,10 +124,17 @@ function Pagination({ page, total, onChange }) {
 
 /* ===== 등록 버튼 ===== */
 const RegBtn = ({ onClick }) => (
-  <button onClick={onClick} className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white text-[12px] font-semibold rounded-lg transition border border-white/30">
+  <button onClick={onClick} className="px-3 py-1 bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[12px] font-semibold rounded-lg transition">
     + 등록
   </button>
 );
+
+function formatCreatedAtTime(createdAt) {
+  if (!createdAt) return "-";
+  const d = createdAt.seconds ? new Date(createdAt.seconds * 1000) : new Date(createdAt);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
 
 /* ===== 모듈 레벨: 당일 닫기/읽기 완료된 토스트 ID 관리 ===== */
 const _dismissedToasts = new Set();
@@ -468,182 +475,6 @@ React.useEffect(() => {
         </SectionCard>
       </div>
 
-      {/* ===== 통합 게시판 ===== */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        {/* 헤더: 탭 + 등록 버튼 */}
-        <div className="flex items-center border-b border-gray-100 px-4">
-          <div className="flex gap-0">
-            {[
-              { key: "공지사항", count: notices.length },
-              { key: "휴가/외근", count: schedules.length },
-              { key: "인수인계", count: handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length > 0 ? handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length : handovers.length },
-            ].map(({ key, count }) => {
-              const isActive = boardTab === key;
-              const unreadCount = key === "인수인계" ? handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length : 0;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setBoardTab(key)}
-                  className={`relative px-5 py-3.5 text-[13px] font-semibold transition border-b-2 ${
-                    isActive
-                      ? "text-[#1B2B4B] border-[#1B2B4B]"
-                      : "text-gray-400 border-transparent hover:text-gray-600"
-                  }`}
-                >
-                  {key}
-                  {unreadCount > 0 && (
-                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold">{unreadCount}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <div className="ml-auto">
-            {boardTab === "공지사항" && <RegBtn onClick={() => setNoticeOpen(true)} />}
-            {boardTab === "휴가/외근" && <RegBtn onClick={() => setScheduleOpen(true)} />}
-            {boardTab === "인수인계" && (
-              <RegBtn onClick={() => {
-                const me = users.find(u => u.id === user?.uid);
-                setSelectedHandover(null);
-                setHandoverForm({ text: "", author: me?.name || "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr });
-                setHandoverOpen(true);
-              }} />
-            )}
-          </div>
-        </div>
-
-        {/* 탭 콘텐츠 */}
-        <div className="p-4">
-          {/* 공지사항 탭 */}
-          {boardTab === "공지사항" && (
-            notices.length === 0 ? (
-              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 공지가 없습니다</div>
-            ) : (
-              <>
-                <BoardTable
-                  headers={[
-                    { label: "No", width: "50px" },
-                    { label: "날짜", width: "100px" },
-                    { label: "작성자", width: "80px" },
-                    { label: "제목", align: "text-left" },
-                  ]}
-                  rows={pagedNotices.map((n, idx) => (
-                    <tr key={n.id} onClick={() => setSelectedNotice(n)} className="cursor-pointer hover:bg-blue-50/50 transition">
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{(noticePage - 1) * NOTICE_PAGE_SIZE + idx + 1}</td>
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{n.date?.replaceAll("-", ".")}</td>
-                      <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{n.author}</td>
-                      <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800">{n.title || "공지사항"}</td>
-                    </tr>
-                  ))}
-                />
-                <Pagination page={noticePage} total={noticeTotalPages} onChange={setNoticePage} />
-              </>
-            )
-          )}
-
-          {/* 휴가/외근 탭 */}
-          {boardTab === "휴가/외근" && (
-            schedules.length === 0 ? (
-              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 일정이 없습니다</div>
-            ) : (
-              <>
-                <BoardTable
-                  headers={[
-                    { label: "No", width: "44px" },
-                    { label: "날짜", width: "90px" },
-                    { label: "작성자", width: "70px" },
-                    { label: "구분", width: "60px" },
-                    { label: "일정", align: "text-left" },
-                  ]}
-                  rows={pagedSchedules.map((s, idx) => (
-                    <tr key={s.id} onClick={() => setSelectedSchedule(s)} className="cursor-pointer hover:bg-blue-50/50 transition">
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{(schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx + 1}</td>
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">
-                        {s.createdAt?.toDate ? s.createdAt.toDate().toISOString().slice(0, 10).replaceAll("-", ".") : "-"}
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{s.name || "-"}</td>
-                      <td className="px-3 py-2.5 text-center text-[12px]">
-                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${s.type === "휴가" ? "bg-blue-100 text-blue-700" : s.type === "외근" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{s.type}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-[13px] font-medium text-gray-800">{s.start?.replaceAll("-", ".")}</td>
-                    </tr>
-                  ))}
-                />
-                <Pagination page={schedulePage} total={scheduleTotalPages} onChange={setSchedulePage} />
-              </>
-            )
-          )}
-
-          {/* 인수인계 탭 */}
-          {boardTab === "인수인계" && (
-            handovers.length === 0 ? (
-              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 인수인계가 없습니다</div>
-            ) : (
-              <>
-                <div className="flex items-center gap-3 mb-2 px-1">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm bg-red-400"></div>
-                    <span className="text-[11px] text-gray-500">미확인</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm bg-emerald-400"></div>
-                    <span className="text-[11px] text-gray-500">확인완료</span>
-                  </div>
-                </div>
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[44px]">No</th>
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[90px]">날짜</th>
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[70px]">작성자</th>
-                      <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500">내용</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {pagedHandovers.map((h, idx) => {
-                      const receiverRead = h.readBy?.includes(h.receiverUid);
-                      const isReceiver = user?.uid === h.receiverUid;
-                      const isAuthor = user?.uid === h.authorUid;
-                      const unread = isReceiver && !receiverRead;
-                      const dateStr = (h.date || formatCreatedAt(h.createdAt) || "").replaceAll("-", ".");
-                      return (
-                        <tr key={h.id}
-                          onClick={async () => {
-                            setSelectedHandover(h);
-                            if (isReceiver && !receiverRead) {
-                              await updateDoc(doc(db, "handovers", h.id), { readBy: [...(h.readBy || []), user.uid] });
-                            }
-                          }}
-                          className={`cursor-pointer transition hover:bg-blue-50/50 relative ${unread ? "bg-red-50/60" : ""}`}
-                        >
-                          <td className="w-[44px] text-center py-2.5 pl-3 pr-2 relative">
-                            {(isReceiver || isAuthor) && (
-                              <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r ${receiverRead ? "bg-emerald-400" : "bg-red-400"}`} />
-                            )}
-                            <span className="text-[12px] text-gray-400">{(handoverPage - 1) * HANDOVER_PAGE_SIZE + idx + 1}</span>
-                          </td>
-                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{dateStr}</td>
-                          <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{h.author}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-800">
-                            <span className="font-medium">인수인계</span>
-                            {(isReceiver || isAuthor) && (
-                              <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${receiverRead ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"}`}>
-                                {receiverRead ? "확인" : "미확인"}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <Pagination page={handoverPage} total={handoverTotalPages} onChange={setHandoverPage} />
-              </>
-            )
-          )}
-        </div>
-      </div>
-
       {/* ===== 하단: 당일 미배차 + Top10 ===== */}
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2">
@@ -719,6 +550,188 @@ React.useEffect(() => {
             })}
           </div>
         </SectionCard>
+      </div>
+
+      {/* ===== 통합 게시판 ===== */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* 헤더: 탭 + 등록 버튼 */}
+        <div className="flex items-center border-b border-gray-100 px-4">
+          <div className="flex gap-0">
+            {[
+              { key: "공지사항", count: notices.length },
+              { key: "휴가/외근", count: schedules.length },
+              { key: "인수인계", count: handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length > 0 ? handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length : handovers.length },
+            ].map(({ key, count }) => {
+              const isActive = boardTab === key;
+              const unreadCount = key === "인수인계" ? handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length : 0;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setBoardTab(key)}
+                  className={`relative px-5 py-3.5 text-[13px] font-semibold transition border-b-2 ${
+                    isActive
+                      ? "text-[#1B2B4B] border-[#1B2B4B]"
+                      : "text-gray-400 border-transparent hover:text-gray-600"
+                  }`}
+                >
+                  {key}
+                  {unreadCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold">{unreadCount}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-auto">
+            {boardTab === "공지사항" && <RegBtn onClick={() => setNoticeOpen(true)} />}
+            {boardTab === "휴가/외근" && <RegBtn onClick={() => setScheduleOpen(true)} />}
+            {boardTab === "인수인계" && (
+              <RegBtn onClick={() => {
+                const me = users.find(u => u.id === user?.uid);
+                setSelectedHandover(null);
+                setHandoverForm({ text: "", author: me?.name || "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr });
+                setHandoverOpen(true);
+              }} />
+            )}
+          </div>
+        </div>
+
+        {/* 탭 콘텐츠 */}
+        <div className="p-4">
+          {/* 공지사항 탭 */}
+          {boardTab === "공지사항" && (
+            notices.length === 0 ? (
+              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 공지가 없습니다</div>
+            ) : (
+              <>
+                <BoardTable
+                  headers={[
+                    { label: "No", width: "44px" },
+                    { label: "등록날짜", width: "90px" },
+                    { label: "등록시간", width: "70px" },
+                    { label: "작성자", width: "80px" },
+                    { label: "제목", align: "text-left" },
+                  ]}
+                  rows={pagedNotices.map((n, idx) => (
+                    <tr key={n.id} onClick={() => setSelectedNotice(n)} className="cursor-pointer hover:bg-blue-50/50 transition">
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{(noticePage - 1) * NOTICE_PAGE_SIZE + idx + 1}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{n.date?.replaceAll("-", ".")}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(n.createdAt)}</td>
+                      <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{n.author}</td>
+                      <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800">{n.title || "공지사항"}</td>
+                    </tr>
+                  ))}
+                />
+                <Pagination page={noticePage} total={noticeTotalPages} onChange={setNoticePage} />
+              </>
+            )
+          )}
+
+          {/* 휴가/외근 탭 */}
+          {boardTab === "휴가/외근" && (
+            schedules.length === 0 ? (
+              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 일정이 없습니다</div>
+            ) : (
+              <>
+                <BoardTable
+                  headers={[
+                    { label: "No", width: "44px" },
+                    { label: "등록날짜", width: "90px" },
+                    { label: "등록시간", width: "70px" },
+                    { label: "작성자", width: "70px" },
+                    { label: "구분", width: "55px" },
+                    { label: "일정", align: "text-left" },
+                  ]}
+                  rows={pagedSchedules.map((s, idx) => (
+                    <tr key={s.id} onClick={() => setSelectedSchedule(s)} className="cursor-pointer hover:bg-blue-50/50 transition">
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{(schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx + 1}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">
+                        {s.createdAt?.toDate ? s.createdAt.toDate().toISOString().slice(0, 10).replaceAll("-", ".") : "-"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(s.createdAt)}</td>
+                      <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{s.name || "-"}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px]">
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${s.type === "휴가" ? "bg-blue-100 text-blue-700" : s.type === "외근" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{s.type}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-[13px] font-medium text-gray-800">{s.start?.replaceAll("-", ".")}</td>
+                    </tr>
+                  ))}
+                />
+                <Pagination page={schedulePage} total={scheduleTotalPages} onChange={setSchedulePage} />
+              </>
+            )
+          )}
+
+          {/* 인수인계 탭 */}
+          {boardTab === "인수인계" && (
+            handovers.length === 0 ? (
+              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 인수인계가 없습니다</div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-2 px-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm bg-red-400"></div>
+                    <span className="text-[11px] text-gray-500">미확인</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm bg-emerald-400"></div>
+                    <span className="text-[11px] text-gray-500">확인완료</span>
+                  </div>
+                </div>
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[44px]">No</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[90px]">등록날짜</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[68px]">등록시간</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[70px]">작성자</th>
+                      <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500">내용</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {pagedHandovers.map((h, idx) => {
+                      const receiverRead = h.readBy?.includes(h.receiverUid);
+                      const isReceiver = user?.uid === h.receiverUid;
+                      const isAuthor = user?.uid === h.authorUid;
+                      const unread = isReceiver && !receiverRead;
+                      const dateStr = (h.date || formatCreatedAt(h.createdAt) || "").replaceAll("-", ".");
+                      return (
+                        <tr key={h.id}
+                          onClick={async () => {
+                            setSelectedHandover(h);
+                            if (isReceiver && !receiverRead) {
+                              await updateDoc(doc(db, "handovers", h.id), { readBy: [...(h.readBy || []), user.uid] });
+                            }
+                          }}
+                          className={`cursor-pointer transition hover:bg-blue-50/50 relative ${unread ? "bg-red-50/60" : ""}`}
+                        >
+                          <td className="w-[44px] text-center py-2.5 pl-3 pr-2 relative">
+                            {(isReceiver || isAuthor) && (
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r ${receiverRead ? "bg-emerald-400" : "bg-red-400"}`} />
+                            )}
+                            <span className="text-[12px] text-gray-400">{(handoverPage - 1) * HANDOVER_PAGE_SIZE + idx + 1}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{dateStr}</td>
+                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(h.createdAt)}</td>
+                          <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{h.author}</td>
+                          <td className="px-3 py-2.5 text-[13px] text-gray-800">
+                            <span className="font-medium">인수인계</span>
+                            {(isReceiver || isAuthor) && (
+                              <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${receiverRead ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"}`}>
+                                {receiverRead ? "확인" : "미확인"}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <Pagination page={handoverPage} total={handoverTotalPages} onChange={setHandoverPage} />
+              </>
+            )
+          )}
+        </div>
       </div>
 
       {/* ===== 모달들 ===== */}

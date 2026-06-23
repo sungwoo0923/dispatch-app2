@@ -397,7 +397,9 @@ const sixMonthsAgo = getSixMonthsAgo();
       });
 
       dispatchCache = arr2;
-      setDispatchData([...ordersCache, ...dispatchCache]);
+      React.startTransition(() => {
+        setDispatchData([...ordersCache, ...dispatchCache]);
+      });
       safeSave("dispatchData", arr2);
 
       // 🔔 최초 로드: prevMap 구축만
@@ -2550,7 +2552,7 @@ return (
           </div>
         )}
 
-        {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
+        {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer) && (
           revenueUnlocked ? (
             <Settlement
               dispatchData={dispatchDataFiltered}
@@ -2598,7 +2600,7 @@ return (
           )
         )}
 
-        <div style={{ display: menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test") ? "block" : "none" }}>
+        <div style={{ display: menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer) ? "block" : "none" }}>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["거래처정산", "지급관리"].map(tab => (
               <button key={tab} onClick={() => set정산관리Tab(tab)}
@@ -17650,6 +17652,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
     {/* 수정 저장 */}
     <button
   onClick={async () => {
+    if (isViewer) return showAlert("조회전용 권한으로 수정할 수 없습니다.");
     if (!copyTarget?._id) {
       showAlert("수정할 오더 ID가 없습니다.");
       return;
@@ -17671,8 +17674,11 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
     delete payload.톤수타입;
 
 const savedId = copyTarget._id;
-    setCopyPanelOpen(false);
     showAlert("오더 수정 완료");
+    React.startTransition(() => {
+      setCopyPanelOpen(false);
+      setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
+    });
 
 flashRow(savedId);
     setTimeout(() => {
@@ -17680,10 +17686,6 @@ flashRow(savedId);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 400);
 
-    // 낙관적 업데이트: startTransition으로 낮은 우선순위 처리
-    React.startTransition(() => {
-      setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
-    });
     patchDispatch(savedId, payload).catch(console.error);
     if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
     if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
@@ -20312,8 +20314,11 @@ const savedId = editTarget._id;
 const _savedScrollX = window.scrollX;
 setMarkDeliveredOnSave(false);
 showAlert("수정이 저장되었습니다.");
-setEditPopupOpen(false);
-setSelected([]);
+React.startTransition(() => {
+  setEditPopupOpen(false);
+  setSelected([]);
+  setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
+});
 
 flashRow(savedId);
 requestAnimationFrame(() => window.scrollTo({ left: _savedScrollX, top: window.scrollY }));
@@ -20321,11 +20326,6 @@ setTimeout(() => {
   const el = document.getElementById(`row-${savedId}`);
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
 }, 400);
-
-// ✅ rows 낙관적 업데이트
-React.startTransition(() => {
-  setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
-});
 
 // ✅ 백그라운드 저장
 if (payload.차량번호 && payload.이름) {
@@ -26918,19 +26918,19 @@ return (
     const savedId = targetId;
 
     // ✅ UI 먼저
-    setEdited(prev => { const next = { ...prev }; delete next[targetId]; return next; });
     showAlert("수정이 저장되었습니다.");
-    setEditPopupOpen(false);
-    setSelected(new Set());
+    React.startTransition(() => {
+      setEdited(prev => { const next = { ...prev }; delete next[targetId]; return next; });
+      setEditPopupOpen(false);
+      setSelected(new Set());
+      setLocalOverrides(prev => ({ ...prev, [savedId]: payload }));
+    });
 
     flashRow(savedId);
     setTimeout(() => {
       const el = document.getElementById(`row-${savedId}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 400);
-
-// ✅ 낙관적 UI 즉시 반영
-    setLocalOverrides(prev => ({ ...prev, [savedId]: payload }));
     patchDispatch(savedId, payload).catch(console.error);
     if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
     if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
@@ -26994,7 +26994,7 @@ return (
     {/* 수정 저장 */}
 <button
   onClick={async () => {
-
+    if (isViewer) return showAlert("조회전용 권한으로 수정할 수 없습니다.");
     const id = getId(copyTarget);
     if (!id) {
       showAlert("수정할 오더 ID가 없습니다.");
