@@ -2292,8 +2292,8 @@ return (
             className="flex-1 flex items-center gap-1 overflow-x-auto xl:justify-center"
             style={{
               WebkitOverflowScrolling: "touch",
-              scrollbarWidth: "thin",
-              msOverflowStyle: "auto",
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
               flexWrap: "nowrap",
               minWidth: 0,
             }}
@@ -9744,54 +9744,7 @@ className={`
 
 <div className="flex-1 flex flex-col overflow-hidden">
 
-  {/* 🔁 기존 / 신규 버튼 + 유가 슬라이드 */}
-<div className="flex items-center justify-between mb-3">
-
-  {/* ⛽ 유가 슬라이드 (왼쪽) */}
-  <div className="flex items-center">
-  </div>
-
-  {/* 기존 / 신규 버튼 (오른쪽) */}
-  <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-1">
-    <button
-      type="button"
-      onClick={() => setUseNewForm(false)}
-      className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${
-        !useNewForm
-          ? "bg-[#1B2B4B] text-white shadow-sm"
-          : "text-gray-500 hover:text-gray-700"
-      }`}
-    >
-      기존
-    </button>
-    <button
-      type="button"
-      onClick={() => setUseNewForm(true)}
-      className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 ${
-        useNewForm
-          ? "bg-[#1B2B4B] text-white shadow-sm"
-          : "text-gray-500 hover:text-gray-700"
-      }`}
-    >
-      신규
-    </button>
-  </div>
-</div>
-
-  {/* 🔽 실제 폼만 교체 */}
-  {useNewForm ? (
-    <DispatchFormNew
-      form={form}
-      onChange={onChange}
-      doSave={doSave}
-      drivers={drivers}
-      clients={clients}
-      placeRows={placeRows}
-      role={role}
-    />
-  ) : (
-    renderForm()
-  )}
+  {renderForm()}
 </div>
 
   {/* ================= Premium Today Dashboard v7 — Bold & Clear ================= */}
@@ -31929,9 +31882,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
     if (!firstAppearMap.has(c) || d < firstAppearMap.get(c)) firstAppearMap.set(c, d);
   });
 
+  const basicClientNames = new Set((clients || []).map(c => (c.거래처명 || "").trim()).filter(Boolean));
   const newClients = [];
   firstAppearMap.forEach((firstDate, client) => {
-    if (firstDate.startsWith(monthKey)) {
+    if (firstDate.startsWith(monthKey) && basicClientNames.has(client.trim())) {
       const clientRows = monthRows.filter((r) => r.거래처명 === client);
       const sale = sum(clientRows, "청구운임");
       const driver = sum(clientRows, "기사운임");
@@ -40184,6 +40138,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const PLACES_COLL = "places";
   const removePlace = async (id) => { if (!id) return; await deleteDoc(doc(db, PLACES_COLL, id)); };
   const [placeRows, setPlaceRows] = React.useState(() => placesProp.map(normalizePlaceRow));
+  const placeDupGroups = React.useMemo(() => {
+    const map = new Map();
+    placeRows.forEach(p => {
+      const key = (p.업체명 || "").trim().toLowerCase().replace(/\s+/g, "");
+      if (!key) return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(p);
+    });
+    return [...map.values()].filter(g => g.length >= 2).sort((a, b) => b.length - a.length);
+  }, [placeRows]);
   const [placeQ, setPlaceQ] = React.useState("");
   const [placeSearched, setPlaceSearched] = React.useState(false);
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
@@ -40193,6 +40157,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [dupSelected, setDupSelected] = React.useState(new Set());
   const [placeNewForm, setPlaceNewForm] = React.useState({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 등급: "일반", 메모: "" });
   const [showNewPlaceForm, setShowNewPlaceForm] = React.useState(false);
+  const [placeDupOpen, setPlaceDupOpen] = React.useState(false);
+  const [placeDupSelected, setPlaceDupSelected] = React.useState(new Set());
+  const [placeDupDone, setPlaceDupDone] = React.useState(false);
 
   // ★ 부모에서 내려온 places(회사별 필터링 완료) 기반으로 placeRows 갱신
   React.useEffect(() => {
@@ -40639,6 +40606,10 @@ React.useEffect(() => {
               </label>
               <button onClick={downloadPlaceExcel}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
+              <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
+                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
+                거래처정리
+              </button>
               <button onClick={removeSelectedPlaces}
                 className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
                 선택삭제 {placeSelected.size > 0 && `(${placeSelected.size})`}
@@ -40778,6 +40749,113 @@ React.useEffect(() => {
               </div>
             </div>
           )}
+
+          {placeDupOpen && (
+  <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setPlaceDupOpen(false)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+        <h3 className="text-white font-bold text-[15px]">하차지거래처 중복정리</h3>
+        <button onClick={() => setPlaceDupOpen(false)} className="text-white/60 hover:text-white text-xl">✕</button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-6">
+        {placeDupGroups.length === 0 ? (
+          <div className="text-center text-gray-400 py-12 text-[14px]">
+            {placeDupDone ? "중복 거래처가 정리되었습니다." : "중복된 거래처가 없습니다."}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {placeDupGroups.length > 0 && (
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[13px] text-gray-500">업체명 기준 중복 {placeDupGroups.length}건</span>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm("체크된 항목을 모두 삭제하시겠습니까?")) return;
+                    for (const id of placeDupSelected) {
+                      await removePlace(id);
+                    }
+                    setPlaceRows(prev => prev.filter(p => !placeDupSelected.has(p.id)));
+                    setPlaceDupSelected(new Set());
+                    setPlaceDupDone(true);
+                  }}
+                  disabled={placeDupSelected.size === 0}
+                  className="h-[32px] px-4 rounded-lg text-[13px] font-semibold border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                  선택 삭제 {placeDupSelected.size > 0 && `(${placeDupSelected.size})`}
+                </button>
+              </div>
+            )}
+            {placeDupGroups.map((group, gi) => {
+              const sorted = [...group].sort((a, b) => {
+                const ta = a.updatedAt?.seconds || 0;
+                const tb = b.updatedAt?.seconds || 0;
+                return tb - ta;
+              });
+              const repr = sorted[0];
+              return (
+                <div key={gi} className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="bg-[#1B2B4B]/5 px-4 py-2 flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">{repr.업체명} <span className="text-gray-400 font-normal">({group.length}건)</span></span>
+                    <button
+                      onClick={async () => {
+                        const toDelete = sorted.slice(1);
+                        if (!window.confirm(`"${repr.업체명}" 최신 1건 제외 ${toDelete.length}건을 삭제하시겠습니까?`)) return;
+                        for (const p of toDelete) {
+                          await removePlace(p.id);
+                        }
+                        const delIds = new Set(toDelete.map(p => p.id));
+                        setPlaceRows(prev => prev.filter(p => !delIds.has(p.id)));
+                        setPlaceDupSelected(prev => { const n = new Set(prev); toDelete.forEach(p => n.delete(p.id)); return n; });
+                      }}
+                      className="h-[28px] px-3 rounded-lg text-[12px] font-semibold border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition">
+                      이 그룹 정리
+                    </button>
+                  </div>
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50">
+                        <th className="px-3 py-2 text-center w-8"></th>
+                        <th className="px-3 py-2 text-center">구분</th>
+                        <th className="px-3 py-2 text-center">업체명</th>
+                        <th className="px-3 py-2 text-center">주소</th>
+                        <th className="px-3 py-2 text-center">담당자</th>
+                        <th className="px-3 py-2 text-center">연락처</th>
+                        <th className="px-3 py-2 text-center">등급</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map((p, pi) => (
+                        <tr key={p.id} className={`border-b border-gray-100 ${pi === 0 ? "bg-blue-50/40" : ""}`}>
+                          <td className="px-3 py-2 text-center">
+                            {pi > 0 && (
+                              <input type="checkbox" checked={placeDupSelected.has(p.id)}
+                                onChange={() => setPlaceDupSelected(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })} />
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {pi === 0 ? <span className="text-[11px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/10 px-2 py-0.5 rounded">대표</span>
+                              : <span className="text-[11px] text-gray-400">중복</span>}
+                          </td>
+                          <td className="px-3 py-2 text-center font-semibold">{p.업체명}</td>
+                          <td className="px-3 py-2 text-center text-gray-500">{p.주소 || "-"}</td>
+                          <td className="px-3 py-2 text-center">{p.담당자 || "-"}</td>
+                          <td className="px-3 py-2 text-center">{p.담당자번호 || "-"}</td>
+                          <td className="px-3 py-2 text-center">{p.등급 || "일반"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="px-6 py-4 border-t border-gray-100 shrink-0">
+        <button onClick={() => setPlaceDupOpen(false)}
+          className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">닫기</button>
+      </div>
+    </div>
+  </div>
+)}
 
           {/* 중복 미리보기 팝업 */}
           {showDupPreview && (

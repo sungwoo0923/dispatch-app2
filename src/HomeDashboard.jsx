@@ -441,15 +441,17 @@ React.useEffect(() => {
       </div>
 
       {/* ===== 차트 + Sales Score ===== */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2">
-          <SectionCard title="Sales Performance" action={
-            <button onClick={() => setPeriod(p => p === "7d" ? "none" : "7d")}
-              className="text-[12px] px-2.5 py-1 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition">
-              최근 7일
-            </button>
-          }>
-            <ResponsiveContainer width="100%" height={220}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex justify-between items-center px-5 py-3 bg-[#1B2B4B]">
+          <h3 className="text-[14px] font-bold text-white">매출 현황</h3>
+          <button onClick={() => setPeriod(p => p === "7d" ? "none" : "7d")}
+            className="text-[12px] px-2.5 py-1 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition">
+            최근 7일
+          </button>
+        </div>
+        <div className="p-4 grid grid-cols-3 gap-4">
+          <div className="col-span-2">
+            <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={salesTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -464,37 +466,33 @@ React.useEffect(() => {
                 {salesTrend.length === 7 && <ReferenceDot x={salesTrend[6].date} y={salesTrend[6].value} r={5} fill="#1B2B4B" stroke="#fff" strokeWidth={2} />}
               </AreaChart>
             </ResponsiveContainer>
-            <div className="mt-3 pt-3 border-t border-gray-100 flex items-end justify-between">
+            <div className="mt-2 pt-2 border-t border-gray-100 flex items-end justify-between">
               <div>
                 <div className="text-[11px] text-gray-400 font-medium">Total Revenue</div>
-                <div className="text-[18px] font-bold text-gray-900">{yearRevenue.toLocaleString()}원</div>
+                <div className="text-[16px] font-bold text-gray-900">{yearRevenue.toLocaleString()}원</div>
               </div>
               <div className={`text-[13px] font-semibold ${delta >= 0 ? "text-blue-600" : "text-red-500"}`}>
-                {delta >= 0 ? "▲" : "▼"} 최근 7일 {Math.abs(delta).toLocaleString()}원
+                {delta >= 0 ? "+" : ""}{Math.abs(delta).toLocaleString()}원
               </div>
             </div>
-          </SectionCard>
-        </div>
-
-        <SectionCard title="Sales Score">
-          <div className="grid grid-cols-2 gap-4">
+          </div>
+          <div className="border-l border-gray-100 pl-4 flex flex-col justify-center gap-4">
             {[
               { label: "년 매출", value: yearRevenue, unit: "원" },
               { label: "당월 매출", value: monthRevenue, unit: "원" },
-              { label: "2026년 누적 오더", value: orderCountFrom2026, unit: "건" },
-              { label: "총 누적 오더", value: dispatchData.length, unit: "건" },
-              { label: "등록 거래처 수", value: new Set(dispatchData.map(d => d?.거래처명).filter(Boolean)).size, unit: "곳" },
+              { label: "누적 오더", value: orderCountFrom2026, unit: "건" },
+              { label: "등록 거래처", value: new Set(dispatchData.map(d => d?.거래처명).filter(Boolean)).size, unit: "곳" },
             ].map((item, i) => (
-              <div key={i} className={i === 4 ? "col-span-2" : ""}>
-                <div className="text-[24px] font-extrabold text-[#1B2B4B] leading-tight">
+              <div key={i}>
+                <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-tight">
                   <CountUp value={item.value} />
-                  <span className="text-[14px] font-semibold text-gray-400 ml-1">{item.unit}</span>
+                  <span className="text-[12px] font-semibold text-gray-400 ml-1">{item.unit}</span>
                 </div>
-                <div className="text-[12px] font-medium text-gray-500 mt-0.5">{item.label}</div>
+                <div className="text-[11px] font-medium text-gray-500">{item.label}</div>
               </div>
             ))}
           </div>
-        </SectionCard>
+        </div>
       </div>
 
       {/* ===== 하단: 미배차 현황 + Top5 ===== */}
@@ -583,9 +581,9 @@ React.useEffect(() => {
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: "#374151", fontWeight: 600 }}
+                  tick={{ fontSize: 13, fill: "#1B2B4B", fontWeight: 700 }}
                   interval={0}
-                  tickFormatter={v => v.length > 5 ? v.slice(0, 5) + "…" : v}
+                  tickFormatter={v => v.length > 6 ? v.slice(0, 6) + "…" : v}
                 />
                 <YAxis hide />
                 <Tooltip
