@@ -41636,7 +41636,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   );
 
   return (
-    <div className="p-4 max-w-5xl mx-auto">
+    <div className="p-6">
       {/* 토스트 알림 */}
       {alertMsg && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] bg-[#1B2B4B] text-white px-5 py-3 rounded-xl shadow-lg text-[13px] font-medium">
@@ -41704,25 +41704,25 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   { label: "연락처", value: appData.phone || appData.연락처 },
                   { label: "이메일", value: appData.email },
                 ].map(({ label, value }) => (
-                  <div key={label} className="px-5 py-4">
-                    <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">{label}</div>
-                    <div className="text-[14px] font-semibold text-gray-800">{value || "-"}</div>
+                  <div key={label} className="px-7 py-6">
+                    <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">{label}</div>
+                    <div className="text-[15px] font-semibold text-gray-800">{value || "-"}</div>
                   </div>
                 ))}
               </div>
-              {/* 2행: 주소 / 회사코드 / 가입유형 / 승인일 */}
+              {/* 2행: 주소 / 회사코드 / 승인일 */}
               <div className="grid grid-cols-4 divide-x divide-gray-100 border-t border-gray-100">
-                <div className="px-5 py-4 col-span-2">
-                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">주소</div>
-                  <div className="text-[14px] font-semibold text-gray-800">{appData.address || appData.주소 || "-"}</div>
+                <div className="px-7 py-6 col-span-2">
+                  <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">주소</div>
+                  <div className="text-[15px] font-semibold text-gray-800">{appData.address || appData.주소 || "-"}</div>
                 </div>
-                <div className="px-5 py-4">
-                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">회사 코드</div>
-                  <div className="text-[14px] font-mono font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 inline-block px-2 py-0.5 rounded">{appData.companyCode || "-"}</div>
+                <div className="px-7 py-6">
+                  <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">회사 코드</div>
+                  <div className="text-[15px] font-mono font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 inline-block px-3 py-1 rounded-lg">{appData.companyCode || "-"}</div>
                 </div>
-                <div className="px-5 py-4">
-                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">승인일</div>
-                  <div className="text-[14px] font-semibold text-gray-800">
+                <div className="px-7 py-6">
+                  <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">승인일</div>
+                  <div className="text-[15px] font-semibold text-gray-800">
                     {appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : "-"}
                   </div>
                 </div>
@@ -41736,7 +41736,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         {/* ── 하단 3열: 계좌정보 | 사업자등록증 | 매출비밀번호 ── */}
         <div className="grid grid-cols-3 divide-x divide-gray-100">
           {/* 계좌 정보 */}
-          <div className="p-6">
+          <div className="p-8">
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">계좌 정보</p>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -41790,7 +41790,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           </div>
 
           {/* 사업자등록증 */}
-          <div className="p-6">
+          <div className="p-8">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
               <button
@@ -41835,7 +41835,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           </div>
 
           {/* 매출관리 비밀번호 */}
-          <div className="p-6">
+          <div className="p-8">
             {isAdmin && <RevenuePasswordSection companyName={companyName} />}
           </div>
         </div>

@@ -505,20 +505,21 @@ React.useEffect(() => {
           {allPendingOrders.length === 0 ? (
             <div className="flex items-center justify-center h-[220px] text-[13px] text-gray-400">미배차 오더가 없습니다</div>
           ) : (
-            <div className="relative" style={{ minHeight: 220 }}>
-              {/* column headers */}
-              <div className="flex items-center text-[12px] font-bold text-gray-400 border-b-2 border-gray-200 pb-2 mb-1 px-1">
-                <span className="w-[72px] text-center shrink-0">상차일</span>
-                <span className="w-[68px] text-center shrink-0">상차시간</span>
-                <span className="w-[72px] text-center shrink-0">하차일</span>
-                <span className="w-[68px] text-center shrink-0">하차시간</span>
-                <span className="w-[100px] text-center shrink-0">거래처명</span>
-                <span className="flex-1 text-center min-w-0">상차지명</span>
-                <span className="flex-1 text-center min-w-0">하차지명</span>
-                <span className="w-[80px] text-center shrink-0">화물내용</span>
-                <span className="w-[72px] text-center shrink-0">차량종류</span>
-                <span className="w-[52px] text-center shrink-0">톤수</span>
-                <span className="w-[64px] text-center shrink-0">배차상태</span>
+            <div className="relative overflow-x-hidden" style={{ minHeight: 220 }}>
+              {/* column headers — CSS grid, exact widths */}
+              <div className="grid text-[11px] font-bold text-gray-400 border-b-2 border-gray-200 pb-1.5 mb-0.5"
+                style={{ gridTemplateColumns: "56px 86px 56px 78px 88px minmax(0,1fr) minmax(0,1fr) 68px 62px 40px 56px" }}>
+                <span className="text-center px-1">상차일</span>
+                <span className="text-center px-1">상차시간</span>
+                <span className="text-center px-1">하차일</span>
+                <span className="text-center px-1">하차시간</span>
+                <span className="text-center px-1">거래처명</span>
+                <span className="text-center px-1">상차지명</span>
+                <span className="text-center px-1">하차지명</span>
+                <span className="text-center px-1">화물내용</span>
+                <span className="text-center px-1">차량종류</span>
+                <span className="text-center px-1">톤수</span>
+                <span className="text-center px-1">배차상태</span>
               </div>
               {/* ticker rows */}
               <div
@@ -532,20 +533,21 @@ React.useEffect(() => {
                   return (
                     <div
                       key={i}
-                      className="flex items-center py-2.5 border-b border-gray-100 last:border-0 hover:bg-gray-50/80 cursor-pointer transition px-1"
+                      className="grid items-center py-2 border-b border-gray-100 last:border-0 hover:bg-gray-50/70 cursor-pointer transition"
+                      style={{ gridTemplateColumns: "56px 86px 56px 78px 88px minmax(0,1fr) minmax(0,1fr) 68px 62px 40px 56px" }}
                       onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
                     >
-                      <span className="w-[72px] text-center shrink-0 text-[13px] text-gray-800 font-semibold whitespace-nowrap">{상차일}</span>
-                      <span className="w-[68px] text-center shrink-0 text-[13px] text-gray-600 whitespace-nowrap">{d?.상차시간 || ""}</span>
-                      <span className="w-[72px] text-center shrink-0 text-[13px] text-gray-800 whitespace-nowrap">{하차일}</span>
-                      <span className="w-[68px] text-center shrink-0 text-[13px] text-gray-600 whitespace-nowrap">{d?.하차시간 || ""}</span>
-                      <span className="w-[100px] text-center shrink-0 text-[13px] font-bold text-[#1B2B4B] whitespace-nowrap overflow-hidden text-ellipsis">{d?.거래처명 || ""}</span>
-                      <span className="flex-1 text-center min-w-0 text-[13px] text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{d?.상차지명 || ""}</span>
-                      <span className="flex-1 text-center min-w-0 text-[13px] text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">{d?.하차지명 || ""}</span>
-                      <span className="w-[80px] text-center shrink-0 text-[13px] text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">{d?.화물내용 || ""}</span>
-                      <span className="w-[72px] text-center shrink-0 text-[13px] text-gray-600 whitespace-nowrap">{d?.차량종류 || ""}</span>
-                      <span className="w-[52px] text-center shrink-0 text-[13px] text-gray-600 whitespace-nowrap">{d?.차량톤수 || ""}</span>
-                      <span className={`w-[64px] text-center shrink-0 text-[12px] font-bold whitespace-nowrap ${status === "배차완료" ? "text-[#1B2B4B]" : status === "배차중" ? "text-[#2d4470]" : "text-[#1B2B4B]/60"}`}>{status}</span>
+                      <span className="text-center px-1 text-[12px] font-semibold text-gray-800 truncate">{상차일}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-500 truncate">{d?.상차시간 || ""}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-500 truncate">{하차일}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-500 truncate">{d?.하차시간 || ""}</span>
+                      <span className="text-center px-1 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.거래처명 || ""}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-600 truncate">{d?.상차지명 || ""}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-600 truncate">{d?.하차지명 || ""}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-500 truncate">{d?.화물내용 || ""}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-500 truncate">{d?.차량종류 || ""}</span>
+                      <span className="text-center px-1 text-[11px] text-gray-500 truncate">{d?.차량톤수 || ""}</span>
+                      <span className={`text-center px-1 text-[11px] font-bold truncate ${status === "배차완료" ? "text-[#1B2B4B]" : status === "배차중" ? "text-[#2d4470]" : "text-[#1B2B4B]/60"}`}>{status}</span>
                     </div>
                   );
                 })}
