@@ -14178,7 +14178,6 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   // 🔥 즉시변경 확인 팝업 (PART 5 이식)
   // =======================
   const [confirmChange, setConfirmChange] = React.useState(null);
-  const [smsConfirm5, setSmsConfirm5] = React.useState(null);
   /*
   {
     rowId,
@@ -23059,6 +23058,7 @@ const [panelContactPopup5, setPanelContactPopup5] = React.useState(null);
 const [panelContactActive5, setPanelContactActive5] = React.useState(0);
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
+  const [smsConfirm5, setSmsConfirm5] = React.useState(null);
   /*
   {
     id,
