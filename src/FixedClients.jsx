@@ -440,7 +440,7 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
   );
 }
 
-export default function FixedClients({ drivers = [], upsertDriver, userCompany = "", role = "" }) {
+export default function FixedClients({ drivers = [], upsertDriver, userCompany = "", role = "", isViewer = false }) {
   const coll = collection(db, "fixedClients");
 
   const [rows, setRows] = useState([]);
@@ -579,7 +579,10 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     return Object.entries(map).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total).slice(0, 5);
   }, [filtered]);
 
+  const _viewerAlert = () => alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
+
   const markSettlement = async () => {
+    if (isViewer) { _viewerAlert(); return; }
     if (!selected.length) return alert("정산처리할 항목을 선택하세요.");
     const targets = rows.filter(r => selected.includes(r.id));
     if (!window.confirm(`${targets.length}건의 정산상태를 변경하시겠습니까?`)) return;
@@ -588,11 +591,13 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const addRow = async () => {
+    if (isViewer) { _viewerAlert(); return; }
     const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: 1, 차량번호: "", 이름: "", 핸드폰번호: "", 기사단가: 5091, 수수료단가: 909, 수수료기준: "수량", 선결제: 360, 기사운임: 5091, 수수료: 909, 실수수료: 549, 청구운임: 6000, 지급방식: "착불", companyName: getViewCompany() };
     await setDoc(doc(coll, newRow.id), newRow);
   };
 
   const removeSelected = async () => {
+    if (isViewer) { _viewerAlert(); return; }
     for (const id of selected) await removeRow(id);
     setSelected([]);
     setDeleteConfirm(false);
@@ -612,6 +617,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const saveEditPopup = async () => {
+    if (isViewer) { _viewerAlert(); return; }
     if (!editPopupRow) return;
     if (editPopupRow.거래처명) {
       saveClientConfig(editPopupRow.거래처명, {
@@ -754,8 +760,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
               )}
             </div>
           )}
-          <button onClick={() => setFastOpen(true)} className="px-4 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">+ 빠른 등록</button>
-          <button onClick={addRow} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">+ 행 추가</button>
+          <button onClick={() => isViewer ? _viewerAlert() : setFastOpen(true)} className="px-4 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">+ 빠른 등록</button>
+          <button onClick={addRow} className="px-4 py-2 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">+ 행 추가</button>
         </div>
       </div>
 
@@ -797,7 +803,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             }} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap">업로드링크</button>
             <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">정산</button>
             <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filtered); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "고정거래처"); XLSX.writeFile(wb, "고정거래처관리.xlsx"); }} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">엑셀다운</button>
-            <button onClick={() => setBulkEditOpen(true)} disabled={filtered.length === 0} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-40">일괄수정</button>
+            <button onClick={() => isViewer ? _viewerAlert() : setBulkEditOpen(true)} disabled={filtered.length === 0} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-40">일괄수정</button>
           </div>
         </div>
       </div>

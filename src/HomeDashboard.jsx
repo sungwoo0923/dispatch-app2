@@ -2,6 +2,7 @@ import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, ReferenceDot,
+  BarChart, Bar, Cell, LabelList,
 } from "recharts";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
@@ -390,7 +391,7 @@ React.useEffect(() => {
       if (!name || /\d{2}년\d{1,2}월/.test(name) || name.includes("후레쉬물류")) return;
       map[name] = (map[name] || 0) + Number(d?.청구운임 || 0);
     });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, value]) => ({ name, value }));
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, value]) => ({ name, value }));
   }, [dispatchData]);
 
   const top10Summary = useMemo(() => {
@@ -515,40 +516,43 @@ React.useEffect(() => {
           </SectionCard>
         </div>
 
-        {/* Top10 거래처 */}
-        <SectionCard title="Top 10 거래처">
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <div className="bg-[#1B2B4B]/5 rounded-lg px-3 py-2.5">
-              <div className="text-[11px] text-gray-500 font-medium">총 매출</div>
-              <div className="text-[13px] font-bold text-[#1B2B4B] mt-0.5">{(top10Summary.total / 1000000).toFixed(1)}M</div>
-            </div>
-            <div className="bg-[#1B2B4B]/5 rounded-lg px-3 py-2.5">
-              <div className="text-[11px] text-gray-500 font-medium">평균</div>
-              <div className="text-[13px] font-bold text-[#1B2B4B] mt-0.5">{(top10Summary.avg / 1000000).toFixed(1)}M</div>
-            </div>
-            <div className="bg-[#1B2B4B]/5 rounded-lg px-3 py-2.5">
-              <div className="text-[11px] text-gray-500 font-medium">1위</div>
-              <div className="text-[12px] font-bold text-[#1B2B4B] mt-0.5 truncate">{top10Summary.topName}</div>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {topClients.map((c, i) => {
-              const max = topClients[0]?.value || 1;
-              const pct = Math.round((c.value / max) * 100);
-              const opacity = 1 - i * 0.07;
-              return (
-                <div key={i} className="flex items-center gap-2">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${i < 3 ? "bg-[#1B2B4B]" : "bg-gray-400"}`}>{i + 1}</div>
-                  <div className="w-[68px] text-[12px] font-semibold text-gray-700 truncate flex-shrink-0" title={c.name}>{c.name}</div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-3.5 overflow-hidden">
-                    <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-700" style={{ width: `${pct}%`, opacity }} />
-                  </div>
-                  <div className="w-[60px] text-right text-[11px] font-bold text-gray-600 flex-shrink-0">
-                    {c.value >= 1000000 ? `${(c.value / 1000000).toFixed(1)}M` : c.value.toLocaleString()}
-                  </div>
-                </div>
-              );
-            })}
+        {/* Top5 거래처 */}
+        <SectionCard title="Top 5 거래처">
+          {topClients.length === 0 ? (
+            <div className="text-[13px] text-gray-400 text-center py-8">데이터 없음</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={topClients} margin={{ top: 24, right: 8, left: 8, bottom: 32 }}>
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 11, fill: "#374151", fontWeight: 600 }}
+                  interval={0}
+                  tickFormatter={v => v.length > 5 ? v.slice(0, 5) + "…" : v}
+                />
+                <YAxis hide />
+                <Tooltip
+                  formatter={v => [`${Number(v).toLocaleString()}원`, "매출"]}
+                  contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }}
+                />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={52}>
+                  {topClients.map((_, i) => (
+                    <Cell key={i} fill={i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296"} />
+                  ))}
+                  <LabelList
+                    dataKey="value"
+                    position="top"
+                    formatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v.toLocaleString()}
+                    style={{ fontSize: 10, fill: "#6b7280", fontWeight: 600 }}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+          <div className="flex justify-between mt-1 pt-2 border-t border-gray-100">
+            <span className="text-[11px] text-gray-400">1위: <b className="text-[#1B2B4B]">{top10Summary.topName}</b></span>
+            <span className="text-[11px] text-gray-400">합계: <b className="text-[#1B2B4B]">{(top10Summary.total / 1000000).toFixed(1)}M</b></span>
           </div>
         </SectionCard>
       </div>
@@ -611,7 +615,7 @@ React.useEffect(() => {
                     { label: "등록날짜", width: "90px" },
                     { label: "등록시간", width: "70px" },
                     { label: "작성자", width: "80px" },
-                    { label: "제목", align: "text-left" },
+                    { label: "제목", align: "text-left", width: "180px" },
                   ]}
                   rows={pagedNotices.map((n, idx) => (
                     <tr key={n.id} onClick={() => setSelectedNotice(n)} className="cursor-pointer hover:bg-blue-50/50 transition">
@@ -641,7 +645,7 @@ React.useEffect(() => {
                     { label: "등록시간", width: "70px" },
                     { label: "작성자", width: "70px" },
                     { label: "구분", width: "55px" },
-                    { label: "일정", align: "text-left" },
+                    { label: "일정", align: "text-left", width: "180px" },
                   ]}
                   rows={pagedSchedules.map((s, idx) => (
                     <tr key={s.id} onClick={() => setSelectedSchedule(s)} className="cursor-pointer hover:bg-blue-50/50 transition">
@@ -686,7 +690,7 @@ React.useEffect(() => {
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[90px]">등록날짜</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">등록시간</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">작성자</th>
-                      <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500">내용</th>
+                      <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500 w-[180px]">내용</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">

@@ -2172,6 +2172,8 @@ const showAlert = (msg) => setAlertMsg(msg);
 const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
 const [revenuePassInput, setRevenuePassInput] = React.useState("");
 const [revenuePassError, setRevenuePassError] = React.useState(false);
+const [revenuePassword, setRevenuePassword] = React.useState(null); // null = not loaded yet
+const [revenuePasswordLoaded, setRevenuePasswordLoaded] = React.useState(false);
 const [hasUpdate, setHasUpdate] = React.useState(false);
 React.useEffect(() => {
   const handler = () => setHasUpdate(true);
@@ -2203,6 +2205,18 @@ React.useEffect(() => {
   const viewerBlockedMenus = ["관리센터", "관리자메뉴"];
 
   const blockedMenus = role === "test" ? testBlockedMenus : isViewer ? viewerBlockedMenus : userBlockedMenus;
+
+  // 매출관리 비밀번호 - 회사별 Firestore 로드
+  useEffect(() => {
+    const co = userCompany || localStorage.getItem("userCompany") || "";
+    if (!co) return;
+    const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
+      const data = snap.data();
+      setRevenuePassword(data?.revenuePassword || null);
+      setRevenuePasswordLoaded(true);
+    });
+    return () => unsub();
+  }, [userCompany]);
 
   // 역할이 바뀌어 현재 메뉴가 차단 목록에 포함되면 HOME으로 이동
   useEffect(() => {
@@ -2395,7 +2409,7 @@ return (
       </header>
       {/* ---------------- 화면 렌더링 ---------------- */}
       <main className={`rounded shadow p-4 min-w-max ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
-        {menu === "HOME" && (
+        <div style={{ display: menu === "HOME" ? "block" : "none" }}>
           <HomeDashboard
             role={role}
             user={user}
@@ -2406,7 +2420,7 @@ return (
             delayed={0}
             dispatchData={dispatchDataFiltered}
           />
-        )}
+        </div>
 
         <div style={{ display: menu === "배차관리" ? "block" : "none" }}>
           <DispatchManagement
@@ -2537,7 +2551,7 @@ return (
           )}
           {거래처관리Tab === "고정거래처관리" && (
             <div className="p-4">
-              <FixedClients drivers={drivers} upsertDriver={upsertDriver} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
+              <FixedClients drivers={drivers} upsertDriver={upsertDriverSafe} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} isViewer={isViewer} />
             </div>
           )}
           {거래처관리Tab === "고정노선관리" && (
@@ -2582,29 +2596,47 @@ return (
                     <div className="text-[11px] text-gray-400">비밀번호를 입력하세요</div>
                   </div>
                 </div>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  const stored = localStorage.getItem("exec_intel_pin_v1");
-                  if (revenuePassInput === stored) {
-                    setRevenueUnlocked(true);
-                    setRevenuePassInput("");
-                    setRevenuePassError(false);
-                  } else {
-                    setRevenuePassError(true);
-                    setRevenuePassInput("");
-                  }
-                }}>
-                  <input
-                    type="password"
-                    autoFocus
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-center tracking-widest mb-3 focus:outline-none focus:border-[#1B2B4B] transition"
-                    placeholder="비밀번호 입력"
-                    value={revenuePassInput}
-                    onChange={e => { setRevenuePassInput(e.target.value); setRevenuePassError(false); }}
-                  />
-                  {revenuePassError && <div className="text-red-500 text-[12px] text-center mb-3 font-medium">비밀번호가 올바르지 않습니다</div>}
-                  <button type="submit" className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition">확인</button>
-                </form>
+                {!revenuePasswordLoaded ? (
+                  <div className="text-center py-4 text-gray-400 text-[13px]">로딩 중...</div>
+                ) : !revenuePassword ? (
+                  <div>
+                    <div className="text-[13px] text-gray-500 text-center mb-4">비밀번호가 설정되지 않았습니다.<br/>관리자가 회사관리에서 비밀번호를 설정해 주세요.</div>
+                    {role === "admin" && (
+                      <button onClick={() => setMenu("회사관리")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl text-[13px] font-bold hover:bg-[#243860] transition">회사관리로 이동</button>
+                    )}
+                  </div>
+                ) : (
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (revenuePassInput === revenuePassword) {
+                      setRevenueUnlocked(true);
+                      setRevenuePassInput("");
+                      setRevenuePassError(false);
+                    } else {
+                      setRevenuePassError(true);
+                      setRevenuePassInput("");
+                    }
+                  }}>
+                    <input
+                      type="password"
+                      autoFocus
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-center tracking-widest mb-3 focus:outline-none focus:border-[#1B2B4B] transition"
+                      placeholder="비밀번호 입력"
+                      value={revenuePassInput}
+                      onChange={e => { setRevenuePassInput(e.target.value); setRevenuePassError(false); }}
+                    />
+                    {revenuePassError && <div className="text-red-500 text-[12px] text-center mb-3 font-medium">비밀번호가 올바르지 않습니다</div>}
+                    <button type="submit" className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition">확인</button>
+                    {role === "totalMaster" && (
+                      <button type="button" onClick={async () => {
+                        if (!window.confirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
+                        const co = userCompany || localStorage.getItem("userCompany") || "";
+                        await setDoc(doc(db, "companySettings", co), { revenuePassword: null }, { merge: true });
+                        showAlert("비밀번호가 초기화되었습니다.");
+                      }} className="w-full mt-2 py-2.5 border border-red-300 text-red-500 rounded-xl text-[13px] font-semibold hover:bg-red-50 transition">초기화 (최고관리자)</button>
+                    )}
+                  </form>
+                )}
               </div>
             </div>
           )
@@ -2650,7 +2682,21 @@ return (
 
         {menu === "운임조회" && <FreightRateInquiry />}
 
-        {menu === "회사관리" && <CompanyProfile userCompany={userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""} role={role} userId={auth?.currentUser?.uid || localStorage.getItem("uid") || ""} />}
+        {menu === "회사관리" && (
+          <CompanyManagementWrapper
+            userCompany={userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""}
+            role={role}
+            userId={auth?.currentUser?.uid || localStorage.getItem("uid") || ""}
+            user={user}
+            todayStats={todayStats}
+            myStats={myStats}
+            cardImage={cardImage}
+            setCardImage={setCardImage}
+            cardImageUploading={cardImageUploading}
+            setCardImageUploading={setCardImageUploading}
+            showAlert={showAlert}
+          />
+        )}
 
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
 
@@ -37379,21 +37425,21 @@ const handleBatchSettle = async (targetStatus) => {
             {/* Row 2: 액션 버튼 (우측 정렬) */}
             <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-100">
                 <button onClick={settleSelected} disabled={!selectedMonths.size}
-                  className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedMonths.size?"bg-emerald-600 hover:bg-emerald-700":"bg-emerald-600/40 cursor-not-allowed"}`}>
+                  className={`px-3 py-2 rounded-lg text-[13px] font-bold transition border ${selectedMonths.size?"bg-[#1B2B4B] text-white border-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/30 text-white border-transparent cursor-not-allowed"}`}>
                   선택 정산완료
                 </button>
                 <button onClick={settleAll} disabled={!monthRows.length}
-                  className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${monthRows.length?"bg-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/40 cursor-not-allowed"}`}>
+                  className={`px-3 py-2 rounded-lg text-[13px] font-bold transition border ${monthRows.length?"bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white":"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"}`}>
                   전체 정산완료
                 </button>
-                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-semibold hover:bg-teal-700 transition">엑셀</button>
-                <label className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-700 transition cursor-pointer">
+                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">엑셀</button>
+                <label className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition cursor-pointer">
                   입금확인(엑셀)
                   <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
                 </label>
                 <button
                   onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
-                  className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition"
+                  className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
                 >
                   미수금보고서
                 </button>
@@ -37415,7 +37461,7 @@ const handleBatchSettle = async (targetStatus) => {
     setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
     setArEmailOpen(true);
   }}
-  className={`px-3 py-2 rounded-lg text-[13px] font-semibold text-white transition ${selClient ? "bg-sky-600 hover:bg-sky-700" : "bg-sky-600/40 cursor-not-allowed"}`}
+  className={`px-3 py-2 rounded-lg text-[13px] font-semibold transition border ${selClient ? "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white" : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"}`}
 >
   이메일발송
 </button>
@@ -39581,12 +39627,12 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             엑셀 업로드
             <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
           </label>
-          <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-bold hover:bg-teal-700 transition">
+          <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition">
             엑셀 다운로드
           </button>
           <button
             onClick={bulkNormalizePhones}
-            className="px-4 py-2 rounded-lg bg-amber-500 text-white text-[13px] font-bold hover:bg-amber-600 transition"
+            className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
             title="형식이 잘못된 전화번호를 010-XXXX-XXXX 형식으로 일괄 변환"
           >
             전화번호 일괄 정규화
@@ -40219,10 +40265,10 @@ React.useEffect(() => {
         <div className="space-y-3">
 
           {duplicatePlaceGroups.length > 0 && (
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-sm text-amber-800">
+            <div className="flex items-center gap-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-lg px-4 py-2 text-sm text-[#1B2B4B]">
               주소 기준 중복 하차지 <b>{duplicatePlaceGroups.length}건</b> 발견됨
               <button onClick={() => setShowDupPreview(true)}
-                className="ml-2 px-3 py-1 bg-amber-500 text-white rounded text-xs font-semibold hover:bg-amber-600 transition">미리보기</button>
+                className="ml-2 px-3 py-1 bg-[#1B2B4B] text-white rounded text-xs font-semibold hover:bg-[#243a60] transition">미리보기</button>
             </div>
           )}
 
@@ -40436,12 +40482,10 @@ React.useEffect(() => {
                       <table className="w-full text-sm">
                         <tbody>
                           {group.map((p, i) => (
-                            <tr key={p.id} className={i === 0 ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}>
+                            <tr key={p.id} className={i === 0 ? "bg-gray-50 text-gray-700" : "bg-white text-gray-600"}>
                               <td className="border px-3 py-2 w-16 text-center font-bold text-xs">
-                                {i === 0 ? "유지" : (
-                                  <input type="checkbox" checked={dupSelected.has(p.id)}
-                                    onChange={() => setDupSelected((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })} />
-                                )}
+                                <input type="checkbox" checked={dupSelected.has(p.id)}
+                                  onChange={() => setDupSelected((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })} />
                               </td>
                               <td className="border px-3 py-2">{p.주소}</td>
                               <td className="border px-3 py-2 w-24">{p.담당자}</td>
@@ -40681,6 +40725,260 @@ React.useEffect(() => {
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
 
 // ===================== 회사 정보 관리 =====================
+// ─────────── 매출관리 비밀번호 설정 섹션 ───────────
+function RevenuePasswordSection({ companyName }) {
+  const [currentPw, setCurrentPw] = React.useState(null);
+  const [loaded, setLoaded] = React.useState(false);
+  const [newPw, setNewPw] = React.useState("");
+  const [confirmPw, setConfirmPw] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  React.useEffect(() => {
+    if (!companyName) return;
+    const unsub = onSnapshot(doc(db, "companySettings", companyName), (snap) => {
+      setCurrentPw(snap.data()?.revenuePassword || null);
+      setLoaded(true);
+    });
+    return () => unsub();
+  }, [companyName]);
+
+  const handleSave = async () => {
+    if (!newPw) { setMsg("비밀번호를 입력하세요."); return; }
+    if (newPw !== confirmPw) { setMsg("비밀번호가 일치하지 않습니다."); return; }
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "companySettings", companyName), { revenuePassword: newPw }, { merge: true });
+      setMsg("비밀번호가 저장되었습니다.");
+      setNewPw(""); setConfirmPw("");
+    } catch(e) { setMsg("저장 실패: " + e.message); }
+    setSaving(false);
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm("비밀번호를 초기화하시겠습니까?")) return;
+    await setDoc(doc(db, "companySettings", companyName), { revenuePassword: null }, { merge: true });
+    setMsg("비밀번호가 초기화되었습니다.");
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4 mx-0">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h2 className="text-white font-bold text-[16px]">매출관리 비밀번호</h2>
+        <p className="text-white/55 text-[12px] mt-0.5">매출관리 접근 비밀번호를 설정합니다</p>
+      </div>
+      <div className="px-6 py-5 space-y-4">
+        {!loaded ? (
+          <div className="text-[13px] text-gray-400">로딩 중...</div>
+        ) : (
+          <>
+            <div className="text-[13px] text-gray-500">
+              현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-400"}>{currentPw ? "비밀번호 설정됨" : "비밀번호 미설정"}</b>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">새 비밀번호</label>
+                <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  placeholder="새 비밀번호" value={newPw} onChange={e => { setNewPw(e.target.value); setMsg(""); }} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">비밀번호 확인</label>
+                <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  placeholder="비밀번호 확인" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setMsg(""); }} />
+              </div>
+            </div>
+            {msg && <div className={`text-[12px] font-medium ${msg.includes("실패") || msg.includes("일치") || msg.includes("입력") ? "text-red-500" : "text-emerald-600"}`}>{msg}</div>}
+            <div className="flex gap-2">
+              <button onClick={handleSave} disabled={saving}
+                className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
+                {saving ? "저장 중..." : "저장"}
+              </button>
+              {currentPw && (
+                <button onClick={handleReset}
+                  className="px-5 py-2.5 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
+                  초기화
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────── 내정보 컴포넌트 ───────────
+function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert, userCompany, role }) {
+  const co = role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || "")
+    : (userCompany || localStorage.getItem("userCompany") || "");
+
+  const navigate = useNavigate();
+
+  return (
+    <div className="p-6 max-w-2xl">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4">
+          <h2 className="text-white font-bold text-[16px]">내 정보</h2>
+          <p className="text-white/60 text-[12px] mt-0.5">계정 정보 및 개인 통계</p>
+        </div>
+        <div className="p-6 space-y-6">
+          {/* 계정 정보 */}
+          <div className="grid grid-cols-2 gap-4">
+            {co && (
+              <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
+                <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">회사명</div>
+                <div className="text-[15px] font-bold text-gray-900">{co}</div>
+              </div>
+            )}
+            <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">이메일</div>
+              <div className="text-[14px] font-semibold text-gray-800 break-all">{user?.email || "-"}</div>
+            </div>
+          </div>
+
+          {/* 비밀번호 변경 */}
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700 mb-2">계정 보안</div>
+            <button onClick={() => navigate("/change-password")}
+              className="px-5 py-2.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold rounded-xl hover:bg-[#1B2B4B] hover:text-white transition">
+              비밀번호 변경
+            </button>
+          </div>
+
+          {/* 명함 이미지 */}
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700 mb-1">명함 이미지</div>
+            <div className="text-[11px] text-gray-400 mb-3">이메일 발송 시 하단에 첨부되는 명함 이미지입니다.</div>
+            {cardImage && (
+              <img src={cardImage} alt="명함" className="rounded-xl mb-3 border border-gray-200 object-contain max-h-28 max-w-xs" />
+            )}
+            <div className="flex gap-2">
+              <label className={`px-4 py-2 rounded-xl border text-[13px] font-semibold cursor-pointer transition ${cardImageUploading ? "bg-gray-100 text-gray-400 border-gray-200" : "bg-white border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                {cardImageUploading ? "업로드 중..." : "이미지 선택"}
+                <input type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (!file || !user?.uid) return;
+                    setCardImageUploading(true);
+                    const imgEl = new Image();
+                    const objUrl = URL.createObjectURL(file);
+                    imgEl.onload = async () => {
+                      URL.revokeObjectURL(objUrl);
+                      const MAX = 800;
+                      let w = imgEl.width, h = imgEl.height;
+                      if (w > MAX || h > MAX) {
+                        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                        else { w = Math.round(w * MAX / h); h = MAX; }
+                      }
+                      const cv = document.createElement("canvas");
+                      cv.width = w; cv.height = h;
+                      cv.getContext("2d").drawImage(imgEl, 0, 0, w, h);
+                      const dataUrl = cv.toDataURL("image/jpeg", 0.65);
+                      setCardImage(dataUrl);
+                      try {
+                        await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
+                        showAlert("명함 이미지가 저장되었습니다.");
+                      } catch(err) {
+                        showAlert("저장 실패: " + err.message);
+                      } finally {
+                        setCardImageUploading(false);
+                      }
+                    };
+                    imgEl.onerror = () => { URL.revokeObjectURL(objUrl); showAlert("이미지 로드 실패"); setCardImageUploading(false); };
+                    imgEl.src = objUrl;
+                  }} />
+              </label>
+              {cardImage && (
+                <button onClick={async () => {
+                  setCardImage(null);
+                  if (user?.uid) await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: null }, { merge: true }).catch(() => {});
+                }} className="px-4 py-2 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
+                  삭제
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 오늘 통계 */}
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700 mb-3">오늘 통계</div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "오늘 오더", value: todayStats?.count ?? 0, unit: "건" },
+                { label: "오늘 매출", value: (todayStats?.revenue ?? 0).toLocaleString(), unit: "원" },
+                { label: "오늘 수익", value: (todayStats?.profit ?? 0).toLocaleString(), unit: "원" },
+              ].map(({ label, value, unit }) => (
+                <div key={label} className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
+                  <div className="text-[11px] text-gray-400 font-medium mb-0.5">{label}</div>
+                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-400 ml-0.5">{unit}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 총 통계 */}
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700 mb-3">총 통계</div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "총 오더", value: myStats?.totalOrders ?? 0, unit: "건" },
+                { label: "총 매출", value: (myStats?.totalRevenue ?? 0).toLocaleString(), unit: "원" },
+                { label: "총 수익", value: (myStats?.totalProfit ?? 0).toLocaleString(), unit: "원" },
+              ].map(({ label, value, unit }) => (
+                <div key={label} className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
+                  <div className="text-[11px] text-gray-400 font-medium mb-0.5">{label}</div>
+                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-400 ml-0.5">{unit}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────── 회사관리 탭 래퍼 ───────────
+function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
+  const [tab, setTab] = React.useState("회사정보");
+  const tabs = ["회사정보", "내정보"];
+
+  return (
+    <div>
+      <div className="flex gap-2 px-4 pt-4 pb-0">
+        {tabs.map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
+              tab === t
+                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+            }`}>
+            {t}
+          </button>
+        ))}
+      </div>
+      {tab === "회사정보" && (
+        <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
+      )}
+      {tab === "내정보" && (
+        <MyProfilePage
+          user={user}
+          todayStats={todayStats}
+          myStats={myStats}
+          cardImage={cardImage}
+          setCardImage={setCardImage}
+          cardImageUploading={cardImageUploading}
+          setCardImageUploading={setCardImageUploading}
+          showAlert={showAlert}
+          userCompany={userCompany}
+          role={role}
+        />
+      )}
+    </div>
+  );
+}
+
 function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const companyName = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
@@ -41115,6 +41413,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           </div>
         </div>
       </div>
+
+      {/* 매출관리 비밀번호 설정 (관리자만) */}
+      {isAdmin && (
+        <RevenuePasswordSection companyName={companyName} />
+      )}
 
       {/* 계좌 확인 팝업 */}
       {bankConfirmOpen && (
