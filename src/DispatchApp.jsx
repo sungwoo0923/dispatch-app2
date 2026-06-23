@@ -9858,12 +9858,12 @@ className={`
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
-  <div style={{ flex: "0 0 60%", maxWidth: "60%", minWidth: 0, overflow: "hidden" }}>
+  <div style={{ flex: "0 0 55%", maxWidth: "55%", minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
   {/* 오른쪽: Today 패널 */}
-  <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(40% - 12px)", minWidth: 260 }}>
+  <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(45% - 12px)", minWidth: 260 }}>
     {/* 헤더 */}
     <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
       <div>
