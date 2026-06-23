@@ -141,7 +141,7 @@ function formatCreatedAtTime(createdAt) {
 const _dismissedToasts = new Set();
 
 /* ===================== HOME DASHBOARD ===================== */
-export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [] }) {
+export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
   const now = new Date();
@@ -400,12 +400,27 @@ React.useEffect(() => {
     return { total, avg: Math.round(total / topClients.length), topName: topClients[0].name };
   }, [topClients]);
 
-  const todayPendingOrders = useMemo(() => {
-    return dispatchData.filter(d => {
-      const ld = d?.상차일자 || d?.상차일 || d?.상차;
-      return ld && String(ld).slice(0, 10) === todayStr && d?.배차상태 !== "배차완료";
-    }).sort((a, b) => new Date(a?.상차일자 || 0) - new Date(b?.상차일자 || 0)).slice(0, 7);
+  const allPendingOrders = useMemo(() => {
+    return dispatchData
+      .filter(d => d?.배차상태 !== "배차완료")
+      .sort((a, b) => {
+        const da = a?.상차일자 || a?.상차일 || a?.상차 || "";
+        const db2 = b?.상차일자 || b?.상차일 || b?.상차 || "";
+        return da < db2 ? -1 : da > db2 ? 1 : 0;
+      });
   }, [dispatchData]);
+
+  const TICKER_PAGE_SIZE = 4;
+  const [tickerPage, setTickerPage] = useState(0);
+  const totalTickerPages = Math.max(1, Math.ceil(allPendingOrders.length / TICKER_PAGE_SIZE));
+
+  useEffect(() => {
+    if (allPendingOrders.length <= TICKER_PAGE_SIZE) return;
+    const t = setInterval(() => {
+      setTickerPage(p => (p + 1) % totalTickerPages);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [allPendingOrders.length, totalTickerPages]);
 
   const formInput = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 transition";
 
@@ -477,44 +492,59 @@ React.useEffect(() => {
         </SectionCard>
       </div>
 
-      {/* ===== 하단: 당일 미배차 + Top10 ===== */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2">
-          <SectionCard title="당일 미배차 현황">
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    {["상차일","상차시간","하차일","하차시간","상차지","하차지","화물","차량","톤수","메모","상태"].map(h => (
-                      <th key={h} className="px-2.5 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {todayPendingOrders.length === 0 ? (
-                    <tr><td colSpan={11} className="py-10 text-center text-[13px] text-gray-400">당일 미배차 오더가 없습니다</td></tr>
-                  ) : todayPendingOrders.map((d, i) => (
-                    <tr key={i} className="hover:bg-red-50/40 transition">
-                      <td className="px-2.5 py-2.5 text-center text-[13px] text-gray-700">{d?.상차일?.slice(5) || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-center text-[13px] text-gray-600">{d?.상차시간 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-center text-[13px] text-gray-700">{d?.하차일?.slice(5) || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-center text-[13px] text-gray-600">{d?.하차시간 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[120px] truncate">{d?.상차지명 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate">{d?.하차지명 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-center text-[13px] text-gray-700">{d?.화물내용 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-center text-[13px] text-gray-700">{d?.차량종류 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-center text-[13px] text-gray-700">{d?.차량톤수 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-[13px] text-gray-500 max-w-[100px] truncate">{d?.메모 || "-"}</td>
-                      <td className="px-2.5 py-2.5 text-center">
-                        <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-600">미배차</span>
-                      </td>
-                    </tr>
+      {/* ===== 하단: 미배차 현황 + Top5 ===== */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* 미배차 현황 ticker */}
+        <SectionCard title={`미배차 현황 (${allPendingOrders.length}건)`}>
+          {allPendingOrders.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px] text-[13px] text-gray-400">미배차 오더가 없습니다</div>
+          ) : (
+            <div className="relative overflow-hidden" style={{ height: 220 }}>
+              {/* ticker rows */}
+              <div
+                key={tickerPage}
+                style={{ animation: "tickerSlideUp 0.45s cubic-bezier(0.4,0,0.2,1)" }}
+              >
+                {allPendingOrders.slice(tickerPage * TICKER_PAGE_SIZE, tickerPage * TICKER_PAGE_SIZE + TICKER_PAGE_SIZE).map((d, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-2 py-2.5 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition rounded"
+                    onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
+                  >
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 shrink-0">미배차</span>
+                    <span className="text-[12px] font-semibold text-gray-500 shrink-0 w-[72px]">{(d?.상차일자 || d?.상차일 || d?.상차 || "-").slice(5)}</span>
+                    <span className="text-[13px] font-bold text-gray-800 truncate flex-1">{d?.상차지명 || "-"}</span>
+                    <span className="text-[11px] text-gray-400">→</span>
+                    <span className="text-[13px] text-gray-600 truncate flex-1">{d?.하차지명 || "-"}</span>
+                    <span className="text-[12px] text-gray-500 shrink-0">{d?.화물내용 || ""}</span>
+                  </div>
+                ))}
+              </div>
+              {/* page indicator */}
+              {totalTickerPages > 1 && (
+                <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1 pb-1">
+                  {Array.from({ length: totalTickerPages }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="rounded-full transition-all duration-300"
+                      style={{
+                        width: i === tickerPage ? 16 : 6,
+                        height: 6,
+                        background: i === tickerPage ? "#1B2B4B" : "#d1d5db",
+                      }}
+                    />
                   ))}
-                </tbody>
-              </table>
+                </div>
+              )}
             </div>
-          </SectionCard>
-        </div>
+          )}
+          <style>{`
+            @keyframes tickerSlideUp {
+              from { opacity: 0; transform: translateY(18px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+          `}</style>
+        </SectionCard>
 
         {/* Top5 거래처 */}
         <SectionCard title="Top 5 거래처">
