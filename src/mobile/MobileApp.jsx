@@ -2687,15 +2687,16 @@ onGoSchedule={() => {
   const accentCls = cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600";
   return (
   <div className="px-4 py-3">
-    {role !== "viewer" && (
-    <button onClick={() => { setSelectedNotice(null); setNoticeForm({ title: "", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" }); setNoticeOpen(true); }}
-      className={`w-full py-2.5 rounded-xl mb-3 ${accentCls} text-white text-sm font-semibold`}
-    >+ 공지사항 등록</button>
-    )}
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
       <div className={`grid text-[11px] font-semibold text-white px-3 py-2.5 ${accentCls}`}
         style={{ gridTemplateColumns: "72px 1fr 56px" }}>
-        <span>날짜</span><span className="text-center">제목</span><span className="text-right">작성자</span>
+        <span>날짜</span><span className="text-center">제목</span>
+        {role !== "viewer" ? (
+          <button onClick={(e) => { e.stopPropagation(); setSelectedNotice(null); setNoticeForm({ title: "", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" }); setNoticeOpen(true); }}
+            className="text-right text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
+        ) : (
+          <span className="text-right">작성자</span>
+        )}
       </div>
       {notices.length === 0 ? (
         <div className="text-sm text-gray-400 text-center py-6">등록된 공지가 없습니다.</div>
@@ -2719,29 +2720,35 @@ onGoSchedule={() => {
 {/* ================= 일정 ================= */}
 {page === "schedule" && (
   <div className="px-4 py-3 space-y-3">
-    <button
-      onClick={() => {
-        setSelectedSchedule(null);
-        setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] });
-        setScheduleOpen(true);
-      }}
-      className={`w-full py-2.5 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-sm font-semibold`}
-    >
-      + 일정 등록
-    </button>
     {schedules.length === 0 && (
-      <div className="text-sm text-gray-400 text-center py-4">등록된 일정이 없습니다.</div>
+      <div className="bg-white rounded-xl border overflow-hidden">
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white`}>
+              <th className="px-2 py-2 text-center font-semibold w-20">날짜</th>
+              <th className="px-2 py-2 text-center font-semibold w-14">구분</th>
+              <th className="px-2 py-2 text-center font-semibold w-14">작성자</th>
+              <th className="px-2 py-2 text-center font-semibold w-14">
+                <button onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
+              </th>
+            </tr>
+          </thead>
+        </table>
+        <div className="text-sm text-gray-400 text-center py-4">등록된 일정이 없습니다.</div>
+      </div>
     )}
     {schedules.length > 0 && (
       <>
         <div className="bg-white rounded-xl border overflow-hidden">
           <table className="w-full text-[12px]">
             <thead>
-              <tr className="bg-[#1B2B4B] text-white">
+              <tr className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white`}>
                 <th className="px-2 py-2 text-center font-semibold w-20">날짜</th>
                 <th className="px-2 py-2 text-center font-semibold w-14">구분</th>
                 <th className="px-2 py-2 text-center font-semibold w-14">작성자</th>
-                <th className="px-2 py-2 text-center font-semibold w-14">결재</th>
+                <th className="px-2 py-2 text-center font-semibold w-14">
+                  <button onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -2969,41 +2976,37 @@ onGoSchedule={() => {
 {/* ================= 인수인계 ================= */}
 {page === "handover" && (
   <div className="px-4 py-3 space-y-3">
-    <button
-      onClick={() => {
-        setSelectedHandover(null);
-        setHandoverEditMode(false);
-        setHandoverForm({ text: "", receiver: "", receiverUid: "", date: todayKST() });
-        setHandoverOpen(true);
-      }}
-      className={`w-full py-2.5 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-sm font-semibold`}
-    >
-      + 인수인계 등록
-    </button>
-    <div className="flex items-center gap-3 px-1">
-      <div className="flex items-center gap-1.5">
-        <div className="w-3 h-3 rounded-sm bg-red-400"></div>
-        <span className="text-xs text-gray-500">미확인</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <div className="w-3 h-3 rounded-sm bg-emerald-400"></div>
-        <span className="text-xs text-gray-500">확인완료</span>
-      </div>
-    </div>
     {handovers.length === 0 && (
-      <div className="text-sm text-gray-400 text-center py-4">등록된 인수인계가 없습니다.</div>
+      <div className="bg-white rounded-xl border overflow-hidden">
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white`}>
+              <th className="px-2 py-2 text-center font-semibold w-20">날짜</th>
+              <th className="px-2 py-2 text-center font-semibold">인수인계</th>
+              <th className="px-2 py-2 text-center font-semibold w-14">작성자</th>
+              <th className="px-2 py-2 text-center font-semibold w-16">받는이</th>
+              <th className="px-2 py-2 text-center font-semibold w-14">
+                <button onClick={() => { setSelectedHandover(null); setHandoverEditMode(false); setHandoverForm({ text: "", receiver: "", receiverUid: "", date: todayKST() }); setHandoverOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
+              </th>
+            </tr>
+          </thead>
+        </table>
+        <div className="text-sm text-gray-400 text-center py-4">등록된 인수인계가 없습니다.</div>
+      </div>
     )}
     {handovers.length > 0 && (
       <>
         <div className="bg-white rounded-xl border overflow-hidden">
           <table className="w-full text-[12px]">
             <thead>
-              <tr className="bg-[#1B2B4B] text-white">
+              <tr className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white`}>
                 <th className="px-2 py-2 text-center font-semibold w-20">날짜</th>
                 <th className="px-2 py-2 text-center font-semibold">인수인계</th>
                 <th className="px-2 py-2 text-center font-semibold w-14">작성자</th>
                 <th className="px-2 py-2 text-center font-semibold w-16">받는이</th>
-                <th className="px-2 py-2 text-center font-semibold w-14">읽음</th>
+                <th className="px-2 py-2 text-center font-semibold w-14">
+                  <button onClick={(e) => { e.stopPropagation(); setSelectedHandover(null); setHandoverEditMode(false); setHandoverForm({ text: "", receiver: "", receiverUid: "", date: todayKST() }); setHandoverOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
