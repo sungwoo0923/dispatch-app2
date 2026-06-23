@@ -147,6 +147,18 @@ function ApprovalStamp({ status }) {
   );
 }
 
+/* ===== getOverallApprovalStatus ===== */
+function getOverallApprovalStatus(s) {
+  const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, name: s.approverName, status: s.approvalStatus || "pending" }] : []);
+  if (approvers.length === 0) return "none";
+  const statuses = approvers.map(a => a.status || "pending");
+  if (statuses.every(st => st === "approved")) return "approved";
+  if (statuses.some(st => st === "rejected")) return "rejected";
+  if (statuses.every(st => st === "hold")) return "hold";
+  if (statuses.some(st => st !== "pending")) return "in_progress";
+  return "pending";
+}
+
 /* ===== 등록 버튼 ===== */
 const RegBtn = ({ onClick }) => (
   <button onClick={onClick} className="px-3 py-1 bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[12px] font-semibold rounded-lg transition">
@@ -186,7 +198,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeForm, setNoticeForm] = React.useState({ title: "", author: "", content: "" });
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
-  const [scheduleForm, setScheduleForm] = React.useState({ type: "휴가", name: "", start: "", end: "", memo: "", approverUid: "", approverName: "" });
+  const [scheduleForm, setScheduleForm] = React.useState({ type: "휴가", name: "", start: "", end: "", memo: "", approvers: [] });
   const [notices, setNotices] = React.useState([]);
   const [schedules, setSchedules] = React.useState([]);
   const [handovers, setHandovers] = React.useState([]);
@@ -313,6 +325,22 @@ React.useEffect(() => {
     });
     return () => unsub();
   }, [showTodayToast]);
+
+  React.useEffect(() => {
+    schedules.forEach(s => {
+      const endDate = s.end || s.start || "";
+      if (endDate && endDate <= "2026-06-16") {
+        const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, name: s.approverName, status: s.approvalStatus }] : []);
+        const needsMigration = approvers.length === 0 || approvers.some(a => a.status === "pending");
+        if (needsMigration) {
+          const updatedApprovers = approvers.length > 0
+            ? approvers.map(a => ({ ...a, status: "approved" }))
+            : [{ uid: "migrated", name: "자동승인", status: "approved" }];
+          updateDoc(doc(db, "schedules", s.id), { approvers: updatedApprovers, approvalStatus: "approved" }).catch(() => {});
+        }
+      }
+    });
+  }, [schedules]);
 
   React.useEffect(() => {
     const vc = getViewCompany();
