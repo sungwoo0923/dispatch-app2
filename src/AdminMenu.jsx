@@ -36,6 +36,7 @@ const ROLE_LABELS = {
   totalMaster: "최고관리자",
   admin: "관리자",
   user: "실무자",
+  viewer: "조회전용",
   driver: "기사",
   shipper: "화주",
   test: "경리/회계",
@@ -76,8 +77,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
   const me = auth.currentUser;
   const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
   const ROLES = isTotalMaster
-    ? ["totalMaster", "admin", "user", "driver", "shipper", "test"]
-    : ["admin", "user", "driver", "shipper", "test"];
+    ? ["totalMaster", "admin", "user", "viewer", "driver", "shipper", "test"]
+    : ["admin", "user", "viewer", "driver", "shipper", "test"];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || "돌캐";
 
   useEffect(() => {
@@ -188,6 +189,16 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
     }
     await setDoc(doc(db, "users", u.id), updateData, { merge: true });
     await setDoc(doc(db, "drivers", u.id), { active: status, updatedAt: new Date() }, { merge: true });
+    // transportApplications 상태도 동기화
+    try {
+      const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
+      for (const d of tSnap.docs) {
+        await updateDoc(doc(db, "transportApplications", d.id), {
+          status: status ? "approved" : "pending",
+          processedAt: serverTimestamp(),
+        });
+      }
+    } catch (_) {}
     if (manageUser?.id === u.id) setManageUser(prev => ({ ...prev, approved: status }));
   };
 

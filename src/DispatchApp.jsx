@@ -2166,6 +2166,10 @@ useEffect(() => {
 
 const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
+// 매출관리 비밀번호 게이트
+const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
+const [revenuePassInput, setRevenuePassInput] = React.useState("");
+const [revenuePassError, setRevenuePassError] = React.useState(false);
 const [hasUpdate, setHasUpdate] = React.useState(false);
 React.useEffect(() => {
   const handler = () => setHasUpdate(true);
@@ -2174,6 +2178,8 @@ React.useEffect(() => {
 }, []);
 
   // ---------------- 역할별 차단 메뉴 ----------------
+  // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
+  const isViewer = role === "viewer";
   // user(실무자): 배차/기사/거래처 업무 가능, 재무/관리 메뉴 차단
   const userBlockedMenus = [
     "매출관리", "정산관리", "관리자메뉴",
@@ -2182,13 +2188,15 @@ React.useEffect(() => {
   const testBlockedMenus = [
     "배차관리", "실시간배차현황", "단가표", "관리자메뉴",
   ];
+  // viewer(조회전용): 관리센터만 차단
+  const viewerBlockedMenus = ["관리센터", "관리자메뉴"];
 
-  const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
+  const blockedMenus = role === "test" ? testBlockedMenus : isViewer ? viewerBlockedMenus : userBlockedMenus;
 
   // 역할이 바뀌어 현재 메뉴가 차단 목록에 포함되면 HOME으로 이동
   useEffect(() => {
     if (role === "shipper" && user?.email !== "tjddnqkf@naver.com") { navigate("/shipper", { replace: true }); return; }
-    if ((role === "user" || role === "test") && blockedMenus.includes(menu)) {
+    if ((role === "user" || role === "test" || isViewer) && blockedMenus.includes(menu)) {
       setMenu("HOME");
     }
   }, [role]);
@@ -2196,6 +2204,7 @@ React.useEffect(() => {
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
     if ((role === "user" || role === "test") && blockedMenus.includes(m)) return;
+    if (m !== "매출관리") setRevenueUnlocked(false);
     React.startTransition(() => setMenu(m));
   };
 
@@ -2271,10 +2280,10 @@ return (
               "관리자메뉴",
               "관리센터",
             ].map((m) => {
-              const isBlocked = (role === "user" || role === "test") && blockedMenus.includes(m);
+              const isBlocked = (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
               if (m === "관리센터" && role !== "totalMaster") return null;
-              if (isBlocked && role === "test") return null;
+              if (isBlocked && (role === "test" || isViewer)) return null;
               const isActive = menu === m;
               return (
                 <button
@@ -2423,6 +2432,7 @@ return (
             removeDispatch={removeDispatch}
             upsertDriver={upsertDriver}
             darkMode={darkMode}
+            isViewer={isViewer}
             key={menu}
           />
         )}
@@ -2458,6 +2468,7 @@ return (
                 upsertDriver={upsertDriver}
                 focusOrderId={focusOrderId}
                 clearFocusOrder={() => setFocusOrderId(null)}
+                isViewer={isViewer}
               />
             )}
             {배차현황Tab === "미배차현황" && (
@@ -2478,7 +2489,7 @@ return (
           <RateCard dispatchData={dispatchDataFiltered} />
         )}
 
-        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
+        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
           <DriverManagement
             drivers={drivers}
             upsertDriver={upsertDriver}
@@ -2486,7 +2497,7 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) ? "block" : "none" }}>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["하차지거래처", "기본거래처", "고정거래처관리", "고정노선관리"].map(tab => (
               <button key={tab} onClick={() => set거래처관리Tab(tab)}
@@ -2524,7 +2535,7 @@ return (
           )}
         </div>
 
-        {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
+        {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
           <div>
             <div className="flex gap-2 px-4 pt-4 pb-4">
               <button
@@ -2540,12 +2551,51 @@ return (
         )}
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
-          <Settlement
-            dispatchData={dispatchDataFiltered}
-            fixedRows={fixedRows}
-            clients={clients}
-            places={places}
-          />
+          revenueUnlocked ? (
+            <Settlement
+              dispatchData={dispatchDataFiltered}
+              fixedRows={fixedRows}
+              clients={clients}
+              places={places}
+            />
+          ) : (
+            <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 w-[360px]">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-[#1B2B4B] flex items-center justify-center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </div>
+                  <div>
+                    <div className="text-[15px] font-bold text-[#1B2B4B]">매출관리</div>
+                    <div className="text-[11px] text-gray-400">비밀번호를 입력하세요</div>
+                  </div>
+                </div>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const stored = localStorage.getItem("exec_intel_pin_v1");
+                  if (revenuePassInput === stored) {
+                    setRevenueUnlocked(true);
+                    setRevenuePassInput("");
+                    setRevenuePassError(false);
+                  } else {
+                    setRevenuePassError(true);
+                    setRevenuePassInput("");
+                  }
+                }}>
+                  <input
+                    type="password"
+                    autoFocus
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-center tracking-widest mb-3 focus:outline-none focus:border-[#1B2B4B] transition"
+                    placeholder="비밀번호 입력"
+                    value={revenuePassInput}
+                    onChange={e => { setRevenuePassInput(e.target.value); setRevenuePassError(false); }}
+                  />
+                  {revenuePassError && <div className="text-red-500 text-[12px] text-center mb-3 font-medium">비밀번호가 올바르지 않습니다</div>}
+                  <button type="submit" className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition">확인</button>
+                </form>
+              </div>
+            </div>
+          )
         )}
 
         <div style={{ display: menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test") ? "block" : "none" }}>
@@ -4091,6 +4141,7 @@ const filterPlaces = (q) => {
       운임보정: null,
       
     };
+    const cargoInputRef = React.useRef(null);
     const [form, setForm] = React.useState(() => {
       
   try {
@@ -7641,6 +7692,7 @@ className={`
 
     {/* 입력 */}
     <input
+      ref={cargoInputRef}
       className={`${inputCls} pr-[62px] text-base`}
       placeholder={form.화물타입 ? "숫자만 입력" : "예: 2 또는 변압기"}
       value={form.화물타입
@@ -7687,6 +7739,7 @@ className={`
           if (!type) {
             // 없음: suffix만 제거, 나머지 텍스트만 남김 (빈칸이면 빈칸)
             onChange("화물내용", cleaned);
+            setTimeout(() => cargoInputRef.current?.focus(), 0);
           } else {
             onChange("화물내용", `${cleaned}${type}`);
           }
@@ -13290,6 +13343,7 @@ function RealtimeStatus({
   menu,
   darkMode = false,
   isEmbedded = false,
+  isViewer = false,
 }) {
 const mergedClients = React.useMemo(() => {
   const map = new Map();
@@ -17085,6 +17139,7 @@ const head = isDark
     <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
 
     <button onClick={()=>{
+  if(isViewer)return showAlert("조회전용 권한으로 수정할 수 없습니다.");
   if(selected.length!==1)return showAlert("수정할 항목은 1개만 선택해야 합니다.");
   const row=rows.find(r=>r._id===selected[0]);
   if(!row)return;
@@ -17625,11 +17680,16 @@ flashRow(savedId);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 400);
 
-    patchDispatch(savedId, payload).catch(console.error);
-    if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
-    if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
-    const plate = normalizePlate(payload.차량번호 || "");
-    setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
+    // 낙관적 업데이트: startTransition으로 낮은 우선순위 처리
+    React.startTransition(() => {
+      setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
+    });
+    // Firestore 저장은 다음 이벤트 루프로 넘겨 UI 블로킹 방지
+    setTimeout(() => {
+      patchDispatch(savedId, payload).catch(console.error);
+      if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
+      if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
+    }, 0);
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
@@ -19616,7 +19676,7 @@ value={copyTarget?.화물수량 || ""}
                 <input className="border p-2 rounded w-full" value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
               </div>
               <div>
-                <label className="text-sm font-medium">상차지 연락처</label>
+                <label className="text-sm font-medium">하차지 연락처</label>
                 <input className="border p-2 rounded w-full" value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
               </div>
               <div>
@@ -20265,10 +20325,13 @@ setTimeout(() => {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
 }, 400);
 
-// ✅ rows 즉시 반영 (항상 실행) — 정렬은 Firebase 업데이트 후 effect에서 처리
-setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
+// ✅ rows 낙관적 업데이트 (낮은 우선순위)
+React.startTransition(() => {
+  setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
+});
 
-// ✅ 백그라운드 저장
+// ✅ 백그라운드 저장 (다음 이벤트루프 - UI 블로킹 방지)
+setTimeout(() => {
 if (payload.차량번호 && payload.이름) {
   const existingD = driverMap.get((payload.차량번호||"").replace(/\s+/g,""));
   if (!existingD || existingD.length === 0) {
@@ -20281,6 +20344,7 @@ if (editTarget.거래처명) {
 }
 if (editTarget.상차지명) upsertPlace?.({ 업체명: editTarget.상차지명, 주소: editTarget.상차지주소||"", 담당자: editTarget.상차지담당자||"", 담당자번호: editTarget.상차지담당자번호||"" }).catch(console.error);
 if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명, 주소: editTarget.하차지주소||"", 담당자: editTarget.하차지담당자||"", 담당자번호: editTarget.하차지담당자번호||"" }).catch(console.error);
+}, 0);
                 }}
               >
                 저장
@@ -22245,6 +22309,7 @@ function DispatchStatus({
   patchDispatch,
   removeDispatch,
   upsertDriver,
+  isViewer = false,
 }) {
 const [companyBankData, setCompanyBankData] = React.useState(null);
 React.useEffect(() => {
@@ -24360,6 +24425,7 @@ else if (cp) priority = 1;
   // 🔵 선택수정 / 수정완료 (팝업 방식)  
   // ================================
   const handleEditToggle = async () => {
+    if (isViewer) return showAlert("조회전용 권한으로 수정할 수 없습니다.");
     // 🔐 여러 건 선택 시 경고
     if (!editMode && selected.size > 1) {
       return showAlert("⚠️ 1개의 항목만 선택해주세요.\n(지금은 선택수정 모드입니다)");
@@ -26247,6 +26313,7 @@ return (
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">하차지 담당자</label>
+
                 <input
                   className="border p-2 rounded w-full"
                   value={editTarget.하차지담당자 || ""}
@@ -26254,7 +26321,7 @@ return (
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">상차지 연락처</label>
+                <label className="text-sm font-medium">하차지 연락처</label>
                 <input
                   className="border p-2 rounded w-full"
                   value={editTarget.하차지담당자번호 || ""}
@@ -27432,7 +27499,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
-      <Field label="상차지 연락처">
+      <Field label="하차지 연락처">
         <input
           className="inputStyle"
           value={copyTarget?.하차지담당자번호 ?? ""}
