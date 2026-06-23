@@ -1294,6 +1294,7 @@ useEffect(() => {
 
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [openMemo, setOpenMemo] = useState(null);
+  const [deleteConfirmMobile, setDeleteConfirmMobile] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
 const [detailFrom, setDetailFrom] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
@@ -2125,16 +2126,15 @@ const deleteSingleOrder = async (order) => {
   };
 
   // 🔴 오더 취소 = 실제 삭제
-  const cancelOrder = async () => {
+  const cancelOrder = () => {
     if (!selectedOrder) return;
-    if (
-      !window.confirm(
-        "해당 오더를 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다."
-      )
-    )
-      return;
+    setDeleteConfirmMobile(selectedOrder);
+  };
 
-    await deleteDoc(doc(db, selectedOrder.__col, selectedOrder.id));
+  const confirmDeleteMobile = async () => {
+    if (!deleteConfirmMobile) return;
+    await deleteDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id));
+    setDeleteConfirmMobile(null);
     setSelectedOrder(null);
     showSuccess("오더 삭제 완료");
     setPage(prevPage);
@@ -2397,6 +2397,45 @@ const title =
     </div>
   </div>
 )}
+
+{/* 오더 삭제 확인 팝업 (상세보기) */}
+{deleteConfirmMobile && (
+  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99999 }}>
+    <div style={{ background: "#fff", borderRadius: 20, width: 320, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+      <div style={{ padding: "20px 20px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111" }}>오더 삭제</div>
+          <div style={{ fontSize: 13, color: "#374151", marginTop: 2 }}>
+            {deleteConfirmMobile.거래처명 && <span style={{ fontWeight: 600 }}>{deleteConfirmMobile.거래처명} · </span>}
+            {deleteConfirmMobile.상차지명} → {deleteConfirmMobile.하차지명}
+          </div>
+          <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{deleteConfirmMobile.상차일 || ""}</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center", padding: "0 20px 18px" }}>
+        삭제하면 복구할 수 없습니다. 진행하시겠습니까?
+      </div>
+      <div style={{ display: "flex", borderTop: "1px solid #f3f4f6" }}>
+        <button
+          onClick={() => setDeleteConfirmMobile(null)}
+          style={{ flex: 1, padding: "14px 0", fontSize: 14, fontWeight: 600, color: "#374151", background: "none", border: "none", cursor: "pointer", borderRight: "1px solid #f3f4f6" }}
+        >
+          취소
+        </button>
+        <button
+          onClick={confirmDeleteMobile}
+          style={{ flex: 1, padding: "14px 0", fontSize: 14, fontWeight: 700, color: "#fff", background: "#ef4444", border: "none", cursor: "pointer" }}
+        >
+          삭제
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
       <MobileHeader
   title={title}
   cardVersionB={cardVersionB}

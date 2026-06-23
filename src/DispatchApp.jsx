@@ -13383,6 +13383,8 @@ const NORMAL_NOTICE = `인수증 업로드 (운임 지급 필수)`;
 const BANCHAN_NOTICE = ``;
   // 📤 업체 전달 상태 변경 확인 팝업
   const [deliveryConfirm, setDeliveryConfirm] = React.useState(null);
+  // 📱 기사전달용 복사 후 SMS 팝업 (Part 4)
+  const [smsConfirm4, setSmsConfirm4] = React.useState(null); // { phone, body }
   /*
   {
     rowId,
@@ -13972,7 +13974,12 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
   setCopyModalOpen(false);
   const rowId = selected[0];
   const row = rows.find((r) => r._id === rowId);
-  if (row && row.업체전달상태 !== "전달완료") {
+
+  if (mode === "driver") {
+    // 기사전달용: SMS 전송 팝업
+    const phone = formatPhone(row?.전화번호 || "");
+    setSmsConfirm4({ phone, body: text, rowId });
+  } else if (row && row.업체전달상태 !== "전달완료") {
     setDeliveryConfirm({
       rowId,
       before: row?.업체전달상태 || "미전달",
@@ -14171,6 +14178,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   // 🔥 즉시변경 확인 팝업 (PART 5 이식)
   // =======================
   const [confirmChange, setConfirmChange] = React.useState(null);
+  const [smsConfirm5, setSmsConfirm5] = React.useState(null);
   /*
   {
     rowId,
@@ -21325,6 +21333,34 @@ setConfirmChange(null);
         </div>
       )}
       {/* ===================== 📤 업체 전달 상태 변경 팝업 ===================== */}
+      {/* SMS 전송 확인 팝업 (기사전달용) Part 4 */}
+      {smsConfirm4 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">문자 메시지 전송</h3>
+            </div>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
+                오더 내용이 복사되었습니다.<br />
+                <span className="font-semibold text-[#1B2B4B]">{smsConfirm4.phone || "번호 없음"}</span> 으로 문자를 보내시겠습니까?
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setSmsConfirm4(null)}>취소</button>
+                <button
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
+                  onClick={() => {
+                    const phone = smsConfirm4.phone.replace(/[^\d]/g, "");
+                    window.location.href = `sms:${phone}?body=${encodeURIComponent(smsConfirm4.body)}`;
+                    setSmsConfirm4(null);
+                  }}
+                >문자 보내기</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deliveryConfirm && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100001]"
@@ -23783,12 +23819,14 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     setSelected(new Set());
     setCopyModalOpen(false);
 
-// 🔔 기사복사 후 전달상태 변경 팝업 (조건부)
+// 기사복사 후 처리
 const rowId = [...selected][0];
 const row = dispatchData.find((d) => getId(d) === rowId);
 
-// ✅ 이미 전달완료면 아무 것도 하지 않음
-if (row?.업체전달상태 !== "전달완료") {
+if (mode === "driver") {
+  const phone = formatPhone2 ? formatPhone2(row?.전화번호 || "") : (row?.전화번호 || "");
+  setSmsConfirm5({ phone, body: text, rowId });
+} else if (row?.업체전달상태 !== "전달완료") {
   setConfirmChange({
     id: rowId,
     field: "업체전달상태",
@@ -28629,6 +28667,35 @@ setCopyPlaceOptions(list);
               <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
                 취소
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {smsConfirm5 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">문자 메시지 전송</h3>
+            </div>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
+                오더 내용이 복사되었습니다.<br />
+                <span className="font-semibold text-[#1B2B4B]">{smsConfirm5.phone || "번호 없음"}</span> 으로 문자를 보내시겠습니까?
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSmsConfirm5(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-medium"
+                >취소</button>
+                <button
+                  onClick={() => {
+                    const phone = smsConfirm5.phone.replace(/[^\d]/g, "");
+                    window.location.href = `sms:${phone}?body=${encodeURIComponent(smsConfirm5.body)}`;
+                    setSmsConfirm5(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-medium"
+                >문자 보내기</button>
+              </div>
             </div>
           </div>
         </div>

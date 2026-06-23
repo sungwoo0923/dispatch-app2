@@ -325,15 +325,6 @@ export default function App() {
     return () => clearTimeout(t);
   }, [loading]);
 
-  // 카카오 인앱 브라우저 → 크롬 강제
-  useEffect(() => {
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes("kakaotalk")) {
-      location.href =
-        "intent://dispatch-app2.vercel.app/app#Intent;scheme=https;package=com.android.chrome;end";
-    }
-  }, []);
-
   // 업데이트 이벤트 - UpdateBanner.jsx가 처리하므로 App에서는 제거
 
   // 인증 + 역할
