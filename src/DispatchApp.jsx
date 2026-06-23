@@ -9856,14 +9856,14 @@ className={`
       <>
       
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
-<div className="flex items-stretch gap-3 w-full mb-4">
-  {/* 왼쪽: 폼 (원래 크기 유지) */}
-  <div className="shrink-0">
+<div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
+  {/* 왼쪽: 폼 — 최대 너비 제한으로 화면 초과 방지 */}
+  <div style={{ flex: "0 0 auto", maxWidth: "min(1100px, 74vw)", minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
   {/* 오른쪽: Today 패널 (남은 공간 전부 채움) */}
-  <div className="flex-1 min-w-0 bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col">
+  <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "1 1 0", minWidth: 260 }}>
     {/* 헤더 */}
     <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
       <div>
