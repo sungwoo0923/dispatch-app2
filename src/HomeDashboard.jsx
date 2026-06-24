@@ -986,7 +986,7 @@ React.useEffect(() => {
                     }}
                   >
                     <option value="">결재자 선택</option>
-                    {users.map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+                    {users.filter(u => (u.uid || u.id) !== user?.uid).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
                   </select>
                   <button onClick={() => setScheduleForm({ ...scheduleForm, approvers: scheduleForm.approvers.filter((_, j) => j !== i) })}
                     className="text-red-400 text-lg font-bold px-1">×</button>
@@ -1004,7 +1004,7 @@ React.useEffect(() => {
               const userName = me?.name || "사용자";
               const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
               if (selectedSchedule?.id) {
-                const updatedFields = { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData };
+                const updatedFields = { type: scheduleForm.type, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData };
                 await updateDoc(doc(db, "schedules", selectedSchedule.id), updatedFields);
                 setSelectedSchedule(prev => ({ ...prev, ...updatedFields }));
               } else {
