@@ -1,6 +1,7 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import MobileFleetView from "./MobileFleetView";
 import MobileIntelView from "./MobileIntelView";
+import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
 import southKorea from "@svg-maps/south-korea";
@@ -746,6 +747,8 @@ const [notifications, setNotifications] = useState(() => {
 });
 const [showNotifPanel, setShowNotifPanel] = useState(false);
 const unreadCount = notifications.filter(n => !n.read).length;
+const [showMobileMessenger, setShowMobileMessenger] = useState(false);
+const [messengerUnread, setMessengerUnread] = useState(0);
 
 const addNotification = (type, orderData) => {
   const notifKey = `${type}_${orderData.id || ""}`;
@@ -2600,6 +2603,8 @@ const title =
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
+  messengerUnread={messengerUnread}
+  onMessengerClick={() => setShowMobileMessenger(true)}
 />
 {showNotifPanel && (
   <NotificationPanel
@@ -2611,6 +2616,19 @@ const title =
     onToggleAlarm={toggleAlarm}
     orders={orders}
   />
+)}
+{/* 모바일 메신저 패널 */}
+{showMobileMessenger && (
+  <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column" }}>
+    <InternalMessenger
+      user={user}
+      userCompany={userCompany || localStorage.getItem("userCompany") || ""}
+      role={role}
+      mobileMode={true}
+      onClose={() => setShowMobileMessenger(false)}
+      onUnreadChange={setMessengerUnread}
+    />
+  </div>
 )}
       {showMenu && (
         <MobileSideMenu
@@ -3998,7 +4016,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
-const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick, cardVersionB = false }) {
+const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick }) {
   const isListPage = title === "등록내역";
   const iconColor = cardVersionB ? "#ffffff" : "#374151";
   const bellColor = cardVersionB ? "#ffffff" : "#1f2937";
@@ -4043,6 +4061,21 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
               <path d="M1 20v-6h6"/>
               <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
             </svg>
+          </button>
+        )}
+        {onMessengerClick && (
+          <button
+            className={`relative w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
+            onClick={onMessengerClick}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            {messengerUnread > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                {messengerUnread > 99 ? "99+" : messengerUnread}
+              </span>
+            )}
           </button>
         )}
         <button

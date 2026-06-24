@@ -54,7 +54,7 @@ function Avatar({ name = "", photo = "", size = 36, bgColor = "#1B2B4B" }) {
   );
 }
 
-export default function InternalMessenger({ user, userCompany = "", role = "" }) {
+export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, onClose, onUnreadChange }) {
   const myUid = user?.uid || "";
   const myEmail = user?.email || "";
   const company = userCompany || localStorage.getItem("userCompany") || "";
@@ -93,19 +93,21 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
 
   // ── 내 프로필 로드 & 자동 생성 ──
   useEffect(() => {
-    if (!myUid || !company) return;
+    if (!myUid) return;
     const unsub = onSnapshot(doc(db, PROFILES_COLL, myUid), (snap) => {
       if (snap.exists()) {
         setMyProfile(snap.data());
       } else {
-        // users 컬렉션에서 기존 정보 가져와서 프로필 자동 생성
         getDoc(doc(db, "users", myUid)).then(userSnap => {
-          const userData = userSnap.exists() ? userSnap.data() : {};
+          const u = userSnap.exists() ? userSnap.data() : {};
+          const effectiveCompany = company || u.companyName || "";
           const defaultProfile = {
-            uid: myUid, email: myEmail, company,
-            name: userData.name || userData.displayName || auth.currentUser?.displayName || myEmail.split("@")[0] || "나",
-            statusMsg: "", photo: "", position: userData.position || userData.직책 || "",
-            phone: userData.phone || userData.전화번호 || "", createdAt: serverTimestamp(),
+            uid: myUid, email: myEmail, company: effectiveCompany,
+            name: u.name || u.displayName || auth.currentUser?.displayName || myEmail.split("@")[0] || "나",
+            statusMsg: "", photo: "",
+            position: u.position || u.직책 || "",
+            phone: u.phone || u.phoneNumber || u.전화번호 || "",
+            createdAt: serverTimestamp(),
           };
           setDoc(doc(db, PROFILES_COLL, myUid), defaultProfile);
           setMyProfile(defaultProfile);
@@ -113,34 +115,35 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
       }
     });
     return unsub;
-  }, [myUid, company]);
+  }, [myUid]);
 
-  // ── 같은 회사 사용자 목록 (users 컬렉션 기반, chat_profiles로 머지) ──
+  // ── 같은 회사 사용자 목록 (users 컬렉션 companyName 기반, chat_profiles 머지) ──
   useEffect(() => {
     if (!company) return;
-    // users 컬렉션에서 같은 회사 가입자 전부 가져오기
+    // users 컬렉션: companyName 필드 사용
     const unsub = onSnapshot(
-      query(collection(db, "users"), where("company", "==", company)),
+      query(collection(db, "users"), where("companyName", "==", company)),
       async (userSnap) => {
         const userList = userSnap.docs
-          .map(d => ({ uid: d.id, ...d.data() }))
-          .filter(u => u.uid !== myUid);
+          .map(d => ({ uid: d.id || d.uid, ...d.data() }))
+          .filter(u => (u.uid || u.id) !== myUid && u.approved !== false);
 
-        // chat_profiles가 있으면 머지 (사진, 상태메시지, 직책, 전화번호 업데이트)
+        // chat_profiles 머지 (사진, 상태메시지, 직책, 전화번호)
         const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", company)));
         const profileMap = {};
         profileSnap.docs.forEach(d => { profileMap[d.id] = d.data(); });
 
         const merged = userList.map(u => {
-          const p = profileMap[u.uid] || {};
+          const uid = u.uid || u.id;
+          const p = profileMap[uid] || {};
           return {
-            uid: u.uid,
-            email: u.email || u.uid,
-            name: p.name || u.name || u.displayName || u.email?.split("@")[0] || u.uid,
+            uid,
+            email: u.email || "",
+            name: p.name || u.name || u.displayName || u.email?.split("@")[0] || uid,
             photo: p.photo || u.photo || "",
             statusMsg: p.statusMsg || "",
             position: p.position || u.position || u.직책 || "",
-            phone: p.phone || u.phone || u.전화번호 || u.phoneNumber || "",
+            phone: p.phone || u.phone || u.phoneNumber || u.전화번호 || "",
             company,
           };
         });
@@ -208,6 +211,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
   }, [rooms, myUid]);
 
   const totalUnread = Object.values(unreadMap).reduce((a, b) => a + b, 0);
+
+  // 모바일 부모에게 안읽음 수 전달
+  useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]);
 
   const markRead = useCallback(async (roomId) => {
     if (!myUid || !roomId) return;
@@ -380,6 +386,184 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
   const PANEL_H = 580;
   const BTN_BOTTOM = 152; // AI: 24, 계산기: 88, 메신저: 152
 
+  const panelContent = (
+    <div style={{
+      width: "100%", height: "100%",
+      display: "flex", flexDirection: "column",
+      background: "#fff",
+      fontFamily: "'Noto Sans KR', sans-serif",
+      ...(mobileMode ? {} : {
+        borderRadius: 20, overflow: "hidden",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
+        border: "1px solid #e2e8f0",
+      }),
+    }}>
+      {/* ─── 친구 목록 뷰 ─── */}
+      {view === "friends" && (
+        <FriendsView
+          myProfile={myProfile}
+          friends={friends}
+          rooms={rooms}
+          unreadMap={unreadMap}
+          totalUnread={totalUnread}
+          getRoomName={getRoomName}
+          getRoomPhoto={getRoomPhoto}
+          onOpenDM={openDM}
+          onOpenRoom={(room) => { setActiveRoom(room); setView("chat"); }}
+          onOpenProfile={() => setView("profile")}
+          onOpenPeerProfile={(f) => setProfileView(f)}
+          onNewGroup={() => setNewGroupModal(true)}
+          onClose={mobileMode ? onClose : () => setOpen(false)}
+        />
+      )}
+
+      {/* ─── 채팅 뷰 ─── */}
+      {view === "chat" && activeRoom && (
+        <ChatView
+          room={activeRoom}
+          roomName={getRoomName(activeRoom)}
+          roomPhoto={getRoomPhoto(activeRoom)}
+          messages={filteredMsgs}
+          myUid={myUid}
+          myProfile={myProfile}
+          input={input}
+          setInput={setInput}
+          onSend={sendMessage}
+          onBack={() => setView("friends")}
+          onClose={mobileMode ? onClose : () => setOpen(false)}
+          editMsg={editMsg}
+          setEditMsg={setEditMsg}
+          editText={editText}
+          setEditText={setEditText}
+          onSaveEdit={saveEdit}
+          onDeleteMsg={deleteMessage}
+          msgSearch={msgSearch}
+          setMsgSearch={setMsgSearch}
+          bottomRef={bottomRef}
+          inputRef={inputRef}
+          fileRef={fileRef}
+          onSendImage={sendImage}
+        />
+      )}
+
+      {/* ─── 내 프로필 뷰 ─── */}
+      {view === "profile" && (
+        <ProfileView
+          myProfile={myProfile}
+          editingProfile={editingProfile}
+          editName={editName} editStatusMsg={editStatusMsg}
+          editPosition={editPosition} editPhone={editPhone}
+          setEditName={setEditName} setEditStatusMsg={setEditStatusMsg}
+          setEditPosition={setEditPosition} setEditPhone={setEditPhone}
+          onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(myProfile?.phone || ""); setEditingProfile(true); }}
+          onSave={saveProfile}
+          onCancel={() => setEditingProfile(false)}
+          onBack={() => setView("friends")}
+          onClose={mobileMode ? onClose : () => setOpen(false)}
+          onPhotoUpload={uploadProfilePhoto}
+          photoUploading={photoUploading}
+          photoFileRef={photoFileRef}
+        />
+      )}
+    </div>
+  );
+
+  if (mobileMode) {
+    return (
+      <>
+        <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {panelContent}
+        </div>
+        {/* 다른 사람 프로필 팝업 */}
+        {profileView && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
+            onClick={() => setProfileView(null)}>
+            <div style={{ background: "#fff", borderRadius: 20, width: 280, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ background: "#1B2B4B", padding: "28px 20px 20px", textAlign: "center" }}>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                  <Avatar name={profileView.name} photo={profileView.photo} size={64} />
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#fff" }}>{profileView.name}</div>
+                {profileView.position && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>{profileView.position}</div>}
+                {profileView.statusMsg && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>{profileView.statusMsg}</div>}
+              </div>
+              {(profileView.phone || profileView.email) && (
+                <div style={{ padding: "12px 20px 0", borderBottom: "1px solid #f3f4f6" }}>
+                  {profileView.phone && (
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
+                      <span style={{ color: "#6b7280", fontWeight: 600 }}>전화번호</span>
+                      <a href={`tel:${profileView.phone}`} style={{ color: "#1B2B4B", fontWeight: 600, textDecoration: "none" }}>{profileView.phone}</a>
+                    </div>
+                  )}
+                  {profileView.email && (
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
+                      <span style={{ color: "#6b7280", fontWeight: 600 }}>이메일</span>
+                      <span style={{ color: "#374151", fontWeight: 500 }}>{profileView.email}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ padding: "12px 20px 16px", display: "flex", gap: 10 }}>
+                <button onClick={() => { openDM(profileView); setProfileView(null); }}
+                  style={{ flex: 1, padding: "9px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  1:1 대화
+                </button>
+                <button onClick={() => setProfileView(null)}
+                  style={{ flex: 1, padding: "9px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {newGroupModal && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
+            onClick={() => setNewGroupModal(false)}>
+            <div style={{ background: "#fff", borderRadius: 20, width: "90%", maxWidth: 360, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ background: "#1B2B4B", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>단체 채팅방 만들기</span>
+                <button onClick={() => setNewGroupModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
+              </div>
+              <div style={{ padding: "20px 20px 16px" }}>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 5 }}>채팅방 이름 *</label>
+                  <input value={groupName} onChange={e => setGroupName(e.target.value)}
+                    placeholder="채팅방 이름 입력"
+                    style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 8 }}>
+                  멤버 선택 ({groupMembers.length}명 선택됨)
+                </label>
+                <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                  {friends.map(f => {
+                    const checked = groupMembers.includes(f.uid);
+                    return (
+                      <label key={f.uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 10, cursor: "pointer", background: checked ? "#eff6ff" : "transparent" }}>
+                        <input type="checkbox" checked={checked}
+                          onChange={() => setGroupMembers(prev => checked ? prev.filter(u => u !== f.uid) : [...prev, f.uid])}
+                          style={{ accentColor: "#1B2B4B", width: 15, height: 15 }} />
+                        <Avatar name={f.name} photo={f.photo} size={30} />
+                        <span style={{ fontSize: 13, fontWeight: checked ? 700 : 400, color: "#1B2B4B" }}>{f.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ padding: "0 20px 20px", display: "flex", gap: 10 }}>
+                <button onClick={() => setNewGroupModal(false)}
+                  style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
+                <button onClick={createGroup} disabled={!groupName.trim() || groupMembers.length === 0}
+                  style={{ flex: 1, padding: "10px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: (!groupName.trim() || groupMembers.length === 0) ? 0.4 : 1 }}>만들기</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {/* 플로팅 버튼 */}
@@ -416,80 +600,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
         <div style={{
           position: "fixed", bottom: BTN_BOTTOM + 64, right: 24,
           width: PANEL_W, height: PANEL_H, zIndex: 99997,
-          borderRadius: 20, overflow: "hidden",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
-          display: "flex", flexDirection: "column",
-          background: "#fff", border: "1px solid #e2e8f0",
-          fontFamily: "'Noto Sans KR', sans-serif",
         }}>
-
-          {/* ─── 친구 목록 뷰 ─── */}
-          {view === "friends" && (
-            <FriendsView
-              myProfile={myProfile}
-              friends={friends}
-              rooms={rooms}
-              unreadMap={unreadMap}
-              totalUnread={totalUnread}
-              getRoomName={getRoomName}
-              getRoomPhoto={getRoomPhoto}
-              onOpenDM={openDM}
-              onOpenRoom={(room) => { setActiveRoom(room); setView("chat"); }}
-              onOpenProfile={() => setView("profile")}
-              onOpenPeerProfile={(f) => setProfileView(f)}
-              onNewGroup={() => setNewGroupModal(true)}
-              onClose={() => setOpen(false)}
-            />
-          )}
-
-          {/* ─── 채팅 뷰 ─── */}
-          {view === "chat" && activeRoom && (
-            <ChatView
-              room={activeRoom}
-              roomName={getRoomName(activeRoom)}
-              roomPhoto={getRoomPhoto(activeRoom)}
-              messages={filteredMsgs}
-              myUid={myUid}
-              myProfile={myProfile}
-              input={input}
-              setInput={setInput}
-              onSend={sendMessage}
-              onBack={() => setView("friends")}
-              onClose={() => setOpen(false)}
-              editMsg={editMsg}
-              setEditMsg={setEditMsg}
-              editText={editText}
-              setEditText={setEditText}
-              onSaveEdit={saveEdit}
-              onDeleteMsg={deleteMessage}
-              msgSearch={msgSearch}
-              setMsgSearch={setMsgSearch}
-              bottomRef={bottomRef}
-              inputRef={inputRef}
-              fileRef={fileRef}
-              onSendImage={sendImage}
-            />
-          )}
-
-          {/* ─── 내 프로필 뷰 ─── */}
-          {view === "profile" && (
-            <ProfileView
-              myProfile={myProfile}
-              editingProfile={editingProfile}
-              editName={editName} editStatusMsg={editStatusMsg}
-              editPosition={editPosition} editPhone={editPhone}
-              setEditName={setEditName} setEditStatusMsg={setEditStatusMsg}
-              setEditPosition={setEditPosition} setEditPhone={setEditPhone}
-              onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(myProfile?.phone || ""); setEditingProfile(true); }}
-              onSave={saveProfile}
-              onCancel={() => setEditingProfile(false)}
-              onBack={() => setView("friends")}
-              onClose={() => setOpen(false)}
-              onPhotoUpload={uploadProfilePhoto}
-              photoUploading={photoUploading}
-              photoFileRef={photoFileRef}
-            />
-          )}
+          {panelContent}
         </div>
       )}
 
