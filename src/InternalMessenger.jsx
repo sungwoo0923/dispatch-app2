@@ -82,6 +82,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState("");
   const [editStatusMsg, setEditStatusMsg] = useState("");
+  const [editPosition, setEditPosition] = useState("");
+  const [editPhone, setEditPhone] = useState("");
 
   const msgUnsub = useRef(null);
   const bottomRef = useRef(null);
@@ -89,32 +91,62 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
   const fileRef = useRef(null);
   const photoFileRef = useRef(null);
 
-  // ── 내 프로필 로드 ──
+  // ── 내 프로필 로드 & 자동 생성 ──
   useEffect(() => {
-    if (!myUid) return;
+    if (!myUid || !company) return;
     const unsub = onSnapshot(doc(db, PROFILES_COLL, myUid), (snap) => {
       if (snap.exists()) {
         setMyProfile(snap.data());
       } else {
-        const defaultProfile = {
-          uid: myUid, email: myEmail, company,
-          name: auth.currentUser?.displayName || myEmail.split("@")[0] || "나",
-          statusMsg: "", photo: "", createdAt: serverTimestamp(),
-        };
-        setDoc(doc(db, PROFILES_COLL, myUid), defaultProfile);
-        setMyProfile(defaultProfile);
+        // users 컬렉션에서 기존 정보 가져와서 프로필 자동 생성
+        getDoc(doc(db, "users", myUid)).then(userSnap => {
+          const userData = userSnap.exists() ? userSnap.data() : {};
+          const defaultProfile = {
+            uid: myUid, email: myEmail, company,
+            name: userData.name || userData.displayName || auth.currentUser?.displayName || myEmail.split("@")[0] || "나",
+            statusMsg: "", photo: "", position: userData.position || userData.직책 || "",
+            phone: userData.phone || userData.전화번호 || "", createdAt: serverTimestamp(),
+          };
+          setDoc(doc(db, PROFILES_COLL, myUid), defaultProfile);
+          setMyProfile(defaultProfile);
+        }).catch(() => {});
       }
     });
     return unsub;
-  }, [myUid]);
+  }, [myUid, company]);
 
-  // ── 같은 회사 사용자 목록 ──
+  // ── 같은 회사 사용자 목록 (users 컬렉션 기반, chat_profiles로 머지) ──
   useEffect(() => {
     if (!company) return;
-    const q = query(collection(db, PROFILES_COLL), where("company", "==", company));
-    const unsub = onSnapshot(q, (snap) => {
-      setFriends(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.uid !== myUid));
-    });
+    // users 컬렉션에서 같은 회사 가입자 전부 가져오기
+    const unsub = onSnapshot(
+      query(collection(db, "users"), where("company", "==", company)),
+      async (userSnap) => {
+        const userList = userSnap.docs
+          .map(d => ({ uid: d.id, ...d.data() }))
+          .filter(u => u.uid !== myUid);
+
+        // chat_profiles가 있으면 머지 (사진, 상태메시지, 직책, 전화번호 업데이트)
+        const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", company)));
+        const profileMap = {};
+        profileSnap.docs.forEach(d => { profileMap[d.id] = d.data(); });
+
+        const merged = userList.map(u => {
+          const p = profileMap[u.uid] || {};
+          return {
+            uid: u.uid,
+            email: u.email || u.uid,
+            name: p.name || u.name || u.displayName || u.email?.split("@")[0] || u.uid,
+            photo: p.photo || u.photo || "",
+            statusMsg: p.statusMsg || "",
+            position: p.position || u.position || u.직책 || "",
+            phone: p.phone || u.phone || u.전화번호 || u.phoneNumber || "",
+            company,
+          };
+        });
+        setFriends(merged);
+      }
+    );
     return unsub;
   }, [company, myUid]);
 
@@ -184,6 +216,20 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
       [`unreadCount.${myUid}`]: 0,
     }).catch(() => {});
     setUnreadMap(prev => ({ ...prev, [roomId]: 0 }));
+    // 안읽은 메시지들에 readBy 추가 (배치)
+    getDocs(query(
+      collection(db, MSGS_COLL),
+      where("roomId", "==", roomId),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    )).then(snap => {
+      snap.docs.forEach(d => {
+        const readBy = d.data().readBy || [];
+        if (!readBy.includes(myUid)) {
+          updateDoc(d.ref, { readBy: arrayUnion(myUid) }).catch(() => {});
+        }
+      });
+    }).catch(() => {});
   }, [myUid]);
 
   // ── 1:1 채팅 시작 ──
@@ -241,13 +287,14 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
     const text = input.trim();
     setInput("");
     const senderName = myProfile?.name || myEmail.split("@")[0];
+    const others = activeRoom.members?.filter(uid => uid !== myUid) || [];
     await addDoc(collection(db, MSGS_COLL), {
       roomId: activeRoom.id, text, type: "text",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), edited: false,
+      readBy: [myUid], // 보낸 사람은 이미 읽음
+      totalMembers: activeRoom.members?.length || 1,
     });
-    // 안읽음 카운트 업
-    const others = activeRoom.members?.filter(uid => uid !== myUid) || [];
     const unreadUpdate = {};
     others.forEach(uid => { unreadUpdate[`unreadCount.${uid}`] = (activeRoom.unreadCount?.[uid] || 0) + 1; });
     await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
@@ -267,7 +314,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
     await addDoc(collection(db, MSGS_COLL), {
       roomId: activeRoom.id, text: "", type: "image", imageUrl: url,
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
-      createdAt: serverTimestamp(),
+      createdAt: serverTimestamp(), readBy: [myUid],
+      totalMembers: activeRoom.members?.length || 1,
     });
     await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
       lastMsg: "[사진]", lastAt: serverTimestamp(), lastSenderUid: myUid,
@@ -289,7 +337,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
   // ── 프로필 저장 ──
   const saveProfile = async () => {
     if (!myUid) return;
-    await updateDoc(doc(db, PROFILES_COLL, myUid), { name: editName, statusMsg: editStatusMsg });
+    await updateDoc(doc(db, PROFILES_COLL, myUid), {
+      name: editName, statusMsg: editStatusMsg, position: editPosition, phone: editPhone,
+    });
     setEditingProfile(false);
   };
 
@@ -426,11 +476,11 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
             <ProfileView
               myProfile={myProfile}
               editingProfile={editingProfile}
-              editName={editName}
-              editStatusMsg={editStatusMsg}
-              setEditName={setEditName}
-              setEditStatusMsg={setEditStatusMsg}
-              onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditingProfile(true); }}
+              editName={editName} editStatusMsg={editStatusMsg}
+              editPosition={editPosition} editPhone={editPhone}
+              setEditName={setEditName} setEditStatusMsg={setEditStatusMsg}
+              setEditPosition={setEditPosition} setEditPhone={setEditPhone}
+              onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(myProfile?.phone || ""); setEditingProfile(true); }}
               onSave={saveProfile}
               onCancel={() => setEditingProfile(false)}
               onBack={() => setView("friends")}
@@ -455,11 +505,29 @@ export default function InternalMessenger({ user, userCompany = "", role = "" })
                 <Avatar name={profileView.name} photo={profileView.photo} size={64} />
               </div>
               <div style={{ fontSize: 16, fontWeight: 800, color: "#fff" }}>{profileView.name}</div>
+              {profileView.position && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>{profileView.position}</div>}
               {profileView.statusMsg && (
                 <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>{profileView.statusMsg}</div>
               )}
             </div>
-            <div style={{ padding: "16px 20px", display: "flex", gap: 10 }}>
+            {/* 연락처 정보 */}
+            {(profileView.phone || profileView.email) && (
+              <div style={{ padding: "12px 20px 0", borderBottom: "1px solid #f3f4f6" }}>
+                {profileView.phone && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
+                    <span style={{ color: "#6b7280", fontWeight: 600 }}>전화번호</span>
+                    <a href={`tel:${profileView.phone}`} style={{ color: "#1B2B4B", fontWeight: 600, textDecoration: "none" }}>{profileView.phone}</a>
+                  </div>
+                )}
+                {profileView.email && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
+                    <span style={{ color: "#6b7280", fontWeight: 600 }}>이메일</span>
+                    <span style={{ color: "#374151", fontWeight: 500 }}>{profileView.email}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ padding: "12px 20px 16px", display: "flex", gap: 10 }}>
               <button onClick={() => { openDM(profileView); setProfileView(null); }}
                 style={{ flex: 1, padding: "9px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 1:1 대화
@@ -765,6 +833,16 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                       {isLast && msg.type !== "deleted" && (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start", gap: 2, flexShrink: 0 }}>
                           <span style={{ fontSize: 10, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtTime(msg.createdAt)}</span>
+                          {/* 읽음 표시 */}
+                          {isMine && msg.type !== "deleted" && (() => {
+                            const total = msg.totalMembers || room.members?.length || 1;
+                            const readCount = (msg.readBy || []).length;
+                            const unreadCount = total - readCount;
+                            if (unreadCount > 0) {
+                              return <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap" }}>{unreadCount}</span>;
+                            }
+                            return <span style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>;
+                          })()}
                           {isMine && msg.type !== "deleted" && (
                             <div style={{ display: "flex", gap: 2 }}>
                               <button onClick={() => { setEditMsg(msg); setEditText(msg.text); }}
@@ -822,7 +900,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
 }
 
 // ════════════════ 내 프로필 뷰 ════════════════
-function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, setEditName, setEditStatusMsg, onEdit, onSave, onCancel, onBack, onClose, onPhotoUpload, photoUploading, photoFileRef }) {
+function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editPosition, editPhone, setEditName, setEditStatusMsg, setEditPosition, setEditPhone, onEdit, onSave, onCancel, onBack, onClose, onPhotoUpload, photoUploading, photoFileRef }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ background: "#1B2B4B", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
@@ -848,12 +926,18 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, setEd
               onChange={e => { const f = e.target.files?.[0]; if (f) onPhotoUpload(f); e.target.value = ""; }} />
           </div>
           {editingProfile ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center", width: "100%" }}>
               <input value={editName} onChange={e => setEditName(e.target.value)}
                 placeholder="이름"
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 10, padding: "6px 12px", color: "#fff", fontSize: 16, fontWeight: 700, outline: "none", width: "80%" }} />
               <input value={editStatusMsg} onChange={e => setEditStatusMsg(e.target.value)}
-                placeholder="상태 메시지 입력..."
+                placeholder="상태 메시지..."
+                style={{ textAlign: "center", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.8)", fontSize: 13, outline: "none", width: "80%" }} />
+              <input value={editPosition} onChange={e => setEditPosition(e.target.value)}
+                placeholder="직책 (예: 팀장, 과장...)"
+                style={{ textAlign: "center", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.8)", fontSize: 13, outline: "none", width: "80%" }} />
+              <input value={editPhone} onChange={e => setEditPhone(e.target.value)}
+                placeholder="전화번호"
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.8)", fontSize: 13, outline: "none", width: "80%" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                 <button onClick={onSave} style={{ background: "#fff", color: "#1B2B4B", border: "none", borderRadius: 10, padding: "6px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>저장</button>
@@ -862,7 +946,8 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, setEd
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 6 }}>{myProfile?.name || "이름 없음"}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4 }}>{myProfile?.name || "이름 없음"}</div>
+              {myProfile?.position && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>{myProfile.position}</div>}
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", minHeight: 18 }}>{myProfile?.statusMsg || "상태 메시지를 입력해보세요"}</div>
               <button onClick={onEdit}
                 style={{ marginTop: 12, background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 20, padding: "6px 20px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
@@ -875,8 +960,13 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, setEd
         {/* 정보 */}
         <div style={{ padding: "16px 20px" }}>
           <div style={{ background: "#f8fafc", borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb" }}>
-            {[["이메일", myProfile?.email || ""], ["회사", myProfile?.company || ""]].map(([label, value]) => (
-              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #e5e7eb" }}>
+            {[
+              ["이메일", myProfile?.email || ""],
+              ["회사", myProfile?.company || ""],
+              ["직책", myProfile?.position || "-"],
+              ["전화번호", myProfile?.phone || "-"],
+            ].map(([label, value], idx, arr) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: idx < arr.length - 1 ? "1px solid #e5e7eb" : "none" }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>{label}</span>
                 <span style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>{value}</span>
               </div>

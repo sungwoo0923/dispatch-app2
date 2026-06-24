@@ -547,10 +547,18 @@ React.useEffect(() => {
   // 결재 알림 리스너 — read: false 필터링으로 중복 방지
   useEffect(() => {
     if (!user?.uid) return;
+    const sessionKey = `notif_shown_${user.uid}`;
+    const getShown = () => { try { return new Set(JSON.parse(sessionStorage.getItem(sessionKey) || "[]")); } catch { return new Set(); } };
+    const markShown = (id) => { try { const s = getShown(); s.add(id); sessionStorage.setItem(sessionKey, JSON.stringify([...s])); } catch {} };
+
     const qRef = query(collection(db, "notifications"), where("toUid", "==", user.uid), where("read", "==", false));
     const unsub = onSnapshot(qRef, (snapshot) => {
       snapshot.docChanges().forEach(change => {
         if (change.type !== "added") return;
+        const docId = change.doc.id;
+        // sessionStorage로 세션당 1회만 표시 (컴포넌트 리마운트 시 중복 방지)
+        if (getShown().has(docId)) return;
+        markShown(docId);
         const data = change.doc.data();
         const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
         const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
@@ -564,7 +572,7 @@ React.useEffect(() => {
           msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
           notifStatus = data.status;
         }
-        setApprovalNotifBanner({ id: change.doc.id, msg, status: notifStatus });
+        setApprovalNotifBanner({ id: docId, msg, status: notifStatus });
       });
     }, () => {});
     return unsub;
@@ -580,7 +588,14 @@ React.useEffect(() => {
             {approvalNotifBanner.status === "approved" ? "승" : approvalNotifBanner.status === "rejected" ? "반" : approvalNotifBanner.status === "hold" ? "보" : "결"}
           </div>
           <span className="text-[13px] font-semibold text-gray-800 flex-1">{approvalNotifBanner.msg}</span>
-          <button onClick={() => { if (approvalNotifBanner?.id) updateDoc(doc(db, "notifications", approvalNotifBanner.id), { read: true }).catch(() => {}); setApprovalNotifBanner(null); }} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+          <button onClick={() => {
+            if (approvalNotifBanner?.id) {
+              updateDoc(doc(db, "notifications", approvalNotifBanner.id), { read: true }).catch(() => {});
+              // sessionStorage에서도 제거해서 다음 세션에서 다시 물어볼 일 없게
+              try { const k = `notif_shown_${user?.uid}`; const s = new Set(JSON.parse(sessionStorage.getItem(k)||"[]")); s.delete(approvalNotifBanner.id); sessionStorage.setItem(k, JSON.stringify([...s])); } catch {}
+            }
+            setApprovalNotifBanner(null);
+          }} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
         </div>
       )}
 
