@@ -349,12 +349,21 @@ export default function App() {
             // totalMaster uses the company they typed at login, not their Firestore doc
             const loginCompany = localStorage.getItem("loginCompany") || "";
             setUserCompany(loginCompany);
-            localStorage.setItem("userCompany", loginCompany);
+            try { localStorage.setItem("userCompany", loginCompany); } catch {}
           } else {
             setUserCompany(data.companyName || "");
-            localStorage.setItem("userCompany", data.companyName || "");
+            try { localStorage.setItem("userCompany", data.companyName || ""); } catch {};
           }
-          localStorage.setItem("role", dataRole);
+          // localStorage가 꽉 찬 경우 대용량 항목 먼저 정리 후 저장
+          const safeSetItem = (key, val) => {
+            try { localStorage.setItem(key, val); } catch {
+              ["mobileNotifs", "attachments", "detailAttachments"].forEach(k => { try { localStorage.removeItem(k); } catch {} });
+              // shownNotifs_ prefix 항목도 정리
+              Object.keys(localStorage).filter(k2 => k2.startsWith("shownNotifs_") || k2.startsWith("attach_")).forEach(k2 => { try { localStorage.removeItem(k2); } catch {} });
+              try { localStorage.setItem(key, val); } catch {}
+            }
+          };
+          safeSetItem("role", dataRole);
         } else {
           setRole(null);
           setApproved(false);

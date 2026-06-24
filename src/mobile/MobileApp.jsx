@@ -636,6 +636,21 @@ export default function MobileApp({ role, user, userCompany = "" }) {
       requestAnimationFrame(() => { window.scrollTo(0, y); });
     }
   }, [page]);
+  // localStorage 용량 초과 방지: 오래된 첨부파일 캐시 정리
+  (() => {
+    try {
+      const keys = Object.keys(localStorage);
+      const attachKeys = keys.filter(k => k.startsWith("saved_attach_"));
+      if (attachKeys.length > 20) {
+        attachKeys.slice(0, attachKeys.length - 10).forEach(k => { try { localStorage.removeItem(k); } catch {} });
+      }
+      if (keys.length > 150) {
+        ["mobileNotifs"].forEach(k => { try { localStorage.removeItem(k); } catch {} });
+        keys.filter(k => k.startsWith("shownNotifs_")).slice(0, -3).forEach(k => { try { localStorage.removeItem(k); } catch {} });
+      }
+    } catch {}
+  })();
+
   // 🎨 테마 상태 (기본: navy)
 const [theme, setTheme] = useState(
   localStorage.getItem("appTheme") || "navy"
@@ -759,7 +774,7 @@ const addNotification = (type, orderData) => {
 const markAllRead = () => {
   setNotifications(prev => {
     const next = prev.map(n => ({ ...n, read: true }));
-    localStorage.setItem("mobileNotifs", JSON.stringify(next));
+    try { localStorage.setItem("mobileNotifs", JSON.stringify(next)); } catch {}
     return next;
   });
 };
@@ -798,7 +813,7 @@ const [userReadScheduleAt, setUserReadScheduleAt] = useState(null);
 const [selectedSchedule, setSelectedSchedule] = useState(null);
 const [selectedNotice, setSelectedNotice] = useState(null);
 const [noticeOpen, setNoticeOpen] = useState(false);
-const [noticeForm, setNoticeForm] = useState({ title: "", author: "", content: "" });
+const [noticeForm, setNoticeForm] = useState({ category: "공지사항", author: "", content: "" });
 const [scheduleOpen, setScheduleOpen] = useState(false);
 const [scheduleForm, setScheduleForm] = useState({ type: "휴가", start: "", end: "", memo: "", approvers: [] });
 const [noticePage, setNoticePage] = useState(1);
@@ -2733,7 +2748,7 @@ onGoSchedule={() => {
         style={{ gridTemplateColumns: "72px 1fr 56px" }}>
         <span>날짜</span><span className="text-center">제목</span>
         {role !== "viewer" ? (
-          <button onClick={(e) => { e.stopPropagation(); setSelectedNotice(null); setNoticeForm({ title: "", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" }); setNoticeOpen(true); }}
+          <button onClick={(e) => { e.stopPropagation(); setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" }); setNoticeOpen(true); }}
             className="text-right text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
         ) : (
           <span className="text-right">작성자</span>
@@ -3159,7 +3174,7 @@ onGoSchedule={() => {
           <div className="flex gap-2 pt-2 border-t border-gray-100">
             <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }}
               className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
-            <button onClick={() => { setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }}
+            <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
           </div>
           );
@@ -3173,52 +3188,52 @@ onGoSchedule={() => {
 {noticeOpen && (
   <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
     <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
-      <div className="flex justify-between items-center px-5 py-4 bg-[#1B2B4B]">
+      <div className={`flex justify-between items-center px-5 py-4 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
         <h3 className="font-bold text-white">{selectedNotice ? "공지사항 수정" : "공지사항 등록"}</h3>
-        <button onClick={() => setNoticeOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+        <button onClick={() => { setNoticeOpen(false); setSelectedNotice(null); }} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div className="p-5 space-y-3">
-        <input
-          placeholder="제목"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
-          value={noticeForm.title}
-          onChange={e => setNoticeForm(f => ({ ...f, title: e.target.value }))}
-        />
-        <input
-          placeholder="작성자"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+        <select
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+          value={noticeForm.category}
+          onChange={e => setNoticeForm(f => ({ ...f, category: e.target.value }))}
+        >
+          <option>공지사항</option>
+          <option>업데이트</option>
+          <option>안내</option>
+          <option>긴급</option>
+        </select>
+        <select
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
           value={noticeForm.author}
           onChange={e => setNoticeForm(f => ({ ...f, author: e.target.value }))}
-        />
+        >
+          <option value="">작성자 선택</option>
+          {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+        </select>
         <textarea
           rows={4}
           placeholder="내용"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B2B4B]"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none"
           value={noticeForm.content}
           onChange={e => setNoticeForm(f => ({ ...f, content: e.target.value }))}
         />
         <button
           onClick={async () => {
-            if (!noticeForm.title.trim()) { alert("제목을 입력해주세요."); return; }
+            if (!noticeForm.author) { alert("작성자를 선택해주세요."); return; }
+            const now = new Date();
+            const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
+            const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
             if (selectedNotice?.id) {
-              await updateDoc(doc(db, "notices", selectedNotice.id), {
-                title: noticeForm.title,
-                author: noticeForm.author,
-                content: noticeForm.content,
-              });
+              await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content });
             } else {
-              await addDoc(collection(db, "notices"), {
-                title: noticeForm.title,
-                author: noticeForm.author,
-                content: noticeForm.content,
-                createdAt: serverTimestamp(),
-              });
+              await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, authorUid: currentUser?.uid || "", createdAt: serverTimestamp(), companyName: mobileUsers.find(u => (u.uid||u.id) === currentUser?.uid)?.companyName || "" });
             }
             setNoticeOpen(false);
             setSelectedNotice(null);
-            setNoticeForm({ title: "", author: "", content: "" });
+            setNoticeForm({ category: "공지사항", author: "", content: "" });
           }}
-          className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+          className={`w-full py-3 rounded-xl text-white text-sm font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
         >저장</button>
       </div>
     </div>

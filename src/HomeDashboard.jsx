@@ -196,7 +196,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const isViewer = role === "viewer";
   const [boardTab, setBoardTab] = React.useState("공지사항");
   const [noticeOpen, setNoticeOpen] = useState(false);
-  const [noticeForm, setNoticeForm] = React.useState({ title: "", author: "", content: "" });
+  const [noticeForm, setNoticeForm] = React.useState({ category: "공지사항", author: "", content: "" });
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [scheduleForm, setScheduleForm] = React.useState({ type: "휴가", name: "", start: "", end: "", memo: "", approvers: [] });
   const [notices, setNotices] = React.useState([]);
@@ -844,9 +844,9 @@ React.useEffect(() => {
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[90px]">등록날짜</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">등록시간</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">작성자</th>
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[70px]">받는이</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">받는이</th>
                       <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500">내용</th>
-                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[70px]">수신여부</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[60px]">수신여부</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -875,10 +875,15 @@ React.useEffect(() => {
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{dateStr}</td>
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(h.createdAt)}</td>
                           <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{h.author}</td>
-                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-600">{h.receiver || "-"}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-800">인수인계</td>
-                          <td className="px-3 py-2.5 text-center">
-                            <span className={`text-[11px] px-2 py-0.5 rounded font-semibold ${receiverRead ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500"}`}>
+                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{h.receiver || "-"}</td>
+                          <td className="px-3 py-2.5 text-[13px] text-gray-800 whitespace-nowrap">{(() => {
+                            const d = h.date || formatCreatedAt(h.createdAt) || "";
+                            if (!d) return "업무 인수인계";
+                            const [y, m, day] = d.split("-");
+                            return `${y}년 ${m}월 ${day}일 업무 인수인계`;
+                          })()}</td>
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                            <span className={`text-[11px] px-2 py-0.5 rounded font-semibold ${receiverRead ? "bg-[#EEF1F7] text-[#1B2B4B]" : "bg-red-50 text-red-500"}`}>
                               {receiverRead ? "확인" : "미확인"}
                             </span>
                           </td>
@@ -896,18 +901,30 @@ React.useEffect(() => {
 
       {/* ===== 모달들 ===== */}
       {noticeOpen && (
-        <Modal title="공지사항 등록" onClose={() => setNoticeOpen(false)}>
+        <Modal title={selectedNotice ? "공지사항 수정" : "공지사항 등록"} onClose={() => { setNoticeOpen(false); setSelectedNotice(null); }}>
           <div className="space-y-3">
-            <input placeholder="제목" className={formInput} value={noticeForm.title} onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })} />
-            <input placeholder="작성자" className={formInput} value={noticeForm.author} onChange={e => setNoticeForm({ ...noticeForm, author: e.target.value })} />
+            <select className={formInput} value={noticeForm.category} onChange={e => setNoticeForm({ ...noticeForm, category: e.target.value })}>
+              <option>공지사항</option>
+              <option>업데이트</option>
+              <option>안내</option>
+              <option>긴급</option>
+            </select>
+            <select className={formInput} value={noticeForm.author} onChange={e => setNoticeForm({ ...noticeForm, author: e.target.value })}>
+              <option value="">작성자 선택</option>
+              {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+            </select>
             <textarea placeholder="내용" rows={4} className={formInput} value={noticeForm.content} onChange={e => setNoticeForm({ ...noticeForm, content: e.target.value })} />
             <button onClick={async () => {
+              if (!noticeForm.author) { alert("작성자를 선택하세요"); return; }
+              const now = new Date();
+              const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
+              const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
               if (selectedNotice?.id) {
-                await updateDoc(doc(db, "notices", selectedNotice.id), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content });
+                await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content });
               } else {
-                await addDoc(collection(db, "notices"), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content, authorUid: user?.uid || "", createdAt: serverTimestamp(), companyName: getViewCompany() });
+                await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, authorUid: user?.uid || "", createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
-              setNoticeForm({ title: "", author: "", content: "" }); setNoticeOpen(false);
+              setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(false); setSelectedNotice(null);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
           </div>
         </Modal>
@@ -922,13 +939,13 @@ React.useEffect(() => {
             <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
           </div>
           {(!isViewer) && (() => {
-            const isNoticeAuthor = selectedNotice.authorUid ? selectedNotice.authorUid === user?.uid : true;
             const isSA = role === "superadmin";
-            if (!isNoticeAuthor && !isSA) return null;
+            const isNoticeAuthor = isSA || (selectedNotice.authorUid ? selectedNotice.authorUid === user?.uid : !selectedNotice.authorUid);
+            if (!isNoticeAuthor) return null;
             return (
             <div className="flex gap-2 mt-4 pt-4 border-t">
               <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-              <button onClick={() => { setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+              <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
             </div>
             );
           })()}
@@ -1111,9 +1128,9 @@ React.useEffect(() => {
                 <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
               </div>
               {!isViewer && (() => {
-                const isHAuthor = selectedHandover.authorUid ? selectedHandover.authorUid === user?.uid : true;
                 const isSA = role === "superadmin";
-                if (!isHAuthor && !isSA) return null;
+                const isHAuthor = isSA || (selectedHandover.authorUid ? selectedHandover.authorUid === user?.uid : !selectedHandover.authorUid);
+                if (!isHAuthor) return null;
                 return (
                 <div className="flex gap-2 mt-4 pt-4 border-t">
                   <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
