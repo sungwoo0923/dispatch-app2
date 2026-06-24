@@ -251,10 +251,10 @@ function MobilePagination({ page, total, onChange }) {
 }
 
 function MobileApprovalBadge({ status }) {
-  if (!status || status === "pending") return <span className="text-[11px] text-gray-300">대기</span>;
-  const map = { approved: ["승인", "#1B2B4B", "bg-[#EEF1F7] text-[#1B2B4B]"], rejected: ["반려", "#DC2626", "bg-red-50 text-red-600"], hold: ["보류", "#6B7280", "bg-gray-100 text-gray-500"] };
-  const [label, , cls] = map[status] || ["대기", "", ""];
-  return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${cls}`}>{label}</span>;
+  if (!status || status === "pending" || status === "none") return <span className="text-[11px] text-gray-400 font-semibold animate-pulse">대기</span>;
+  const map = { approved: ["승인", "text-[#1B2B4B]"], rejected: ["반려", "text-red-600"], hold: ["보류", "text-gray-500"], in_progress: ["진행중", "text-blue-500"] };
+  const [label, cls] = map[status] || ["대기", "text-gray-400"];
+  return <span className={`text-[11px] font-semibold ${cls}`}>{label}</span>;
 }
 
 function MobileApprovalStamp({ status }) {
@@ -720,6 +720,7 @@ const [handovers, setHandovers] = useState([]);
 const [currentUser, setCurrentUser] = useState(null);
 const [mobileUsers, setMobileUsers] = useState([]);
 const [approvalNotifBanner, setApprovalNotifBanner] = useState(null);
+const [confirmDialog, setConfirmDialog] = useState(null);
 const [loginTime] = useState(() => new Date());
 const [handoverOpen, setHandoverOpen] = useState(false);
 const [handoverForm, setHandoverForm] = useState({ text: "", receiver: "", receiverUid: "", date: todayKST() });
@@ -2839,7 +2840,7 @@ onGoSchedule={() => {
 {selectedSchedule && !scheduleOpen && (() => {
   const overallStatus = getOverallApprovalStatus(selectedSchedule);
   const isAuthor = currentUser?.uid === selectedSchedule.authorUid;
-  const isSuperAdmin = role === "superadmin";
+  const isSuperAdmin = role === "superadmin" || role === "totalMaster";
   const canEdit = (isAuthor || isSuperAdmin) && overallStatus !== "approved" && overallStatus !== "rejected";
   const canDelete = isAuthor || isSuperAdmin;
   const isHoldAndAuthor = isAuthor && overallStatus === "hold";
@@ -2923,11 +2924,7 @@ onGoSchedule={() => {
         {(canEdit || canDelete) && (
           <div className="flex gap-2 pt-2 border-t border-gray-100">
             {canDelete && (
-              <button onClick={async () => {
-                if (!window.confirm("삭제할까요?")) return;
-                await deleteDoc(doc(db, "schedules", selectedSchedule.id));
-                setSelectedSchedule(null);
-              }} className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
+              <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             )}
             {canEdit && (
               <button onClick={() => {
@@ -3168,11 +3165,11 @@ onGoSchedule={() => {
         </div>
         {(() => {
           const isNAuthor = selectedNotice.authorUid ? selectedNotice.authorUid === currentUser?.uid : role !== "viewer";
-          const isSA = role === "superadmin";
+          const isSA = role === "superadmin" || role === "totalMaster";
           if (!isNAuthor && !isSA) return null;
           return (
           <div className="flex gap-2 pt-2 border-t border-gray-100">
-            <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }}
+            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })}
               className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
@@ -3355,14 +3352,10 @@ onGoSchedule={() => {
             <div><div className="text-xs text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
             <div><div className="text-xs text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-xl p-3 leading-relaxed">{selectedHandover.text}</div></div>
           </div>
-          {(currentUser?.uid === selectedHandover.authorUid || role === "superadmin") && (
+          {(currentUser?.uid === selectedHandover.authorUid || role === "superadmin" || role === "totalMaster") && (
             <div className="flex gap-2 pt-2 border-t">
               <button
-                onClick={async () => {
-                  if (!window.confirm("삭제할까요?")) return;
-                  await deleteDoc(doc(db, "handovers", selectedHandover.id));
-                  setSelectedHandover(null);
-                }}
+                onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); } })}
                 className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-semibold"
               >
                 삭제
@@ -14328,6 +14321,17 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       </div>
 
       {/* 로그아웃 확인 모달 */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[280px] flex flex-col gap-4">
+            <div className="text-[14px] font-semibold text-gray-800 text-center">{confirmDialog.message}</div>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDialog(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">취소</button>
+              <button onClick={async () => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); await fn(); }} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-[13px] font-semibold">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowLogoutConfirm(false)}>
           <div className="w-full bg-white rounded-t-3xl p-6" onClick={e => e.stopPropagation()}>

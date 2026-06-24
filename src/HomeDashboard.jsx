@@ -125,10 +125,10 @@ function Pagination({ page, total, onChange }) {
 
 /* ===== ApprovalBadge ===== */
 function ApprovalBadge({ status }) {
-  if (!status || status === "pending") return <span className="text-[11px] text-gray-300">대기</span>;
-  const map = { approved: ["승인", "#1B2B4B", "bg-[#EEF1F7] text-[#1B2B4B]"], rejected: ["반려", "#DC2626", "bg-red-50 text-red-600"], hold: ["보류", "#6B7280", "bg-gray-100 text-gray-500"] };
-  const [label, , cls] = map[status] || ["대기", "", ""];
-  return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${cls}`}>{label}</span>;
+  if (!status || status === "pending" || status === "none") return <span className="text-[11px] text-gray-400 font-semibold animate-pulse">대기</span>;
+  const map = { approved: ["승인", "text-[#1B2B4B]"], rejected: ["반려", "text-red-600"], hold: ["보류", "text-gray-500"], in_progress: ["진행중", "text-blue-500"] };
+  const [label, cls] = map[status] || ["대기", "text-gray-400"];
+  return <span className={`text-[12px] font-semibold ${cls}`}>{label}</span>;
 }
 
 /* ===== ApprovalStamp ===== */
@@ -216,6 +216,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [users, setUsers] = useState([]);
   const [approvalNotifBanner, setApprovalNotifBanner] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null); // { message, onConfirm }
 
 React.useEffect(() => {
   if (!toast) return;
@@ -732,7 +733,7 @@ React.useEffect(() => {
             })}
           </div>
           <div className="ml-auto">
-            {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => setNoticeOpen(true)} />}
+            {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }} />}
             {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => setScheduleOpen(true)} />}
             {!isViewer && boardTab === "인수인계" && (
               <RegBtn onClick={() => {
@@ -930,7 +931,7 @@ React.useEffect(() => {
         </Modal>
       )}
 
-      {selectedNotice && (
+      {selectedNotice && !noticeOpen && (
         <Modal title="공지사항 상세" onClose={() => setSelectedNotice(null)}>
           <div className="space-y-3 text-[14px]">
             <div><div className="text-[13px] text-gray-400 mb-0.5">제목</div><div className="font-semibold">{selectedNotice.title}</div></div>
@@ -939,12 +940,12 @@ React.useEffect(() => {
             <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
           </div>
           {(!isViewer) && (() => {
-            const isSA = role === "superadmin";
+            const isSA = role === "superadmin" || role === "totalMaster";
             const isNoticeAuthor = isSA || (selectedNotice.authorUid ? selectedNotice.authorUid === user?.uid : !selectedNotice.authorUid);
             if (!isNoticeAuthor) return null;
             return (
             <div className="flex gap-2 mt-4 pt-4 border-t">
-              <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
+              <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
               <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
             </div>
             );
@@ -1010,7 +1011,7 @@ React.useEffect(() => {
         const me = users.find(u => u.id === user?.uid);
         const overallStatus = getOverallApprovalStatus(selectedSchedule);
         const isAuthor = user?.uid === selectedSchedule.authorUid;
-        const isSuperAdmin = role === "superadmin";
+        const isSuperAdmin = role === "superadmin" || role === "totalMaster";
         const canEdit = (isAuthor || isSuperAdmin) && overallStatus !== "approved" && overallStatus !== "rejected";
         const canDelete = isAuthor || isSuperAdmin;
         const isHoldAndAuthor = isAuthor && overallStatus === "hold";
@@ -1066,7 +1067,7 @@ React.useEffect(() => {
           )}
           {(canEdit || canDelete) && !isViewer && (
           <div className="flex gap-2 mt-4 pt-4 border-t">
-            {canDelete && <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>}
+            {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>}
             {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>}
           </div>
           )}
@@ -1128,12 +1129,12 @@ React.useEffect(() => {
                 <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
               </div>
               {!isViewer && (() => {
-                const isSA = role === "superadmin";
+                const isSA = role === "superadmin" || role === "totalMaster";
                 const isHAuthor = isSA || (selectedHandover.authorUid ? selectedHandover.authorUid === user?.uid : !selectedHandover.authorUid);
                 if (!isHAuthor) return null;
                 return (
                 <div className="flex gap-2 mt-4 pt-4 border-t">
-                  <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
+                  <button onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
                   <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
                 </div>
                 );
@@ -1222,6 +1223,17 @@ React.useEffect(() => {
           </div>
         );
       })()}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[300px] flex flex-col gap-4">
+            <div className="text-[14px] font-semibold text-gray-800 text-center">{confirmDialog.message}</div>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDialog(null)} className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+              <button onClick={async () => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); await fn(); }} className="flex-1 py-2 rounded-lg bg-red-600 text-white text-[13px] font-semibold hover:bg-red-700 transition">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
