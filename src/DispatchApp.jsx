@@ -5610,13 +5610,13 @@ function extractMemoTags(memo = "") {
 }
 
 
-const getPalletFromCargoText = (cargo = "") => {
+function getPalletFromCargoText(cargo = "") {
   const m = cargo.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
   if (m) return Number(m[1]);
   const m2 = cargo.match(/^\s*(\d+)\s*$/);
   if (m2) return Number(m2[1]);
   return null;
-};
+}
 // ================================
 // ⭐ 오더복사용 조건 Key 생성 (중복 제거 기준)
 // ================================
@@ -12313,7 +12313,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
-  const validList = (list || []).filter(s => s?.업체명?.trim());
+  const validList = (list || []).filter(s => s?.업체명?.trim() || s?.주소?.trim());
   if (!validList.length) return null;
 
   const label = type === "pickup" ? "상차경유" : "하차경유";
