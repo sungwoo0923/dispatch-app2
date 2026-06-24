@@ -2217,11 +2217,11 @@ React.useEffect(() => {
 
   // 매출관리 비밀번호 - 회사별 Firestore 로드
   useEffect(() => {
-    const co = userCompany || localStorage.getItem("userCompany") || "";
+    const co = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
     if (!co) return;
     const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
       const data = snap.data();
-      setRevenuePassword(data?.revenuePassword || null);
+      setRevenuePassword(data?.revenuePassword ?? null);
       setRevenuePasswordLoaded(true);
     });
     return () => unsub();
