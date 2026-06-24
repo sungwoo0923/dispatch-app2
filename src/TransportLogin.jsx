@@ -398,11 +398,11 @@ export default function TransportLogin() {
             <div style={{ background: "#fff", padding: "24px 28px" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f2f5", paddingBottom: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em" }}>로그인 일시</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em", minWidth: 64 }}>로그인 일시</span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{loginTime}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em" }}>아이디</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em", minWidth: 64 }}>아이디</span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{email}</span>
                 </div>
               </div>

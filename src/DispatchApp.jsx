@@ -1858,6 +1858,14 @@ function SentMailLogItem({ log, onDelete }) {
 }
 
 // ⭐ 모듈 스코프 — DispatchApp 및 하위 컴포넌트(RealtimeStatus, DispatchStatus 등) 전체에서 접근 가능
+function extractTonNum(text = "") {
+  if (!text) return null;
+  const s = String(text).replace(/\s+/g, "");
+  const m = s.match(/(\d+(?:\.\d+)?)/);
+  if (m) return Number(m[1]);
+  return null;
+}
+
 function getPalletFromCargoText(cargo = "") {
   const m = cargo.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
   if (m) return Number(m[1]);
@@ -3530,17 +3538,6 @@ function normalizeVehicleGroup(type = "") {
 // ================================
 // 🚛 차량톤수 숫자 추출 (전역 공용)
 // ================================
-function extractTonNum(text = "") {
-  if (!text) return null;
-
-  const s = String(text).replace(/\s+/g, "");
-
-  // 1️⃣ "1톤", "2.5톤"
-  const m = s.match(/(\d+(?:\.\d+)?)/);
-  if (m) return Number(m[1]);
-
-  return null;
-}
 
 // ================================
 // 🔍 날짜 문자열 판별 (오더복사용)
@@ -41249,57 +41246,6 @@ React.useEffect(() => {
             </div>
           )}
 
-          {/* 하차지거래처 수정 팝업 */}
-          {editPlaceModal && (
-            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditPlaceModal(null)}>
-              <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-                  <h3 className="text-white font-bold text-[15px]">하차지 수정 — {editPlaceModal.업체명}</h3>
-                  <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
-                </div>
-                <div className="px-6 py-5 grid grid-cols-2 gap-4">
-                  {[["업체명 *","업체명"],["담당자","담당자"],["담당자번호","담당자번호"]].map(([label, key]) => (
-                    <div key={key}>
-                      <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
-                      <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
-                        value={editPlaceModal[key]||""}
-                        onChange={(e) => setEditPlaceModal(p => ({ ...p, [key]: e.target.value }))} />
-                    </div>
-                  ))}
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
-                      value={editPlaceModal.등급||"일반"}
-                      onChange={(e) => setEditPlaceModal(p => ({ ...p, 등급: e.target.value }))}>
-                      <option value="일반">일반</option>
-                      <option value="블랙">블랙</option>
-                      <option value="주의">주의</option>
-                      <option value="이탈">이탈</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
-                      value={editPlaceModal.주소||""}
-                      onChange={(e) => setEditPlaceModal(p => ({ ...p, 주소: e.target.value }))} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
-                      value={editPlaceModal.메모||""}
-                      onChange={(e) => setEditPlaceModal(p => ({ ...p, 메모: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="px-6 pb-5 flex gap-3">
-                  <button onClick={() => setEditPlaceModal(null)}
-                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition">취소</button>
-                  <button onClick={saveEditPlace}
-                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold hover:bg-[#243a60] transition">저장</button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* 테이블 */}
           {filtered.length > 0 ? (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
@@ -41378,6 +41324,57 @@ React.useEffect(() => {
               {q ? "검색 결과가 없습니다" : "등록된 거래처가 없습니다"}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 하차지거래처 수정 팝업 */}
+      {editPlaceModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditPlaceModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-white font-bold text-[15px]">하차지 수정 — {editPlaceModal.업체명}</h3>
+              <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+            </div>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+              {[["업체명 *","업체명"],["담당자","담당자"],["담당자번호","담당자번호"]].map(([label, key]) => (
+                <div key={key}>
+                  <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
+                  <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    value={editPlaceModal[key]||""}
+                    onChange={(e) => setEditPlaceModal(p => ({ ...p, [key]: e.target.value }))} />
+                </div>
+              ))}
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
+                <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                  value={editPlaceModal.등급||"일반"}
+                  onChange={(e) => setEditPlaceModal(p => ({ ...p, 등급: e.target.value }))}>
+                  <option value="일반">일반</option>
+                  <option value="블랙">블랙</option>
+                  <option value="주의">주의</option>
+                  <option value="이탈">이탈</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editPlaceModal.주소||""}
+                  onChange={(e) => setEditPlaceModal(p => ({ ...p, 주소: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editPlaceModal.메모||""}
+                  onChange={(e) => setEditPlaceModal(p => ({ ...p, 메모: e.target.value }))} />
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex gap-3">
+              <button onClick={() => setEditPlaceModal(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition">취소</button>
+              <button onClick={saveEditPlace}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold hover:bg-[#243a60] transition">저장</button>
+            </div>
+          </div>
         </div>
       )}
 
