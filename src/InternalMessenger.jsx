@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   collection, addDoc, onSnapshot, query, orderBy, limit,
   serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc,
-  getDocs, where, arrayUnion, arrayRemove
+  getDocs, where, arrayUnion, arrayRemove, increment
 } from "firebase/firestore";
 import { db, auth, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -173,14 +173,17 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   useEffect(() => {
     if (msgUnsub.current) { msgUnsub.current(); msgUnsub.current = null; }
     if (!activeRoom) { setMessages([]); return; }
+    // orderBy 없이 where만 사용 (복합 인덱스 불필요), 클라이언트에서 정렬
     const q = query(
       collection(db, MSGS_COLL),
       where("roomId", "==", activeRoom.id),
-      orderBy("createdAt", "asc"),
       limit(300)
     );
     msgUnsub.current = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const msgs = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
+      setMessages(msgs);
       markRead(activeRoom.id);
     });
     return () => { if (msgUnsub.current) msgUnsub.current(); };
@@ -222,11 +225,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       [`unreadCount.${myUid}`]: 0,
     }).catch(() => {});
     setUnreadMap(prev => ({ ...prev, [roomId]: 0 }));
-    // 안읽은 메시지들에 readBy 추가 (배치)
+    // 안읽은 메시지들에 readBy 추가 (복합 인덱스 없이)
     getDocs(query(
       collection(db, MSGS_COLL),
       where("roomId", "==", roomId),
-      orderBy("createdAt", "desc"),
       limit(50)
     )).then(snap => {
       snap.docs.forEach(d => {
@@ -302,7 +304,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       totalMembers: activeRoom.members?.length || 1,
     });
     const unreadUpdate = {};
-    others.forEach(uid => { unreadUpdate[`unreadCount.${uid}`] = (activeRoom.unreadCount?.[uid] || 0) + 1; });
+    others.forEach(uid => { unreadUpdate[`unreadCount.${uid}`] = increment(1); });
     await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
       lastMsg: text, lastAt: serverTimestamp(), lastSenderUid: myUid,
       [`lastRead.${myUid}`]: serverTimestamp(),
@@ -323,9 +325,13 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       createdAt: serverTimestamp(), readBy: [myUid],
       totalMembers: activeRoom.members?.length || 1,
     });
+    const others2 = activeRoom.members?.filter(uid => uid !== myUid) || [];
+    const unreadUpdate2 = {};
+    others2.forEach(uid => { unreadUpdate2[`unreadCount.${uid}`] = increment(1); });
     await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
       lastMsg: "[사진]", lastAt: serverTimestamp(), lastSenderUid: myUid,
       [`lastRead.${myUid}`]: serverTimestamp(),
+      ...unreadUpdate2,
     }).catch(() => {});
   };
 
