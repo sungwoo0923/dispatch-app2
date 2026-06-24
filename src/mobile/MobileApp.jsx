@@ -251,10 +251,10 @@ function MobilePagination({ page, total, onChange }) {
 }
 
 function MobileApprovalBadge({ status }) {
-  if (!status || status === "pending" || status === "none") return <span className="text-[11px] text-gray-400 font-semibold animate-pulse">대기</span>;
-  const map = { approved: ["승인", "text-[#1B2B4B]"], rejected: ["반려", "text-red-600"], hold: ["보류", "text-gray-500"], in_progress: ["진행중", "text-blue-500"] };
-  const [label, cls] = map[status] || ["대기", "text-gray-400"];
-  return <span className={`text-[11px] font-semibold ${cls}`}>{label}</span>;
+  if (!status || status === "pending" || status === "none") return <span style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700 }} className="animate-pulse">대기</span>;
+  const map = { approved: ["승인", "#1B2B4B"], rejected: ["반려", "#DC2626"], hold: ["보류", "#6B7280"], in_progress: ["진행중", "#3B82F6"] };
+  const [label, color] = map[status] || ["대기", "#9CA3AF"];
+  return <span style={{ color, fontSize: 11, fontWeight: 700 }}>{label}</span>;
 }
 
 function MobileApprovalStamp({ status }) {
@@ -2857,6 +2857,25 @@ onGoSchedule={() => {
       </div>
       <div className="p-5 space-y-3 text-sm relative">
         <MobileApprovalStamp status={overallStatus} />
+        {/* 결재라인 */}
+        {approvers.length > 0 && (
+          <div className="flex justify-end">
+            <div className="flex gap-0 border border-gray-300">
+              <div className="border-r border-gray-300 px-1.5 py-1 flex items-center" style={{ writingMode: "vertical-rl", fontSize: 10, color: "#6B7280", letterSpacing: "0.15em" }}>결&nbsp;재</div>
+              {approvers.map((a, i) => {
+                const statusColor = a.status === "approved" ? "#1B2B4B" : a.status === "rejected" ? "#DC2626" : a.status === "hold" ? "#6B7280" : "#9CA3AF";
+                const statusLabel = a.status === "approved" ? "승인" : a.status === "rejected" ? "반려" : a.status === "hold" ? "보류" : "대기";
+                return (
+                  <div key={i} className={`flex flex-col items-center${i < approvers.length - 1 ? " border-r border-gray-300" : ""}`} style={{ minWidth: 48 }}>
+                    <div style={{ fontSize: 9, color: "#9CA3AF" }} className="border-b border-gray-300 w-full text-center py-0.5">결재자</div>
+                    <div style={{ fontSize: 11, fontWeight: 600 }} className="text-gray-800 py-1 px-1.5">{a.name}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: statusColor }} className="border-t border-gray-300 w-full text-center py-0.5">{statusLabel}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div>
           <div className="text-[11px] text-gray-400 mb-0.5">구분</div>
           <div className="font-semibold">{selectedSchedule.type || selectedSchedule.title}</div>
@@ -2868,13 +2887,6 @@ onGoSchedule={() => {
         <div>
           <div className="text-[11px] text-gray-400 mb-0.5">기간</div>
           <div>{(selectedSchedule.startDate || selectedSchedule.start)} ~ {(selectedSchedule.endDate || selectedSchedule.end)}</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-gray-400 mb-0.5">결재자</div>
-          <div>{approvers.map(a => {
-            const statusLabel = a.status === "approved" ? " (승인)" : a.status === "rejected" ? " (반려)" : a.status === "hold" ? " (보류)" : " (대기)";
-            return a.name + statusLabel;
-          }).join(", ") || "미지정"}</div>
         </div>
         {(selectedSchedule.memo || selectedSchedule.reason) && (
           <div>
@@ -2962,8 +2974,11 @@ onGoSchedule={() => {
         >
           <option>휴가</option>
           <option>외근</option>
-          <option>반차</option>
+          <option>오전반차</option>
+          <option>오후반차</option>
           <option>병가</option>
+          <option>경조사</option>
+          <option>조퇴</option>
         </select>
         <div className="grid grid-cols-2 gap-2">
           <div>

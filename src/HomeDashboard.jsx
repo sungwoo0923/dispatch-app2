@@ -125,10 +125,10 @@ function Pagination({ page, total, onChange }) {
 
 /* ===== ApprovalBadge ===== */
 function ApprovalBadge({ status }) {
-  if (!status || status === "pending" || status === "none") return <span className="text-[11px] text-gray-400 font-semibold animate-pulse">대기</span>;
-  const map = { approved: ["승인", "text-[#1B2B4B]"], rejected: ["반려", "text-red-600"], hold: ["보류", "text-gray-500"], in_progress: ["진행중", "text-blue-500"] };
-  const [label, cls] = map[status] || ["대기", "text-gray-400"];
-  return <span className={`text-[12px] font-semibold ${cls}`}>{label}</span>;
+  if (!status || status === "pending" || status === "none") return <span style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700 }} className="animate-pulse">대기</span>;
+  const map = { approved: ["승인", "#1B2B4B"], rejected: ["반려", "#DC2626"], hold: ["보류", "#6B7280"], in_progress: ["진행중", "#3B82F6"] };
+  const [label, color] = map[status] || ["대기", "#9CA3AF"];
+  return <span style={{ color, fontSize: 12, fontWeight: 700 }}>{label}</span>;
 }
 
 /* ===== ApprovalStamp ===== */
@@ -734,7 +734,7 @@ React.useEffect(() => {
           </div>
           <div className="ml-auto">
             {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }} />}
-            {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => setScheduleOpen(true)} />}
+            {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", name: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} />}
             {!isViewer && boardTab === "인수인계" && (
               <RegBtn onClick={() => {
                 const me = users.find(u => u.id === user?.uid);
@@ -957,7 +957,7 @@ React.useEffect(() => {
         <Modal title="휴가 / 외근 일정 등록" onClose={() => setScheduleOpen(false)}>
           <div className="space-y-3">
             <select className={formInput} value={scheduleForm.type} onChange={e => setScheduleForm({ ...scheduleForm, type: e.target.value })}>
-              <option>휴가</option><option>외근</option><option>반차</option><option>병가</option>
+              <option>휴가</option><option>외근</option><option>오전반차</option><option>오후반차</option><option>병가</option><option>경조사</option><option>조퇴</option>
             </select>
             <div className="flex gap-2">
               <input type="date" className={formInput} value={scheduleForm.start} onChange={e => setScheduleForm({ ...scheduleForm, start: e.target.value })} />
@@ -1007,7 +1007,7 @@ React.useEffect(() => {
         </Modal>
       )}
 
-      {selectedSchedule && (() => {
+      {selectedSchedule && !scheduleOpen && (() => {
         const me = users.find(u => u.id === user?.uid);
         const overallStatus = getOverallApprovalStatus(selectedSchedule);
         const isAuthor = user?.uid === selectedSchedule.authorUid;
@@ -1019,16 +1019,33 @@ React.useEffect(() => {
         const myIdx = approvers.findIndex(a => a.uid === auth.currentUser?.uid && a.status === "pending");
         return (
         <Modal title="일정 상세" onClose={() => setSelectedSchedule(null)}>
-          <div className="relative space-y-3 text-[14px]">
+          <div className="relative text-[14px]">
             <ApprovalStamp status={overallStatus} />
-            <div><div className="text-[13px] text-gray-400 mb-0.5">구분</div><div className="font-semibold">{selectedSchedule.type}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedSchedule.name}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">결재자</div><div>{approvers.map(a => {
-              const lbl = a.status === "approved" ? " (승인)" : a.status === "rejected" ? " (반려)" : a.status === "hold" ? " (보류)" : " (대기)";
-              return a.name + lbl;
-            }).join(", ") || "미지정"}</div></div>
-            {selectedSchedule.memo && <div><div className="text-[13px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
+            {/* 결재라인 */}
+            {approvers.length > 0 && (
+              <div className="flex justify-end mb-3">
+                <div className="flex gap-0 border border-gray-300">
+                  <div className="border-r border-gray-300 px-2 py-1 flex items-center" style={{ writingMode: "vertical-rl", fontSize: 11, color: "#6B7280", letterSpacing: "0.15em" }}>결&nbsp;재</div>
+                  {approvers.map((a, i) => {
+                    const statusColor = a.status === "approved" ? "#1B2B4B" : a.status === "rejected" ? "#DC2626" : a.status === "hold" ? "#6B7280" : "#9CA3AF";
+                    const statusLabel = a.status === "approved" ? "승인" : a.status === "rejected" ? "반려" : a.status === "hold" ? "보류" : "대기";
+                    return (
+                      <div key={i} className={`flex flex-col items-center${i < approvers.length - 1 ? " border-r border-gray-300" : ""}`} style={{ minWidth: 52 }}>
+                        <div className="text-[10px] text-gray-400 border-b border-gray-300 w-full text-center py-0.5">결재자</div>
+                        <div className="text-[12px] font-semibold text-gray-800 py-1 px-2">{a.name}</div>
+                        <div className="text-[11px] font-bold border-t border-gray-300 w-full text-center py-0.5" style={{ color: statusColor }}>{statusLabel}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div className="space-y-3">
+              <div><div className="text-[13px] text-gray-400 mb-0.5">구분</div><div className="font-semibold">{selectedSchedule.type}</div></div>
+              <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedSchedule.name}</div></div>
+              <div><div className="text-[13px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
+              {selectedSchedule.memo && <div><div className="text-[13px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
+            </div>
           </div>
           {myIdx !== -1 && (
             <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
