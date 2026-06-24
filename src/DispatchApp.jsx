@@ -12483,9 +12483,9 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
       {/* ── 경유+N 버튼 ── */}
       <button
         onClick={e => { e.stopPropagation(); setOpen(true); }}
-        className="ml-1 px-1.5 py-0.5 text-[11px] font-bold rounded
-          bg-gray-100 text-gray-700 border border-gray-300
-          hover:bg-gray-200 cursor-pointer whitespace-nowrap">
+        className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded
+          bg-[#1B2B4B] text-white
+          hover:bg-[#243d6a] cursor-pointer whitespace-nowrap">
         경유+{count}
       </button>
 
@@ -34174,9 +34174,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={cellBase}>{r.화물내용 || ""}</td>
                       <td className={cellBase}>
                         {(() => {
-                          const safeP = (v) => { if (!v) return []; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } };
-                          const pu = safeP(r.경유상차목록 || r.경유지_상차).filter(s => s.주소?.trim() || s.업체명?.trim());
-                          const dr = safeP(r.경유하차목록 || r.경유지_하차).filter(s => s.주소?.trim() || s.업체명?.trim());
+                          const _sp = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
+                          const _dedup = (arr) => { const seen = new Set(); return arr.filter(s => { if (!s || (!s.업체명?.trim() && !s.주소?.trim())) return false; const k = s.업체명 || s.주소; if (seen.has(k)) return false; seen.add(k); return true; }); };
+                          const pu = _dedup([..._sp(r.경유상차목록), ..._sp(r.경유지_상차), ..._sp(r.경유지상차)]);
+                          const dr = _dedup([..._sp(r.경유하차목록), ..._sp(r.경유지_하차), ..._sp(r.경유지하차)]);
                           return (
                             <div className="flex flex-wrap gap-1">
                               {pu.length > 0 && <StopBadge count={pu.length} list={pu} type="pickup" />}
@@ -34555,6 +34556,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="상차지 연락처">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))} />
                       </Field>
+                      {/* 경유 상차지 */}
+                      {(() => {
+                        const _sp7 = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
+                        const stops = [..._sp7(copyTarget?.경유상차목록), ..._sp7(copyTarget?.경유지_상차)].filter(s => s?.업체명?.trim() || s?.주소?.trim());
+                        const dedup = [...new Map(stops.map(s => [(s.업체명||s.주소), s])).values()];
+                        return <WaypointSection stops={dedup} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={[...clients, ...places]} timeOptions={[]} className="mt-2" />;
+                      })()}
                     </div>
 
                     {/* 하차 */}
@@ -34633,6 +34641,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="하차지 연락처">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))} />
                       </Field>
+                      {/* 경유 하차지 */}
+                      {(() => {
+                        const _sp7 = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
+                        const stops = [..._sp7(copyTarget?.경유하차목록), ..._sp7(copyTarget?.경유지_하차)].filter(s => s?.업체명?.trim() || s?.주소?.trim());
+                        const dedup = [...new Map(stops.map(s => [(s.업체명||s.주소), s])).values()];
+                        return <WaypointSection stops={dedup} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={[...clients, ...places]} timeOptions={[]} className="mt-2" />;
+                      })()}
                     </div>
                   </div>
                 </div>
