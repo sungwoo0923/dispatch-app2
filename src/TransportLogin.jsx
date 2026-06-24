@@ -387,46 +387,57 @@ export default function TransportLogin() {
 
       {/* Login success popup */}
       {showPopup && (
-        <div className="fixed inset-0 bg-black/40 z-[999] flex items-center justify-center">
-          <div className="bg-white w-[320px] rounded-2xl shadow-xl p-6 text-center">
-            <div className="text-lg font-bold mb-3">로그인 완료</div>
-
-            <div className="text-sm text-gray-500 mb-1">로그인 일시</div>
-            <div className="text-sm font-semibold mb-2">{loginTime}</div>
-
-            <div className="text-sm text-gray-500 mb-1">아이디</div>
-            <div className="text-sm font-semibold mb-4">{email}</div>
-
-            {/* SVG circular countdown */}
-            <div className="relative w-20 h-20 mx-auto mb-4">
-              <svg className="w-20 h-20 -rotate-90">
-                <circle cx="40" cy="40" r="34" stroke="#e5e7eb" strokeWidth="6" fill="none" />
-                <circle
-                  cx="40"
-                  cy="40"
-                  r="34"
-                  stroke="#2563eb"
-                  strokeWidth="6"
-                  fill="none"
-                  strokeDasharray={2 * Math.PI * 34}
-                  strokeDashoffset={(2 * Math.PI * 34 * countdown) / 3}
-                  strokeLinecap="round"
-                  style={{ transition: "stroke-dashoffset 1s linear" }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-blue-600">
-                {countdown}
-              </div>
+        <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center">
+          <div className="w-[340px] rounded-2xl shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div style={{ background: "#1B2B4B", padding: "22px 28px 18px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", marginBottom: 6 }}>LOGIN COMPLETE</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>로그인 완료</div>
             </div>
+            {/* Body */}
+            <div style={{ background: "#fff", padding: "24px 28px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f2f5", paddingBottom: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em" }}>로그인 일시</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{loginTime}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em" }}>아이디</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{email}</span>
+                </div>
+              </div>
 
-            <div className="text-xs text-gray-400 mb-4">오늘도 좋은 하루 되세요</div>
+              {/* SVG circular countdown */}
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+                <div style={{ position: "relative", width: 72, height: 72 }}>
+                  <svg width="72" height="72" style={{ transform: "rotate(-90deg)" }}>
+                    <circle cx="36" cy="36" r="30" stroke="#e5e7eb" strokeWidth="5" fill="none" />
+                    <circle
+                      cx="36" cy="36" r="30"
+                      stroke="#1B2B4B"
+                      strokeWidth="5"
+                      fill="none"
+                      strokeDasharray={2 * Math.PI * 30}
+                      strokeDashoffset={(2 * Math.PI * 30 * countdown) / 3}
+                      strokeLinecap="round"
+                      style={{ transition: "stroke-dashoffset 1s linear" }}
+                    />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, color: "#1B2B4B" }}>
+                    {countdown}
+                  </div>
+                </div>
+              </div>
 
-            <button
-              onClick={() => { sessionStorage.removeItem("skipLoginPopup"); navigate("/app", { replace: true }); }}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold"
-            >
-              확인
-            </button>
+              <div style={{ textAlign: "center", fontSize: 12, color: "#9ca3af", marginBottom: 18 }}>오늘도 좋은 하루 되세요</div>
+
+              <button
+                onClick={() => { sessionStorage.removeItem("skipLoginPopup"); navigate("/app", { replace: true }); }}
+                style={{ width: "100%", background: "#1B2B4B", color: "#fff", padding: "13px", borderRadius: 10, border: "none", fontSize: 14, fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em" }}
+              >
+                확인
+              </button>
+            </div>
           </div>
         </div>
       )}

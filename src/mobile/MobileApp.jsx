@@ -2906,7 +2906,7 @@ onGoSchedule={() => {
           </table>
         </div>
         {/* 결재 요청 문구 */}
-        <div style={{ borderTop: "1px solid #E5E7EB", borderBottom: "1px solid #E5E7EB", margin: "14px 0", padding: "12px 0", textAlign: "center", fontSize: 12, color: "#6B7280", lineHeight: 1.8 }}>
+        <div style={{ borderTop: "2px solid #1B2B4B", borderBottom: "2px solid #1B2B4B", margin: "14px 0", padding: "14px 0", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#1B2B4B", lineHeight: 2, letterSpacing: "0.01em" }}>
           상기 사유로 인하여 결재를 요청하오니<br />승인하여 주시기 바랍니다.
         </div>
         {/* 결재 버튼 (철회/변경 포함) */}

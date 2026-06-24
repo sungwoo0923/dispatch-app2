@@ -406,13 +406,18 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       placeholder="이메일 · 이름 · 회사명 검색"
                       className="flex-1 px-2 py-2 text-[13px] outline-none" />
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {["all", ...ROLES].map(r => (
-                      <button key={r} onClick={() => setRoleFilter(r)}
-                        className={`h-[36px] px-3.5 rounded-full text-[12px] font-semibold border transition ${roleFilter === r ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-                        {r === "all" ? "전체" : (ROLE_LABELS[r] || r)}
-                      </button>
-                    ))}
+                  <div className="flex items-center">
+                    <select
+                      value={roleFilter}
+                      onChange={e => setRoleFilter(e.target.value)}
+                      className="h-[36px] px-3 pr-8 rounded-lg text-[13px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none cursor-pointer appearance-none"
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+                    >
+                      <option value="all">전체 권한</option>
+                      {ROLES.map(r => (
+                        <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="ml-auto text-[13px] text-gray-400 font-medium">{filtered.length}명 표시 중</div>
                 </div>

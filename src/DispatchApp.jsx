@@ -1857,6 +1857,15 @@ function SentMailLogItem({ log, onDelete }) {
   );
 }
 
+// ⭐ 모듈 스코프 — DispatchApp 및 하위 컴포넌트(RealtimeStatus, DispatchStatus 등) 전체에서 접근 가능
+function getPalletFromCargoText(cargo = "") {
+  const m = cargo.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
+  if (m) return Number(m[1]);
+  const m2 = cargo.match(/^\s*(\d+)\s*$/);
+  if (m2) return Number(m2[1]);
+  return null;
+}
+
 export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
@@ -2680,6 +2689,7 @@ return (
               setCardImage={setCardImage}
               cardImageUploading={cardImageUploading}
               setCardImageUploading={setCardImageUploading}
+              isViewer={isViewer}
             />
           </div>
           {정산관리Tab === "지급관리" && (
@@ -5612,13 +5622,6 @@ function extractMemoTags(memo = "") {
 }
 
 
-function getPalletFromCargoText(cargo = "") {
-  const m = cargo.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
-  if (m) return Number(m[1]);
-  const m2 = cargo.match(/^\s*(\d+)\s*$/);
-  if (m2) return Number(m2[1]);
-  return null;
-}
 // ================================
 // ⭐ 오더복사용 조건 Key 생성 (중복 제거 기준)
 // ================================
@@ -34868,7 +34871,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
 
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
-function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading }) {
+function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
 
   // ★ 오더 상세 팝업
   const [orderPopup, setOrderPopup] = useState(null);
@@ -36810,6 +36813,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <button
                     className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
                     onClick={async () => {
+                      if (isViewer) return showAlert("조회전용 권한으로는 수정할 수 없습니다.");
                       if (!orderPopup._id) return showAlert("저장할 수 없는 오더입니다.");
                       if (typeof patchDispatch === "function") {
                         await patchDispatch(orderPopup._id, orderPopupEdit);
@@ -40304,6 +40308,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [showNewClientModal, setShowNewClientModal] = React.useState(false);
   const [editingClientId, setEditingClientId] = React.useState(null);
   const [editClientModal, setEditClientModal] = React.useState(null); // row data for popup
+  const [editPlaceModal, setEditPlaceModal] = React.useState(null); // 하차지거래처 수정 팝업
   const [memoPopup, setMemoPopup] = React.useState(null); // memo text for popup
 
   // ═══════════════════════════════════════════════════
@@ -40367,6 +40372,16 @@ React.useEffect(() => {
     await upsertClient?.({ ...data, id });
     setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...data } : r));
     setEditClientModal(null);
+    showAlert("수정 완료");
+  };
+
+  const saveEditPlace = async () => {
+    if (!editPlaceModal) return;
+    const id = editPlaceModal.id || editPlaceModal.업체명;
+    if (!id) return;
+    await upsertPlace?.({ ...editPlaceModal, id });
+    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal } : r));
+    setEditPlaceModal(null);
     showAlert("수정 완료");
   };
 
@@ -40820,29 +40835,19 @@ React.useEffect(() => {
                       const id = r.id || r.업체명 || `${i}`;
                       const grade = r.등급 || "일반";
                       return (
-                        <tr key={id} className={`hover:bg-blue-50/60 transition border-b border-gray-100 ${
-                          grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
-                        }`}>
-                          <td className="px-3 py-2.5 text-center">
+                        <tr key={id}
+                          onDoubleClick={() => setEditPlaceModal({ ...r })}
+                          className={`hover:bg-blue-50/60 transition border-b border-gray-100 cursor-pointer ${
+                            grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
+                          }`}>
+                          <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <input type="checkbox" checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} />
                           </td>
-                          <td className="px-2 py-2.5">
-                            <input className="border border-gray-200 rounded px-2 py-1 text-sm w-[190px] focus:border-[#1B2B4B] outline-none"
-                              defaultValue={r.업체명||""} onBlur={(e) => handlePlaceBlur(r,"업체명",e.target.value)} />
-                          </td>
-                          <td className="px-2 py-2.5">
-                            <input className="border border-gray-200 rounded px-2 py-1 text-sm w-[250px] focus:border-[#1B2B4B] outline-none"
-                              defaultValue={r.주소||""} onBlur={(e) => handlePlaceBlur(r,"주소",e.target.value)} />
-                          </td>
-                          <td className="px-2 py-2.5">
-                            <input className="border border-gray-200 rounded px-2 py-1 text-sm w-[75px] focus:border-[#1B2B4B] outline-none"
-                              defaultValue={r.담당자||""} onBlur={(e) => handlePlaceBlur(r,"담당자",e.target.value)} />
-                          </td>
-                          <td className="px-2 py-2.5">
-                            <input className="border border-gray-200 rounded px-2 py-1 text-sm w-[120px] focus:border-[#1B2B4B] outline-none"
-                              defaultValue={r.담당자번호||""} onBlur={(e) => handlePlaceBlur(r,"담당자번호",e.target.value)} />
-                          </td>
-                          <td className="px-2 py-2.5 text-center">
+                          <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate">{r.업체명||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate">{r.주소||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-700">{r.담당자||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-700">{r.담당자번호||""}</td>
+                          <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <div className="flex flex-col items-center gap-0.5">
                               <select
                                 className={`px-2 py-1 rounded text-xs font-bold cursor-pointer w-[68px] ${등급색상(grade)}`}
@@ -40858,11 +40863,8 @@ React.useEffect(() => {
                               )}
                             </div>
                           </td>
-                          <td className="px-2 py-2.5">
-                            <input className="border border-gray-200 rounded px-2 py-1 text-sm w-[160px] focus:border-[#1B2B4B] outline-none"
-                              defaultValue={r.메모||""} onBlur={(e) => handlePlaceBlur(r,"메모",e.target.value)} />
-                          </td>
-                          <td className="px-2 py-2.5 text-center">
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.메모||""}</td>
+                          <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={() => { if (confirm("삭제하시겠습니까?")) removePlace(id); }}
                               className="px-2.5 py-1 bg-red-500 text-white rounded text-xs font-semibold hover:bg-red-600 transition">삭제</button>
                           </td>
@@ -41242,6 +41244,57 @@ React.useEffect(() => {
                 <div className="px-6 pb-5">
                   <button onClick={() => setMemoPopup(null)}
                     className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">닫기</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 하차지거래처 수정 팝업 */}
+          {editPlaceModal && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditPlaceModal(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+                  <h3 className="text-white font-bold text-[15px]">하차지 수정 — {editPlaceModal.업체명}</h3>
+                  <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+                </div>
+                <div className="px-6 py-5 grid grid-cols-2 gap-4">
+                  {[["업체명 *","업체명"],["담당자","담당자"],["담당자번호","담당자번호"]].map(([label, key]) => (
+                    <div key={key}>
+                      <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
+                      <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                        value={editPlaceModal[key]||""}
+                        onChange={(e) => setEditPlaceModal(p => ({ ...p, [key]: e.target.value }))} />
+                    </div>
+                  ))}
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
+                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                      value={editPlaceModal.등급||"일반"}
+                      onChange={(e) => setEditPlaceModal(p => ({ ...p, 등급: e.target.value }))}>
+                      <option value="일반">일반</option>
+                      <option value="블랙">블랙</option>
+                      <option value="주의">주의</option>
+                      <option value="이탈">이탈</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      value={editPlaceModal.주소||""}
+                      onChange={(e) => setEditPlaceModal(p => ({ ...p, 주소: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      value={editPlaceModal.메모||""}
+                      onChange={(e) => setEditPlaceModal(p => ({ ...p, 메모: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="px-6 pb-5 flex gap-3">
+                  <button onClick={() => setEditPlaceModal(null)}
+                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition">취소</button>
+                  <button onClick={saveEditPlace}
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold hover:bg-[#243a60] transition">저장</button>
                 </div>
               </div>
             </div>

@@ -787,6 +787,34 @@ React.useEffect(() => {
           <div className="ml-auto">
             {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }} />}
             {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} />}
+            {!isViewer && boardTab === "휴가/외근" && (role === "superadmin" || role === "totalMaster" || role === "admin") && (() => {
+              const pendingCount = schedules.filter(s => {
+                const approvers = s.approvers || [];
+                return approvers.some(a => a.status === "pending" || !a.status);
+              }).length;
+              if (pendingCount === 0) return null;
+              return (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`대기 중인 결재 ${pendingCount}건을 모두 승인하시겠습니까?`)) return;
+                    const myName = auth.currentUser?.displayName || auth.currentUser?.email || "관리자";
+                    for (const s of schedules) {
+                      const approvers = s.approvers || [];
+                      const hasAnyPending = approvers.some(a => a.status === "pending" || !a.status);
+                      if (!hasAnyPending) continue;
+                      const newApprovers = approvers.map(a =>
+                        (a.status === "pending" || !a.status) ? { ...a, status: "approved" } : a
+                      );
+                      await updateDoc(doc(db, "schedules", s.id), { approvers: newApprovers, approvalStatus: "approved" });
+                    }
+                    alert("전체 승인 완료되었습니다.");
+                  }}
+                  className="flex items-center gap-1.5 h-[32px] px-3.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B] text-[#1B2B4B] bg-white hover:bg-[#1B2B4B] hover:text-white transition mr-2"
+                >
+                  대기 {pendingCount}건 전체 승인
+                </button>
+              );
+            })()}
             {!isViewer && boardTab === "인수인계" && (
               <RegBtn onClick={() => {
                 const me = users.find(u => u.id === user?.uid);
@@ -1149,7 +1177,7 @@ React.useEffect(() => {
               </div>
 
               {/* 결재 요청 문구 */}
-              <div style={{ borderTop: "1px solid #E5E7EB", borderBottom: "1px solid #E5E7EB", margin: "18px 0", padding: "14px 0", textAlign: "center", fontSize: 13, color: "#6B7280", lineHeight: 1.8 }}>
+              <div style={{ borderTop: "2px solid #1B2B4B", borderBottom: "2px solid #1B2B4B", margin: "18px 0", padding: "16px 0", textAlign: "center", fontSize: 15, fontWeight: 700, color: "#1B2B4B", lineHeight: 2, letterSpacing: "0.01em" }}>
                 상기 사유로 인하여 결재를 요청하오니<br />승인하여 주시기 바랍니다.
               </div>
 

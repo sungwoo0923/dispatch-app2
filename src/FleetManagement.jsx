@@ -1555,8 +1555,8 @@ function AttendanceTab({ drivers }) {
             { label: "전체 등록", val: drivers.length, color: "#6b7280" },
           ].map(({ label, val, color }) => (
             <div key={label}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color }}>{val}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color }}>{val}</div>
             </div>
           ))}
         </div>
@@ -1565,40 +1565,40 @@ function AttendanceTab({ drivers }) {
       {/* 출근 기록 테이블 */}
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ padding: "13px 20px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>출근 현황</span>
-          <span style={{ fontSize: 13, color: "#6b7280" }}>{attendance.length}명 출근</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>출근 현황</span>
+          <span style={{ fontSize: 14, color: "#6b7280" }}>{attendance.length}명 출근</span>
         </div>
         {loading ? (
-          <div style={{ padding: "40px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>불러오는 중...</div>
+          <div style={{ padding: "40px", textAlign: "center", color: "#9ca3af", fontSize: 15 }}>불러오는 중...</div>
         ) : attendance.length === 0 ? (
-          <div style={{ padding: "44px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>해당 날짜에 출근 기록이 없습니다</div>
+          <div style={{ padding: "44px", textAlign: "center", color: "#9ca3af", fontSize: 15 }}>해당 날짜에 출근 기록이 없습니다</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
             <thead>
               <tr style={{ background: "#f4f6fa", borderBottom: "2px solid #e5e7eb", position: "sticky", top: 0, zIndex: 1 }}>
                 {["#", "기사명", "차량번호", "출근시각", "퇴근시각", "근무시간", "이동거리", "연료비", "상태"].map(col => (
-                  <th key={col} style={{ padding: "11px 14px", textAlign: "left", color: "#374151", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>{col}</th>
+                  <th key={col} style={{ padding: "12px 16px", textAlign: "left", color: "#374151", fontWeight: 700, fontSize: 14, whiteSpace: "nowrap" }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {attendance.map((row, i) => (
                 <tr key={row.uid} style={{ borderBottom: "1px solid #f0f2f5", background: i % 2 === 0 ? "#fff" : "#fafbfc" }}>
-                  <td style={{ padding: "11px 14px", color: "#9ca3af", fontWeight: 600, fontSize: 13 }}>{i + 1}</td>
-                  <td style={{ padding: "11px 14px", fontWeight: 700, color: "#111827" }}>{row.name}</td>
-                  <td style={{ padding: "11px 14px", color: NAVY, fontWeight: 700, fontSize: 13, letterSpacing: "0.04em", fontVariantNumeric: "tabular-nums" }}>{row.carNo}</td>
-                  <td style={{ padding: "11px 14px", color: "#1B2B4B", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtT(row.checkIn)}</td>
-                  <td style={{ padding: "11px 14px", color: row.checkOut ? "#374151" : "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "12px 16px", color: "#9ca3af", fontWeight: 600, fontSize: 14 }}>{i + 1}</td>
+                  <td style={{ padding: "12px 16px", fontWeight: 700, color: "#111827", fontSize: 15 }}>{row.name}</td>
+                  <td style={{ padding: "12px 16px", color: NAVY, fontWeight: 700, fontSize: 14, letterSpacing: "0.04em", fontVariantNumeric: "tabular-nums" }}>{row.carNo}</td>
+                  <td style={{ padding: "12px 16px", color: "#1B2B4B", fontWeight: 700, fontVariantNumeric: "tabular-nums", fontSize: 14 }}>{fmtT(row.checkIn)}</td>
+                  <td style={{ padding: "12px 16px", color: row.checkOut ? "#374151" : "#9ca3af", fontVariantNumeric: "tabular-nums", fontSize: 14 }}>
                     {fmtT(row.checkOut)}
                     {row.isFinal && <span style={{ marginLeft: 7, fontSize: 11, color: "#6b7280", background: "#f3f4f6", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>최종</span>}
                   </td>
-                  <td style={{ padding: "11px 14px" }}>{fmtWork(row.checkIn, row.checkOut)}</td>
-                  <td style={{ padding: "11px 14px", color: "#374151", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "12px 16px", fontSize: 14 }}>{fmtWork(row.checkIn, row.checkOut)}</td>
+                  <td style={{ padding: "12px 16px", color: "#374151", fontVariantNumeric: "tabular-nums", fontSize: 14 }}>
                     {row.distance != null
                       ? `${row.distance.toFixed(1)} km`
                       : (() => { const live = drivers.find(d => d.id === row.uid); return live ? `${(live.총거리 || 0).toFixed(1)} km` : "--"; })()}
                   </td>
-                  <td style={{ padding: "11px 14px", color: "#374151", fontVariantNumeric: "tabular-nums" }}>
+                  <td style={{ padding: "12px 16px", color: "#374151", fontVariantNumeric: "tabular-nums", fontSize: 14 }}>
                     {(() => {
                       const live = drivers.find(d => d.id === row.uid);
                       const km = row.distance != null ? row.distance : (live ? live.총거리 || 0 : null);
@@ -1608,12 +1608,12 @@ function AttendanceTab({ drivers }) {
                       return `${Math.round(km/eff*1750).toLocaleString()}원`;
                     })()}
                   </td>
-                  <td style={{ padding: "11px 14px" }}>
+                  <td style={{ padding: "12px 16px" }}>
                     {!row.checkOut
-                      ? <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700, background: "#d1fae5", padding: "2px 9px", borderRadius: 99 }}>근무중</span>
+                      ? <span style={{ fontSize: 13, color: "#10b981", fontWeight: 700, background: "#d1fae5", padding: "3px 10px", borderRadius: 99 }}>근무중</span>
                       : row.isFinal
-                        ? <span style={{ fontSize: 12, color: "#374151", background: "#f3f4f6", padding: "2px 9px", borderRadius: 99 }}>최종퇴근</span>
-                        : <span style={{ fontSize: 12, color: "#6b7280", background: "#f3f4f6", padding: "2px 9px", borderRadius: 99 }}>퇴근</span>
+                        ? <span style={{ fontSize: 13, color: "#374151", background: "#f3f4f6", padding: "3px 10px", borderRadius: 99 }}>최종퇴근</span>
+                        : <span style={{ fontSize: 13, color: "#6b7280", background: "#f3f4f6", padding: "3px 10px", borderRadius: 99 }}>퇴근</span>
                     }
                   </td>
                 </tr>
@@ -1626,13 +1626,13 @@ function AttendanceTab({ drivers }) {
       {/* 미출근 기사 (오늘만 표시) */}
       {selectedDate === todayStr && noShow.length > 0 && (
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "18px 24px" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 12 }}>미출근 기사 ({noShow.length}명)</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 12 }}>미출근 기사 ({noShow.length}명)</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {noShow.map(d => (
-              <div key={d.id} style={{ padding: "6px 14px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fafafa", fontSize: 13, color: "#374151", fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
+              <div key={d.id} style={{ padding: "7px 16px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fafafa", fontSize: 14, color: "#374151", fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#d1d5db", display: "inline-block" }} />
                 {d.이름}
-                <span style={{ color: "#9ca3af", fontWeight: 500, fontSize: 12 }}>{d.차량번호}</span>
+                <span style={{ color: "#9ca3af", fontWeight: 500, fontSize: 13 }}>{d.차량번호}</span>
               </div>
             ))}
           </div>
