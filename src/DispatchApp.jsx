@@ -6257,30 +6257,42 @@ setFareResult({
   pastHistoryList: pastDedupedList,
 });
 
-// ★ 빠른 선택: 동일 파렛수/화물 + 차량종류 최신 3건
+// ★ 빠른 선택: 동일 파렛수/화물 + 차량종류, 톤수근접 기준 최신 5건
 const _inputPallet = getPalletFromCargoText(form.화물내용);
 const _inputCargoText = (form.화물내용 || "").trim();
 const _inputVehicle = (vehicleQuery?.trim() || form.차량종류 || "").trim().toLowerCase();
+const _inputTonQ = extractTonNum(form.차량톤수);
 
-const _quickMatches = pastDedupedList
-  .filter(r => {
-    // 화물 일치
+const _quickMatches = (() => {
+  // 1단계: 차량종류 필터
+  const vehicleFiltered = pastDedupedList.filter(r => {
+    if (!_inputVehicle) return true;
+    const rv = (r.차량종류 || "").toLowerCase();
+    const isCold = _inputVehicle.includes("냉장") || _inputVehicle.includes("냉동");
+    if (isCold) return rv.includes("냉장") || rv.includes("냉동");
+    return rv.includes(_inputVehicle) || _inputVehicle.includes(rv);
+  });
+
+  // 2단계: 화물+톤수 근접도 점수 부여
+  const scored = vehicleFiltered.map(r => {
     const rPallet = getPalletFromCargoText(r.화물내용);
-    const cargoMatch = _inputPallet != null && rPallet != null
-      ? rPallet === _inputPallet
-      : (r.화물내용 || "").trim() === _inputCargoText;
-    if (!cargoMatch) return false;
-    // 차량종류 일치 (냉장/냉동은 묶어서 처리)
-    if (_inputVehicle) {
-      const rv = (r.차량종류 || "").toLowerCase();
-      const isCold = _inputVehicle.includes("냉장") || _inputVehicle.includes("냉동");
-      if (isCold) { if (!rv.includes("냉장") && !rv.includes("냉동")) return false; }
-      else { if (!rv.includes(_inputVehicle) && !_inputVehicle.includes(rv)) return false; }
-    }
-    return true;
-  })
-  .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))
-  .slice(0, 3);
+    const rTon = extractTonNum(r.차량톤수);
+    let cargoDiff = 999, tonDiff = 999;
+    if (_inputPallet != null && rPallet != null) cargoDiff = Math.abs(rPallet - _inputPallet);
+    else cargoDiff = (r.화물내용||"").trim() === _inputCargoText ? 0 : 1;
+    if (_inputTonQ != null && rTon != null) tonDiff = Math.abs(rTon - _inputTonQ);
+    return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff };
+  });
+
+  // 3단계: 화물일치 우선, 톤수근접, 최신순으로 정렬 후 상위 5건
+  return scored
+    .sort((a, b) => {
+      if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff;
+      if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff;
+      return (b.상차일||"").localeCompare(a.상차일||"");
+    })
+    .slice(0, 5);
+})();
 
 setFareQuickMatches(_quickMatches);
 
@@ -11492,58 +11504,77 @@ setConfirmChange(null);
   })();
   const _inputCargoStr = (form.화물내용 || "").trim();
 
-  let sortedHistory;
-  if (_inputType === "pallet" && _inputPalletNum != null) {
-    // 파렛트: 파렛수별 최신 1건, 입력값 근접순 정렬
-    const _byPallet = new Map();
-    for (const r of (fareResult.pastHistoryList || [])) {
-      if (_detectType(r.화물내용) !== "pallet") continue;
-      const rp = getPalletFromCargoText(r.화물내용);
-      if (rp == null) continue;
-      if (!_byPallet.has(rp)) _byPallet.set(rp, []);
-      _byPallet.get(rp).push(r);
-    }
-    sortedHistory = Array.from(_byPallet.entries())
-      .map(([p, recs]) => {
-        const best = [...recs].sort((a, b) => (b.상차일||"").localeCompare(a.상차일||""))[0];
-        return { ...best, _palletCount: p, _groupSize: recs.length };
-      })
-      .sort((a, b) => Math.abs(a._palletCount - _inputPalletNum) - Math.abs(b._palletCount - _inputPalletNum));
-  } else if (_inputType === "box" && _inputBoxNum != null) {
-    // 박스: 박스수별 최신 1건, 입력값 근접순
-    const _byBox = new Map();
-    for (const r of (fareResult.pastHistoryList || [])) {
-      if (_detectType(r.화물내용) !== "box") continue;
+  const _inputTon = extractTonNum(form.차량톤수);
+
+  // 각 이력에 화물/톤수 근접도 점수 부여 후 정렬
+  // 우선순위: 1) 화물일치+톤수일치 → 최신순
+  //           2) 화물일치+톤수다름 → 톤수근접순 → 최신순
+  //           3) 화물다름+톤수일치 → 최신순
+  //           4) 나머지 → 화물근접+톤수근접+최신순
+  const _scoredAll = (fareResult.pastHistoryList || []).map(r => {
+    const rPallet = getPalletFromCargoText(r.화물내용);
+    const rType = _detectType(r.화물내용);
+    const rTon = extractTonNum(r.차량톤수);
+    const rDate = r.상차일 || r.등록일 || "";
+
+    let cargoScore = 0; // 화물 일치도 (높을수록 좋음)
+    let tonScore = 0;   // 톤수 일치도
+    let tonDiff = 999;
+    let cargoDiff = 999;
+
+    // 화물 점수
+    if (_inputType === "pallet" && _inputPalletNum != null && rType === "pallet" && rPallet != null) {
+      cargoDiff = Math.abs(rPallet - _inputPalletNum);
+      cargoScore = cargoDiff === 0 ? 100 : Math.max(0, 80 - cargoDiff * 15);
+    } else if (_inputType === "box" && _inputBoxNum != null) {
       const rm = (r.화물내용||"").replace(/\s+/g,"").match(/(\d+)(박스|box)/i);
-      const rb = rm ? Number(rm[1]) : -1;
-      if (!_byBox.has(rb)) _byBox.set(rb, []);
-      _byBox.get(rb).push(r);
+      const rb = rm ? Number(rm[1]) : null;
+      if (rb != null) { cargoDiff = Math.abs(rb - _inputBoxNum); cargoScore = cargoDiff === 0 ? 100 : Math.max(0, 80 - cargoDiff * 10); }
+    } else {
+      // 텍스트 일치
+      cargoScore = (r.화물내용||"").trim() === _inputCargoStr ? 100 : 0;
+      cargoDiff = cargoScore === 100 ? 0 : 1;
     }
-    sortedHistory = Array.from(_byBox.entries())
-      .map(([b, recs]) => {
-        const best = [...recs].sort((a, b) => (b.상차일||"").localeCompare(a.상차일||""))[0];
-        return { ...best, _boxCount: b, _groupSize: recs.length };
-      })
-      .sort((a, b) => Math.abs(a._boxCount - _inputBoxNum) - Math.abs(b._boxCount - _inputBoxNum));
-  } else {
-    // 텍스트/기타: 화물내용별 최신 1건, 동일 내용 우선
-    const _byText = new Map();
-    for (const r of (fareResult.pastHistoryList || [])) {
-      const key = (r.화물내용||"기타").trim();
-      if (!_byText.has(key)) _byText.set(key, []);
-      _byText.get(key).push(r);
+
+    // 톤수 점수
+    if (_inputTon != null && rTon != null) {
+      tonDiff = Math.abs(rTon - _inputTon);
+      tonScore = tonDiff === 0 ? 100 : Math.max(0, 80 - tonDiff * 20);
     }
-    sortedHistory = Array.from(_byText.entries())
-      .map(([text, recs]) => {
-        const best = [...recs].sort((a, b) => (b.상차일||"").localeCompare(a.상차일||""))[0];
-        return { ...best, _cargoText: text, _groupSize: recs.length };
-      })
-      .sort((a, b) => {
-        if (a._cargoText === _inputCargoStr && b._cargoText !== _inputCargoStr) return -1;
-        if (b._cargoText === _inputCargoStr && a._cargoText !== _inputCargoStr) return 1;
-        return (b.상차일||"").localeCompare(a.상차일||"");
-      });
-  }
+
+    // 최종 우선순위 그룹 (낮을수록 상위)
+    let tier;
+    const exactCargo = cargoDiff === 0;
+    const exactTon = tonDiff === 0;
+    if (exactCargo && exactTon) tier = 0;       // 화물+톤수 완전일치
+    else if (exactCargo) tier = 1;              // 화물일치, 톤수다름
+    else if (exactTon) tier = 2;                // 화물다름, 톤수일치
+    else tier = 3;                              // 둘다 다름
+
+    // 같은 tier 내 정렬 키: 톤수근접→화물근접→최신순
+    const matchLabel = tier === 0 ? "완전일치" : tier === 1 ? "부분일치" : tier === 2 ? "톤수일치" : "경로일치";
+    return { ...r, _cargoScore: cargoScore, _tonScore: tonScore, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _palletCount: rType==="pallet"?rPallet:null, _groupSize: 1, _match: { label: matchLabel } };
+  });
+
+  // tier 기준으로 그룹화 후 각 그룹 내 최신 1건씩 대표 선출 후 정렬
+  // (같은 화물+톤수 조합은 최신 1건만)
+  const _groupMap = new Map();
+  _scoredAll.forEach(r => {
+    const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`;
+    if (!_groupMap.has(key)) _groupMap.set(key, []);
+    _groupMap.get(key).push(r);
+  });
+
+  let sortedHistory = Array.from(_groupMap.values()).map(recs => {
+    const best = [...recs].sort((a, b) => b._date.localeCompare(a._date))[0];
+    return { ...best, _groupSize: recs.length };
+  }).sort((a, b) => {
+    if (a._tier !== b._tier) return a._tier - b._tier;
+    // 같은 tier 내: 톤수근접 → 화물근접 → 최신순
+    if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff;
+    if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff;
+    return b._date.localeCompare(a._date);
+  });
 
   const recent3 = sortedHistory.slice(0, 3).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,"")));
   let trend = null;
@@ -25487,7 +25518,6 @@ return (
         <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>setEndDate(e.target.value)} />
 
         {/* 날짜 버튼들 */}
-        <button onClick={handleSearch} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">조회</button>
         <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
         <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">내일</button>
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>

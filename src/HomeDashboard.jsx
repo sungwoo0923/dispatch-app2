@@ -125,8 +125,31 @@ function Pagination({ page, total, onChange }) {
 
 /* ===== ApprovalBadge ===== */
 function ApprovalBadge({ status }) {
-  if (!status || status === "pending" || status === "none") return <span style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700 }} className="animate-pulse">대기</span>;
-  const map = { approved: ["승인", "#1B2B4B"], rejected: ["반려", "#DC2626"], hold: ["보류", "#6B7280"], in_progress: ["진행중", "#3B82F6"] };
+  if (!status || status === "pending" || status === "none") {
+    return (
+      <span className="animate-pulse" style={{
+        display: "inline-block", padding: "4px 10px", borderRadius: 6,
+        background: "white", border: "1.5px solid #d1d5db",
+        color: "#111827", fontSize: 12, fontWeight: 700,
+      }}>대기</span>
+    );
+  }
+  if (status === "approved") return (
+    <span style={{
+      display: "inline-block", padding: "4px 10px", borderRadius: 6,
+      background: "#1B2B4B", color: "white", fontSize: 12, fontWeight: 700,
+    }}>승인</span>
+  );
+  if (status === "rejected") return (
+    <span style={{
+      display: "inline-block", padding: "4px 10px", borderRadius: 6,
+      background: "#DC2626", color: "white", fontSize: 12, fontWeight: 700,
+    }}>반려</span>
+  );
+  if (status === "hold") return (
+    <span style={{ color: "#6B7280", fontSize: 12, fontWeight: 700 }}>보류</span>
+  );
+  const map = { in_progress: ["진행중", "#3B82F6"] };
   const [label, color] = map[status] || ["대기", "#9CA3AF"];
   return <span style={{ color, fontSize: 12, fontWeight: 700 }}>{label}</span>;
 }
