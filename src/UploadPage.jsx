@@ -42,6 +42,47 @@ export default function UploadPage() {
   const sigRef                    = useRef(null);
   const [signed, setSigned]       = useState(false);
   const [sigDrawing, setSigDrawing] = useState(false);
+  const [showPaymentCalc, setShowPaymentCalc] = useState(false);
+  const [invoiceDate, setInvoiceDate] = useState("");
+
+  // 결제일 계산 로직
+  const calcPaymentDate = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr + "T00:00:00");
+    if (isNaN(d.getTime())) return null;
+    const dow = d.getDay(); // 0=일,1=월,2=화,3=수,4=목,5=금,6=토
+
+    const addDays = (base, n) => {
+      const r = new Date(base);
+      r.setDate(r.getDate() + n);
+      return r;
+    };
+    const fmtDate = (dt) => {
+      const y = dt.getFullYear(), m = String(dt.getMonth()+1).padStart(2,"0"), dd = String(dt.getDate()).padStart(2,"0");
+      const yoil = ["일","월","화","수","목","금","토"][dt.getDay()];
+      return `${y}-${m}-${dd} (${yoil}요일)`;
+    };
+
+    let result, desc;
+    if (dow === 5) { // 금요일
+      const r = addDays(d, 4); // 다음주 화요일
+      result = fmtDate(r); desc = "금요일 계산서 → 익주 화요일 입금";
+    } else if (dow === 6 || dow === 0) { // 주말
+      // 다음주 화요일
+      const diff = dow === 6 ? 3 : 2;
+      const r = addDays(d, diff);
+      result = fmtDate(r); desc = "주말 계산서 → 화요일 입금";
+    } else { // 평일 월~목
+      let r = addDays(d, 3);
+      // 주말이면 다음 월요일로
+      if (r.getDay() === 6) r = addDays(r, 2);
+      else if (r.getDay() === 0) r = addDays(r, 1);
+      const dowNames = ["일","월","화","수","목"];
+      desc = `${dowNames[dow]}요일 계산서 → 3일 후 입금`;
+      result = fmtDate(r);
+    }
+    return { result, desc };
+  };
 
   const isCold = React.useMemo(() => {
     const t = String(order?.차량종류 || "");
@@ -372,6 +413,73 @@ export default function UploadPage() {
                     <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>하차지</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* 결제일 정보 버튼 */}
+            <button
+              onClick={() => setShowPaymentCalc(true)}
+              style={{ width: "100%", padding: "13px 16px", background: "#1B2B4B", color: "white", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              결제일 정보
+            </button>
+
+            {/* 결제일 정보 모달 */}
+            {showPaymentCalc && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 9999 }} onClick={() => setShowPaymentCalc(false)}>
+                <div style={{ background: "white", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 40px", boxShadow: "0 -8px 32px rgba(0,0,0,0.15)" }} onClick={e => e.stopPropagation()}>
+                  <div style={{ width: 40, height: 4, background: "#e2e8f0", borderRadius: 2, margin: "0 auto 20px" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
+                    <span style={{ fontWeight: 700, fontSize: 15, color: "#1B2B4B" }}>결제일 정보</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 18, paddingLeft: 12 }}>계산서 발행일을 선택하면 입금 예정일을 안내해 드립니다.</p>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>계산서 발행일</label>
+                    <input
+                      type="date"
+                      value={invoiceDate}
+                      onChange={e => setInvoiceDate(e.target.value)}
+                      style={{ width: "100%", padding: "11px 14px", border: "2px solid #1B2B4B", borderRadius: 10, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none", color: "#1e293b" }}
+                    />
+                  </div>
+
+                  {invoiceDate && (() => {
+                    const calc = calcPaymentDate(invoiceDate);
+                    if (!calc) return null;
+                    return (
+                      <div style={{ background: "#f0f4ff", border: "1.5px solid #c7d2fe", borderRadius: 12, padding: "16px" }}>
+                        <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, marginBottom: 6 }}>{calc.desc}</div>
+                        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>입금 예정일</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: "#1B2B4B" }}>{calc.result}</div>
+                        <div style={{ marginTop: 12, padding: "10px 12px", background: "white", borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
+                          <div style={{ fontWeight: 700, color: "#374151", marginBottom: 4 }}>입금 규칙 안내</div>
+                          <div>금요일 계산서 → 익주 화요일</div>
+                          <div>주말(토/일) 계산서 → 화요일</div>
+                          <div>평일(월~목) 계산서 → 3일 후</div>
+                          <div style={{ marginTop: 6, color: "#9ca3af", fontSize: 10 }}>* 공휴일의 경우 담당자에게 문의해 주세요.</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {!invoiceDate && (
+                    <div style={{ background: "#f8fafc", borderRadius: 10, padding: "14px", fontSize: 12, color: "#64748b", lineHeight: 1.7 }}>
+                      <div style={{ fontWeight: 700, color: "#374151", marginBottom: 6 }}>입금 규칙 안내</div>
+                      <div>금요일 계산서 → 익주 화요일</div>
+                      <div>주말(토/일) 계산서 → 화요일</div>
+                      <div>평일(월~목) 계산서 → 3일 후</div>
+                      <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 11 }}>* 공휴일의 경우 담당자에게 문의해 주세요.</div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setShowPaymentCalc(false)}
+                    style={{ marginTop: 20, width: "100%", padding: "13px", background: "#f1f5f9", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, color: "#64748b", cursor: "pointer" }}
+                  >닫기</button>
                 </div>
               </div>
             )}
