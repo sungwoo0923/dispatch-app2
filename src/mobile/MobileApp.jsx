@@ -1375,27 +1375,23 @@ useEffect(() => {
   const shownKey = `shownNotifs_${currentUser.uid}`;
   const shownSet = new Set((() => { try { return JSON.parse(localStorage.getItem(shownKey) || "[]"); } catch { return []; } })());
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
-  const qRef = query(collection(db, "notifications"), where("toUid", "==", currentUser.uid));
+  const qRef = query(collection(db, "notifications"), where("toUid", "==", currentUser.uid), where("read", "==", false));
   const unsub = onSnapshot(qRef, (snapshot) => {
     snapshot.docChanges().forEach(change => {
-      if (change.type === "added" || change.type === "modified") {
-        const data = change.doc.data();
-        if (shownSet.has(change.doc.id)) return;
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
-        if (createdAt && createdAt < since) return;
-        let msg, notifStatus;
-        if (data.type === "approval_request") {
-          msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
-          notifStatus = "request";
-        } else {
-          const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
-          msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
-          notifStatus = data.status;
-        }
-        shownSet.add(change.doc.id);
-        try { localStorage.setItem(shownKey, JSON.stringify([...shownSet].slice(-100))); } catch {}
-        setApprovalNotifBanner({ id: change.doc.id, msg, status: notifStatus });
+      if (change.type !== "added") return;
+      const data = change.doc.data();
+      const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
+      if (createdAt && createdAt < since) return;
+      let msg, notifStatus;
+      if (data.type === "approval_request") {
+        msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
+        notifStatus = "request";
+      } else {
+        const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
+        msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
+        notifStatus = data.status;
       }
+      setApprovalNotifBanner({ id: change.doc.id, msg, status: notifStatus });
     });
   }, () => {});
   return unsub;
@@ -2387,13 +2383,11 @@ const title =
     <div className={`pointer-events-auto flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl ${
       cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-900 border border-gray-200"
     }`} style={{ animation: "successBannerIn 0.3s ease-out", maxWidth: "85vw" }}>
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold text-white ${
-        approvalNotifBanner.status === "approved" ? "bg-blue-600" : approvalNotifBanner.status === "rejected" ? "bg-red-500" : "bg-gray-500"
-      }`}>
-        {approvalNotifBanner.status === "approved" ? "승" : approvalNotifBanner.status === "rejected" ? "반" : "보"}
+      <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 11, fontWeight: 700, color: "#fff", background: approvalNotifBanner.status === "approved" ? "#1B2B4B" : approvalNotifBanner.status === "rejected" ? "#DC2626" : approvalNotifBanner.status === "hold" ? "#6B7280" : "#1B2B4B" }}>
+        {approvalNotifBanner.status === "approved" ? "승" : approvalNotifBanner.status === "rejected" ? "반" : approvalNotifBanner.status === "hold" ? "보" : "결"}
       </div>
       <span className="text-[13px] font-semibold flex-1">{approvalNotifBanner.msg}</span>
-      <button onClick={() => setApprovalNotifBanner(null)} className={`text-lg leading-none ml-2 ${cardVersionB ? "text-white/60" : "text-gray-400"}`}>✕</button>
+      <button onClick={() => { if (approvalNotifBanner?.id) updateDoc(doc(db, "notifications", approvalNotifBanner.id), { read: true }).catch(() => {}); setApprovalNotifBanner(null); }} className={`text-lg leading-none ml-2 ${cardVersionB ? "text-white/60" : "text-gray-400"}`}>✕</button>
     </div>
   </div>
 )}
@@ -2881,7 +2875,7 @@ onGoSchedule={() => {
                       onClick={async () => {
                         if (!isAuthor || !a.uid) return;
                         const myName = mobileUsers.find(u => (u.uid || u.id) === currentUser?.uid)?.name || "작성자";
-                        await addDoc(collection(db, "notifications"), { toUid: a.uid, type: "approval_request", fromName: myName, scheduleType: selectedSchedule.type || "", scheduleId: selectedSchedule.id, createdAt: serverTimestamp() }).catch(() => {});
+                        await setDoc(doc(db, "notifications", `req_${selectedSchedule.id}_${a.uid}`), { toUid: a.uid, type: "approval_request", fromName: myName, scheduleType: selectedSchedule.type || "", scheduleId: selectedSchedule.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
                         alert(`${a.name}님에게 결재 요청을 발송했습니다.`);
                       }}
                       style={{ fontSize: 12, fontWeight: 700, color: "#111827", padding: "6px 4px", textAlign: "center", width: "100%", cursor: isAuthor ? "pointer" : "default", textDecoration: isAuthor ? "underline dotted" : "none" }}
@@ -2934,6 +2928,10 @@ onGoSchedule={() => {
                     newApprovers[myApproverIdx] = { ...newApprovers[myApproverIdx], status: st };
                     await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
                     setSelectedSchedule(prev => ({ ...prev, approvers: newApprovers }));
+                    // 결재 요청 알림 읽음 처리 + 배너 닫기
+                    const notifId = `req_${selectedSchedule.id}_${currentUser?.uid}`;
+                    updateDoc(doc(db, "notifications", notifId), { read: true }).catch(() => {});
+                    setApprovalNotifBanner(null);
                     if (selectedSchedule.authorUid) {
                       addDoc(collection(db, "notifications"), {
                         toUid: selectedSchedule.authorUid, type: "approval", status: st,
@@ -3080,7 +3078,7 @@ onGoSchedule={() => {
                 companyName: mobileUsers.find(u => u.id === currentUser?.uid)?.companyName || "",
               });
               for (const a of approversData) {
-                if (a.uid) addDoc(collection(db, "notifications"), { toUid: a.uid, type: "approval_request", fromName: userName, scheduleType: scheduleForm.type, scheduleId: newDocRef.id, createdAt: serverTimestamp() }).catch(() => {});
+                if (a.uid) setDoc(doc(db, "notifications", `req_${newDocRef.id}_${a.uid}`), { toUid: a.uid, type: "approval_request", fromName: userName, scheduleType: scheduleForm.type, scheduleId: newDocRef.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
               }
             }
             setScheduleOpen(false);

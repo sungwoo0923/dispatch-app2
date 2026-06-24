@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  serverTimestamp, doc, deleteDoc, updateDoc, where,
+  serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 
@@ -484,33 +484,27 @@ React.useEffect(() => {
 
   const formInput = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 transition";
 
-  // 결재 알림 리스너 (최근 7일 알림, 로컬에서 표시 여부 추적)
+  // 결재 알림 리스너 — read: false 필터링으로 중복 방지
   useEffect(() => {
     if (!user?.uid) return;
-    const shownKey = `shownNotifs_${user.uid}`;
-    const shownSet = new Set((() => { try { return JSON.parse(localStorage.getItem(shownKey) || "[]"); } catch { return []; } })());
-    const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
-    const qRef = query(collection(db, "notifications"), where("toUid", "==", user.uid));
+    const qRef = query(collection(db, "notifications"), where("toUid", "==", user.uid), where("read", "==", false));
     const unsub = onSnapshot(qRef, (snapshot) => {
       snapshot.docChanges().forEach(change => {
-        if (change.type === "added" || change.type === "modified") {
-          const data = change.doc.data();
-          if (shownSet.has(change.doc.id)) return;
-          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt instanceof Date ? data.createdAt : null);
-          if (createdAt && createdAt < since) return;
-          let msg, notifStatus;
-          if (data.type === "approval_request") {
-            msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
-            notifStatus = "request";
-          } else {
-            const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
-            msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
-            notifStatus = data.status;
-          }
-          shownSet.add(change.doc.id);
-          try { localStorage.setItem(shownKey, JSON.stringify([...shownSet].slice(-100))); } catch {}
-          setApprovalNotifBanner({ id: change.doc.id, msg, status: notifStatus });
+        if (change.type !== "added") return;
+        const data = change.doc.data();
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
+        const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+        if (createdAt && createdAt < since) return;
+        let msg, notifStatus;
+        if (data.type === "approval_request") {
+          msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
+          notifStatus = "request";
+        } else {
+          const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
+          msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
+          notifStatus = data.status;
         }
+        setApprovalNotifBanner({ id: change.doc.id, msg, status: notifStatus });
       });
     }, () => {});
     return unsub;
@@ -526,7 +520,7 @@ React.useEffect(() => {
             {approvalNotifBanner.status === "approved" ? "승" : approvalNotifBanner.status === "rejected" ? "반" : approvalNotifBanner.status === "hold" ? "보" : "결"}
           </div>
           <span className="text-[13px] font-semibold text-gray-800 flex-1">{approvalNotifBanner.msg}</span>
-          <button onClick={() => setApprovalNotifBanner(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+          <button onClick={() => { if (approvalNotifBanner?.id) updateDoc(doc(db, "notifications", approvalNotifBanner.id), { read: true }).catch(() => {}); setApprovalNotifBanner(null); }} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
         </div>
       )}
 
@@ -1011,7 +1005,7 @@ React.useEffect(() => {
                 const newDocRef = await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, authorUid: user?.uid || "", start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData, approvalStatus: "pending", createdAt: serverTimestamp(), companyName: getViewCompany() });
                 // 결재자에게 최초 결재 요청 알림 발송
                 for (const a of approversData) {
-                  if (a.uid) addDoc(collection(db, "notifications"), { toUid: a.uid, type: "approval_request", fromName: userName, scheduleType: scheduleForm.type, scheduleId: newDocRef.id, createdAt: serverTimestamp() }).catch(() => {});
+                  if (a.uid) setDoc(doc(db, "notifications", `req_${newDocRef.id}_${a.uid}`), { toUid: a.uid, type: "approval_request", fromName: userName, scheduleType: scheduleForm.type, scheduleId: newDocRef.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
                 }
               }
               setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(false);
@@ -1058,8 +1052,9 @@ React.useEffect(() => {
                           <div
                             title="클릭하여 결재 요청 발송"
                             onClick={async () => {
-                              if (!a.uid) return;
-                              await addDoc(collection(db, "notifications"), { toUid: a.uid, type: "approval_request", fromName: me?.name || "작성자", scheduleType: selectedSchedule.type || "", scheduleId: selectedSchedule.id, createdAt: serverTimestamp() }).catch(() => {});
+                              if (!isAuthor || !a.uid) return;
+                              const notifId = `req_${selectedSchedule.id}_${a.uid}`;
+                              await setDoc(doc(db, "notifications", notifId), { toUid: a.uid, type: "approval_request", fromName: me?.name || "작성자", scheduleType: selectedSchedule.type || "", scheduleId: selectedSchedule.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
                               alert(`${a.name}님에게 결재 요청을 발송했습니다.`);
                             }}
                             style={{ fontSize: 13, fontWeight: 700, color: "#111827", padding: "8px 4px", textAlign: "center", width: "100%", cursor: isAuthor ? "pointer" : "default", textDecoration: isAuthor ? "underline dotted" : "none" }}
@@ -1116,6 +1111,10 @@ React.useEffect(() => {
                           newApprovers[myApproverIdx] = { ...newApprovers[myApproverIdx], status: st };
                           await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
                           setSelectedSchedule(prev => ({ ...prev, approvers: newApprovers }));
+                          // 결재 요청 알림을 읽음 처리
+                          const notifId = `req_${selectedSchedule.id}_${auth.currentUser?.uid}`;
+                          updateDoc(doc(db, "notifications", notifId), { read: true }).catch(() => {});
+                          setApprovalNotifBanner(null);
                           if (selectedSchedule.authorUid) {
                             const approverName = me?.name || auth.currentUser?.displayName || "";
                             addDoc(collection(db, "notifications"), { toUid: selectedSchedule.authorUid, type: "approval", status: st, scheduleType: selectedSchedule.type || "", approverName, scheduleId: selectedSchedule.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
