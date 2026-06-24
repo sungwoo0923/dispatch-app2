@@ -995,7 +995,7 @@ React.useEffect(() => {
             <button onClick={async () => {
               const me = users.find(u => u.id === user?.uid);
               const userName = me?.name || "사용자";
-              const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: "pending" }));
+              const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
               if (selectedSchedule?.id) {
                 await updateDoc(doc(db, "schedules", selectedSchedule.id), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData });
               } else {
@@ -1017,78 +1017,105 @@ React.useEffect(() => {
         const isHoldAndAuthor = isAuthor && overallStatus === "hold";
         const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
         const myIdx = approvers.findIndex(a => a.uid === auth.currentUser?.uid && a.status === "pending");
+        const typeLabel = { "휴가": "휴가 신청서", "외근": "외근 신청서", "오전반차": "반차 신청서", "오후반차": "반차 신청서", "병가": "병가 신청서", "경조사": "경조사 신청서", "조퇴": "조퇴 신청서" };
         return (
-        <Modal title="일정 상세" onClose={() => setSelectedSchedule(null)}>
-          <div className="relative text-[14px]">
-            <ApprovalStamp status={overallStatus} />
-            {/* 결재라인 */}
-            {approvers.length > 0 && (
-              <div className="flex justify-end mb-3">
-                <div className="flex gap-0 border border-gray-300">
-                  <div className="border-r border-gray-300 px-2 py-1 flex items-center" style={{ writingMode: "vertical-rl", fontSize: 11, color: "#6B7280", letterSpacing: "0.15em" }}>결&nbsp;재</div>
-                  {approvers.map((a, i) => {
-                    const statusColor = a.status === "approved" ? "#1B2B4B" : a.status === "rejected" ? "#DC2626" : a.status === "hold" ? "#6B7280" : "#9CA3AF";
-                    const statusLabel = a.status === "approved" ? "승인" : a.status === "rejected" ? "반려" : a.status === "hold" ? "보류" : "대기";
-                    return (
-                      <div key={i} className={`flex flex-col items-center${i < approvers.length - 1 ? " border-r border-gray-300" : ""}`} style={{ minWidth: 52 }}>
-                        <div className="text-[10px] text-gray-400 border-b border-gray-300 w-full text-center py-0.5">결재자</div>
-                        <div className="text-[12px] font-semibold text-gray-800 py-1 px-2">{a.name}</div>
-                        <div className="text-[11px] font-bold border-t border-gray-300 w-full text-center py-0.5" style={{ color: statusColor }}>{statusLabel}</div>
-                      </div>
-                    );
-                  })}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 560, maxHeight: "90vh", overflowY: "auto" }}>
+            {/* 헤더 */}
+            <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B]">
+              <h3 className="font-bold text-white text-[15px] tracking-widest">{typeLabel[selectedSchedule.type] || "일정 신청서"}</h3>
+              <button onClick={() => setSelectedSchedule(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+            </div>
+
+            <div className="px-7 py-6">
+              {/* 결재라인 - 우측 정렬 */}
+              {approvers.length > 0 && (
+                <div className="flex justify-end mb-5">
+                  <div style={{ border: "1.5px solid #9CA3AF", display: "flex" }}>
+                    <div style={{ borderRight: "1.5px solid #9CA3AF", padding: "0 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
+                      {["결", "재"].map((ch, i) => <span key={i} style={{ fontSize: 12, fontWeight: 700, color: "#374151", lineHeight: 1.3 }}>{ch}</span>)}
+                    </div>
+                    {approvers.map((a, i) => {
+                      const statusColor = a.status === "approved" ? "#1B2B4B" : a.status === "rejected" ? "#DC2626" : a.status === "hold" ? "#6B7280" : "#9CA3AF";
+                      const statusLabel = a.status === "approved" ? "승인" : a.status === "rejected" ? "반려" : a.status === "hold" ? "보류" : "대기";
+                      return (
+                        <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 64, borderLeft: i > 0 ? "1.5px solid #9CA3AF" : undefined }}>
+                          <div style={{ fontSize: 10, color: "#9CA3AF", borderBottom: "1.5px solid #9CA3AF", width: "100%", textAlign: "center", padding: "3px 0" }}>결재자</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", padding: "8px 4px", textAlign: "center", width: "100%" }}>{a.name}</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: statusColor, borderTop: "1.5px solid #9CA3AF", width: "100%", textAlign: "center", padding: "3px 0" }}>{statusLabel}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+              )}
+
+              {/* 신청서 본문 테이블 */}
+              <div className="relative" style={{ border: "1.5px solid #D1D5DB" }}>
+                <ApprovalStamp status={overallStatus} />
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                  <tbody>
+                    {[
+                      ["구 분", <span style={{ fontWeight: 700, color: "#111827" }}>{selectedSchedule.type}</span>],
+                      ["작 성 자", <span style={{ color: "#111827" }}>{selectedSchedule.name}</span>],
+                      ["기 간", <span style={{ color: "#111827" }}>{selectedSchedule.start} ~ {selectedSchedule.end}</span>],
+                      ...(selectedSchedule.memo ? [["사 유", <span style={{ color: "#111827", whiteSpace: "pre-wrap" }}>{selectedSchedule.memo}</span>]] : []),
+                    ].map(([label, val], idx, arr) => (
+                      <tr key={idx} style={{ borderBottom: idx < arr.length - 1 ? "1px solid #E5E7EB" : undefined }}>
+                        <td style={{ background: "#F9FAFB", padding: "11px 16px", fontSize: 12, fontWeight: 700, color: "#4B5563", width: 100, borderRight: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>{label}</td>
+                        <td style={{ padding: "11px 16px" }}>{val}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-            <div className="space-y-3">
-              <div><div className="text-[13px] text-gray-400 mb-0.5">구분</div><div className="font-semibold">{selectedSchedule.type}</div></div>
-              <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedSchedule.name}</div></div>
-              <div><div className="text-[13px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
-              {selectedSchedule.memo && <div><div className="text-[13px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
-            </div>
-          </div>
-          {myIdx !== -1 && (
-            <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-              {["approved", "rejected", "hold"].map(status => (
-                <button key={status} onClick={async () => {
-                  const newApprovers = [...approvers];
-                  newApprovers[myIdx] = { ...newApprovers[myIdx], status };
-                  await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
-                  if (selectedSchedule.authorUid) {
-                    const approverName = me?.name || auth.currentUser?.displayName || "";
-                    addDoc(collection(db, "notifications"), {
-                      toUid: selectedSchedule.authorUid,
-                      type: "approval",
-                      status,
-                      scheduleType: selectedSchedule.type || "",
-                      approverName,
-                      scheduleId: selectedSchedule.id,
-                      createdAt: serverTimestamp(),
-                      read: false,
-                    }).catch(() => {});
-                  }
+
+              {/* 결재 요청 문구 */}
+              <div style={{ borderTop: "1px solid #E5E7EB", borderBottom: "1px solid #E5E7EB", margin: "18px 0", padding: "14px 0", textAlign: "center", fontSize: 13, color: "#6B7280", lineHeight: 1.8 }}>
+                상기 사유로 인하여 결재를 요청하오니<br />승인하여 주시기 바랍니다.
+              </div>
+
+              {/* 결재 행동 버튼 */}
+              {myIdx !== -1 && (
+                <div className="flex gap-2 mb-3">
+                  {["approved", "rejected", "hold"].map(status => (
+                    <button key={status} onClick={async () => {
+                      const newApprovers = [...approvers];
+                      newApprovers[myIdx] = { ...newApprovers[myIdx], status };
+                      await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
+                      if (selectedSchedule.authorUid) {
+                        const approverName = me?.name || auth.currentUser?.displayName || "";
+                        addDoc(collection(db, "notifications"), {
+                          toUid: selectedSchedule.authorUid, type: "approval", status,
+                          scheduleType: selectedSchedule.type || "", approverName,
+                          scheduleId: selectedSchedule.id, createdAt: serverTimestamp(), read: false,
+                        }).catch(() => {});
+                      }
+                      setSelectedSchedule(null);
+                    }} style={{
+                      flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      background: status === "approved" ? "#1B2B4B" : status === "rejected" ? "#DC2626" : "#6B7280",
+                      color: "#fff", border: "none"
+                    }}>{status === "approved" ? "승인" : status === "rejected" ? "반려" : "보류"}</button>
+                  ))}
+                </div>
+              )}
+              {isHoldAndAuthor && (
+                <button onClick={async () => {
+                  const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
+                  await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers });
                   setSelectedSchedule(null);
-                }} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
-                  status === "approved" ? "bg-[#EEF1F7] text-[#1B2B4B]" :
-                  status === "rejected" ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"
-                }`}>{status === "approved" ? "승인" : status === "rejected" ? "반려" : "보류"}</button>
-              ))}
+                }} className="w-full mb-3 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">재결재 요청</button>
+              )}
+              {(canEdit || canDelete) && !isViewer && (
+                <div className="flex gap-2 pt-3 border-t border-gray-100">
+                  {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>}
+                  {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>}
+                </div>
+              )}
             </div>
-          )}
-          {isHoldAndAuthor && (
-            <button onClick={async () => {
-              const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
-              await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers });
-              setSelectedSchedule(null);
-            }} className="w-full mt-3 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">재결재 요청</button>
-          )}
-          {(canEdit || canDelete) && !isViewer && (
-          <div className="flex gap-2 mt-4 pt-4 border-t">
-            {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>}
-            {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>}
           </div>
-          )}
-        </Modal>
+        </div>
         );
       })()}
 
