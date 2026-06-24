@@ -750,8 +750,8 @@ const addNotification = (type, orderData) => {
     read: false,
   };
   setNotifications(prev => {
-    const next = [notif, ...prev].slice(0, 50);
-    localStorage.setItem("mobileNotifs", JSON.stringify(next));
+    const next = [notif, ...prev].slice(0, 30);
+    try { localStorage.setItem("mobileNotifs", JSON.stringify(next)); } catch { try { localStorage.removeItem("mobileNotifs"); localStorage.setItem("mobileNotifs", JSON.stringify(next.slice(0, 5))); } catch {} }
     return next;
   });
 };
@@ -1353,21 +1353,28 @@ useEffect(() => {
   setHasNewNotice(latest > userReadNoticeAt);
 }, [notices, currentUser, userReadNoticeAt]);
 
-// 결재 알림 리스너
+// 결재 알림 리스너 (최근 7일, 로컬 표시 이력으로 중복 방지)
 useEffect(() => {
   if (!currentUser?.uid) return;
-  const qRef = query(collection(db, "notifications"), where("toUid", "==", currentUser.uid), where("read", "==", false));
+  const shownKey = `shownNotifs_${currentUser.uid}`;
+  const shownSet = new Set((() => { try { return JSON.parse(localStorage.getItem(shownKey) || "[]"); } catch { return []; } })());
+  const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+  const qRef = query(collection(db, "notifications"), where("toUid", "==", currentUser.uid));
   const unsub = onSnapshot(qRef, (snapshot) => {
     snapshot.docChanges().forEach(change => {
-      if (change.type === "added") {
+      if (change.type === "added" || change.type === "modified") {
         const data = change.doc.data();
+        if (shownSet.has(change.doc.id)) return;
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
+        if (createdAt && createdAt < since) return;
         const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
         const msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
+        shownSet.add(change.doc.id);
+        try { localStorage.setItem(shownKey, JSON.stringify([...shownSet].slice(-100))); } catch {}
         setApprovalNotifBanner({ id: change.doc.id, msg, status: data.status });
-        updateDoc(doc(db, "notifications", change.doc.id), { read: true }).catch(() => {});
       }
     });
-  });
+  }, () => {});
   return unsub;
 }, [currentUser]);
 
@@ -3144,23 +3151,19 @@ onGoSchedule={() => {
           <div className="text-[11px] text-gray-400 mb-0.5">내용</div>
           <div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-gray-700 leading-relaxed">{selectedNotice.content}</div>
         </div>
-        <div className="flex gap-2 pt-2 border-t border-gray-100">
-          <button
-            onClick={async () => {
-              if (!window.confirm("삭제할까요?")) return;
-              await deleteDoc(doc(db, "notices", selectedNotice.id));
-              setSelectedNotice(null);
-            }}
-            className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
-          >삭제</button>
-          <button
-            onClick={() => {
-              setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content });
-              setNoticeOpen(true);
-            }}
-            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
-          >수정</button>
-        </div>
+        {(() => {
+          const isNAuthor = selectedNotice.authorUid ? selectedNotice.authorUid === currentUser?.uid : role !== "viewer";
+          const isSA = role === "superadmin";
+          if (!isNAuthor && !isSA) return null;
+          return (
+          <div className="flex gap-2 pt-2 border-t border-gray-100">
+            <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }}
+              className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
+            <button onClick={() => { setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }}
+              className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
+          </div>
+          );
+        })()}
       </div>
     </div>
   </div>
@@ -3337,7 +3340,7 @@ onGoSchedule={() => {
             <div><div className="text-xs text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
             <div><div className="text-xs text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-xl p-3 leading-relaxed">{selectedHandover.text}</div></div>
           </div>
-          {currentUser?.uid === selectedHandover.authorUid && (
+          {(currentUser?.uid === selectedHandover.authorUid || role === "superadmin") && (
             <div className="flex gap-2 pt-2 border-t">
               <button
                 onClick={async () => {

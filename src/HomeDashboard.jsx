@@ -483,21 +483,28 @@ React.useEffect(() => {
 
   const formInput = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 transition";
 
-  // 결재 알림 리스너
+  // 결재 알림 리스너 (최근 7일 알림, 로컬에서 표시 여부 추적)
   useEffect(() => {
     if (!user?.uid) return;
-    const qRef = query(collection(db, "notifications"), where("toUid", "==", user.uid), where("read", "==", false));
+    const shownKey = `shownNotifs_${user.uid}`;
+    const shownSet = new Set((() => { try { return JSON.parse(localStorage.getItem(shownKey) || "[]"); } catch { return []; } })());
+    const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+    const qRef = query(collection(db, "notifications"), where("toUid", "==", user.uid));
     const unsub = onSnapshot(qRef, (snapshot) => {
       snapshot.docChanges().forEach(change => {
-        if (change.type === "added") {
+        if (change.type === "added" || change.type === "modified") {
           const data = change.doc.data();
+          if (shownSet.has(change.doc.id)) return;
+          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt instanceof Date ? data.createdAt : null);
+          if (createdAt && createdAt < since) return;
           const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
           const msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
+          shownSet.add(change.doc.id);
+          try { localStorage.setItem(shownKey, JSON.stringify([...shownSet].slice(-100))); } catch {}
           setApprovalNotifBanner({ id: change.doc.id, msg, status: data.status });
-          updateDoc(doc(db, "notifications", change.doc.id), { read: true }).catch(() => {});
         }
       });
-    });
+    }, () => {});
     return unsub;
   }, [user?.uid]);
 
@@ -898,7 +905,7 @@ React.useEffect(() => {
               if (selectedNotice?.id) {
                 await updateDoc(doc(db, "notices", selectedNotice.id), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content });
               } else {
-                await addDoc(collection(db, "notices"), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content, createdAt: serverTimestamp(), companyName: getViewCompany() });
+                await addDoc(collection(db, "notices"), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content, authorUid: user?.uid || "", createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
               setNoticeForm({ title: "", author: "", content: "" }); setNoticeOpen(false);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
@@ -914,12 +921,17 @@ React.useEffect(() => {
             <div><div className="text-[13px] text-gray-400 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
             <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
           </div>
-          {!isViewer && (
-          <div className="flex gap-2 mt-4 pt-4 border-t">
-            <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-            <button onClick={() => { setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
-          </div>
-          )}
+          {(!isViewer) && (() => {
+            const isNoticeAuthor = selectedNotice.authorUid ? selectedNotice.authorUid === user?.uid : true;
+            const isSA = role === "superadmin";
+            if (!isNoticeAuthor && !isSA) return null;
+            return (
+            <div className="flex gap-2 mt-4 pt-4 border-t">
+              <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
+              <button onClick={() => { setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+            </div>
+            );
+          })()}
         </Modal>
       )}
 
@@ -978,6 +990,7 @@ React.useEffect(() => {
       )}
 
       {selectedSchedule && (() => {
+        const me = users.find(u => u.id === user?.uid);
         const overallStatus = getOverallApprovalStatus(selectedSchedule);
         const isAuthor = user?.uid === selectedSchedule.authorUid;
         const isSuperAdmin = role === "superadmin";
@@ -986,7 +999,6 @@ React.useEffect(() => {
         const isHoldAndAuthor = isAuthor && overallStatus === "hold";
         const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
         const myIdx = approvers.findIndex(a => a.uid === auth.currentUser?.uid && a.status === "pending");
-        const users2 = Array.isArray(me) ? me : [];
         return (
         <Modal title="일정 상세" onClose={() => setSelectedSchedule(null)}>
           <div className="relative space-y-3 text-[14px]">
@@ -1098,12 +1110,17 @@ React.useEffect(() => {
                 <div><div className="text-[13px] text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
                 <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
               </div>
-              {!isViewer && (
-              <div className="flex gap-2 mt-4 pt-4 border-t">
-                <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-                <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
-              </div>
-              )}
+              {!isViewer && (() => {
+                const isHAuthor = selectedHandover.authorUid ? selectedHandover.authorUid === user?.uid : true;
+                const isSA = role === "superadmin";
+                if (!isHAuthor && !isSA) return null;
+                return (
+                <div className="flex gap-2 mt-4 pt-4 border-t">
+                  <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
+                  <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+                </div>
+                );
+              })()}
             </>
           )}
         </Modal>
