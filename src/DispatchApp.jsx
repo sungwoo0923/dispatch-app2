@@ -2211,7 +2211,7 @@ React.useEffect(() => {
     "배차관리", "실시간배차현황", "단가표", "관리자메뉴",
   ];
   // viewer(조회전용): 관리센터만 차단
-  const viewerBlockedMenus = ["관리센터", "관리자메뉴"];
+  const viewerBlockedMenus = ["관리센터"];
 
   const blockedMenus = role === "test" ? testBlockedMenus : isViewer ? viewerBlockedMenus : userBlockedMenus;
 
@@ -2315,7 +2315,7 @@ return (
               "관리센터",
             ].map((m) => {
               const isBlocked = (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
-              if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
+              if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return null;
               if (m === "관리센터" && role !== "totalMaster") return null;
               if (isBlocked && (role === "test" || isViewer)) return null;
               const isActive = menu === m;
@@ -2517,6 +2517,7 @@ return (
                 clients={clients}
                 places={places}
                 upsertDriver={upsertDriver}
+                isViewer={isViewer}
               />
             )}
           </div>
@@ -2593,6 +2594,7 @@ return (
               fixedRows={fixedRows}
               clients={clients}
               places={places}
+              isViewer={isViewer}
             />
           ) : (
             <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
@@ -2708,7 +2710,7 @@ return (
           />
         )}
 
-        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
+        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster" || isViewer) && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} isViewer={isViewer} />}
 
         {menu === "관리센터" && role === "totalMaster" && (
           <div>
@@ -11988,7 +11990,7 @@ function InlineEditCell({ value, placeholder, onSave }) {
 }
 // ── 첨부파일 뷰어 컴포넌트 ──
 // ── 첨부파일 뷰어 컴포넌트 ──
-function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed }) {
+function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer = false }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState(null);
@@ -12016,6 +12018,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed }) {
   const getRotation = (id) => rotations[id] || 0;
 
   const handleRotate = async (item) => {
+    if (isViewer) return;
     const newRot = (getRotation(item.id) + 90) % 360;
     setRotations(prev => ({ ...prev, [item.id]: newRot }));
     if (selected?.id === item.id) setSelected(prev => ({ ...prev, rotation: newRot }));
@@ -12102,6 +12105,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed }) {
     }
   };
 const handleDelete = async (item) => {
+    if (isViewer) { alert("조회전용 권한으로는 삭제할 수 없습니다."); return; }
     if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
     try {
       const col = row.__col || "orders";
@@ -12111,6 +12115,7 @@ const handleDelete = async (item) => {
   };
 
   const handleUpload = async (files) => {
+    if (isViewer) { alert("조회전용 권한으로는 업로드할 수 없습니다."); return; }
     if (!files?.length) return;
     const col = row.__col || "orders";
     for (const file of files) {
@@ -12158,11 +12163,13 @@ const handleDelete = async (item) => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer">
-              파일 추가
-              <input type="file" multiple accept="image/*,.pdf" className="hidden"
-                onChange={e => handleUpload(Array.from(e.target.files))} />
-            </label>
+            {!isViewer && (
+              <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer">
+                파일 추가
+                <input type="file" multiple accept="image/*,.pdf" className="hidden"
+                  onChange={e => handleUpload(Array.from(e.target.files))} />
+              </label>
+            )}
             {items.length > 1 && (
               <button
                 onClick={handleDownloadAll}
@@ -12227,15 +12234,19 @@ const handleDelete = async (item) => {
                         }`}>
                         {copyDone === item.id ? "복사됨" : "복사"}
                       </button>
-                      <button onClick={e => { e.stopPropagation(); handleRotate(item); }}
-                        className="px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[11px] font-bold hover:bg-gray-50 transition"
-                        title="90도 회전">
-                        ↻
-                      </button>
-                      <button onClick={() => handleDelete(item)}
-                        className="px-2 py-1.5 rounded-lg border border-red-200 text-red-500 text-[11px] font-bold hover:bg-red-50 transition">
-                        삭제
-                      </button>
+                      {!isViewer && (
+                        <button onClick={e => { e.stopPropagation(); handleRotate(item); }}
+                          className="px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[11px] font-bold hover:bg-gray-50 transition"
+                          title="90도 회전">
+                          ↻
+                        </button>
+                      )}
+                      {!isViewer && (
+                        <button onClick={() => handleDelete(item)}
+                          className="px-2 py-1.5 rounded-lg border border-red-200 text-red-500 text-[11px] font-bold hover:bg-red-50 transition">
+                          삭제
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -13434,7 +13445,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
           <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold rounded-lg transition">닫기</button>
         </div>
       </div>
-      {viewRow && <AttachmentViewer row={viewRow} onClose={() => setViewRow(null)} db={db} />}
+      {viewRow && <AttachmentViewer row={viewRow} onClose={() => setViewRow(null)} db={db} isViewer={isViewer} />}
     </div>
   );
 }
@@ -17004,6 +17015,7 @@ const head = isDark
     onClose={() => setAttachViewer(null)}
     isViewed={rows.find(r => r._id === attachViewer?._id)?.attachViewed ?? false}
     onToggleViewed={() => { const r2 = rows.find(r => r._id === attachViewer?._id); updateDoc(doc(db, attachViewer.__col || "orders", attachViewer._id), { attachViewed: !r2?.attachViewed }).catch(() => {}); }}
+    isViewer={isViewer}
   />
 )}
 {orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} />}
@@ -20870,8 +20882,8 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
             </div>
             <div className="px-6 pb-6 grid grid-cols-2 gap-3">
               <button className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold" onClick={()=>{ const ex=smart4ConflictPopup.existing; smart4ConflictPopup.setTarget(p=>({...p,차량번호:ex.차량번호,이름:ex.이름,전화번호:formatPhone(ex.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>기존 정보 사용</button>
-              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>새 정보로 업데이트</button>
-              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>신규 기사로 별도 등록</button>
+              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>새 정보로 업데이트</button>
+              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>신규 기사로 별도 등록</button>
             </div>
           </div>
         </div>
@@ -25253,6 +25265,7 @@ return (
     onClose={() => setAttachViewer(null)}
     isViewed={filtered.find(r => getId(r) === getId(attachViewer))?.attachViewed ?? false}
     onToggleViewed={() => { const r2 = filtered.find(r => getId(r) === getId(attachViewer)); updateDoc(doc(db, attachViewer.__col || "orders", getId(attachViewer)), { attachViewed: !r2?.attachViewed }).catch(() => {}); }}
+    isViewer={isViewer}
   />
 )}
 {orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} />}
@@ -29069,8 +29082,8 @@ setCopyPlaceOptions(list);
             </div>
             <div className="px-6 pb-6 grid grid-cols-2 gap-3">
               <button className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold" onClick={()=>{ const ex=smart5ConflictPopup.existing; smart5ConflictPopup.setTarget(p=>({...p,차량번호:ex.차량번호,이름:ex.이름,전화번호:formatPhone(ex.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>기존 정보 사용</button>
-              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>새 정보로 업데이트</button>
-              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>신규 기사로 별도 등록</button>
+              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>새 정보로 업데이트</button>
+              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>신규 기사로 별도 등록</button>
             </div>
           </div>
         </div>
@@ -30555,7 +30568,7 @@ function NewOrderPopup({
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
 
 // ===================== 손익보고서 컴포넌트 =====================
-function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
+function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = React.useState(currentYear);
   const [manualData, setManualData] = React.useState({});
@@ -30587,6 +30600,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
 
   // 수동 데이터 저장
   const saveManual = async (newData) => {
+    if (isViewer) { alert("조회전용 권한으로는 저장할 수 없습니다."); return; }
     setSaving(true);
     try {
       await setDoc(doc(db, "plManual", String(year)), { rows: newData });
@@ -31172,7 +31186,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
 }
 
 // ===================== 회계자료 컴포넌트 =====================
-function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [] }) {
+function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], isViewer = false }) {
   const currentYear = new Date().getFullYear();
   const [subTab, setSubTab] = React.useState("ar");
   const [year, setYear] = React.useState(currentYear);
@@ -31312,6 +31326,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [] }
   };
 
   const savePayment = async (type, name, amtStr) => {
+    if (isViewer) { alert("조회전용 권한으로는 저장할 수 없습니다."); return; }
     const amt = parseInt(String(amtStr).replace(/[^\d]/g, ""), 10) || 0;
     if (!amt) return;
     setSaving(true);
@@ -31325,6 +31340,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [] }
   };
 
   const resetPayment = async (type, name) => {
+    if (isViewer) { alert("조회전용 권한으로는 초기화할 수 없습니다."); return; }
     if (!window.confirm(`${name} 의 ${type === "ar" ? "수금" : "지급"} 내역을 초기화하시겠습니까?`)) return;
     setSaving(true);
     try {
@@ -31768,7 +31784,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [] }
 }
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
-function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] }) {
+function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false }) {
 
   const [activeTab, setActiveTab] = React.useState("overview"); // overview | client_compare
   const [rangeStart, setRangeStart] = React.useState("2026-01");
@@ -32191,6 +32207,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
         <ProfitLossReport
           dispatchData={dispatchData}
           fixedRows={fixedRows}
+          isViewer={isViewer}
         />
       )}
       {/* ================= 회계자료 탭 ================= */}
@@ -32199,6 +32216,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
           dispatchData={dispatchData}
           fixedRows={fixedRows}
           clients={clients}
+          isViewer={isViewer}
         />
       )}
 {/* ================= 매출 개요 탭 ================= */}
@@ -33686,7 +33704,7 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, isViewer = false }) {
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -34299,6 +34317,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <div className="flex gap-2 px-6 pb-6">
               <button onClick={() => { setNewDriverPopupOpen(false); setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" }); }} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
               <button onClick={async () => {
+                if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                 if (!newDriverData.이름.trim()) { showToast("기사명을 입력하세요.", "err"); return; }
                 if (!newDriverData.전화번호.trim()) { showToast("전화번호를 입력하세요.", "err"); return; }
                 try {
@@ -34392,6 +34411,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="flex gap-2 items-center">
                   <button
                     onClick={async () => {
+                      if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
                       if (!copyTarget?._id) { showToast("수정할 오더 ID가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
@@ -34405,6 +34425,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   </button>
                   <button
                     onClick={async () => {
+                      if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, 등록일: todayStr(), createdAt: Date.now(), updatedAt: Date.now(), 배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중", 업체전달상태: "미전달" };
@@ -34694,6 +34715,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                   <div className="flex gap-2">
                                     <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                                       onClick={async () => {
+                                        if (isViewer) { alert("조회전용 권한으로는 수정할 수 없습니다."); return; }
                                         if (!editingDriver7Data.이름.trim()) return;
                                         await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriver7Data.이름, 전화번호: editingDriver7Data.전화번호 });
                                         setEditingDriver7Id(null);

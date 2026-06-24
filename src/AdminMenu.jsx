@@ -49,7 +49,7 @@ const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
   </span>
 );
 
-export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
+export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false }) {
   const [adminTab, setAdminTab] = useState("members");
   const [users, setUsers] = useState([]);
   const [allShipperApps, setAllShipperApps] = useState([]);
@@ -183,8 +183,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
     return list;
   }, [linkedShipperApps, linkedSearch, linkedStatusFilter, isTotalMaster]);
 
+  const _viewerAlert = () => { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); };
+
   // 관리 기능
   const toggleApprove = async (u) => {
+    if (isViewer) return _viewerAlert();
     if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
     const status = !u.approved;
     const updateData = { approved: status };
@@ -210,6 +213,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
   };
 
   const removeUser = async (u) => {
+    if (isViewer) return _viewerAlert();
     if (me?.uid === u.id) return alert("본인 계정은 삭제할 수 없습니다.");
     if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
     if (!window.confirm(`"${u.name || u.email}" 계정을 삭제하시겠습니까?\n가입신청 내역도 함께 삭제됩니다.`)) return;
@@ -235,6 +239,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
   };
 
   const saveEdit = async () => {
+    if (isViewer) return _viewerAlert();
     if (!editName.trim()) return alert("이름을 입력하세요.");
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
     const payload = {
@@ -254,6 +259,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
 
   // 운송사 관리자 1차 승인
   const approveShipper1st = async (app) => {
+    if (isViewer) return _viewerAlert();
     const myName = users.find(u => u.id === me?.uid)?.name || me?.email || "관리자";
     await updateDoc(doc(db, "companyApplications", app.id), {
       transportApprovalStatus: "approved",
@@ -272,6 +278,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
 
   // 운송사 관리자 1차 거절
   const rejectShipper1st = async (app, reason) => {
+    if (isViewer) return _viewerAlert();
     await updateDoc(doc(db, "companyApplications", app.id), {
       transportApprovalStatus: "rejected",
       transportRejectionReason: reason || "",
@@ -284,6 +291,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
 
   // 최고관리자 2차 최종 승인
   const approveShipper2nd = async (app) => {
+    if (isViewer) return _viewerAlert();
     let companyCode = app.companyCode;
     if (!companyCode) {
       if (app.type === "기존") {
@@ -318,6 +326,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
 
   // 최고관리자 2차 거절
   const rejectShipper2nd = async (app, reason) => {
+    if (isViewer) return _viewerAlert();
     await updateDoc(doc(db, "companyApplications", app.id), {
       status: "rejected",
       rejectionReason: reason || "",
@@ -784,6 +793,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
                     ))}
                     <button
                       onClick={async () => {
+                        if (isViewer) { _viewerAlert(); return; }
                         try {
                           await updateDoc(doc(db, "users", managingLinkedApp.userId), { permissions: appUserPerms });
                           alert("권한이 저장되었습니다.");
