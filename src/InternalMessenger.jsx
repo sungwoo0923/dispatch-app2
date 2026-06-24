@@ -54,13 +54,19 @@ function Avatar({ name = "", photo = "", size = 36, bgColor = "#1B2B4B" }) {
   );
 }
 
-export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, onClose, onUnreadChange }) {
+export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, mobileVisible = false, onClose, onUnreadChange, controlledOpen, onOpenChange }) {
   const myUid = user?.uid || "";
   const myEmail = user?.email || "";
   const company = userCompany || localStorage.getItem("userCompany") || "";
 
   // ── 상태 ──
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = (v) => {
+    const val = typeof v === "function" ? v(open) : v;
+    if (onOpenChange) onOpenChange(val);
+    else setInternalOpen(val);
+  };
   const [view, setView] = useState("friends"); // friends | chat | profile | newGroup | search
   const [myProfile, setMyProfile] = useState(null);
   const [friends, setFriends] = useState([]); // all users in same company
@@ -97,6 +103,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const fileAllRef = useRef(null);
   const photoFileRef = useRef(null);
   const prevUnreadRef = useRef(0);
+  // 채팅창이 실제로 보이는지 추적 (읽음 처리 기준)
+  const isVisibleRef = useRef(false);
 
   // ── 내 프로필 로드 & 자동 생성 ──
   useEffect(() => {
@@ -191,7 +199,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
       setMessages(msgs);
-      markRead(activeRoom.id);
+      // 채팅창이 실제로 보일 때만 읽음 처리 (카톡 동작과 동일)
+      if (isVisibleRef.current) markRead(activeRoom.id);
     });
     return () => { if (msgUnsub.current) msgUnsub.current(); };
   }, [activeRoom?.id]);
@@ -232,6 +241,16 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }
     prevUnreadRef.current = totalUnread;
   }, [totalUnread]);
+
+  // 채팅창 실제 가시성 추적 (읽음 처리 기준)
+  useEffect(() => {
+    const visible = mobileMode
+      ? (mobileVisible && view === "chat")
+      : (open && view === "chat");
+    isVisibleRef.current = visible;
+    // 채팅창이 새로 보이게 되면 즉시 읽음 처리
+    if (visible && activeRoom) markRead(activeRoom.id);
+  }, [open, view, mobileVisible, mobileMode, activeRoom?.id]);
 
   const markRead = useCallback(async (roomId) => {
     if (!myUid || !roomId) return;
@@ -446,6 +465,18 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }).catch(() => {});
   };
 
+  // ── 채팅방 나가기 ──
+  const leaveRoom = async (roomId) => {
+    if (!window.confirm("채팅방에서 나가시겠습니까?\n나가면 대화 내용이 삭제됩니다.")) return;
+    await updateDoc(doc(db, ROOMS_COLL, roomId), {
+      members: arrayRemove(myUid),
+    }).catch(() => {});
+    if (activeRoom?.id === roomId) {
+      setActiveRoom(null);
+      setView("friends");
+    }
+  };
+
   // ── 메시지 수정/삭제 ──
   const saveEdit = async () => {
     if (!editMsg || !editText.trim()) return;
@@ -531,6 +562,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           onOpenPeerProfile={(f) => setProfileView(f)}
           onNewGroup={() => setNewGroupModal(true)}
           onClose={mobileMode ? onClose : () => setOpen(false)}
+          onLeaveRoom={leaveRoom}
+          myUid={myUid}
+          mobileMode={mobileMode}
         />
       )}
 
@@ -926,9 +960,28 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 }
 
 // ════════════════ 친구 목록 뷰 ════════════════
-function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose }) {
+function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode }) {
   const [tab, setTab] = useState("chats"); // chats | friends
   const [search, setSearch] = useState("");
+  const [contextMenu, setContextMenu] = useState(null); // { room, x, y }
+  const longPressTimer = useRef(null);
+
+  const closeContext = () => setContextMenu(null);
+
+  // 길게 누르기 (모바일)
+  const handleTouchStart = (room, e) => {
+    longPressTimer.current = setTimeout(() => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setContextMenu({ room, x: rect.left + rect.width / 2, y: rect.top });
+    }, 600);
+  };
+  const handleTouchEnd = () => clearTimeout(longPressTimer.current);
+
+  // 우클릭 (PC)
+  const handleContextMenu = (room, e) => {
+    e.preventDefault();
+    setContextMenu({ room, x: e.clientX, y: e.clientY });
+  };
 
   const filteredFriends = search ? friends.filter(f => f.name?.includes(search) || f.email?.includes(search)) : friends;
   const filteredRooms = search ? rooms.filter(r => getRoomName(r)?.includes(search)) : rooms;
@@ -983,7 +1036,11 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
             const photo = getRoomPhoto(room);
             return (
               <div key={room.id} onClick={() => onOpenRoom(room)}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6", transition: "background 0.1s" }}
+                onContextMenu={e => handleContextMenu(room, e)}
+                onTouchStart={e => handleTouchStart(room, e)}
+                onTouchEnd={handleTouchEnd}
+                onTouchMove={handleTouchEnd}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6", transition: "background 0.1s", userSelect: "none" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <div style={{ position: "relative", flexShrink: 0 }}>
@@ -1048,6 +1105,46 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
           </>
         )}
       </div>
+
+      {/* ─── 컨텍스트 메뉴 (우클릭/길게 누르기) ─── */}
+      {contextMenu && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 100001 }} onClick={closeContext} />
+          <div style={{
+            position: "fixed",
+            left: Math.min(contextMenu.x, window.innerWidth - 200),
+            top: Math.min(contextMenu.y, window.innerHeight - 160),
+            zIndex: 100002,
+            background: "#fff", borderRadius: 12,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+            border: "1px solid #e5e7eb",
+            overflow: "hidden", minWidth: 180,
+          }}>
+            {[
+              {
+                label: "대화 입장",
+                icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+                action: () => { onOpenRoom(contextMenu.room); closeContext(); },
+                color: "#111827",
+              },
+              {
+                label: "채팅방 나가기",
+                icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+                action: () => { onLeaveRoom(contextMenu.room.id); closeContext(); },
+                color: "#ef4444",
+              },
+            ].map((item) => (
+              <button key={item.label} onClick={item.action}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 16px", background: "none", border: "none", cursor: "pointer", color: item.color, fontSize: 13, fontWeight: 600, textAlign: "left" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

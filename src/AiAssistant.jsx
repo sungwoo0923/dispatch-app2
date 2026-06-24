@@ -3,8 +3,10 @@ import React, { useState, useRef, useEffect } from "react";
 /**
  * AI 비서 플로팅 챗봇 (무료 버전 - 로컬 데이터만 활용)
  */
-export default function AiAssistant({ dispatches = [], clients = [] }) {
-  const [open, setOpen] = useState(false);
+export default function AiAssistant({ dispatches = [], clients = [], controlledOpen, onOpenChange }) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = (v) => { if (onOpenChange) onOpenChange(v); else setInternalOpen(v); };
   const [messages, setMessages] = useState([
     { role: "assistant", content: "안녕하세요! 배차 AI 비서입니다.\n무엇을 도와드릴까요?" }
   ]);

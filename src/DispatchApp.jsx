@@ -2158,7 +2158,9 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
-  const [calcOpen, setCalcOpen] = useState(false);
+  const [activeTool, setActiveTool] = useState("none"); // "none" | "calculator" | "ai" | "messenger"
+  const calcOpen = activeTool === "calculator";
+  const setCalcOpen = (v) => setActiveTool(v ? "calculator" : "none");
   useEffect(() => {
     const root = document.getElementById("root");
     if (root) root.style.zoom = "1";
@@ -2949,15 +2951,23 @@ return (
 <AiAssistant
   dispatches={dispatchData}
   clients={clients}
+  controlledOpen={activeTool === "ai"}
+  onOpenChange={v => setActiveTool(v ? "ai" : "none")}
 />
 
       {/* 메신저 플로팅 버튼 */}
-      <InternalMessenger user={user} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
+      <InternalMessenger
+        user={user}
+        userCompany={userCompany || localStorage.getItem("userCompany") || ""}
+        role={role}
+        controlledOpen={activeTool === "messenger"}
+        onOpenChange={v => setActiveTool(v ? "messenger" : "none")}
+      />
 
       {/* 계산기 플로팅 버튼 — 모든 탭에 표시 */}
         <>
           <button
-            onClick={() => setCalcOpen(p => !p)}
+            onClick={() => setActiveTool(p => p === "calculator" ? "none" : "calculator")}
             title="계산기"
             style={{
               position: "fixed", bottom: 88, right: 24,
