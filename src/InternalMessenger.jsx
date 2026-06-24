@@ -85,11 +85,18 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const [editPosition, setEditPosition] = useState("");
   const [editPhone, setEditPhone] = useState("");
 
+  const [fileUploading, setFileUploading] = useState(false);
+  const [contactPickModal, setContactPickModal] = useState(false);
+  const [noticeInput, setNoticeInput] = useState("");
+  const [showNoticeInput, setShowNoticeInput] = useState(false);
+
   const msgUnsub = useRef(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
+  const fileAllRef = useRef(null);
   const photoFileRef = useRef(null);
+  const prevUnreadRef = useRef(0);
 
   // ── 내 프로필 로드 & 자동 생성 ──
   useEffect(() => {
@@ -218,6 +225,14 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   // 모바일 부모에게 안읽음 수 전달
   useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]);
 
+  // 새 메시지 진동 알림 (안읽음 수 증가 시)
+  useEffect(() => {
+    if (totalUnread > prevUnreadRef.current && "vibrate" in navigator) {
+      navigator.vibrate([100, 60, 100]);
+    }
+    prevUnreadRef.current = totalUnread;
+  }, [totalUnread]);
+
   const markRead = useCallback(async (roomId) => {
     if (!myUid || !roomId) return;
     await updateDoc(doc(db, ROOMS_COLL, roomId), {
@@ -335,6 +350,102 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }).catch(() => {});
   };
 
+  // ── 파일 전송 ──
+  const sendFile = async (file) => {
+    if (!file || !activeRoom) return;
+    setFileUploading(true);
+    try {
+      const path = `chat_files/${activeRoom.id}/${Date.now()}_${file.name}`;
+      const snap = await uploadBytes(storageRef(storage, path), file);
+      const url = await getDownloadURL(snap.ref);
+      const senderName = myProfile?.name || myEmail.split("@")[0];
+      const others = activeRoom.members?.filter(u => u !== myUid) || [];
+      await addDoc(collection(db, MSGS_COLL), {
+        roomId: activeRoom.id, text: file.name, type: "file",
+        fileUrl: url, fileName: file.name, fileSize: file.size,
+        senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
+        createdAt: serverTimestamp(), readBy: [myUid],
+        totalMembers: activeRoom.members?.length || 1,
+      });
+      const upd = {};
+      others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
+      await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+        lastMsg: `[파일] ${file.name}`, lastAt: serverTimestamp(), lastSenderUid: myUid,
+        [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
+      }).catch(() => {});
+    } catch (e) { console.error(e); }
+    setFileUploading(false);
+  };
+
+  // ── 위치 전송 ──
+  const sendLocation = () => {
+    if (!activeRoom) return;
+    if (!navigator.geolocation) { alert("위치 기능을 지원하지 않는 브라우저입니다."); return; }
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const lat = pos.coords.latitude.toFixed(6);
+      const lng = pos.coords.longitude.toFixed(6);
+      const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+      const senderName = myProfile?.name || myEmail.split("@")[0];
+      const others = activeRoom.members?.filter(u => u !== myUid) || [];
+      await addDoc(collection(db, MSGS_COLL), {
+        roomId: activeRoom.id, text: mapsUrl, type: "location", lat, lng,
+        senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
+        createdAt: serverTimestamp(), readBy: [myUid],
+        totalMembers: activeRoom.members?.length || 1,
+      });
+      const upd = {};
+      others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
+      await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+        lastMsg: "[위치]", lastAt: serverTimestamp(), lastSenderUid: myUid,
+        [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
+      }).catch(() => {});
+    }, () => alert("위치 정보를 가져올 수 없습니다."));
+  };
+
+  // ── 연락처 카드 전송 ──
+  const sendContact = async (friend) => {
+    if (!friend || !activeRoom) return;
+    const senderName = myProfile?.name || myEmail.split("@")[0];
+    const others = activeRoom.members?.filter(u => u !== myUid) || [];
+    await addDoc(collection(db, MSGS_COLL), {
+      roomId: activeRoom.id, text: friend.name, type: "contact",
+      contactName: friend.name, contactPhone: friend.phone || "",
+      contactPosition: friend.position || "", contactPhoto: friend.photo || "",
+      contactUid: friend.uid,
+      senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
+      createdAt: serverTimestamp(), readBy: [myUid],
+      totalMembers: activeRoom.members?.length || 1,
+    });
+    const upd = {};
+    others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
+    await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+      lastMsg: `[연락처] ${friend.name}`, lastAt: serverTimestamp(), lastSenderUid: myUid,
+      [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
+    }).catch(() => {});
+    setContactPickModal(false);
+  };
+
+  // ── 공지 전송 ──
+  const sendNotice = async () => {
+    if (!noticeInput.trim() || !activeRoom) return;
+    const text = noticeInput.trim();
+    setNoticeInput(""); setShowNoticeInput(false);
+    const senderName = myProfile?.name || myEmail.split("@")[0];
+    const others = activeRoom.members?.filter(u => u !== myUid) || [];
+    await addDoc(collection(db, MSGS_COLL), {
+      roomId: activeRoom.id, text, type: "notice",
+      senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
+      createdAt: serverTimestamp(), readBy: [myUid],
+      totalMembers: activeRoom.members?.length || 1,
+    });
+    const upd = {};
+    others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
+    await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+      lastMsg: `[공지] ${text}`, lastAt: serverTimestamp(), lastSenderUid: myUid,
+      [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
+    }).catch(() => {});
+  };
+
   // ── 메시지 수정/삭제 ──
   const saveEdit = async () => {
     if (!editMsg || !editText.trim()) return;
@@ -448,7 +559,15 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           bottomRef={bottomRef}
           inputRef={inputRef}
           fileRef={fileRef}
+          fileAllRef={fileAllRef}
           onSendImage={sendImage}
+          onSendFile={sendFile}
+          onSendLocation={sendLocation}
+          onSendContact={() => setContactPickModal(true)}
+          onSendNotice={() => setShowNoticeInput(true)}
+          fileUploading={fileUploading}
+          friends={friends}
+          mobileMode={mobileMode}
         />
       )}
 
@@ -562,6 +681,56 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
                   style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
                 <button onClick={createGroup} disabled={!groupName.trim() || groupMembers.length === 0}
                   style={{ flex: 1, padding: "10px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: (!groupName.trim() || groupMembers.length === 0) ? 0.4 : 1 }}>만들기</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 연락처 카드 전송 모달 */}
+        {contactPickModal && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+            onClick={() => setContactPickModal(false)}>
+            <div style={{ background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, overflow: "hidden", maxHeight: "60vh", display: "flex", flexDirection: "column" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ background: "#1B2B4B", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>연락처 공유</span>
+                <button onClick={() => setContactPickModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer" }}>✕</button>
+              </div>
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                {friends.map(f => (
+                  <div key={f.uid} onClick={() => sendContact(f)}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <Avatar name={f.name} photo={f.photo} size={40} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>{f.name}</div>
+                      {f.position && <div style={{ fontSize: 12, color: "#6b7280" }}>{f.position}</div>}
+                    </div>
+                    {f.phone && <span style={{ fontSize: 12, color: "#9ca3af" }}>{f.phone}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 공지 입력 모달 */}
+        {showNoticeInput && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
+            onClick={() => setShowNoticeInput(false)}>
+            <div style={{ background: "#fff", borderRadius: 16, width: "90%", maxWidth: 360, padding: 20, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1B2B4B", marginBottom: 12 }}>공지사항 전송</div>
+              <textarea value={noticeInput} onChange={e => setNoticeInput(e.target.value)}
+                placeholder="공지 내용을 입력하세요..."
+                rows={4} autoFocus
+                style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button onClick={() => setShowNoticeInput(false)}
+                  style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
+                <button onClick={sendNotice} disabled={!noticeInput.trim()}
+                  style={{ flex: 1, padding: "10px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: noticeInput.trim() ? 1 : 0.4 }}>전송</button>
               </div>
             </div>
           </div>
@@ -703,6 +872,55 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           </div>
         </div>
       )}
+
+      {/* 연락처 카드 전송 모달 */}
+      {contactPickModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setContactPickModal(false)}>
+          <div style={{ background: "#fff", borderRadius: 20, width: 320, maxHeight: 480, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ background: "#1B2B4B", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>연락처 공유</span>
+              <button onClick={() => setContactPickModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {friends.map(f => (
+                <div key={f.uid} onClick={() => sendContact(f)}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <Avatar name={f.name} photo={f.photo} size={40} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>{f.name}</div>
+                    {f.position && <div style={{ fontSize: 12, color: "#6b7280" }}>{f.position}</div>}
+                  </div>
+                  {f.phone && <span style={{ fontSize: 12, color: "#9ca3af" }}>{f.phone}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 공지 입력 모달 */}
+      {showNoticeInput && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setShowNoticeInput(false)}>
+          <div style={{ background: "#fff", borderRadius: 16, width: 320, padding: 20, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1B2B4B", marginBottom: 12 }}>공지사항 전송</div>
+            <textarea value={noticeInput} onChange={e => setNoticeInput(e.target.value)}
+              placeholder="공지 내용을 입력하세요..." rows={4} autoFocus
+              style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={() => setShowNoticeInput(false)}
+                style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
+              <button onClick={sendNotice} disabled={!noticeInput.trim()}
+                style={{ flex: 1, padding: "10px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: noticeInput.trim() ? 1 : 0.4 }}>전송</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -835,8 +1053,9 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, bottomRef, inputRef, fileRef, onSendImage }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, bottomRef, inputRef, fileRef, fileAllRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode }) {
   const [showSearch, setShowSearch] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -918,10 +1137,54 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                         <div style={{ padding: "8px 12px", borderRadius: 14, background: "#e5e7eb", fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>
                           (삭제된 메시지)
                         </div>
+                      ) : msg.type === "notice" ? (
+                        <div style={{ background: "#fef3c7", border: "1px solid #f59e0b", borderRadius: 12, padding: "10px 14px", maxWidth: 240 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#d97706", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>공지사항</div>
+                          <div style={{ fontSize: 13, color: "#111827", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.text}</div>
+                        </div>
                       ) : msg.type === "image" ? (
                         <div style={{ borderRadius: 12, overflow: "hidden", maxWidth: 200 }}>
                           <img src={msg.imageUrl} style={{ width: "100%", display: "block", cursor: "pointer" }}
                             onClick={() => window.open(msg.imageUrl, "_blank")} />
+                        </div>
+                      ) : msg.type === "file" ? (
+                        <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, background: isMine ? "#1B2B4B" : "#fff", border: isMine ? "none" : "1px solid #e5e7eb", maxWidth: 220, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 8, background: isMine ? "rgba(255,255,255,0.15)" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isMine ? "#fff" : "#1B2B4B"} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: isMine ? "#fff" : "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msg.fileName}</div>
+                              <div style={{ fontSize: 10, color: isMine ? "rgba(255,255,255,0.6)" : "#9ca3af", marginTop: 2 }}>{msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : ""}</div>
+                            </div>
+                          </div>
+                        </a>
+                      ) : msg.type === "location" ? (
+                        <a href={msg.text} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                          <div style={{ borderRadius: 12, overflow: "hidden", width: 180, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+                            <div style={{ background: "#1B2B4B", padding: "28px 16px", textAlign: "center" }}>
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            </div>
+                            <div style={{ background: "#fff", padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "#1B2B4B", textAlign: "center", borderTop: "1px solid #e5e7eb" }}>
+                              위치 보기
+                            </div>
+                          </div>
+                        </a>
+                      ) : msg.type === "contact" ? (
+                        <div style={{ background: isMine ? "#1B2B4B" : "#fff", border: isMine ? "none" : "1px solid #e5e7eb", borderRadius: 14, padding: "12px 14px", minWidth: 160, maxWidth: 220, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${isMine ? "rgba(255,255,255,0.15)" : "#f3f4f6"}` }}>
+                            <Avatar name={msg.contactName} photo={msg.contactPhoto} size={36} />
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: isMine ? "#fff" : "#111827" }}>{msg.contactName}</div>
+                              {msg.contactPosition && <div style={{ fontSize: 11, color: isMine ? "rgba(255,255,255,0.6)" : "#9ca3af" }}>{msg.contactPosition}</div>}
+                            </div>
+                          </div>
+                          {msg.contactPhone && (
+                            <a href={`tel:${msg.contactPhone}`} style={{ display: "flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isMine ? "rgba(255,255,255,0.7)" : "#6b7280"} strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.19h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17z"/></svg>
+                              <span style={{ fontSize: 12, color: isMine ? "rgba(255,255,255,0.8)" : "#1B2B4B", fontWeight: 600 }}>{msg.contactPhone}</span>
+                            </a>
+                          )}
                         </div>
                       ) : editMsg?.id === msg.id ? (
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -981,16 +1244,38 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         <div ref={bottomRef} />
       </div>
 
+      {/* + 첨부 메뉴 */}
+      {showAttachMenu && (
+        <div style={{ padding: "10px 12px", background: "#f8fafc", borderTop: "1px solid #e5e7eb", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            { label: "사진", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, action: () => { fileRef.current?.click(); setShowAttachMenu(false); } },
+            { label: "파일", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, action: () => { fileAllRef.current?.click(); setShowAttachMenu(false); } },
+            { label: "위치", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>, action: () => { onSendLocation(); setShowAttachMenu(false); } },
+            { label: "연락처", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, action: () => { onSendContact(); setShowAttachMenu(false); } },
+            { label: "공지", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>, action: () => { onSendNotice(); setShowAttachMenu(false); } },
+          ].map(item => (
+            <button key={item.label} onClick={item.action}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60 }}>
+              {item.icon}
+              <span style={{ fontSize: 11, fontWeight: 600 }}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 입력창 */}
-      <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: "1px solid #e5e7eb", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 12px" }}>
-          {/* 사진 첨부 */}
-          <button onClick={() => fileRef.current?.click()}
-            style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", padding: 4, display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: showAttachMenu ? "none" : "1px solid #e5e7eb", flexShrink: 0 }}>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) onSendImage(f); e.target.value = ""; }} />
+        <input ref={fileAllRef} type="file" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) onSendFile(f); e.target.value = ""; }} />
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
+          {/* + 버튼 */}
+          <button onClick={() => setShowAttachMenu(p => !p)}
+            style={{ width: 32, height: 32, borderRadius: "50%", background: showAttachMenu ? "#1B2B4B" : "none", border: "none", color: showAttachMenu ? "#fff" : "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s", marginLeft: 2 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) onSendImage(f); e.target.value = ""; }} />
+          {(fileUploading) && <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>업로드 중...</span>}
           <textarea
             ref={inputRef}
             value={input}
