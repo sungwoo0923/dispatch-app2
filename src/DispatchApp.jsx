@@ -25496,9 +25496,9 @@ return (
         </div>
 
         {/* 날짜 */}
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>setStartDate(e.target.value)} />
+        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>{const v=e.target.value;setStartDate(v);setAppliedStartDate(v);if(endDate)localStorage.setItem("dispatchDateState",JSON.stringify({startDate:v,endDate,appliedStartDate:v,appliedEndDate:endDate}));}} />
         <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>setEndDate(e.target.value)} />
+        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>{const v=e.target.value;setEndDate(v);setAppliedEndDate(v);if(startDate)localStorage.setItem("dispatchDateState",JSON.stringify({startDate,endDate:v,appliedStartDate:startDate,appliedEndDate:v}));}} />
 
         {/* 날짜 버튼들 */}
         <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
