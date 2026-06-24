@@ -3,7 +3,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
+import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import AdminMenu from "./AdminMenu";
@@ -9858,12 +9858,12 @@ className={`
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
-  <div style={{ flex: "0 0 55%", maxWidth: "55%", minWidth: 0, overflow: "hidden" }}>
+  <div style={{ flex: "0 0 62%", maxWidth: "62%", minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
   {/* 오른쪽: Today 패널 */}
-  <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(45% - 12px)", minWidth: 260 }}>
+  <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
     {/* 헤더 */}
     <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
       <div>
@@ -9947,30 +9947,26 @@ className={`
           <span className="text-[13px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
           <span className="text-[11px] text-gray-300 font-medium">오늘 오더</span>
         </div>
-        <div className="px-4 py-3 flex-1 flex flex-col justify-center">
+        <div className="px-2 py-2 flex-1 flex flex-col justify-center">
           {(() => {
             const counts = {};
             todayRows.forEach(r => { const name = r.거래처명?.trim(); if (name) counts[name] = (counts[name] || 0) + 1; });
             const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-            const max = sorted[0]?.[1] || 1;
             if (sorted.length === 0) return <div className="text-center py-4 text-[12px] text-gray-300">오늘 오더 없음</div>;
+            const chartData = sorted.map(([name, value]) => ({ name: name.length > 5 ? name.slice(0, 5) + "…" : name, value }));
             return (
-              <div className="space-y-2">
-                {sorted.map(([name, count], i) => (
-                  <div key={name} className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-gray-300 w-4 shrink-0">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[12px] font-semibold text-gray-700 truncate">{name}</span>
-                        <span className="text-[12px] font-bold text-[#1B2B4B] shrink-0 ml-2">{count}건</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-[#1B2B4B] rounded-full" style={{ width: `${(count / max) * 100}%`, opacity: 1 - i * 0.15 }} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={chartData} margin={{ top: 16, right: 4, left: 4, bottom: 28 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#1B2B4B", fontWeight: 700 }} interval={0} />
+                  <YAxis hide />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                    {chartData.map((_, i) => (
+                      <Cell key={i} fill={i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296"} />
+                    ))}
+                    <LabelList dataKey="value" position="top" formatter={v => `${v}건`} style={{ fontSize: 9, fill: "#6b7280", fontWeight: 600 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             );
           })()}
         </div>
@@ -13739,6 +13735,7 @@ const checkWarningStatus = (name, type) => {
   // ALL | UNASSIGNED | ASSIGNED | URGENT | UNDELIVERED
 
   const [q, setQ] = React.useState("");
+  const [qInput, setQInput] = React.useState("");
   const [filterType, setFilterType] = React.useState("거래처명");
   // 🔒 실시간 배차 날짜 모드
   const [dayMode, setDayMode] = React.useState("today");
@@ -17181,11 +17178,13 @@ const head = isDark
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
     <input
       type="text"
-      value={q}
-      onChange={(e) => setQ(e.target.value)}
+      value={qInput}
+      onChange={(e) => setQInput(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter") { setQ(qInput); } }}
       placeholder="검색어"
       className="px-2 h-full text-[11px] w-20 outline-none"
     />
+    <button onClick={() => setQ(qInput)} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition">조회</button>
   </div>
   {/* 날짜 버튼 */}
   {["yesterday","today","tomorrow"].map((mode,i)=>{
@@ -17197,18 +17196,17 @@ const head = isDark
       </button>
     );
   })}
-  {/* 필터 뱃지 */}
-  {[
-    {key:"ALL", label:`전체 ${filtered.length}`},
-    {key:"UNASSIGNED", label:`미배차 ${statusSummary.미배차}`},
-    {key:"ASSIGNED", label:`완료 ${statusSummary.배차완료}`},
-    ...(statusSummary.업체미전달>0?[{key:"UNDELIVERED",label:`미전달 ${statusSummary.업체미전달}`}]:[]),
-  ].map(({key,label})=>(
-    <button key={key} onClick={()=>setStatusFilter(key)}
-      className={`h-[30px] px-2 rounded-full text-[11px] font-semibold border transition whitespace-nowrap flex-shrink-0 ${statusFilter===key?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}>
-      {label}
-    </button>
-  ))}
+  {/* 상태 필터 드롭다운 */}
+  <select
+    value={statusFilter}
+    onChange={e => setStatusFilter(e.target.value)}
+    className="h-[30px] px-2 rounded-lg border-2 border-[#1B2B4B] text-[11px] font-semibold text-[#1B2B4B] bg-white outline-none flex-shrink-0 cursor-pointer"
+  >
+    <option value="ALL">전체 {filtered.length}</option>
+    <option value="UNASSIGNED">미배차 {statusSummary.미배차}</option>
+    <option value="ASSIGNED">완료 {statusSummary.배차완료}</option>
+    {statusSummary.업체미전달>0 && <option value="UNDELIVERED">미전달 {statusSummary.업체미전달}</option>}
+  </select>
 
   <div className="ml-auto flex items-center gap-1 flex-shrink-0">
     <button onClick={async(e)=>{
@@ -21414,43 +21412,53 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
       )}
 
       {/* 기사복사 선택 모달 */}
-      {copyModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
-            <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">복사 방식 선택</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
-                차량번호 / 기사명 / 전화번호
-              </button>
-              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
-                운임 포함 (부가세/선불/착불)
-              </button>
-              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
-                전체 상세 (상하차 + 화물정보 + 차량)
-              </button>
-              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
-                기사 전달용 (상세 + 전달메시지)
-              </button>
-              <div className="border-t border-gray-100 pt-2 mt-1 space-y-2">
-                <p className="text-[11px] text-gray-400 text-center">이미지 복사 (카카오톡 전용)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={copyAccountImage4} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
-                    계좌 이미지
+      {copyModalOpen && (() => {
+        const copyOptions = [
+          { type: "basic", label: "차량 · 기사 · 연락처", desc: "차량번호 / 기사명 / 전화번호", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> },
+          { type: "fare", label: "운임 포함", desc: "부가세 / 선불 / 착불 형식", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> },
+          { type: "full", label: "전체 상세", desc: "상하차 + 화물 + 기사 정보", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
+          { type: "driver", label: "기사 전달용", desc: "운행 정보 + 업로드 링크 포함", primary: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/></svg> },
+        ];
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-[99999]" onClick={() => setCopyModalOpen(false)}>
+            <div className="bg-white w-full max-w-md rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-center pt-3 pb-2"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
+              <div className="px-5 pb-3 border-b border-gray-100">
+                <div className="font-bold text-[15px] text-[#1B2B4B]">복사 형식 선택</div>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {copyOptions.map(({ type, label, desc, icon, primary }) => (
+                  <button key={type} onClick={() => copyMessage(type)}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-colors ${primary ? "bg-[#1B2B4B] text-white" : "bg-gray-50 border border-gray-200 text-gray-800"}`}>
+                    <span className={primary ? "text-white/80" : "text-gray-400"}>{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-[13px] font-semibold ${primary ? "text-white" : "text-gray-800"}`}>{label}</div>
+                      <div className={`text-[11px] mt-0.5 ${primary ? "text-white/70" : "text-gray-400"}`}>{desc}</div>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={primary ? "rgba(255,255,255,0.6)" : "#CBD5E1"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                   </button>
-                  <button onClick={copyBizImage4} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
-                    사업자등록증
-                  </button>
+                ))}
+                <div className="pt-1 border-t border-gray-100">
+                  <p className="text-[11px] text-gray-400 text-center mb-2">이미지 복사 (카카오톡 전용)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={copyAccountImage4} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-100 transition">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                      계좌 이미지
+                    </button>
+                    <button onClick={copyBizImage4} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-100 transition">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      사업자등록증
+                    </button>
+                  </div>
                 </div>
               </div>
-              <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
-                취소
-              </button>
+              <div className="px-4">
+                <button onClick={() => setCopyModalOpen(false)} className="w-full py-3 rounded-xl text-[13px] font-semibold bg-gray-100 text-gray-500">취소</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* ===================== 🔥 즉시 변경 확인 팝업 (PART 5 이식) ===================== */}
       {confirmChange && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]">

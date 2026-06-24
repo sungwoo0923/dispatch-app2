@@ -667,36 +667,27 @@ React.useEffect(() => {
           {topClients.length === 0 ? (
             <div className="text-[13px] text-gray-400 text-center py-8">데이터 없음</div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={topClients} margin={{ top: 24, right: 8, left: 8, bottom: 32 }}>
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 13, fill: "#1B2B4B", fontWeight: 700 }}
-                  interval={0}
-                  tickFormatter={v => v.length > 6 ? v.slice(0, 6) + "…" : v}
-                />
-                <YAxis hide />
-                <Tooltip
-                  formatter={v => [`${Number(v).toLocaleString()}원`, "매출"]}
-                  contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }}
-                />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={52}>
-                  {topClients.map((_, i) => (
-                    <Cell key={i} fill={i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296"} />
-                  ))}
-                  <LabelList
-                    dataKey="value"
-                    position="top"
-                    formatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v.toLocaleString()}
-                    style={{ fontSize: 10, fill: "#6b7280", fontWeight: 600 }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="space-y-3 py-1">
+              {topClients.map((c, i) => {
+                const max = topClients[0]?.value || 1;
+                return (
+                  <div key={c.name} className="flex items-center gap-3">
+                    <span className="text-[12px] font-bold text-gray-300 w-4 shrink-0">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[13px] font-semibold text-gray-700 truncate">{c.name}</span>
+                        <span className="text-[12px] font-bold text-[#1B2B4B] shrink-0 ml-2">{c.value >= 1000000 ? `${(c.value / 1000000).toFixed(1)}M` : c.value.toLocaleString()}원</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(c.value / max) * 100}%`, backgroundColor: i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296", opacity: 1 - i * 0.1 }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
-          <div className="flex justify-between mt-1 pt-2 border-t border-gray-100">
+          <div className="flex justify-between mt-3 pt-2 border-t border-gray-100">
             <span className="text-[11px] text-gray-400">1위: <b className="text-[#1B2B4B]">{top10Summary.topName}</b></span>
             <span className="text-[11px] text-gray-400">합계: <b className="text-[#1B2B4B]">{(top10Summary.total / 1000000).toFixed(1)}M</b></span>
           </div>

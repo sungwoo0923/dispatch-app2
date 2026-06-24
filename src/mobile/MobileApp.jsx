@@ -10910,6 +10910,21 @@ const pickDrop = (c) => {
 }
 
 function CopySelectModal({ order, onClose, onAfterFullCopy, onCopySuccess, cardVersionB = false }) {
+  const [smsConfirm, setSmsConfirm] = useState(null); // { phone, body }
+  const [companyBankData, setCompanyBankData] = useState(null);
+
+  useEffect(() => {
+    const cname = localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+    if (!cname) return;
+    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const found = docs.find(d => (d.companyName || "").trim() === cname.trim() && d.type === "신규") ||
+                    docs.find(d => (d.companyName || "").trim() === cname.trim());
+      setCompanyBankData(found || null);
+    });
+    return () => unsub();
+  }, []);
+
   /* ===============================
      공통 유틸
   =============================== */
@@ -11187,7 +11202,18 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
       document.body.removeChild(el);
     }
 
-    if (type === "full" || type === "driver") {
+    if (type === "driver") {
+      const phone = (order.전화번호 || order.전화 || "").replace(/[^0-9]/g, "");
+      if (phone) {
+        setSmsConfirm({ phone, body: text });
+        return;
+      }
+      onCopySuccess?.("기사 문자 복사 완료");
+      onAfterFullCopy?.();
+      return;
+    }
+
+    if (type === "full") {
       onCopySuccess?.("기사 문자 복사 완료");
       onAfterFullCopy?.();
       return;
@@ -11195,6 +11221,61 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
 
     alert("복사되었습니다.");
     onClose();
+  };
+
+  const copyAccountImage = async () => {
+    if (!companyBankData?.계좌번호) { alert("회사관리에 계좌 정보를 먼저 등록해 주세요."); return; }
+    try {
+      const 청구 = Number(String(order?.청구운임 || "0").replace(/[^\d]/g, ""));
+      const 기사 = Number(String(order?.기사운임 || "0").replace(/[^\d]/g, ""));
+      const 차액 = 청구 - 기사;
+      const W = 640, rowH = 52, headerH = 64;
+      const H = headerH + 5 * rowH + 24;
+      const canvas = document.createElement("canvas");
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#f8f9fb"; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#1B2B4B"; ctx.fillRect(0, 0, W, headerH);
+      ctx.fillStyle = "#fff"; ctx.font = "bold 20px 'Malgun Gothic', sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("기사 운임 정산 안내", W / 2, 38);
+      const drawRow = (label, val, idx, highlight) => {
+        const y = headerH + idx * rowH;
+        ctx.fillStyle = highlight ? "#e8ecf5" : (idx % 2 === 0 ? "#fff" : "#fafafa");
+        ctx.fillRect(0, y, W, rowH);
+        ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, y + rowH); ctx.lineTo(W, y + rowH); ctx.stroke();
+        ctx.fillStyle = "#6b7280"; ctx.font = "14px 'Malgun Gothic', sans-serif"; ctx.textAlign = "left";
+        ctx.fillText(label, 28, y + rowH / 2 + 5);
+        ctx.fillStyle = highlight ? "#1B2B4B" : "#111827";
+        ctx.font = highlight ? "bold 16px 'Malgun Gothic', sans-serif" : "15px 'Malgun Gothic', sans-serif";
+        ctx.textAlign = "right"; ctx.fillText(val, W - 28, y + rowH / 2 + 5);
+      };
+      drawRow("청구운임", 청구.toLocaleString() + "원", 0, false);
+      drawRow("기사운임", 기사.toLocaleString() + "원", 1, false);
+      drawRow("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 2, true);
+      drawRow("입금 계좌", `${companyBankData.계좌은행 || ""} ${companyBankData.계좌번호}`, 3, false);
+      drawRow("예금주", companyBankData.예금주 || "", 4, false);
+      const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      alert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+      onClose();
+    } catch { alert("이미지 복사에 실패했습니다."); }
+  };
+
+  const copyBizImage = async () => {
+    const src = companyBankData?.사업자등록증Base64;
+    if (!src) { alert("회사관리에 사업자등록증을 먼저 등록해 주세요."); return; }
+    try {
+      const [header, b64] = src.split(",");
+      const mime = header.match(/:(.*?);/)?.[1] || "image/png";
+      const binary = atob(b64);
+      const arr = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+      const blob = new Blob([arr], { type: mime });
+      await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);
+      alert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+      onClose();
+    } catch { alert("사업자등록증 복사에 실패했습니다."); }
   };
 
   /* ===============================
@@ -11245,6 +11326,34 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
     },
   ];
 
+  if (smsConfirm) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+        <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden mx-4">
+          <div className="bg-[#1B2B4B] px-5 py-4">
+            <h3 className="text-white font-bold text-[15px]">문자 메시지 전송</h3>
+          </div>
+          <div className="p-5">
+            <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
+              오더 내용이 복사되었습니다.<br />
+              <span className="font-semibold text-[#1B2B4B]">{smsConfirm.phone}</span> 으로 문자를 보내시겠습니까?
+            </div>
+            <div className="flex gap-2">
+              <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600" onClick={() => { onCopySuccess?.("기사 문자 복사 완료"); onAfterFullCopy?.(); }}>취소</button>
+              <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold"
+                onClick={() => {
+                  window.location.href = `sms:${smsConfirm.phone}?body=${encodeURIComponent(smsConfirm.body)}`;
+                  onCopySuccess?.("기사 문자 복사 완료");
+                  onAfterFullCopy?.();
+                }}
+              >문자 보내기</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-end justify-center"
@@ -11276,13 +11385,7 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
             <button
               key={type}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-colors active:scale-[0.98] ${
-                primary
-                  ? cardVersionB
-                    ? "bg-[#1B2B4B] text-white"
-                    : "bg-[#1B2B4B] text-white"
-                  : cardVersionB
-                    ? "bg-gray-50 border border-gray-200 text-gray-800"
-                    : "bg-gray-50 border border-gray-200 text-gray-800"
+                primary ? "bg-[#1B2B4B] text-white" : "bg-gray-50 border border-gray-200 text-gray-800"
               }`}
               onClick={() => copy(type)}
             >
@@ -11302,6 +11405,20 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
               </svg>
             </button>
           ))}
+          {/* 이미지 복사 */}
+          <div className="pt-1 border-t border-gray-100">
+            <p className="text-[11px] text-gray-400 text-center mb-2">이미지 복사 (카카오톡 전용)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={copyAccountImage} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[13px] font-semibold active:scale-[0.97]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                계좌 이미지
+              </button>
+              <button onClick={copyBizImage} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[13px] font-semibold active:scale-[0.97]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                사업자등록증
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* 취소 */}
