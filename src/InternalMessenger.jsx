@@ -195,11 +195,17 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       limit(300)
     );
     msgUnsub.current = onSnapshot(q, (snap) => {
-      const msgs = snap.docs
+      const serverMsgs = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
-      setMessages(msgs);
-      // 채팅창이 실제로 보일 때만 읽음 처리 (카톡 동작과 동일)
+      setMessages(prev => {
+        // 서버에 없는 optimistic 메시지만 유지 (중복 방지)
+        const pendingOpt = prev.filter(m => m._optimistic && !serverMsgs.some(
+          r => r.senderUid === m.senderUid && r.text === m.text &&
+          Math.abs((r.createdAt?.toMillis?.() || 0) - m.createdAt.toMillis()) < 15000
+        ));
+        return [...serverMsgs, ...pendingOpt].sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
+      });
       if (isVisibleRef.current) markRead(activeRoom.id);
     });
     return () => { if (msgUnsub.current) msgUnsub.current(); };
@@ -323,23 +329,37 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     setView("chat");
   };
 
-  // ── 메시지 전송 ──
-  const sendMessage = async () => {
+  // ── 메시지 전송 (optimistic update - 딜레이 없이 즉시 표시) ──
+  const sendMessage = () => {
     if (!input.trim() || !activeRoom) return;
     const text = input.trim();
     setInput("");
     const senderName = myProfile?.name || myEmail.split("@")[0];
+    const now = new Date();
+
+    // 즉시 로컬 상태에 추가
+    const tempId = `_opt_${Date.now()}`;
+    setMessages(prev => [...prev, {
+      id: tempId, _optimistic: true,
+      roomId: activeRoom.id, text, type: "text",
+      senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
+      createdAt: { toMillis: () => now.getTime(), toDate: () => now },
+      edited: false, readBy: [myUid],
+      totalMembers: activeRoom.members?.length || 1,
+    }]);
+
     const others = activeRoom.members?.filter(uid => uid !== myUid) || [];
-    await addDoc(collection(db, MSGS_COLL), {
+    // fire-and-forget
+    addDoc(collection(db, MSGS_COLL), {
       roomId: activeRoom.id, text, type: "text",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), edited: false,
-      readBy: [myUid], // 보낸 사람은 이미 읽음
+      readBy: [myUid],
       totalMembers: activeRoom.members?.length || 1,
-    });
+    }).catch(() => {});
     const unreadUpdate = {};
     others.forEach(uid => { unreadUpdate[`unreadCount.${uid}`] = increment(1); });
-    await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+    updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
       lastMsg: text, lastAt: serverTimestamp(), lastSenderUid: myUid,
       [`lastRead.${myUid}`]: serverTimestamp(),
       ...unreadUpdate,
@@ -968,14 +988,22 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 
   const closeContext = () => setContextMenu(null);
 
-  // 길게 누르기 (모바일)
+  // 길게 누르기 (모바일) - iOS 네이티브 메뉴 방지
+  const touchInfoRef = useRef(null);
   const handleTouchStart = (room, e) => {
+    const touch = e.touches[0];
+    touchInfoRef.current = { x: touch.clientX, y: touch.clientY, room, fired: false };
     longPressTimer.current = setTimeout(() => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      setContextMenu({ room, x: rect.left + rect.width / 2, y: rect.top });
+      if (!touchInfoRef.current) return;
+      touchInfoRef.current.fired = true;
+      navigator.vibrate?.(60);
+      setContextMenu({ room, x: touch.clientX, y: touch.clientY - 60 });
     }, 600);
   };
-  const handleTouchEnd = () => clearTimeout(longPressTimer.current);
+  const handleTouchEnd = (room) => {
+    clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  };
 
   // 우클릭 (PC)
   const handleContextMenu = (room, e) => {
@@ -1035,12 +1063,13 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
             const name = getRoomName(room);
             const photo = getRoomPhoto(room);
             return (
-              <div key={room.id} onClick={() => onOpenRoom(room)}
+              <div key={room.id}
+                onClick={() => { if (!touchInfoRef.current?.fired) onOpenRoom(room); }}
                 onContextMenu={e => handleContextMenu(room, e)}
                 onTouchStart={e => handleTouchStart(room, e)}
-                onTouchEnd={handleTouchEnd}
-                onTouchMove={handleTouchEnd}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6", transition: "background 0.1s", userSelect: "none" }}
+                onTouchEnd={() => handleTouchEnd(room)}
+                onTouchMove={() => { clearTimeout(longPressTimer.current); longPressTimer.current = null; }}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6", transition: "background 0.1s", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <div style={{ position: "relative", flexShrink: 0 }}>
@@ -1362,9 +1391,11 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
 
       {/* 입력창 */}
       <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: showAttachMenu ? "none" : "1px solid #e5e7eb", flexShrink: 0 }}>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
+        <input ref={fileRef} type="file" accept="image/*"
+          style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) onSendImage(f); e.target.value = ""; }} />
-        <input ref={fileAllRef} type="file" style={{ display: "none" }}
+        <input ref={fileAllRef} type="file"
+          style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) onSendFile(f); e.target.value = ""; }} />
         <div style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
           {/* + 버튼 */}
@@ -1422,7 +1453,7 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editP
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
               )}
             </button>
-            <input ref={photoFileRef} type="file" accept="image/*" style={{ display: "none" }}
+            <input ref={photoFileRef} type="file" accept="image/*" style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
               onChange={e => { const f = e.target.files?.[0]; if (f) onPhotoUpload(f); e.target.value = ""; }} />
           </div>
           {editingProfile ? (
