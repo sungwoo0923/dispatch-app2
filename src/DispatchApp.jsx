@@ -12066,32 +12066,10 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed }) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-  // ✅ 전체 ZIP 다운로드
-  const handleDownloadAll = async () => {
+  // ✅ 전체 개별 다운로드
+  const handleDownloadAll = () => {
     if (!items.length) return;
-    setZipLoading(true);
-    try {
-      const JSZip = (await import("jszip")).default;
-      const zip = new JSZip();
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const src = item.base64 || item.url;
-        const base64Data = src.includes(",") ? src.split(",")[1] : src;
-        const ext = (item.name || "").split(".").pop() || "jpg";
-        zip.file(`${i + 1}_${item.name || `사진${i + 1}.${ext}`}`, base64Data, { base64: true });
-      }
-      const blob = await zip.generateAsync({ type: "blob" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `첨부파일_${row.상차지명 || row._id}.zip`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
-    } catch (e) {
-      console.error(e);
-      // zip 실패 시 순차 다운로드
-      items.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
-    }
-    setZipLoading(false);
+    items.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
   };
 
   const handleCopy = async (item, id) => {
@@ -12375,7 +12353,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
       <button
         type="button"
         onClick={openBadge}
-        className="px-1.5 py-0.5 text-[10px] font-semibold rounded border border-[#1B2B4B]/25 bg-[#1B2B4B]/10 text-[#1B2B4B] whitespace-nowrap hover:bg-[#1B2B4B]/20 transition"
+        className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white whitespace-nowrap hover:bg-[#243d6a] transition"
       >
         경유+{validList.length}
       </button>
@@ -14476,43 +14454,34 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
       return;
     }
 
-    // 🔥 2단계: 우선순위 점수 부여
-    const scored = base.map(r => {
-      const ce = fareCargoExact(targetCargo, r.화물내용);
-      const cp = fareCargoPartial(targetCargo, r.화물내용);
-      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
-      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
+    // 🔥 2단계: 티어 기반 점수
+    const _4fDetectType = (s = "") => { const t = s.trim().toLowerCase().replace(/\s+/g,""); if (/\d+(파레트|파렛트|파렛|파레|파|plt)/.test(t)) return "pallet"; if (/\d+(박스|box)/.test(t)) return "box"; return "text"; };
+    const _4fInputType = _4fDetectType(targetCargo);
+    const _4fInputPallet = getPalletFromCargoText(targetCargo);
+    const _4fInputBox = (() => { const m = targetCargo.replace(/\s+/g,"").match(/(\d+)(박스|box)/i); return m ? Number(m[1]) : null; })();
+    const _4fInputTon = extractTonNum(targetTon);
 
-      return {
-        ...r,
-
-        // 점수
-        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
-
-        // 🔥 표시용 메타
-        _match: {
-          cargo: ce || cp,
-          cargoExact: ce,
-          cargoPartial: cp,
-          ton: tonMatch,
-          label: matchLabel,
-        },
-
-        _time: r.updatedAt || r.등록일 || 0,
-      };
+    const _4fScored = base.map(r => {
+      const rType = _4fDetectType(r.화물내용);
+      const rTon = extractTonNum(r.차량톤수);
+      const rDate = r.상차일 || r.등록일 || "";
+      let cargoDiff = 999, tonDiff = 999;
+      if (_4fInputType === "pallet" && _4fInputPallet != null && rType === "pallet") { const rp = getPalletFromCargoText(r.화물내용); cargoDiff = rp != null ? Math.abs(rp - _4fInputPallet) : 999; }
+      else if (_4fInputType === "box" && _4fInputBox != null) { const rm = (r.화물내용||"").replace(/\s+/g,"").match(/(\d+)(박스|box)/i); cargoDiff = rm ? Math.abs(Number(rm[1]) - _4fInputBox) : 999; }
+      else { cargoDiff = (r.화물내용||"").trim() === targetCargo ? 0 : 1; }
+      if (_4fInputTon != null && rTon != null) tonDiff = Math.abs(rTon - _4fInputTon);
+      const exactCargo = cargoDiff === 0, exactTon = tonDiff === 0;
+      const tier = exactCargo && exactTon ? 0 : exactCargo ? 1 : exactTon ? 2 : 3;
+      const matchLabel = tier === 0 ? "완전일치" : tier === 1 ? "부분일치" : tier === 2 ? "톤수일치" : "경로일치";
+      return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
     });
 
+    const _4fGroupMap = new Map();
+    _4fScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_4fGroupMap.has(key)) _4fGroupMap.set(key, []); _4fGroupMap.get(key).push(r); });
+    const scored = Array.from(_4fGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
+      .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
-    // 🔥 3단계: 정렬
-    scored.sort((a, b) => {
-      // 1️⃣ 화물/톤 매칭 우선
-      if (b._score !== a._score) return b._score - a._score;
-
-      // 2️⃣ 최신순
-      return b._time - a._time;
-    });
-
-    // 🔥 4단계: 통계
+    // 🔥 통계
     const fares = scored.map(r =>
       Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""))
     );
@@ -14559,23 +14528,31 @@ setFarePanelOpen(true);
       return;
     }
 
-    const scored = base.map(r => {
-      const ce = fareCargoExact(targetCargo, r.화물내용);
-      const cp = fareCargoPartial(targetCargo, r.화물내용);
-      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
-      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
-      return {
-        ...r,
-        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
-        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
-        _time: r.updatedAt || r.등록일 || 0,
-      };
+    const _4cDetectType = (s = "") => { const t = s.trim().toLowerCase().replace(/\s+/g,""); if (/\d+(파레트|파렛트|파렛|파레|파|plt)/.test(t)) return "pallet"; if (/\d+(박스|box)/.test(t)) return "box"; return "text"; };
+    const _4cInputType = _4cDetectType(targetCargo);
+    const _4cInputPallet = getPalletFromCargoText(targetCargo);
+    const _4cInputBox = (() => { const m = targetCargo.replace(/\s+/g,"").match(/(\d+)(박스|box)/i); return m ? Number(m[1]) : null; })();
+    const _4cInputTon = extractTonNum(targetTon);
+
+    const _4cScored = base.map(r => {
+      const rType = _4cDetectType(r.화물내용);
+      const rTon = extractTonNum(r.차량톤수);
+      const rDate = r.상차일 || r.등록일 || "";
+      let cargoDiff = 999, tonDiff = 999;
+      if (_4cInputType === "pallet" && _4cInputPallet != null && rType === "pallet") { const rp = getPalletFromCargoText(r.화물내용); cargoDiff = rp != null ? Math.abs(rp - _4cInputPallet) : 999; }
+      else if (_4cInputType === "box" && _4cInputBox != null) { const rm = (r.화물내용||"").replace(/\s+/g,"").match(/(\d+)(박스|box)/i); cargoDiff = rm ? Math.abs(Number(rm[1]) - _4cInputBox) : 999; }
+      else { cargoDiff = (r.화물내용||"").trim() === targetCargo ? 0 : 1; }
+      if (_4cInputTon != null && rTon != null) tonDiff = Math.abs(rTon - _4cInputTon);
+      const exactCargo = cargoDiff === 0, exactTon = tonDiff === 0;
+      const tier = exactCargo && exactTon ? 0 : exactCargo ? 1 : exactTon ? 2 : 3;
+      const matchLabel = tier === 0 ? "완전일치" : tier === 1 ? "부분일치" : tier === 2 ? "톤수일치" : "경로일치";
+      return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
     });
 
-    scored.sort((a, b) => {
-      if (b._score !== a._score) return b._score - a._score;
-      return b._time - a._time;
-    });
+    const _4cGroupMap = new Map();
+    _4cScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_4cGroupMap.has(key)) _4cGroupMap.set(key, []); _4cGroupMap.get(key).push(r); });
+    const scored = Array.from(_4cGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
+      .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
     const fares = scored.map(r =>
       Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""))
@@ -21485,7 +21462,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
                 </div>
               </div>
               <div className="px-4">
-                <button onClick={() => setCopyModalOpen(false)} className="w-full py-3 rounded-xl text-[13px] font-semibold bg-gray-100 text-gray-500">취소</button>
+                <button onClick={() => { setCopyModalOpen(false); setSelected([]); }} className="w-full py-3 rounded-xl text-[13px] font-semibold bg-gray-100 text-gray-500">취소</button>
               </div>
             </div>
           </div>
@@ -21561,8 +21538,8 @@ setConfirmChange(null);
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
-                오더 내용이 복사되었습니다.<br />
-                <span className="font-semibold text-[#1B2B4B]">{smsConfirm4.phone || "번호 없음"}</span> 으로 문자를 보내시겠습니까?
+                <span className="font-semibold text-[#1B2B4B]">{smsConfirm4.phone || "번호 없음"}</span><br />
+                으로 문자를 전송하시겠습니까?
               </div>
               <div className="flex gap-2">
                 <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setSmsConfirm4(null)}>취소</button>
@@ -24164,39 +24141,34 @@ if (mode === "driver") {
       return;
     }
 
-    // 2️⃣ 매칭 정보 + 정렬 점수
+    // 2️⃣ 티어 기반 정렬
     const targetCargo5 = String(editTarget.화물내용 || "").trim();
     const targetTon5 = String(editTarget.차량톤수 || "").trim();
-    const records = base
-      .map((r) => {
-const ce = fareCargoExact(targetCargo5, r.화물내용);
-const cp = fareCargoPartial(targetCargo5, r.화물내용);
-const tonMatch = !!targetTon5 && !!r.차량톤수 && r.차량톤수 === targetTon5;
-const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
+    const _5fDetectType = (s = "") => { const t = s.trim().toLowerCase().replace(/\s+/g,""); if (/\d+(파레트|파렛트|파렛|파레|파|plt)/.test(t)) return "pallet"; if (/\d+(박스|box)/.test(t)) return "box"; return "text"; };
+    const _5fInputType = _5fDetectType(targetCargo5);
+    const _5fInputPallet = getPalletFromCargoText(targetCargo5);
+    const _5fInputBox = (() => { const m = targetCargo5.replace(/\s+/g,"").match(/(\d+)(박스|box)/i); return m ? Number(m[1]) : null; })();
+    const _5fInputTon = extractTonNum(targetTon5);
 
-let priority = 0;
+    const _5fScored = base.map(r => {
+      const rType = _5fDetectType(r.화물내용);
+      const rTon = extractTonNum(r.차량톤수);
+      const rDate = r.상차일 || "";
+      let cargoDiff = 999, tonDiff = 999;
+      if (_5fInputType === "pallet" && _5fInputPallet != null && rType === "pallet") { const rp = getPalletFromCargoText(r.화물내용); cargoDiff = rp != null ? Math.abs(rp - _5fInputPallet) : 999; }
+      else if (_5fInputType === "box" && _5fInputBox != null) { const rm = (r.화물내용||"").replace(/\s+/g,"").match(/(\d+)(박스|box)/i); cargoDiff = rm ? Math.abs(Number(rm[1]) - _5fInputBox) : 999; }
+      else { cargoDiff = (r.화물내용||"").trim() === targetCargo5 ? 0 : 1; }
+      if (_5fInputTon != null && rTon != null) tonDiff = Math.abs(rTon - _5fInputTon);
+      const exactCargo = cargoDiff === 0, exactTon = tonDiff === 0;
+      const tier = exactCargo && exactTon ? 0 : exactCargo ? 1 : exactTon ? 2 : 3;
+      const matchLabel = tier === 0 ? "완전일치" : tier === 1 ? "부분일치" : tier === 2 ? "톤수일치" : "경로일치";
+      return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
+    });
 
-// 🔥 PART 4와 동일한 우선순위
-if (ce && tonMatch) priority = 4;
-else if (ce) priority = 3;
-else if (cp && tonMatch) priority = 3;
-else if (tonMatch) priority = 2;
-else if (cp) priority = 1;
-        return {
-          ...r,
-          _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
-          _priority: priority,
-          _date: r.상차일 || "",
-        };
-      })
-.sort((a, b) => {
-  if (b._priority !== a._priority) {
-    return b._priority - a._priority;   // 유사도 우선
-  }
-  // ✅ 최신 → 과거
-  return String(b._date).localeCompare(String(a._date));
-});
-
+    const _5fGroupMap = new Map();
+    _5fScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_5fGroupMap.has(key)) _5fGroupMap.set(key, []); _5fGroupMap.get(key).push(r); });
+    const records = Array.from(_5fGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
+      .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
     const vals = records.map((r) => Number(r.청구운임 || 0));
     const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
@@ -24232,20 +24204,31 @@ else if (cp) priority = 1;
     const targetCargo = String(copyTarget.화물내용 || "").trim();
     const targetTon = String(copyTarget.차량톤수 || "").trim();
 
-    const scored = base.map(r => {
-      const ce = fareCargoExact(targetCargo, r.화물내용);
-      const cp = fareCargoPartial(targetCargo, r.화물내용);
-      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
-      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
-      return {
-        ...r,
-        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
-        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
-        _time: r.updatedAt || r.등록일 || 0,
-      };
+    const _5cDetectType = (s = "") => { const t = s.trim().toLowerCase().replace(/\s+/g,""); if (/\d+(파레트|파렛트|파렛|파레|파|plt)/.test(t)) return "pallet"; if (/\d+(박스|box)/.test(t)) return "box"; return "text"; };
+    const _5cInputType = _5cDetectType(targetCargo);
+    const _5cInputPallet = getPalletFromCargoText(targetCargo);
+    const _5cInputBox = (() => { const m = targetCargo.replace(/\s+/g,"").match(/(\d+)(박스|box)/i); return m ? Number(m[1]) : null; })();
+    const _5cInputTon = extractTonNum(targetTon);
+
+    const _5cScored = base.map(r => {
+      const rType = _5cDetectType(r.화물내용);
+      const rTon = extractTonNum(r.차량톤수);
+      const rDate = r.상차일 || r.등록일 || "";
+      let cargoDiff = 999, tonDiff = 999;
+      if (_5cInputType === "pallet" && _5cInputPallet != null && rType === "pallet") { const rp = getPalletFromCargoText(r.화물내용); cargoDiff = rp != null ? Math.abs(rp - _5cInputPallet) : 999; }
+      else if (_5cInputType === "box" && _5cInputBox != null) { const rm = (r.화물내용||"").replace(/\s+/g,"").match(/(\d+)(박스|box)/i); cargoDiff = rm ? Math.abs(Number(rm[1]) - _5cInputBox) : 999; }
+      else { cargoDiff = (r.화물내용||"").trim() === targetCargo ? 0 : 1; }
+      if (_5cInputTon != null && rTon != null) tonDiff = Math.abs(rTon - _5cInputTon);
+      const exactCargo = cargoDiff === 0, exactTon = tonDiff === 0;
+      const tier = exactCargo && exactTon ? 0 : exactCargo ? 1 : exactTon ? 2 : 3;
+      const matchLabel = tier === 0 ? "완전일치" : tier === 1 ? "부분일치" : tier === 2 ? "톤수일치" : "경로일치";
+      return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
     });
 
-    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+    const _5cGroupMap = new Map();
+    _5cScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_5cGroupMap.has(key)) _5cGroupMap.set(key, []); _5cGroupMap.get(key).push(r); });
+    const scored = Array.from(_5cGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
+      .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
     const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
     setFareResult({
@@ -28910,7 +28893,7 @@ setCopyPlaceOptions(list);
                   </button>
                 </div>
               </div>
-              <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
+              <button onClick={() => { setCopyModalOpen(false); setSelected(new Set()); }} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
                 취소
               </button>
             </div>
@@ -28925,8 +28908,8 @@ setCopyPlaceOptions(list);
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
-                오더 내용이 복사되었습니다.<br />
-                <span className="font-semibold text-[#1B2B4B]">{smsConfirm5.phone || "번호 없음"}</span> 으로 문자를 보내시겠습니까?
+                <span className="font-semibold text-[#1B2B4B]">{smsConfirm5.phone || "번호 없음"}</span><br />
+                으로 문자를 전송하시겠습니까?
               </div>
               <div className="flex gap-2">
                 <button
@@ -33991,7 +33974,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   const headers = [
     "순번","등록일","경과","상차일","상차시간","하차일","하차시간","거래처명",
     "상차지명","상차지주소","하차지명","하차지주소",
-    "차량종류","차량톤수","화물내용","배차상태","메모",
+    "차량종류","차량톤수","화물내용","경유","배차상태","메모",
   ];
 
   const toggleAll = () => {
@@ -34189,6 +34172,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={cellBase}>{r.차량종류 || ""}</td>
                       <td className={cellBase}>{r.차량톤수 || ""}</td>
                       <td className={cellBase}>{r.화물내용 || ""}</td>
+                      <td className={cellBase}>
+                        {(() => {
+                          const safeP = (v) => { if (!v) return []; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } };
+                          const pu = safeP(r.경유상차목록 || r.경유지_상차).filter(s => s.주소?.trim() || s.업체명?.trim());
+                          const dr = safeP(r.경유하차목록 || r.경유지_하차).filter(s => s.주소?.trim() || s.업체명?.trim());
+                          return (
+                            <div className="flex flex-wrap gap-1">
+                              {pu.length > 0 && <StopBadge count={pu.length} list={pu} type="pickup" />}
+                              {dr.length > 0 && <StopBadge count={dr.length} list={dr} type="drop" />}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className={cellBase}><StatusBadge s={r.배차상태} /></td>
                       <td className={`${cellBase} max-w-[260px] text-left`}>
                         {r.메모 && r.메모.length > 40 ? (
