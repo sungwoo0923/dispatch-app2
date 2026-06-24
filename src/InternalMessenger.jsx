@@ -97,7 +97,6 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const [showNoticeInput, setShowNoticeInput] = useState(false);
 
   const msgUnsub = useRef(null);
-  const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
   const fileAllRef = useRef(null);
@@ -202,21 +201,27 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         // 서버에 없는 optimistic 메시지만 유지 (중복 방지)
         const pendingOpt = prev.filter(m => m._optimistic && !serverMsgs.some(
           r => r.senderUid === m.senderUid && r.text === m.text &&
-          Math.abs((r.createdAt?.toMillis?.() || 0) - m.createdAt.toMillis()) < 15000
+          Math.abs((r.createdAt?.toMillis?.() || 0) - (m.createdAt?.toMillis?.() || 0)) < 15000
         ));
-        return [...serverMsgs, ...pendingOpt].sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
+        const all = [...serverMsgs, ...pendingOpt];
+        return all.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
       });
       if (isVisibleRef.current) markRead(activeRoom.id);
     });
     return () => { if (msgUnsub.current) msgUnsub.current(); };
   }, [activeRoom?.id]);
 
+  // 메시지 컨테이너 직접 스크롤 (scrollIntoView는 모바일에서 키보드 내림)
+  const msgContainerRef = useRef(null);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = msgContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   useEffect(() => {
-    if (view === "chat") inputRef.current?.focus();
+    // PC에서만 자동 포커스 (모바일은 키보드 자동 열림 방지)
+    if (view === "chat" && !mobileMode) inputRef.current?.focus();
   }, [view]);
 
   // ── 안읽음 계산 ──
@@ -610,7 +615,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           onDeleteMsg={deleteMessage}
           msgSearch={msgSearch}
           setMsgSearch={setMsgSearch}
-          bottomRef={bottomRef}
+          msgContainerRef={msgContainerRef}
           inputRef={inputRef}
           fileRef={fileRef}
           fileAllRef={fileAllRef}
@@ -1179,7 +1184,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, bottomRef, inputRef, fileRef, fileAllRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, fileRef, fileAllRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode }) {
   const [showSearch, setShowSearch] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
 
@@ -1214,7 +1219,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
       )}
 
       {/* 메시지 영역 */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 2, scrollbarWidth: "thin", scrollbarColor: "#e5e7eb transparent", background: "#f0f4f8" }}>
+      <div ref={msgContainerRef} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 2, scrollbarWidth: "thin", scrollbarColor: "#e5e7eb transparent", background: "#f0f4f8" }}>
         {messages.length === 0 && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>
             대화를 시작해보세요.
@@ -1367,7 +1372,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             );
           });
         })()}
-        <div ref={bottomRef} />
+        <div />
       </div>
 
       {/* + 첨부 메뉴 */}
