@@ -18,6 +18,7 @@ import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
 import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
+import InternalMessenger from "./InternalMessenger";
 import FreightRateInquiry from "./FreightRateInquiry";
 
 // ================= 카운트 애니메이션 =================
@@ -2330,6 +2331,7 @@ return (
               "회사관리",
               "관리자메뉴",
               "관리센터",
+              "메신저",
             ].map((m) => {
               const isBlocked = (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return null;
@@ -2751,6 +2753,10 @@ return (
               <CompanyApplications />
             )}
           </div>
+        )}
+
+        {menu === "메신저" && (
+          <InternalMessenger user={user} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
         )}
       </main>
       </div>
