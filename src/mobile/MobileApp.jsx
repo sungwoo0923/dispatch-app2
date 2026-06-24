@@ -816,7 +816,7 @@ const [selectedNotice, setSelectedNotice] = useState(null);
 const [noticeOpen, setNoticeOpen] = useState(false);
 const [noticeForm, setNoticeForm] = useState({ category: "공지사항", author: "", content: "" });
 const [scheduleOpen, setScheduleOpen] = useState(false);
-const [scheduleForm, setScheduleForm] = useState({ type: "휴가", start: "", end: "", memo: "", approvers: [] });
+const [scheduleForm, setScheduleForm] = useState({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] });
 const [noticePage, setNoticePage] = useState(1);
 const NOTICE_PAGE_SIZE = 5;
 const [schedulePage, setSchedulePage] = useState(1);
@@ -2787,7 +2787,7 @@ onGoSchedule={() => {
               <th className="px-2 py-2 text-center font-semibold w-14">구분</th>
               <th className="px-2 py-2 text-center font-semibold w-14">작성자</th>
               <th className="px-2 py-2 text-center font-semibold w-14">
-                <button onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
+                <button onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
               </th>
             </tr>
           </thead>
@@ -2805,7 +2805,7 @@ onGoSchedule={() => {
                 <th className="px-2 py-2 text-center font-semibold w-14">구분</th>
                 <th className="px-2 py-2 text-center font-semibold w-14">작성자</th>
                 <th className="px-2 py-2 text-center font-semibold w-14">
-                  <button onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
+                  <button onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} className="text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
                 </th>
               </tr>
             </thead>
@@ -2966,6 +2966,7 @@ onGoSchedule={() => {
               <button onClick={() => {
                 setScheduleForm({
                   type: selectedSchedule.type || "휴가",
+                  authorName: selectedSchedule.name || "",
                   start: selectedSchedule.startDate || selectedSchedule.start || "",
                   end: selectedSchedule.endDate || selectedSchedule.end || "",
                   memo: selectedSchedule.memo || selectedSchedule.reason || "",
@@ -2991,6 +2992,19 @@ onGoSchedule={() => {
         <button onClick={() => { setScheduleOpen(false); }} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div className="p-5 space-y-3">
+        {(role === "superadmin" || role === "totalMaster") && selectedSchedule?.id && (
+          <div>
+            <div className="text-[11px] text-gray-400 mb-1">작성자</div>
+            <select
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+              value={scheduleForm.authorName}
+              onChange={e => setScheduleForm(f => ({ ...f, authorName: e.target.value }))}
+            >
+              <option value="">선택</option>
+              {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+            </select>
+          </div>
+        )}
         <select
           className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
           value={scheduleForm.type}
@@ -3068,6 +3082,7 @@ onGoSchedule={() => {
             const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
             if (selectedSchedule?.id) {
               const updatedFields = { type: scheduleForm.type, start: scheduleForm.start, end: scheduleForm.end || scheduleForm.start, memo: scheduleForm.memo, approvers: approversData };
+              if ((role === "superadmin" || role === "totalMaster") && scheduleForm.authorName) updatedFields.name = scheduleForm.authorName;
               await updateDoc(doc(db, "schedules", selectedSchedule.id), updatedFields);
               setSelectedSchedule(prev => ({ ...prev, ...updatedFields }));
             } else {

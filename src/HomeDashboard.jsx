@@ -198,7 +198,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeForm, setNoticeForm] = React.useState({ category: "공지사항", author: "", content: "" });
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
-  const [scheduleForm, setScheduleForm] = React.useState({ type: "휴가", name: "", start: "", end: "", memo: "", approvers: [] });
+  const [scheduleForm, setScheduleForm] = React.useState({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] });
   const [notices, setNotices] = React.useState([]);
   const [schedules, setSchedules] = React.useState([]);
   const [handovers, setHandovers] = React.useState([]);
@@ -735,7 +735,7 @@ React.useEffect(() => {
           </div>
           <div className="ml-auto">
             {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }} />}
-            {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", name: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} />}
+            {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} />}
             {!isViewer && boardTab === "인수인계" && (
               <RegBtn onClick={() => {
                 const me = users.find(u => u.id === user?.uid);
@@ -957,6 +957,15 @@ React.useEffect(() => {
       {scheduleOpen && (
         <Modal title="휴가 / 외근 일정 등록" onClose={() => setScheduleOpen(false)}>
           <div className="space-y-3">
+            {(role === "superadmin" || role === "totalMaster") && selectedSchedule?.id && (
+              <div>
+                <div className="text-[11px] text-gray-400 mb-1">작성자</div>
+                <select className={formInput} value={scheduleForm.authorName} onChange={e => setScheduleForm({ ...scheduleForm, authorName: e.target.value })}>
+                  <option value="">선택</option>
+                  {users.map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+                </select>
+              </div>
+            )}
             <select className={formInput} value={scheduleForm.type} onChange={e => setScheduleForm({ ...scheduleForm, type: e.target.value })}>
               <option>휴가</option><option>외근</option><option>오전반차</option><option>오후반차</option><option>병가</option><option>경조사</option><option>조퇴</option>
             </select>
@@ -999,6 +1008,7 @@ React.useEffect(() => {
               const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
               if (selectedSchedule?.id) {
                 const updatedFields = { type: scheduleForm.type, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData };
+                if ((role === "superadmin" || role === "totalMaster") && scheduleForm.authorName) updatedFields.name = scheduleForm.authorName;
                 await updateDoc(doc(db, "schedules", selectedSchedule.id), updatedFields);
                 setSelectedSchedule(prev => ({ ...prev, ...updatedFields }));
               } else {
@@ -1008,7 +1018,7 @@ React.useEffect(() => {
                   if (a.uid) setDoc(doc(db, "notifications", `req_${newDocRef.id}_${a.uid}`), { toUid: a.uid, type: "approval_request", fromName: userName, scheduleType: scheduleForm.type, scheduleId: newDocRef.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
                 }
               }
-              setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(false);
+              setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(false);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
           </div>
         </Modal>
@@ -1139,7 +1149,7 @@ React.useEffect(() => {
               {(canEdit || canDelete) && !isViewer && (
                 <div className="flex gap-2 pt-3 border-t border-gray-100">
                   {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>}
-                  {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>}
+                  {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, authorName: selectedSchedule.name || "", start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>}
                 </div>
               )}
             </div>
