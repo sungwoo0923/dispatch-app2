@@ -2331,7 +2331,6 @@ return (
               "회사관리",
               "관리자메뉴",
               "관리센터",
-              "메신저",
             ].map((m) => {
               const isBlocked = (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return null;
@@ -2755,9 +2754,6 @@ return (
           </div>
         )}
 
-        {menu === "메신저" && (
-          <InternalMessenger user={user} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
-        )}
       </main>
       </div>
       {/* ===== 홈 오더 미리보기 모달 ===== */}
@@ -2954,6 +2950,9 @@ return (
   dispatches={dispatchData}
   clients={clients}
 />
+
+      {/* 메신저 플로팅 버튼 */}
+      <InternalMessenger user={user} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
 
       {/* 계산기 플로팅 버튼 — 모든 탭에 표시 */}
         <>
