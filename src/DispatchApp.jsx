@@ -21421,7 +21421,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
           { type: "driver", label: "기사 전달용", desc: "운행 정보 + 업로드 링크 포함", primary: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/></svg> },
         ];
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-[99999]" onClick={() => setCopyModalOpen(false)}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setCopyModalOpen(false)}>
             <div className="bg-white w-full max-w-md rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-center pt-3 pb-2"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
               <div className="px-5 pb-3 border-b border-gray-100">
@@ -23196,6 +23196,14 @@ const handleCloseFileUpload = async (e) => {
 };
 const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [q, setQ] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("dispatchStatusState") || "{}");
+      return saved.q || "";
+    } catch {
+      return "";
+    }
+  });
+  const [qInput, setQInput] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("dispatchStatusState") || "{}");
       return saved.q || "";
@@ -25457,7 +25465,7 @@ return (
 {/* 검색창 (통합) */}
         <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
           <select className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
-            value={searchType} onChange={(e)=>{setSearchType(e.target.value);setQ("");setPage(0);}}>
+            value={searchType} onChange={(e)=>{setSearchType(e.target.value);setQ("");setQInput("");setPage(0);}}>
             <option value="all">통합</option>
             <option value="client">거래처</option>
             <option value="pickup">상차지</option>
@@ -25467,8 +25475,10 @@ return (
             <option value="pay">지급방식</option>
             <option value="dispatch">배차방식</option>
           </select>
-       <input className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
-            value={loaded?q:""} onChange={(e)=>{setQ(e.target.value);setPage(0);}} />
+          <input className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
+            value={loaded?qInput:""} onChange={(e)=>{setQInput(e.target.value);}}
+            onKeyDown={(e)=>{ if(e.key==="Enter"){ setQ(qInput); setPage(0); } }} />
+          <button onClick={()=>{ setQ(qInput); setPage(0); }} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition">조회</button>
         </div>
 
         {/* 날짜 */}
@@ -25478,9 +25488,9 @@ return (
 
         {/* 날짜 버튼들 */}
         <button onClick={handleSearch} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">조회</button>
-        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
-        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">내일</button>
-        <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
+        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
+        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">내일</button>
+        <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0">

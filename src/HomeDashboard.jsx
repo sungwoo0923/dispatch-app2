@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc,
+  serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc, getDoc, arrayUnion,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 
@@ -175,11 +175,16 @@ function formatCreatedAtTime(createdAt) {
 
 /* ===== 모듈 레벨: 당일 닫기/읽기 완료된 토스트 ID 관리 ===== */
 const _dismissedToasts = new Set();
+// 계정별 Firestore 기반 seen 키 세트 (로드 완료 후 채워짐)
+const _firestoreSeenKeys = new Set();
+let _firestoreSeenLoaded = false;
 
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
+  const [firestoreSeenReady, setFirestoreSeenReady] = useState(false);
+  const pendingToasts = useRef([]); // Firestore 로드 전에 쌓인 토스트 후보
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
@@ -276,11 +281,49 @@ React.useEffect(() => {
   const getPermDismissed = () => { try { return new Set(JSON.parse(localStorage.getItem("permDismissed") || "[]")); } catch { return new Set(); } };
   const addPermDismissed = (key) => { try { const s = getPermDismissed(); s.add(key); localStorage.setItem("permDismissed", JSON.stringify([...s].slice(-300))); } catch {} };
 
+  // Firestore에 계정별 seen 기록 저장/로드
+  const addFirestoreSeenKey = React.useCallback((key) => {
+    if (!user?.uid) return;
+    _firestoreSeenKeys.add(key);
+    setDoc(doc(db, "userSeenNotifs", user.uid), { keys: arrayUnion(key) }, { merge: true }).catch(() => {});
+  }, [user?.uid]);
+
+  React.useEffect(() => {
+    if (!user?.uid) { _firestoreSeenLoaded = true; setFirestoreSeenReady(true); return; }
+    getDoc(doc(db, "userSeenNotifs", user.uid)).then(d => {
+      if (d.exists()) {
+        const keys = d.data().keys || [];
+        keys.forEach(k => _firestoreSeenKeys.add(k));
+      }
+      _firestoreSeenLoaded = true;
+      setFirestoreSeenReady(true);
+    }).catch(() => { _firestoreSeenLoaded = true; setFirestoreSeenReady(true); });
+  }, [user?.uid]);
+
+  const isAlreadySeen = (key) => {
+    return _dismissedToasts.has(key) || getPermDismissed().has(key) || _firestoreSeenKeys.has(key);
+  };
+
+  const tryShowToast = React.useCallback((type, todayItem) => {
+    const seen = getSeenToasts();
+    const shownKey = `${type}_${todayItem.id}`;
+    if (seen[shownKey] || isAlreadySeen(shownKey)) return;
+    markToastSeen(shownKey);
+    addPermDismissed(shownKey);
+    setTimeout(() => {
+      setToast({ type, data: { ...todayItem, date: formatCreatedAt(todayItem.createdAt) } });
+    }, type === "notice" ? 500 : type === "schedule" ? 1500 : 2500);
+  }, []);
+
+  // Firestore 로드 완료 후 대기 중이던 토스트 처리
+  React.useEffect(() => {
+    if (!firestoreSeenReady) return;
+    const pending = pendingToasts.current.splice(0);
+    pending.forEach(({ type, item }) => tryShowToast(type, item));
+  }, [firestoreSeenReady, tryShowToast]);
+
   const showTodayToast = React.useCallback((type, items) => {
     const today = todayKST();
-    const seen = getSeenToasts();
-
-    // 오늘 날짜 기준으로 가장 최근 항목 찾기
     const todayItem = items.find(item => {
       const sec = item.createdAt?.seconds;
       if (!sec) return false;
@@ -290,19 +333,13 @@ React.useEffect(() => {
     });
     if (!todayItem) return;
 
-    // localStorage에 이미 본 기록 있으면 스킵
-    const shownKey = `${type}_${todayItem.id}`;
-    if (seen[shownKey] || _dismissedToasts.has(shownKey) || getPermDismissed().has(shownKey)) return;
-
-    markToastSeen(shownKey); // setTimeout 이전에 기록 (race condition 방지)
-    addPermDismissed(shownKey); // 영구 기록 — 탭 닫아도 재표시 안 함
-    setTimeout(() => {
-      setToast({
-        type,
-        data: { ...todayItem, date: formatCreatedAt(todayItem.createdAt) }
-      });
-    }, type === "notice" ? 500 : type === "schedule" ? 1500 : 2500);
-  }, []);
+    if (!_firestoreSeenLoaded) {
+      // Firestore 로드 전: 대기열에 추가
+      pendingToasts.current.push({ type, item: todayItem });
+      return;
+    }
+    tryShowToast(type, todayItem);
+  }, [tryShowToast]);
 
   React.useEffect(() => {
     const vc = getViewCompany();
@@ -321,7 +358,7 @@ React.useEffect(() => {
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data() };
       const seenKeyS = `schedule_${data.id}`;
-      if (getSeenToasts()[seenKeyS] || _dismissedToasts.has(seenKeyS) || getPermDismissed().has(seenKeyS)) return;
+      if (getSeenToasts()[seenKeyS] || isAlreadySeen(seenKeyS)) return;
       markToastSeen(seenKeyS); addPermDismissed(seenKeyS);
       setToast({ type: "schedule", data });
     });
@@ -361,7 +398,7 @@ React.useEffect(() => {
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
       const seenKeyN = `notice_${data.id}`;
-      if (getSeenToasts()[seenKeyN] || _dismissedToasts.has(seenKeyN) || getPermDismissed().has(seenKeyN)) return;
+      if (getSeenToasts()[seenKeyN] || isAlreadySeen(seenKeyN)) return;
       markToastSeen(seenKeyN); addPermDismissed(seenKeyN);
       setToast({ type: "notice", data });
     });
@@ -385,7 +422,7 @@ React.useEffect(() => {
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data() };
       const seenKeyH = `handover_${data.id}`;
-      if (getSeenToasts()[seenKeyH] || _dismissedToasts.has(seenKeyH) || getPermDismissed().has(seenKeyH)) return;
+      if (getSeenToasts()[seenKeyH] || isAlreadySeen(seenKeyH)) return;
       markToastSeen(seenKeyH); addPermDismissed(seenKeyH);
       setToast({ type: "handover", data });
     });
@@ -1245,7 +1282,7 @@ React.useEffect(() => {
             style={{ width: 320 }}
             onClick={() => {
               const k = `${toast.type}_${toast.data?.id}`;
-              if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); }
+              if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); }
               if (toast.type === "notice") setSelectedNotice(toast.data);
               else if (toast.type === "schedule") setSelectedSchedule(toast.data);
               else if (toast.type === "handover") setSelectedHandover(toast.data);
@@ -1269,7 +1306,7 @@ React.useEffect(() => {
                   </div>
                 </div>
                 <button
-                  onClick={e => { e.stopPropagation(); const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); } setToast(null); }}
+                  onClick={e => { e.stopPropagation(); const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); } setToast(null); }}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/20 transition text-[14px]"
                 >✕</button>
               </div>

@@ -44,6 +44,9 @@ export default function UploadPage() {
   const [sigDrawing, setSigDrawing] = useState(false);
   const [showPaymentCalc, setShowPaymentCalc] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState("");
+  const [imgZoomOpen, setImgZoomOpen] = useState(false);
+  const imgZoomRef = useRef(null);
+  const imgPinchRef = useRef({ dist: null, scale: 1, baseScale: 1, tx: 0, ty: 0, baseTx: 0, baseTy: 0, pointers: {} });
 
   // 결제일 계산 로직
   const calcPaymentDate = (dateStr) => {
@@ -451,8 +454,8 @@ export default function UploadPage() {
                     const calc = calcPaymentDate(invoiceDate);
                     if (!calc) return null;
                     return (
-                      <div style={{ background: "#f0f4ff", border: "1.5px solid #c7d2fe", borderRadius: 12, padding: "16px" }}>
-                        <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, marginBottom: 6 }}>{calc.desc}</div>
+                      <div style={{ background: "#eef1f7", border: "1.5px solid #b8c5d9", borderRadius: 12, padding: "16px" }}>
+                        <div style={{ fontSize: 11, color: "#1B2B4B", fontWeight: 700, marginBottom: 6 }}>{calc.desc}</div>
                         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>입금 예정일</div>
                         <div style={{ fontSize: 18, fontWeight: 900, color: "#1B2B4B" }}>{calc.result}</div>
                         <div style={{ marginTop: 12, padding: "10px 12px", background: "white", borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
@@ -567,12 +570,79 @@ export default function UploadPage() {
 
             {/* 거래명세서 예시 */}
             <div style={cardStyle}>
-              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0" }}>
+              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0", cursor: "zoom-in" }}
+                onClick={() => setImgZoomOpen(true)}>
                 <img src="/거래명세서.png" alt="거래명세서 예시" style={{ width: "100%", display: "block" }}
                   onError={(e) => { e.target.style.display = "none"; }} />
               </div>
-              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>거래명세서 예시</div>
+              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>거래명세서 예시 (클릭하여 확대)</div>
             </div>
+
+            {/* 거래명세서 이미지 확대 모달 */}
+            {imgZoomOpen && (
+              <div
+                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}
+                onClick={() => setImgZoomOpen(false)}
+              >
+                <button
+                  onClick={() => setImgZoomOpen(false)}
+                  style={{ position: "absolute", top: 16, right: 16, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 40, height: 40, color: "white", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}
+                >✕</button>
+                <div
+                  ref={imgZoomRef}
+                  style={{ touchAction: "none", userSelect: "none", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}
+                  onClick={e => e.stopPropagation()}
+                  onPointerDown={e => {
+                    const p = imgPinchRef.current;
+                    p.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    const pts = Object.values(p.pointers);
+                    if (pts.length === 2) {
+                      const dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
+                      p.dist = Math.sqrt(dx*dx + dy*dy);
+                      p.baseScale = p.scale;
+                      p.baseTx = p.tx; p.baseTy = p.ty;
+                    } else if (pts.length === 1) {
+                      p.baseTx = p.tx; p.baseTy = p.ty;
+                      p.startX = e.clientX; p.startY = e.clientY;
+                    }
+                  }}
+                  onPointerMove={e => {
+                    const p = imgPinchRef.current;
+                    p.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+                    const pts = Object.values(p.pointers);
+                    const img = imgZoomRef.current?.querySelector("img");
+                    if (!img) return;
+                    if (pts.length === 2) {
+                      const dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
+                      const newDist = Math.sqrt(dx*dx + dy*dy);
+                      p.scale = Math.min(Math.max(p.baseScale * (newDist / p.dist), 0.5), 5);
+                    } else if (pts.length === 1 && p.scale > 1) {
+                      p.tx = p.baseTx + (e.clientX - p.startX);
+                      p.ty = p.baseTy + (e.clientY - p.startY);
+                    }
+                    img.style.transform = `scale(${p.scale}) translate(${p.tx/p.scale}px, ${p.ty/p.scale}px)`;
+                  }}
+                  onPointerUp={e => {
+                    delete imgPinchRef.current.pointers[e.pointerId];
+                    const pts = Object.values(imgPinchRef.current.pointers);
+                    if (pts.length === 1) {
+                      imgPinchRef.current.startX = pts[0].x;
+                      imgPinchRef.current.startY = pts[0].y;
+                      imgPinchRef.current.baseTx = imgPinchRef.current.tx;
+                      imgPinchRef.current.baseTy = imgPinchRef.current.ty;
+                    }
+                  }}
+                >
+                  <img
+                    src="/거래명세서.png"
+                    alt="거래명세서 예시"
+                    style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", transformOrigin: "center center", transition: "transform 0.05s", userSelect: "none", pointerEvents: "none" }}
+                    onError={e => { e.target.style.display = "none"; }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* 서명 카드 */}
             <div style={cardStyle}>
