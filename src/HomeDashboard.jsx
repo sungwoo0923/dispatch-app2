@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  serverTimestamp, doc, deleteDoc, updateDoc,
+  serverTimestamp, doc, deleteDoc, updateDoc, where,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 
@@ -133,15 +133,15 @@ function ApprovalBadge({ status }) {
 
 /* ===== ApprovalStamp ===== */
 function ApprovalStamp({ status }) {
-  if (!status || status === "pending") return null;
+  if (!status || status === "pending" || status === "in_progress" || status === "none") return null;
   const map = { approved: ["승 인", "#1B2B4B"], rejected: ["반 려", "#DC2626"], hold: ["보 류", "#6B7280"] };
   const [label, color] = map[status] || [];
   if (!label) return null;
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-      <div style={{ border: `3px solid ${color}`, color, transform: "rotate(-12deg)", opacity: 0.85 }}
-        className="w-20 h-20 rounded-full flex items-center justify-center">
-        <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "0.2em" }}>{label}</span>
+      <div style={{ border: `4px solid ${color}`, color, transform: "rotate(-12deg)", opacity: 0.88 }}
+        className="w-32 h-32 rounded-full flex items-center justify-center">
+        <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: "0.2em" }}>{label}</span>
       </div>
     </div>
   );
@@ -215,6 +215,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [selectedNotice, setSelectedNotice] = useState(null);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [users, setUsers] = useState([]);
+  const [approvalNotifBanner, setApprovalNotifBanner] = useState(null);
 
 React.useEffect(() => {
   if (!toast) return;
@@ -482,8 +483,37 @@ React.useEffect(() => {
 
   const formInput = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 transition";
 
+  // 결재 알림 리스너
+  useEffect(() => {
+    if (!user?.uid) return;
+    const qRef = query(collection(db, "notifications"), where("toUid", "==", user.uid), where("read", "==", false));
+    const unsub = onSnapshot(qRef, (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === "added") {
+          const data = change.doc.data();
+          const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
+          const msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
+          setApprovalNotifBanner({ id: change.doc.id, msg, status: data.status });
+          updateDoc(doc(db, "notifications", change.doc.id), { read: true }).catch(() => {});
+        }
+      });
+    });
+    return unsub;
+  }, [user?.uid]);
+
   return (
     <div className="bg-gray-50 min-h-screen p-5 space-y-4">
+
+      {/* 결재 알림 배너 */}
+      {approvalNotifBanner && (
+        <div className="fixed top-5 right-5 z-[9999] flex items-center gap-3 px-5 py-3.5 bg-white border border-gray-200 rounded-2xl shadow-xl" style={{ animation: "fadeIn 0.3s ease-out", minWidth: 280 }}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-[12px] font-bold text-white ${
+            approvalNotifBanner.status === "approved" ? "bg-[#1B2B4B]" : approvalNotifBanner.status === "rejected" ? "bg-red-500" : "bg-gray-500"
+          }`}>{approvalNotifBanner.status === "approved" ? "승" : approvalNotifBanner.status === "rejected" ? "반" : "보"}</div>
+          <span className="text-[13px] font-semibold text-gray-800 flex-1">{approvalNotifBanner.msg}</span>
+          <button onClick={() => setApprovalNotifBanner(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+        </div>
+      )}
 
       {/* ===== KPI 4개 ===== */}
       <div className="grid grid-cols-4 gap-4">
@@ -752,10 +782,18 @@ React.useEffect(() => {
                     { label: "등록시간", width: "70px" },
                     { label: "작성자", width: "70px" },
                     { label: "구분", width: "55px" },
-                    { label: "일정", align: "text-left", width: "160px" },
-                    { label: "결재", width: "60px" },
+                    { label: "일정", width: "200px" },
+                    { label: "결재", width: "70px" },
                   ]}
-                  rows={pagedSchedules.map((s, idx) => (
+                  rows={pagedSchedules.map((s, idx) => {
+                    const startDate = s.startDate || s.start || "";
+                    const fmt = (d) => {
+                      if (!d) return "-";
+                      const [y, m, day] = d.split("-");
+                      return `${y}년 ${m}월 ${day}일`;
+                    };
+                    const dateLabel = startDate ? `${fmt(startDate)} ${s.type || ""}` : "-";
+                    return (
                     <tr key={s.id} onClick={() => setSelectedSchedule(s)} className="cursor-pointer hover:bg-blue-50/50 transition">
                       <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{(schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx + 1}</td>
                       <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">
@@ -766,19 +804,20 @@ React.useEffect(() => {
                       <td className="px-3 py-2.5 text-center text-[12px]">
                         <span className="text-[12px] font-semibold text-gray-700">{s.type || s.title}</span>
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] font-medium text-gray-800">{s.start?.replaceAll("-", ".")}</td>
+                      <td className="px-3 py-2.5 text-center text-[13px] font-medium text-gray-800">{dateLabel}</td>
                       <td className="px-3 py-2.5 text-center">{(() => {
                         const myApprover = (s.approvers || []).find(a => a.uid === auth.currentUser?.uid && a.status === "pending");
                         if (myApprover) return (
                           <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
-                            className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                            className="text-[11px] font-bold px-2 py-1 rounded-lg bg-[#1B2B4B] text-white animate-pulse">
                             결재대기
                           </button>
                         );
                         return <ApprovalBadge status={getOverallApprovalStatus(s)} />;
                       })()}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 />
                 <Pagination page={schedulePage} total={scheduleTotalPages} onChange={setSchedulePage} />
               </>
@@ -791,16 +830,6 @@ React.useEffect(() => {
               <div className="text-[13px] text-gray-400 py-6 text-center">등록된 인수인계가 없습니다</div>
             ) : (
               <>
-                <div className="flex items-center gap-3 mb-2 px-1">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm bg-red-400"></div>
-                    <span className="text-[11px] text-gray-500">미확인</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm bg-emerald-400"></div>
-                    <span className="text-[11px] text-gray-500">확인완료</span>
-                  </div>
-                </div>
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
@@ -808,7 +837,9 @@ React.useEffect(() => {
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[90px]">등록날짜</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">등록시간</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">작성자</th>
-                      <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500 w-[180px]">내용</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[70px]">받는이</th>
+                      <th className="px-3 py-2.5 text-left text-[12px] font-semibold text-gray-500">내용</th>
+                      <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 w-[70px]">수신여부</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -837,13 +868,12 @@ React.useEffect(() => {
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{dateStr}</td>
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(h.createdAt)}</td>
                           <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{h.author}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-800">
-                            <span className="font-medium">인수인계</span>
-                            {(isReceiver || isAuthor) && (
-                              <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${receiverRead ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"}`}>
-                                {receiverRead ? "확인" : "미확인"}
-                              </span>
-                            )}
+                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-600">{h.receiver || "-"}</td>
+                          <td className="px-3 py-2.5 text-[13px] text-gray-800">인수인계</td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={`text-[11px] px-2 py-0.5 rounded font-semibold ${receiverRead ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-500"}`}>
+                              {receiverRead ? "확인" : "미확인"}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -939,7 +969,7 @@ React.useEffect(() => {
               if (selectedSchedule?.id) {
                 await updateDoc(doc(db, "schedules", selectedSchedule.id), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData });
               } else {
-                await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData, approvalStatus: "pending", createdAt: serverTimestamp(), companyName: getViewCompany() });
+                await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, authorUid: user?.uid || "", start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData, approvalStatus: "pending", createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
               setScheduleForm({ type: "휴가", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(false);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
@@ -947,44 +977,73 @@ React.useEffect(() => {
         </Modal>
       )}
 
-      {selectedSchedule && (
+      {selectedSchedule && (() => {
+        const overallStatus = getOverallApprovalStatus(selectedSchedule);
+        const isAuthor = user?.uid === selectedSchedule.authorUid;
+        const isSuperAdmin = role === "superadmin";
+        const canEdit = (isAuthor || isSuperAdmin) && overallStatus !== "approved" && overallStatus !== "rejected";
+        const canDelete = isAuthor || isSuperAdmin;
+        const isHoldAndAuthor = isAuthor && overallStatus === "hold";
+        const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
+        const myIdx = approvers.findIndex(a => a.uid === auth.currentUser?.uid && a.status === "pending");
+        const users2 = Array.isArray(me) ? me : [];
+        return (
         <Modal title="일정 상세" onClose={() => setSelectedSchedule(null)}>
           <div className="relative space-y-3 text-[14px]">
-            <ApprovalStamp status={getOverallApprovalStatus(selectedSchedule)} />
+            <ApprovalStamp status={overallStatus} />
             <div><div className="text-[13px] text-gray-400 mb-0.5">구분</div><div className="font-semibold">{selectedSchedule.type}</div></div>
             <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedSchedule.name}</div></div>
             <div><div className="text-[13px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">결재자</div><div>{(selectedSchedule.approvers || []).map(a => a.name).join(", ") || selectedSchedule?.approverName || "미지정"}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">결재자</div><div>{approvers.map(a => {
+              const lbl = a.status === "approved" ? " (승인)" : a.status === "rejected" ? " (반려)" : a.status === "hold" ? " (보류)" : " (대기)";
+              return a.name + lbl;
+            }).join(", ") || "미지정"}</div></div>
             {selectedSchedule.memo && <div><div className="text-[13px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
           </div>
-          {(() => {
-            const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
-            const myIdx = approvers.findIndex(a => a.uid === auth.currentUser?.uid && a.status === "pending");
-            if (myIdx === -1) return null;
-            return (
-              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                {["approved", "rejected", "hold"].map(status => (
-                  <button key={status} onClick={async () => {
-                    const newApprovers = [...approvers];
-                    newApprovers[myIdx] = { ...newApprovers[myIdx], status };
-                    await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
-                    setSelectedSchedule(null);
-                  }} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
-                    status === "approved" ? "bg-[#EEF1F7] text-[#1B2B4B]" :
-                    status === "rejected" ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"
-                  }`}>{status === "approved" ? "승인" : status === "rejected" ? "반려" : "보류"}</button>
-                ))}
-              </div>
-            );
-          })()}
-          {!isViewer && (
+          {myIdx !== -1 && (
+            <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+              {["approved", "rejected", "hold"].map(status => (
+                <button key={status} onClick={async () => {
+                  const newApprovers = [...approvers];
+                  newApprovers[myIdx] = { ...newApprovers[myIdx], status };
+                  await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
+                  if (selectedSchedule.authorUid) {
+                    const approverName = me?.name || auth.currentUser?.displayName || "";
+                    addDoc(collection(db, "notifications"), {
+                      toUid: selectedSchedule.authorUid,
+                      type: "approval",
+                      status,
+                      scheduleType: selectedSchedule.type || "",
+                      approverName,
+                      scheduleId: selectedSchedule.id,
+                      createdAt: serverTimestamp(),
+                      read: false,
+                    }).catch(() => {});
+                  }
+                  setSelectedSchedule(null);
+                }} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
+                  status === "approved" ? "bg-[#EEF1F7] text-[#1B2B4B]" :
+                  status === "rejected" ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"
+                }`}>{status === "approved" ? "승인" : status === "rejected" ? "반려" : "보류"}</button>
+              ))}
+            </div>
+          )}
+          {isHoldAndAuthor && (
+            <button onClick={async () => {
+              const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
+              await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers });
+              setSelectedSchedule(null);
+            }} className="w-full mt-3 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">재결재 요청</button>
+          )}
+          {(canEdit || canDelete) && !isViewer && (
           <div className="flex gap-2 mt-4 pt-4 border-t">
-            <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-            <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+            {canDelete && <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>}
+            {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>}
           </div>
           )}
         </Modal>
-      )}
+        );
+      })()}
 
       {handoverOpen && (
         <Modal title="인수인계 등록" onClose={() => setHandoverOpen(false)}>
