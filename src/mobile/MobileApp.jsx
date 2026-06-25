@@ -2335,9 +2335,8 @@ const title =
   </div>
 )}
 
-    {/* 🔍 글씨 크기 전용 래퍼 — 메신저 열릴 때 inert+aria-hidden으로 배경 input 포커스/네비 차단 */}
+    {/* 🔍 글씨 크기 전용 래퍼 */}
     <div
-      {...(showMobileMessenger ? { inert: "", "aria-hidden": "true" } : {})}
       className="flex flex-col flex-1"
       style={{
         fontSize:
