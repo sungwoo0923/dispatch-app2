@@ -1514,19 +1514,21 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
       {/* + 첨부 메뉴 */}
       {showAttachMenu && (
         <div style={{ padding: "10px 12px", background: "#f8fafc", borderTop: "1px solid #e5e7eb", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {/* 사진: label+input (iOS Safari 호환) — 메뉴 닫기는 onChange에서 처리 */}
-          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60 }}>
+          {/* 사진: label+input — display:none은 iOS Safari에서 파일다이얼로그 안 열림, opacity:0 사용 */}
+          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60, position: "relative", overflow: "hidden" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span style={{ fontSize: 11, fontWeight: 600 }}>사진</span>
-            <input ref={photoInputRef} type="file" accept="image/*" style={{ display: "none" }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) onSendImage(f); e.target.value = ""; setShowAttachMenu(false); }} />
+            <input ref={photoInputRef} type="file" accept="image/*"
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) { onSendImage(f); setShowAttachMenu(false); } e.target.value = ""; }} />
           </label>
-          {/* 파일: label+input */}
-          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60 }}>
+          {/* 파일: 동일 방식 */}
+          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60, position: "relative", overflow: "hidden" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span style={{ fontSize: 11, fontWeight: 600 }}>파일</span>
-            <input ref={fileInputRef} type="file" style={{ display: "none" }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) onSendFile(f); e.target.value = ""; setShowAttachMenu(false); }} />
+            <input ref={fileInputRef} type="file"
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) { onSendFile(f); setShowAttachMenu(false); } e.target.value = ""; }} />
           </label>
           {[
             { label: "위치", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>, action: () => { onSendLocation(); setShowAttachMenu(false); } },
@@ -1555,11 +1557,11 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         </div>
       )}
 
-      {/* 입력창 */}
+      {/* 입력창 — form으로 감싸 iOS가 외부 date input으로 네비게이션 못 하게 차단 */}
       <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: showAttachMenu ? "none" : "1px solid #e5e7eb", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
+        <form onSubmit={e => e.preventDefault()} style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
           {/* + 버튼 - onTouchStart preventDefault로 iOS 키보드 유지 */}
-          <button
+          <button type="button"
             onMouseDown={e => e.preventDefault()}
             onTouchStart={e => e.preventDefault()}
             onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); setShowAttachMenu(p => !p); }}
@@ -1580,7 +1582,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             autoCapitalize="sentences"
             style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13, color: "#111827", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }}
           />
-          <button
+          <button type="button"
             onMouseDown={e => e.preventDefault()}
             onTouchStart={e => e.preventDefault()}
             onTouchEnd={e => { e.stopPropagation(); if (input.trim()) onSend(); }}
@@ -1596,7 +1598,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
           </button>
-        </div>
+        </form>
       </div>
 
       {/* 이미지 미리보기 모달 */}

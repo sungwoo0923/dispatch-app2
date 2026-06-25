@@ -2728,10 +2728,6 @@ return (
             cardImageUploading={cardImageUploading}
             setCardImageUploading={setCardImageUploading}
             showAlert={showAlert}
-            drivers={drivers}
-            clients={clients}
-            places={places}
-            dispatchData={dispatchData}
           />
         )}
 
@@ -41721,13 +41717,13 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 }
 
 // ─────────── 회사관리 탭 래퍼 ───────────
-function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert, drivers = [], clients = [], places = [], dispatchData = [] }) {
+function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
   const [tab, setTab] = React.useState("회사정보");
-  const tabs = ["회사정보", "ERP 관리", "내정보"];
+  const tabs = ["회사정보", "내정보"];
 
   return (
     <div>
-      <div className="flex gap-2 px-4 pt-4 pb-0 flex-wrap">
+      <div className="flex gap-2 px-4 pt-4 pb-0">
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
@@ -41741,16 +41737,6 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       </div>
       {tab === "회사정보" && (
         <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
-      )}
-      {tab === "ERP 관리" && (
-        <PCERPPage
-          userCompany={userCompany}
-          drivers={drivers}
-          clients={clients}
-          places={places}
-          dispatchData={dispatchData}
-          user={user}
-        />
       )}
       {tab === "내정보" && (
         <MyProfilePage
