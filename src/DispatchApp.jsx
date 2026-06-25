@@ -2728,6 +2728,10 @@ return (
             cardImageUploading={cardImageUploading}
             setCardImageUploading={setCardImageUploading}
             showAlert={showAlert}
+            drivers={drivers}
+            clients={clients}
+            places={places}
+            dispatchData={dispatchData}
           />
         )}
 
@@ -41717,13 +41721,13 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 }
 
 // ─────────── 회사관리 탭 래퍼 ───────────
-function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
+function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert, drivers = [], clients = [], places = [], dispatchData = [] }) {
   const [tab, setTab] = React.useState("회사정보");
-  const tabs = ["회사정보", "내정보"];
+  const tabs = ["회사정보", "ERP 관리", "내정보"];
 
   return (
     <div>
-      <div className="flex gap-2 px-4 pt-4 pb-0">
+      <div className="flex gap-2 px-4 pt-4 pb-0 flex-wrap">
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
@@ -41737,6 +41741,16 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       </div>
       {tab === "회사정보" && (
         <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
+      )}
+      {tab === "ERP 관리" && (
+        <PCERPPage
+          userCompany={userCompany}
+          drivers={drivers}
+          clients={clients}
+          places={places}
+          dispatchData={dispatchData}
+          user={user}
+        />
       )}
       {tab === "내정보" && (
         <MyProfilePage
@@ -41752,6 +41766,223 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
           role={role}
         />
       )}
+    </div>
+  );
+}
+
+// ─────────── PC ERP 관리 ───────────
+function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], dispatchData = [], user }) {
+  const [subPage, setSubPage] = React.useState(null);
+  const [search, setSearch] = React.useState("");
+  const accent = "#1B2B4B";
+
+  const allClients = [...clients, ...places].filter((c, i, arr) =>
+    c.거래처명 && arr.findIndex(x => x.거래처명 === c.거래처명) === i
+  );
+
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const monthOrders = dispatchData.filter(o => (o.상차일||"").startsWith(thisMonth));
+  const monthRevenue = monthOrders.reduce((s,o)=>s+Number(o.청구운임||0),0);
+  const monthDriverFee = monthOrders.reduce((s,o)=>s+Number(o.기사운임||0),0);
+
+  // ── 급여관리 ──
+  const [payYear, setPayYear] = React.useState(now.getFullYear());
+  const [payMonth, setPayMonth] = React.useState(now.getMonth()+1);
+  const payMonthStr = `${payYear}-${String(payMonth).padStart(2,"0")}`;
+  const payOrders = dispatchData.filter(o=>(o.상차일||"").startsWith(payMonthStr)&&o.이름);
+  const payByDriver = {};
+  payOrders.forEach(o=>{
+    const n=o.이름||"-";
+    if(!payByDriver[n]) payByDriver[n]={name:n,carNo:o.차량번호||"",phone:o.전화번호||"",cnt:0,운임:0};
+    payByDriver[n].cnt++;
+    payByDriver[n].운임+=Number(o.기사운임||0);
+  });
+  const payRows = Object.values(payByDriver).sort((a,b)=>b.운임-a.운임);
+
+  const ERPCard = ({ title, icon, badge, sub, onClick }) => (
+    <div onClick={onClick} className="bg-white border border-gray-200 rounded-2xl p-5 cursor-pointer hover:shadow-md hover:border-[#1B2B4B]/30 transition-all" style={{ minHeight: 100 }}>
+      <div className="flex items-start justify-between mb-3">
+        <div style={{ width:44,height:44,borderRadius:12,background:accent+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>{icon}</div>
+        {badge!=null && badge>0 && <span style={{ background:accent,color:"#fff",fontSize:11,fontWeight:700,borderRadius:20,padding:"2px 10px" }}>{badge}</span>}
+      </div>
+      <div style={{ fontSize:15,fontWeight:700,color:"#111" }}>{title}</div>
+      <div style={{ fontSize:12,color:"#9ca3af",marginTop:3 }}>{sub}</div>
+    </div>
+  );
+
+  if (subPage === "직원관리") {
+    const [employees, setEmployees] = React.useState([]);
+    React.useEffect(()=>{
+      if(!userCompany) return;
+      const q = query(collection(db,"users"),where("company","==",userCompany));
+      const unsub = onSnapshot(q,snap=>setEmployees(snap.docs.map(d=>({id:d.id,...d.data()}))));
+      return ()=>unsub();
+    },[userCompany]);
+    return (
+      <div className="p-6">
+        <button onClick={()=>setSubPage(null)} className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold mb-5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
+        </button>
+        <h3 className="text-[17px] font-bold text-gray-900 mb-4">직원관리</h3>
+        {!employees.length ? <div className="text-gray-400 text-[13px]">등록된 직원이 없습니다</div> : (
+          <div className="grid grid-cols-2 gap-3">
+            {employees.map(emp=>(
+              <div key={emp.id} style={{ background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:"16px 18px",display:"flex",alignItems:"center",gap:12 }}>
+                <div style={{ width:44,height:44,borderRadius:"50%",background:accent,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:18,fontWeight:700,flexShrink:0 }}>
+                  {(emp.name||emp.displayName||"?").charAt(0)}
+                </div>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontSize:14,fontWeight:700,color:"#111" }}>{emp.name||emp.displayName||"-"}</div>
+                  <div style={{ fontSize:12,color:"#9ca3af",marginTop:2 }}>{emp.email||"-"}</div>
+                </div>
+                <span style={{ fontSize:11,fontWeight:700,color:accent,background:accent+"15",padding:"4px 10px",borderRadius:20,flexShrink:0 }}>{emp.role||"일반"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (subPage === "차량관리") {
+    const filtered = drivers.filter(d=>!search||(d.이름||"").includes(search)||(d.차량번호||"").includes(search));
+    return (
+      <div className="p-6">
+        <button onClick={()=>setSubPage(null)} className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold mb-5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
+        </button>
+        <div className="flex items-center gap-3 mb-4">
+          <h3 className="text-[17px] font-bold text-gray-900">차량관리</h3>
+          <span style={{ background:accent+"15",color:accent,fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20 }}>{drivers.length}대</span>
+        </div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="기사명 · 차량번호 검색"
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]" style={{ maxWidth:360 }} />
+        <div className="grid grid-cols-2 gap-3">
+          {filtered.map((d,i)=>(
+            <div key={d.id||i} style={{ background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:12 }}>
+              <div style={{ width:42,height:42,borderRadius:12,background:accent+"15",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+              </div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontSize:14,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.차량번호||"-"}</div>
+                <div style={{ fontSize:12,color:"#6b7280",marginTop:2 }}>{d.이름||"-"}{d.전화번호?` · ${d.전화번호}`:""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (subPage === "거래처관리") {
+    const filtered = allClients.filter(c=>!search||(c.거래처명||"").includes(search));
+    const cnt = (name)=>dispatchData.filter(o=>o.거래처명===name).length;
+    return (
+      <div className="p-6">
+        <button onClick={()=>setSubPage(null)} className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold mb-5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
+        </button>
+        <div className="flex items-center gap-3 mb-4">
+          <h3 className="text-[17px] font-bold text-gray-900">거래처관리</h3>
+          <span style={{ background:accent+"15",color:accent,fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20 }}>{allClients.length}곳</span>
+        </div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="거래처명 검색"
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]" style={{ maxWidth:360 }} />
+        <div className="grid grid-cols-2 gap-3">
+          {filtered.map((c,i)=>(
+            <div key={i} style={{ background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:12 }}>
+              <div style={{ width:42,height:42,borderRadius:12,background:accent+"15",display:"flex",alignItems:"center",justifyContent:"center",color:accent,fontSize:18,fontWeight:800,flexShrink:0 }}>
+                {(c.거래처명||"?").charAt(0)}
+              </div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontSize:14,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.거래처명}</div>
+                <div style={{ fontSize:12,color:"#9ca3af",marginTop:2 }}>{c.담당자||c.연락처||""}</div>
+              </div>
+              {cnt(c.거래처명)>0 && <span style={{ fontSize:11,fontWeight:700,color:accent,background:accent+"15",padding:"3px 9px",borderRadius:20,flexShrink:0 }}>{cnt(c.거래처명)}건</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (subPage === "급여관리") {
+    const total = payRows.reduce((s,r)=>s+r.운임,0);
+    return (
+      <div className="p-6">
+        <button onClick={()=>setSubPage(null)} className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold mb-5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
+        </button>
+        <div className="flex items-center gap-4 mb-5">
+          <h3 className="text-[17px] font-bold text-gray-900">급여관리</h3>
+          <div className="flex items-center gap-1.5">
+            <button onClick={()=>{let m=payMonth-1,y=payYear;if(m<1){m=12;y--;}setPayMonth(m);setPayYear(y);}} className="w-7 h-7 border border-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-50">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span className="text-[13px] font-bold text-gray-700 w-24 text-center">{payYear}년 {payMonth}월</span>
+            <button onClick={()=>{let m=payMonth+1,y=payYear;if(m>12){m=1;y++;}setPayMonth(m);setPayYear(y);}} className="w-7 h-7 border border-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-50">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,background:accent,borderRadius:16,padding:"18px 20px",marginBottom:20 }}>
+          {[{l:"총 지급운임",v:total.toLocaleString()+"원"},{l:"지급 기사",v:payRows.length+"명"},{l:"총 운행건",v:payOrders.length+"건"}].map(s=>(
+            <div key={s.l} style={{ textAlign:"center" }}>
+              <div style={{ color:"rgba(255,255,255,0.6)",fontSize:11,marginBottom:4 }}>{s.l}</div>
+              <div style={{ color:"#fff",fontSize:20,fontWeight:800 }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+        {!payRows.length ? <div className="text-gray-400 text-[13px]">이 달 운행 기록이 없습니다</div> : (
+          <table style={{ width:"100%",borderCollapse:"separate",borderSpacing:"0 6px" }}>
+            <thead><tr style={{ fontSize:11,color:"#9ca3af",textAlign:"left" }}>
+              <th style={{ padding:"0 12px 4px" }}>기사명</th><th>차량번호</th><th style={{ textAlign:"right" }}>운행건수</th><th style={{ textAlign:"right",paddingRight:12 }}>기사운임</th><th style={{ textAlign:"right",paddingRight:12 }}>건당평균</th>
+            </tr></thead>
+            <tbody>
+              {payRows.map((r,i)=>(
+                <tr key={i} style={{ background:"#fff",borderRadius:12 }}>
+                  <td style={{ padding:"12px 12px",fontSize:13,fontWeight:700,color:"#111",borderRadius:"12px 0 0 12px",border:"1px solid #f0f0f0",borderRight:"none" }}>{r.name}</td>
+                  <td style={{ padding:"12px 8px",fontSize:12,color:"#6b7280",border:"1px solid #f0f0f0",borderLeft:"none",borderRight:"none" }}>{r.carNo||"-"}</td>
+                  <td style={{ padding:"12px 8px",fontSize:13,fontWeight:600,color:"#374151",textAlign:"right",border:"1px solid #f0f0f0",borderLeft:"none",borderRight:"none" }}>{r.cnt}건</td>
+                  <td style={{ padding:"12px 12px",fontSize:14,fontWeight:800,color:accent,textAlign:"right",border:"1px solid #f0f0f0",borderLeft:"none",borderRight:"none" }}>{r.운임.toLocaleString()}원</td>
+                  <td style={{ padding:"12px 12px",fontSize:12,color:"#9ca3af",textAlign:"right",borderRadius:"0 12px 12px 0",border:"1px solid #f0f0f0",borderLeft:"none" }}>{Math.round(r.운임/r.cnt).toLocaleString()}원</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  }
+
+  // Hub
+  return (
+    <div className="p-6">
+      {/* 이달 요약 */}
+      <div style={{ background:accent,borderRadius:20,padding:"22px 24px",marginBottom:24,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16 }}>
+        {[
+          {l:`${now.getMonth()+1}월 매출`,v:(monthRevenue/10000).toFixed(0)+"만원",s:`${monthOrders.length}건`},
+          {l:"기사운임",v:(monthDriverFee/10000).toFixed(0)+"만원",s:"지급예정"},
+          {l:"수수료",v:((monthRevenue-monthDriverFee)/10000).toFixed(0)+"만원",s:"순이익"},
+          {l:"등록 차량",v:drivers.length+"대",s:"기사 등록"},
+        ].map(s=>(
+          <div key={s.l} style={{ background:"rgba(255,255,255,0.1)",borderRadius:14,padding:"16px 14px",textAlign:"center" }}>
+            <div style={{ color:"rgba(255,255,255,0.6)",fontSize:11,marginBottom:6 }}>{s.l}</div>
+            <div style={{ color:"#fff",fontSize:22,fontWeight:800 }}>{s.v}</div>
+            <div style={{ color:"rgba(255,255,255,0.5)",fontSize:11,marginTop:4 }}>{s.s}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <ERPCard title="직원관리" icon="👥" sub="임직원 현황 및 권한" onClick={()=>setSubPage("직원관리")} />
+        <ERPCard title="차량관리" icon="🚛" sub={`등록 차량 ${drivers.length}대`} badge={drivers.length} onClick={()=>setSubPage("차량관리")} />
+        <ERPCard title="거래처관리" icon="🏢" sub={`거래처 ${allClients.length}곳`} badge={allClients.length} onClick={()=>setSubPage("거래처관리")} />
+        <ERPCard title="급여관리" icon="💰" sub="월별 기사 운임 정산" onClick={()=>setSubPage("급여관리")} />
+        <ERPCard title="근태관리" icon="📋" sub="준비 중" onClick={()=>{}} />
+        <ERPCard title="운행일지" icon="📍" sub="준비 중" onClick={()=>{}} />
+      </div>
     </div>
   );
 }
