@@ -2301,6 +2301,7 @@ const title =
   : page === "settings" ? "설정"
   : page === "fleet" ? "지입차관리"
   : page === "intel" ? "경영인텔리전스"
+  : page === "erp" ? "ERP 회사관리"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -2593,7 +2594,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "erp"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -3587,10 +3588,23 @@ setOpenMemo={setOpenMemo}
             showSuccess={showSuccess}
             onLogout={logout}
             userCompany={userCompany}
+            onGoERP={() => setPage("erp")}
           />
         )}
         {page === "fleet" && <MobileFleetView />}
         {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
+        {page === "erp" && (
+          <MobileERPPage
+            onBack={() => setPage("list")}
+            cardVersionB={cardVersionB}
+            drivers={drivers}
+            clients={clients}
+            places={places}
+            orders={orders}
+            userCompany={userCompany}
+            user={currentUser}
+          />
+        )}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -5979,9 +5993,13 @@ const dropTime = order.하차시간 || "시간 없음";
             <span className="text-[0.75em] text-gray-500 truncate">
               {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
             </span>
-            <span className="text-[0.85em] font-bold text-gray-700 whitespace-nowrap shrink-0 ml-2">
-              {fmtMoney(claim)}
-            </span>
+            <div className="flex items-center gap-1 shrink-0 ml-2">
+              <span className="text-[0.72em] text-gray-400 font-semibold">청</span>
+              <span className="text-[0.85em] font-bold text-gray-700">{fmtMoney(claim)}</span>
+              <span className="text-[0.72em] text-gray-300 mx-0.5">/</span>
+              <span className="text-[0.72em] text-gray-400 font-semibold">기</span>
+              <span className="text-[0.85em] font-bold text-[#1B2B4B]">{fmtMoney(fee)}</span>
+            </div>
           </div>
 
           {/* 배차완료 시 기사 연락 */}
@@ -7034,6 +7052,24 @@ const handleAssignClick = () => {
         </div>
       )}
     </div>
+
+    {/* 배차방식/지급방식 */}
+    {(order.배차방식 || order.지급방식) && (
+      <div className="flex border-t border-gray-100">
+        {order.배차방식 && (
+          <div className={`flex-1 text-center py-2.5 ${order.지급방식 ? "border-r border-gray-100" : ""}`}>
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">배차방식</div>
+            <div className={`text-[12px] font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.배차방식}</div>
+          </div>
+        )}
+        {order.지급방식 && (
+          <div className="flex-1 text-center py-2.5">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">지급방식</div>
+            <div className={`text-[12px] font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.지급방식}</div>
+          </div>
+        )}
+      </div>
+    )}
 
     {/* 운임 정보 + 업체전달 */}
     <div className="px-4 py-3 border-b border-gray-100">
@@ -14404,7 +14440,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany, onGoERP }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const SectionHeader = ({ title }) => (
@@ -14480,6 +14516,26 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           />
         </div>
 
+        <SectionHeader title="ERP 회사관리" />
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+          {[
+            { label: "직원관리", sub: "임직원 현황 및 권한 관리", icon: "👥" },
+            { label: "차량관리", sub: "등록 차량 및 기사 현황", icon: "🚛" },
+            { label: "거래처관리", sub: "화주·거래처 정보 관리", icon: "🏢" },
+            { label: "급여관리", sub: "월별 기사 운임 정산", icon: "💰" },
+            { label: "근태관리", sub: "출퇴근·근무 현황", icon: "📋" },
+            { label: "운행일지", sub: "차량별 운행 기록", icon: "📍" },
+          ].map(item => (
+            <SettingRow
+              key={item.label}
+              label={item.label}
+              sub={item.sub}
+              onClick={() => onGoERP?.(item.label)}
+              right={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>}
+            />
+          ))}
+        </div>
+
         <SectionHeader title="데이터" />
         <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
           <SettingRow
@@ -14543,6 +14599,369 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           </div>
         </div>
       )}
+    </div>
+  );
+}
+// ── ERP 회사관리 ──────────────────────────────────────────────────────────────
+function MobileERPPage({ onBack, cardVersionB = false, drivers = [], clients = [], places = [], orders = [], userCompany = "", user }) {
+  const [subPage, setSubPage] = useState(null); // null = hub
+  const accent = cardVersionB ? "#1B2B4B" : "#2563eb";
+
+  const SectionCard = ({ title, sub, icon, onClick, badge }) => (
+    <button
+      onClick={onClick}
+      style={{ touchAction: "manipulation" }}
+      className="w-full flex items-center gap-3 px-4 py-4 bg-white border-b border-gray-50 active:bg-gray-50"
+    >
+      <div style={{ width: 44, height: 44, borderRadius: 12, background: accent + "15", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <span style={{ fontSize: 22 }}>{icon}</span>
+      </div>
+      <div className="flex-1 text-left min-w-0">
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{title}</div>
+        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{sub}</div>
+      </div>
+      {badge != null && badge > 0 && (
+        <span style={{ background: accent, color: "#fff", fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "2px 8px", flexShrink: 0 }}>{badge}</span>
+      )}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  );
+
+  // 통계
+  const totalOrders = orders.length;
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const monthOrders = orders.filter(o => (o.상차일 || "").startsWith(thisMonth));
+  const monthRevenue = monthOrders.reduce((s, o) => s + Number(o.청구운임 || 0), 0);
+  const monthDriverFee = monthOrders.reduce((s, o) => s + Number(o.기사운임 || 0), 0);
+  const monthProfit = monthRevenue - monthDriverFee;
+
+  const allClients = [...clients, ...places].filter((c, i, arr) =>
+    c.거래처명 && arr.findIndex(x => x.거래처명 === c.거래처명) === i
+  );
+
+  // subpage: 직원관리
+  if (subPage === "직원관리") {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <div style={{ background: accent, padding: "16px 16px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setSubPage(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", padding: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>직원관리</span>
+        </div>
+        <div className="flex-1 p-4">
+          <ERPEmployeeList cardVersionB={cardVersionB} userCompany={userCompany} accent={accent} />
+        </div>
+      </div>
+    );
+  }
+
+  // subpage: 차량관리
+  if (subPage === "차량관리") {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <div style={{ background: accent, padding: "16px 16px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setSubPage(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", padding: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>차량관리</span>
+        </div>
+        <div className="flex-1 p-4">
+          <ERPVehicleList drivers={drivers} cardVersionB={cardVersionB} accent={accent} />
+        </div>
+      </div>
+    );
+  }
+
+  // subpage: 거래처관리
+  if (subPage === "거래처관리") {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <div style={{ background: accent, padding: "16px 16px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setSubPage(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", padding: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>거래처관리</span>
+        </div>
+        <div className="flex-1 p-4">
+          <ERPClientList clients={allClients} orders={orders} cardVersionB={cardVersionB} accent={accent} />
+        </div>
+      </div>
+    );
+  }
+
+  // subpage: 급여관리
+  if (subPage === "급여관리") {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <div style={{ background: accent, padding: "16px 16px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setSubPage(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", padding: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>급여관리</span>
+        </div>
+        <div className="flex-1 p-4">
+          <ERPPayrollPage drivers={drivers} orders={orders} cardVersionB={cardVersionB} accent={accent} />
+        </div>
+      </div>
+    );
+  }
+
+  // stub pages
+  if (subPage === "근태관리" || subPage === "운행일지") {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <div style={{ background: accent, padding: "16px 16px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setSubPage(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", padding: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>{subPage}</span>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8">
+          <div style={{ width: 60, height: 60, borderRadius: 20, background: accent + "15", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>{subPage}</div>
+          <div style={{ fontSize: 13, color: "#9ca3af", textAlign: "center" }}>준비 중입니다.<br/>빠른 시일 내에 제공될 예정입니다.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-50">
+      {/* 이달 요약 */}
+      <div style={{ background: accent, padding: "20px 16px 24px" }}>
+        <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginBottom: 4 }}>{new Date().getFullYear()}년 {new Date().getMonth()+1}월 현황</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
+          {[
+            { label: "매출", value: (monthRevenue/10000).toFixed(0)+"만", sub: `${monthOrders.length}건` },
+            { label: "기사운임", value: (monthDriverFee/10000).toFixed(0)+"만", sub: "지급예정" },
+            { label: "수수료", value: (monthProfit/10000).toFixed(0)+"만", sub: "순이익" },
+          ].map(s => (
+            <div key={s.label} style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11, marginBottom: 4 }}>{s.label}</div>
+              <div style={{ color: "#fff", fontSize: 18, fontWeight: 800 }}>{s.value}</div>
+              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginTop: 2 }}>{s.sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 pb-10">
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", padding: "20px 16px 8px", letterSpacing: "0.05em" }}>ERP 메뉴</div>
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-white">
+          <SectionCard title="직원관리" sub={`등록 직원 현황`} icon="👥" onClick={() => setSubPage("직원관리")} />
+          <SectionCard title="차량관리" sub={`등록 차량 ${drivers.length}대`} icon="🚛" badge={drivers.length} onClick={() => setSubPage("차량관리")} />
+          <SectionCard title="거래처관리" sub={`거래처 ${allClients.length}곳`} icon="🏢" badge={allClients.length} onClick={() => setSubPage("거래처관리")} />
+          <SectionCard title="급여관리" sub="월별 기사 운임 정산" icon="💰" onClick={() => setSubPage("급여관리")} />
+          <SectionCard title="근태관리" sub="출퇴근·근무 현황" icon="📋" onClick={() => setSubPage("근태관리")} />
+          <SectionCard title="운행일지" sub="차량별 운행 기록" icon="📍" onClick={() => setSubPage("운행일지")} />
+        </div>
+
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", padding: "20px 16px 8px", letterSpacing: "0.05em" }}>누적 현황</div>
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-white">
+          <div className="grid grid-cols-3 divide-x divide-gray-100">
+            {[
+              { label: "총 오더", value: totalOrders.toLocaleString(), unit: "건" },
+              { label: "차량", value: drivers.length, unit: "대" },
+              { label: "거래처", value: allClients.length, unit: "곳" },
+            ].map(s => (
+              <div key={s.label} style={{ padding: "16px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>{s.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: accent }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{s.unit}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ERP 직원관리
+function ERPEmployeeList({ userCompany, cardVersionB, accent }) {
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userCompany) { setLoading(false); return; }
+    const q = query(collection(db, "users"), where("company", "==", userCompany));
+    const unsub = onSnapshot(q, snap => {
+      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, () => setLoading(false));
+    return () => unsub();
+  }, [userCompany]);
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: "#9ca3af", fontSize: 13 }}>불러오는 중...</div>;
+  if (!employees.length) return <div style={{ textAlign: "center", padding: 40, color: "#9ca3af", fontSize: 13 }}>등록된 직원이 없습니다</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {employees.map(emp => (
+        <div key={emp.id} style={{ background: "#fff", borderRadius: 14, border: "1px solid #f0f0f0", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 700, flexShrink: 0 }}>
+            {(emp.name || emp.displayName || "?").charAt(0)}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{emp.name || emp.displayName || "-"}</div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{emp.email || "-"}</div>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: accent, background: accent + "15", padding: "4px 10px", borderRadius: 20 }}>
+            {emp.role || "일반"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ERP 차량관리
+function ERPVehicleList({ drivers, cardVersionB, accent }) {
+  const [search, setSearch] = useState("");
+  const filtered = drivers.filter(d =>
+    !search || (d.이름 || "").includes(search) || (d.차량번호 || "").includes(search)
+  );
+
+  return (
+    <div>
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="기사명 · 차량번호 검색"
+        style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 14px", fontSize: 13, marginBottom: 12, outline: "none", boxSizing: "border-box" }}
+      />
+      {!filtered.length
+        ? <div style={{ textAlign: "center", padding: 40, color: "#9ca3af", fontSize: 13 }}>등록된 차량이 없습니다</div>
+        : filtered.map((d, i) => (
+          <div key={d.id || i} style={{ background: "#fff", borderRadius: 14, border: "1px solid #f0f0f0", padding: "14px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: accent + "15", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{d.차량번호 || "-"}</div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{d.이름 || "-"} {d.전화번호 ? `· ${d.전화번호}` : ""}</div>
+            </div>
+            {d.전화번호 && (
+              <a href={`tel:${d.전화번호}`} style={{ width: 36, height: 36, borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
+              </a>
+            )}
+          </div>
+        ))
+      }
+    </div>
+  );
+}
+
+// ERP 거래처관리
+function ERPClientList({ clients, orders, cardVersionB, accent }) {
+  const [search, setSearch] = useState("");
+  const filtered = clients.filter(c => !search || (c.거래처명 || "").includes(search));
+
+  const orderCount = (name) => orders.filter(o => o.거래처명 === name).length;
+
+  return (
+    <div>
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="거래처명 검색"
+        style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 14px", fontSize: 13, marginBottom: 12, outline: "none", boxSizing: "border-box" }}
+      />
+      {!filtered.length
+        ? <div style={{ textAlign: "center", padding: 40, color: "#9ca3af", fontSize: 13 }}>등록된 거래처가 없습니다</div>
+        : filtered.map((c, i) => {
+          const cnt = orderCount(c.거래처명);
+          return (
+            <div key={i} style={{ background: "#fff", borderRadius: 14, border: "1px solid #f0f0f0", padding: "14px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: accent + "15", display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+                {(c.거래처명 || "?").charAt(0)}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.거래처명}</div>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{c.담당자 || c.연락처 || ""}</div>
+              </div>
+              {cnt > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: accent, background: accent + "15", padding: "4px 10px", borderRadius: 20, flexShrink: 0 }}>
+                  {cnt}건
+                </span>
+              )}
+            </div>
+          );
+        })
+      }
+    </div>
+  );
+}
+
+// ERP 급여관리
+function ERPPayrollPage({ drivers, orders, cardVersionB, accent }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+
+  const monthStr = `${year}-${String(month).padStart(2, "0")}`;
+  const monthOrders = orders.filter(o => (o.상차일 || "").startsWith(monthStr) && o.이름);
+
+  const byDriver = {};
+  monthOrders.forEach(o => {
+    const name = o.이름 || "-";
+    if (!byDriver[name]) byDriver[name] = { name, carNo: o.차량번호 || "", phone: o.전화번호 || "", cnt: 0, 기사운임: 0 };
+    byDriver[name].cnt += 1;
+    byDriver[name].기사운임 += Number(o.기사운임 || 0);
+  });
+  const rows = Object.values(byDriver).sort((a, b) => b.기사운임 - a.기사운임);
+  const total = rows.reduce((s, r) => s + r.기사운임, 0);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <button onClick={() => { let m = month - 1; let y = year; if (m < 1) { m = 12; y--; } setMonth(m); setYear(y); }}
+          style={{ width: 36, height: 36, border: "1px solid #e5e7eb", borderRadius: 10, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div style={{ flex: 1, textAlign: "center", fontSize: 15, fontWeight: 700, color: "#111" }}>{year}년 {month}월</div>
+        <button onClick={() => { let m = month + 1; let y = year; if (m > 12) { m = 1; y++; } setMonth(m); setYear(y); }}
+          style={{ width: 36, height: 36, border: "1px solid #e5e7eb", borderRadius: 10, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <div style={{ background: accent, borderRadius: 16, padding: "16px", marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>총 지급운임</div>
+          <div style={{ color: "#fff", fontSize: 20, fontWeight: 800, marginTop: 4 }}>{total.toLocaleString()}원</div>
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>지급 기사</div>
+          <div style={{ color: "#fff", fontSize: 20, fontWeight: 800, marginTop: 4 }}>{rows.length}명</div>
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>총 운행건</div>
+          <div style={{ color: "#fff", fontSize: 20, fontWeight: 800, marginTop: 4 }}>{monthOrders.length}건</div>
+        </div>
+      </div>
+
+      {!rows.length
+        ? <div style={{ textAlign: "center", padding: 40, color: "#9ca3af", fontSize: 13 }}>이 달 운행 기록이 없습니다</div>
+        : rows.map((r, i) => (
+          <div key={i} style={{ background: "#fff", borderRadius: 14, border: "1px solid #f0f0f0", padding: "14px 16px", marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{r.name} <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 400 }}>{r.carNo}</span></div>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{r.cnt}건 운행</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: accent }}>{r.기사운임.toLocaleString()}원</div>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>건당 {Math.round(r.기사운임 / r.cnt).toLocaleString()}원</div>
+              </div>
+            </div>
+          </div>
+        ))
+      }
     </div>
   );
 }
