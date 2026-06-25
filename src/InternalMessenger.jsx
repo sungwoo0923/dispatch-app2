@@ -67,7 +67,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     if (onOpenChange) onOpenChange(val);
     else setInternalOpen(val);
   };
-  const [view, setView] = useState("friends"); // friends | chat | profile | newGroup | search
+  const [view, setView] = useState("friends"); // friends | chat | profile
   const [myProfile, setMyProfile] = useState(null);
   const [friends, setFriends] = useState([]); // all users in same company
   const [rooms, setRooms] = useState([]);
@@ -95,6 +95,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const [contactPickModal, setContactPickModal] = useState(false);
   const [noticeInput, setNoticeInput] = useState("");
   const [showNoticeInput, setShowNoticeInput] = useState(false);
+  // 메시지 보내야 방 생성 (lazy room creation)
+  const [pendingRoom, setPendingRoom] = useState(null);
+  // 답장 기능
+  const [replyTo, setReplyTo] = useState(null); // { id, text, senderName }
 
   const msgUnsub = useRef(null);
   const inputRef = useRef(null);
@@ -257,7 +261,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   useEffect(() => {
     const visible = mobileMode
       ? (mobileVisible && view === "chat")
-      : (open && view === "chat");
+      : (open && (activeRoom !== null));
     isVisibleRef.current = visible;
     // 채팅창이 새로 보이게 되면 즉시 읽음 처리
     if (visible && activeRoom) markRead(activeRoom.id);
@@ -285,26 +289,45 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }).catch(() => {});
   }, [myUid]);
 
-  // ── 1:1 채팅 시작 ──
-  const openDM = async (friend) => {
+  // ── 1:1 채팅 시작 (메시지 보내야 방 생성) ──
+  const openDM = (friend) => {
     const existing = rooms.find(r => r.type === "dm" && r.members.includes(friend.uid) && r.members.length === 2);
-    if (existing) { setActiveRoom(existing); setView("chat"); return; }
-    const roomRef = await addDoc(collection(db, ROOMS_COLL), {
-      type: "dm",
-      members: [myUid, friend.uid],
-      memberProfiles: {
-        [myUid]: { name: myProfile?.name || myEmail.split("@")[0], photo: myProfile?.photo || "" },
-        [friend.uid]: { name: friend.name, photo: friend.photo || "" },
+    if (existing) { setActiveRoom(existing); setPendingRoom(null); if (mobileMode) setView("chat"); return; }
+    setActiveRoom(null);
+    setPendingRoom({
+      displayName: friend.name,
+      displayPhoto: friend.photo || "",
+      roomData: {
+        type: "dm",
+        members: [myUid, friend.uid],
+        memberProfiles: {
+          [myUid]: { name: myProfile?.name || myEmail.split("@")[0], photo: myProfile?.photo || "" },
+          [friend.uid]: { name: friend.name, photo: friend.photo || "" },
+        },
+        company, lastMsg: "", lastAt: serverTimestamp(), lastSenderUid: "",
+        [`lastRead.${myUid}`]: serverTimestamp(), [`unreadCount.${myUid}`]: 0,
       },
-      company,
-      lastMsg: "",
-      lastAt: serverTimestamp(),
-      lastSenderUid: "",
-      [`lastRead.${myUid}`]: serverTimestamp(),
-      [`unreadCount.${myUid}`]: 0,
     });
-    setActiveRoom({ id: roomRef.id, type: "dm", members: [myUid, friend.uid], memberProfiles: {} });
-    setView("chat");
+    if (mobileMode) setView("chat");
+  };
+
+  // ── 나에게 쓰기 ──
+  const openSelf = () => {
+    const existing = rooms.find(r => r.type === "self" && r.members?.includes(myUid) && r.members.length === 1);
+    if (existing) { setActiveRoom(existing); setPendingRoom(null); if (mobileMode) setView("chat"); return; }
+    setActiveRoom(null);
+    setPendingRoom({
+      displayName: "나에게",
+      displayPhoto: myProfile?.photo || "",
+      roomData: {
+        type: "self",
+        members: [myUid],
+        memberProfiles: { [myUid]: { name: myProfile?.name || "나", photo: myProfile?.photo || "" } },
+        company, lastMsg: "", lastAt: serverTimestamp(), lastSenderUid: "",
+        [`lastRead.${myUid}`]: serverTimestamp(), [`unreadCount.${myUid}`]: 0,
+      },
+    });
+    if (mobileMode) setView("chat");
   };
 
   // ── 단체 채팅방 만들기 ──
@@ -334,86 +357,117 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     setView("chat");
   };
 
-  // ── 메시지 전송 (optimistic update - 딜레이 없이 즉시 표시) ──
-  const sendMessage = () => {
-    if (!input.trim() || !activeRoom) return;
+  // ── 메시지 전송 (pendingRoom이면 방 먼저 생성, optimistic update) ──
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    if (!activeRoom && !pendingRoom) return;
     const text = input.trim();
     setInput("");
     const senderName = myProfile?.name || myEmail.split("@")[0];
     const now = new Date();
+    const replyData = replyTo ? { replyToId: replyTo.id, replyToText: replyTo.text?.slice(0,80) || "", replyToSender: replyTo.senderName } : {};
+    if (replyTo) setReplyTo(null);
+
+    let room = activeRoom;
+
+    // pendingRoom: 첫 메시지 보낼 때 방 생성
+    if (!room && pendingRoom) {
+      try {
+        const roomRef = await addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData);
+        room = { id: roomRef.id, ...pendingRoom.roomData };
+        setActiveRoom(room);
+        setPendingRoom(null);
+      } catch { return; }
+    }
+    if (!room) return;
 
     // 즉시 로컬 상태에 추가
     const tempId = `_opt_${Date.now()}`;
     setMessages(prev => [...prev, {
       id: tempId, _optimistic: true,
-      roomId: activeRoom.id, text, type: "text",
+      roomId: room.id, text, type: "text",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: { toMillis: () => now.getTime(), toDate: () => now },
       edited: false, readBy: [myUid],
-      totalMembers: activeRoom.members?.length || 1,
+      totalMembers: room.members?.length || 1,
+      ...replyData,
     }]);
 
-    const others = activeRoom.members?.filter(uid => uid !== myUid) || [];
-    // fire-and-forget
+    const others = room.members?.filter(uid => uid !== myUid) || [];
     addDoc(collection(db, MSGS_COLL), {
-      roomId: activeRoom.id, text, type: "text",
+      roomId: room.id, text, type: "text",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), edited: false,
-      readBy: [myUid],
-      totalMembers: activeRoom.members?.length || 1,
+      readBy: [myUid], totalMembers: room.members?.length || 1,
+      ...replyData,
     }).catch(() => {});
     const unreadUpdate = {};
     others.forEach(uid => { unreadUpdate[`unreadCount.${uid}`] = increment(1); });
-    updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+    updateDoc(doc(db, ROOMS_COLL, room.id), {
       lastMsg: text, lastAt: serverTimestamp(), lastSenderUid: myUid,
-      [`lastRead.${myUid}`]: serverTimestamp(),
-      ...unreadUpdate,
+      [`lastRead.${myUid}`]: serverTimestamp(), ...unreadUpdate,
     }).catch(() => {});
   };
 
   // ── 이미지 전송 ──
   const sendImage = async (file) => {
-    if (!file || !activeRoom) return;
-    const path = `chat_images/${activeRoom.id}/${Date.now()}_${file.name}`;
+    if (!file) return;
+    let room = activeRoom;
+    if (!room && pendingRoom) {
+      try {
+        const roomRef = await addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData);
+        room = { id: roomRef.id, ...pendingRoom.roomData };
+        setActiveRoom(room); setPendingRoom(null);
+      } catch { return; }
+    }
+    if (!room) return;
+    const path = `chat_images/${room.id}/${Date.now()}_${file.name}`;
     const snap = await uploadBytes(storageRef(storage, path), file);
     const url = await getDownloadURL(snap.ref);
     const senderName = myProfile?.name || myEmail.split("@")[0];
     await addDoc(collection(db, MSGS_COLL), {
-      roomId: activeRoom.id, text: "", type: "image", imageUrl: url,
+      roomId: room.id, text: "", type: "image", imageUrl: url,
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), readBy: [myUid],
-      totalMembers: activeRoom.members?.length || 1,
+      totalMembers: room.members?.length || 1,
     });
-    const others2 = activeRoom.members?.filter(uid => uid !== myUid) || [];
+    const others2 = room.members?.filter(uid => uid !== myUid) || [];
     const unreadUpdate2 = {};
     others2.forEach(uid => { unreadUpdate2[`unreadCount.${uid}`] = increment(1); });
-    await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+    await updateDoc(doc(db, ROOMS_COLL, room.id), {
       lastMsg: "[사진]", lastAt: serverTimestamp(), lastSenderUid: myUid,
-      [`lastRead.${myUid}`]: serverTimestamp(),
-      ...unreadUpdate2,
+      [`lastRead.${myUid}`]: serverTimestamp(), ...unreadUpdate2,
     }).catch(() => {});
   };
 
   // ── 파일 전송 ──
   const sendFile = async (file) => {
-    if (!file || !activeRoom) return;
+    if (!file) return;
+    let room = activeRoom;
+    if (!room && pendingRoom) {
+      try {
+        const roomRef = await addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData);
+        room = { id: roomRef.id, ...pendingRoom.roomData };
+        setActiveRoom(room); setPendingRoom(null);
+      } catch { return; }
+    }
+    if (!room) return;
     setFileUploading(true);
     try {
-      const path = `chat_files/${activeRoom.id}/${Date.now()}_${file.name}`;
+      const path = `chat_files/${room.id}/${Date.now()}_${file.name}`;
       const snap = await uploadBytes(storageRef(storage, path), file);
       const url = await getDownloadURL(snap.ref);
       const senderName = myProfile?.name || myEmail.split("@")[0];
-      const others = activeRoom.members?.filter(u => u !== myUid) || [];
+      const others = room.members?.filter(u => u !== myUid) || [];
       await addDoc(collection(db, MSGS_COLL), {
-        roomId: activeRoom.id, text: file.name, type: "file",
+        roomId: room.id, text: file.name, type: "file",
         fileUrl: url, fileName: file.name, fileSize: file.size,
         senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
-        createdAt: serverTimestamp(), readBy: [myUid],
-        totalMembers: activeRoom.members?.length || 1,
+        createdAt: serverTimestamp(), readBy: [myUid], totalMembers: room.members?.length || 1,
       });
       const upd = {};
       others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
-      await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+      await updateDoc(doc(db, ROOMS_COLL, room.id), {
         lastMsg: `[파일] ${file.name}`, lastAt: serverTimestamp(), lastSenderUid: myUid,
         [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
       }).catch(() => {});
@@ -537,6 +591,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
   // ── 채팅방 이름 (DM이면 상대방 이름) ──
   const getRoomName = (room) => {
+    if (!room) return "";
+    if (room.type === "self") return "나에게";
     if (room.type === "dm") {
       const otherUid = room.members?.find(uid => uid !== myUid);
       return room.memberProfiles?.[otherUid]?.name || "알 수 없음";
@@ -544,6 +600,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     return room.name || "그룹";
   };
   const getRoomPhoto = (room) => {
+    if (!room) return "";
+    if (room.type === "self") return myProfile?.photo || "";
     if (room.type === "dm") {
       const otherUid = room.members?.find(uid => uid !== myUid);
       return room.memberProfiles?.[otherUid]?.photo || "";
@@ -565,18 +623,26 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const PANEL_H = 580;
   const BTN_BOTTOM = 152;
 
+  // pendingRoom일 때 표시용 가상 room 객체
+  const displayRoom = activeRoom || (pendingRoom ? {
+    id: null,
+    type: pendingRoom.roomData.type,
+    members: pendingRoom.roomData.members,
+    memberProfiles: pendingRoom.roomData.memberProfiles,
+  } : null);
+
   // ── 공통 ChatView props ──
-  const chatViewProps = activeRoom ? {
-    room: activeRoom,
-    roomName: getRoomName(activeRoom),
-    roomPhoto: getRoomPhoto(activeRoom),
+  const chatViewProps = displayRoom ? {
+    room: displayRoom,
+    roomName: activeRoom ? getRoomName(activeRoom) : (pendingRoom?.displayName || ""),
+    roomPhoto: activeRoom ? getRoomPhoto(activeRoom) : (pendingRoom?.displayPhoto || ""),
     messages: filteredMsgs,
     myUid,
     myProfile,
     input,
     setInput,
     onSend: sendMessage,
-    onBack: () => { setActiveRoom(null); if (mobileMode) setView("friends"); },
+    onBack: () => { setActiveRoom(null); setPendingRoom(null); if (mobileMode) setView("friends"); },
     onClose: mobileMode ? onClose : () => setOpen(false),
     editMsg, setEditMsg, editText, setEditText,
     onSaveEdit: saveEdit,
@@ -589,13 +655,16 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onSendNotice: () => setShowNoticeInput(true),
     fileUploading, friends, mobileMode,
     themeHdr, themeMyBubble, themeChatBg,
+    replyTo, setReplyTo,
+    onReply: (msg) => setReplyTo({ id: msg.id, text: msg.text, senderName: msg.senderName }),
   } : null;
 
   const friendsViewProps = {
     myProfile, friends, rooms, unreadMap, totalUnread,
     getRoomName, getRoomPhoto,
     onOpenDM: openDM,
-    onOpenRoom: (room) => { setActiveRoom(room); if (mobileMode) setView("chat"); },
+    onOpenSelf: openSelf,
+    onOpenRoom: (room) => { setActiveRoom(room); setPendingRoom(null); if (mobileMode) setView("chat"); },
     onOpenProfile: () => setView("profile"),
     onOpenPeerProfile: (f) => setProfileView(f),
     onNewGroup: () => setNewGroupModal(true),
@@ -603,7 +672,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onLeaveRoom: leaveRoom,
     myUid, mobileMode,
     themeHdr,
-    activeRoomId: activeRoom?.id,
+    activeRoomId: activeRoom?.id || (pendingRoom ? "_pending_" : null),
   };
 
   // ── PC: 좌우 분할 레이아웃 ──
@@ -643,7 +712,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       </div>
       {/* 오른쪽: 채팅 */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {activeRoom && chatViewProps ? (
+        {(activeRoom || pendingRoom) && chatViewProps ? (
           <ChatView {...chatViewProps} />
         ) : (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#9ca3af", gap: 12 }}>
@@ -659,7 +728,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const mobileContent = (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "#fff", fontFamily: "'Noto Sans KR', sans-serif" }}>
       {view === "friends" && <FriendsView {...friendsViewProps} />}
-      {view === "chat" && activeRoom && chatViewProps && <ChatView {...chatViewProps} />}
+      {view === "chat" && (activeRoom || pendingRoom) && chatViewProps && <ChatView {...chatViewProps} />}
       {view === "profile" && (
         <ProfileView
           myProfile={myProfile}
@@ -1017,8 +1086,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 }
 
 // ════════════════ 친구 목록 뷰 ════════════════
-function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, themeHdr, activeRoomId }) {
-  const [tab, setTab] = useState("chats"); // chats | friends
+function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, themeHdr, activeRoomId }) {
+  const [tab, setTab] = useState("friends"); // friends | chats
   const [search, setSearch] = useState("");
   const [contextMenu, setContextMenu] = useState(null); // { room, x, y }
   const longPressTimer = useRef(null);
@@ -1066,7 +1135,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
         </div>
         {/* 탭 */}
         <div style={{ display: "flex", gap: 0 }}>
-          {[["chats","채팅"], ["friends","친구"]].map(([t, l]) => (
+          {[["friends","친구"], ["chats","채팅"]].map(([t, l]) => (
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: "8px 0", border: "none", cursor: "pointer",
               background: "none", color: tab === t ? "#fff" : "rgba(255,255,255,0.5)",
@@ -1074,7 +1143,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
               borderBottom: tab === t ? "2px solid #fff" : "2px solid transparent",
               transition: "all 0.15s",
             }}>
-              {l}{t === "chats" && totalUnread > 0 ? ` (${totalUnread})` : ""}
+              {l}{t === "chats" && totalUnread > 0 ? <span style={{ marginLeft: 4, background: "#ef4444", color: "#fff", borderRadius: 10, fontSize: 10, padding: "1px 5px", fontWeight: 700 }}>{totalUnread}</span> : ""}
             </button>
           ))}
         </div>
@@ -1148,6 +1217,19 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
               </div>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </div>
+            {/* 나에게 */}
+            <div onClick={onOpenSelf}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
+              onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div style={{ width: 40, height: 40, borderRadius: "30%", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>나에게</div>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>메모, 링크, 파일 저장</div>
+              </div>
+            </div>
             <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               친구 {filteredFriends.length}명
             </div>
@@ -1216,7 +1298,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply }) {
   const [showSearch, setShowSearch] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
@@ -1224,7 +1306,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
   const fileInputRef = useRef(null);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
       {/* 헤더 */}
       <div style={{ background: themeHdr, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
@@ -1362,18 +1444,33 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           <button onClick={() => setEditMsg(null)} style={{ background: "#e5e7eb", color: "#374151", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, cursor: "pointer" }}>취소</button>
                         </div>
                       ) : (
-                        <div
-                          style={{
-                            padding: "8px 12px",
-                            borderRadius: isMine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                            background: isMine ? themeMyBubble : "#fff",
-                            color: isMine ? "#fff" : "#111827",
-                            fontSize: 13, lineHeight: 1.5,
-                            wordBreak: "break-word", whiteSpace: "pre-wrap",
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                          }}>
-                          {msg.text}
-                          {msg.edited && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 4 }}>(수정됨)</span>}
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          {/* 답장 인용 */}
+                          {msg.replyToText && (
+                            <div style={{
+                              padding: "5px 10px", marginBottom: 2,
+                              borderRadius: isMine ? "10px 10px 0 0" : "10px 10px 0 0",
+                              background: isMine ? "rgba(255,255,255,0.15)" : "#f1f5f9",
+                              borderLeft: `3px solid ${isMine ? "rgba(255,255,255,0.5)" : themeMyBubble}`,
+                              maxWidth: 220,
+                            }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: isMine ? "rgba(255,255,255,0.7)" : themeMyBubble, marginBottom: 1 }}>{msg.replyToSender}</div>
+                              <div style={{ fontSize: 11, color: isMine ? "rgba(255,255,255,0.6)" : "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>{msg.replyToText}</div>
+                            </div>
+                          )}
+                          <div
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: isMine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                              background: isMine ? themeMyBubble : "#fff",
+                              color: isMine ? "#fff" : "#111827",
+                              fontSize: 13, lineHeight: 1.5,
+                              wordBreak: "break-word", whiteSpace: "pre-wrap",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                            }}>
+                            {msg.text}
+                            {msg.edited && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 4 }}>(수정됨)</span>}
+                          </div>
                         </div>
                       )}
                       {/* 시간 + 액션 */}
@@ -1390,12 +1487,16 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                             }
                             return <span style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>;
                           })()}
-                          {isMine && msg.type !== "deleted" && (
+                          {msg.type !== "deleted" && (
                             <div style={{ display: "flex", gap: 2 }}>
-                              <button onClick={() => { setEditMsg(msg); setEditText(msg.text); }}
-                                style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>수정</button>
-                              <button onClick={() => onDeleteMsg(msg.id)}
-                                style={{ background: "none", border: "none", color: "#fca5a5", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>삭제</button>
+                              <button onClick={() => onReply?.(msg)}
+                                style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>답장</button>
+                              {isMine && <>
+                                <button onClick={() => { setEditMsg(msg); setEditText(msg.text); }}
+                                  style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>수정</button>
+                                <button onClick={() => onDeleteMsg(msg.id)}
+                                  style={{ background: "none", border: "none", color: "#fca5a5", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>삭제</button>
+                              </>}
                             </div>
                           )}
                         </div>
@@ -1443,6 +1544,19 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         </div>
       )}
 
+      {/* 답장 미리보기 */}
+      {replyTo && (
+        <div style={{ padding: "6px 12px 4px", background: "#f8fafc", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <div style={{ width: 3, alignSelf: "stretch", background: themeMyBubble, borderRadius: 2, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: themeMyBubble }}>{replyTo.senderName}에게 답장</div>
+            <div style={{ fontSize: 12, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyTo.text || "[미디어]"}</div>
+          </div>
+          <button onMouseDown={e => e.preventDefault()} onTouchStart={e => e.preventDefault()} onTouchEnd={e => { e.stopPropagation(); setReplyTo(null); }} onClick={() => setReplyTo(null)}
+            style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 16, cursor: "pointer", padding: "0 4px" }}>✕</button>
+        </div>
+      )}
+
       {/* 입력창 */}
       <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: showAttachMenu ? "none" : "1px solid #e5e7eb", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
@@ -1463,6 +1577,9 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
             placeholder="메시지 입력..."
             rows={1}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="sentences"
             style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13, color: "#111827", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }}
           />
           <button

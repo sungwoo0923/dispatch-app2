@@ -2618,7 +2618,7 @@ const title =
   />
 )}
 {/* 모바일 메신저 - 항상 마운트하여 unread count 추적, mobileVisible로 UI 표시 제어 */}
-<div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", visibility: showMobileMessenger ? "visible" : "hidden", pointerEvents: showMobileMessenger ? "auto" : "none" }}>
+<div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMobileMessenger ? "visible" : "hidden", pointerEvents: showMobileMessenger ? "auto" : "none" }}>
   <InternalMessenger
     user={user}
     userCompany={userCompany || localStorage.getItem("userCompany") || ""}
