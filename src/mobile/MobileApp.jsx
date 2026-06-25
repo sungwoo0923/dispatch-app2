@@ -2301,7 +2301,6 @@ const title =
   : page === "settings" ? "설정"
   : page === "fleet" ? "지입차관리"
   : page === "intel" ? "경영인텔리전스"
-  : page === "erp" ? "ERP 회사관리"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -2594,7 +2593,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "erp"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -3588,23 +3587,10 @@ setOpenMemo={setOpenMemo}
             showSuccess={showSuccess}
             onLogout={logout}
             userCompany={userCompany}
-            onGoERP={() => setPage("erp")}
           />
         )}
         {page === "fleet" && <MobileFleetView />}
         {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
-        {page === "erp" && (
-          <MobileERPPage
-            onBack={() => setPage("list")}
-            cardVersionB={cardVersionB}
-            drivers={drivers}
-            clients={clients}
-            places={places}
-            orders={orders}
-            userCompany={userCompany}
-            user={currentUser}
-          />
-        )}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -14440,7 +14426,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany, onGoERP }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const SectionHeader = ({ title }) => (
@@ -14514,26 +14500,6 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             sub="신규 오더·배차 알림"
             right={<Toggle value={alarmEnabled} onChange={toggleAlarm} />}
           />
-        </div>
-
-        <SectionHeader title="ERP 회사관리" />
-        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-          {[
-            { label: "직원관리", sub: "임직원 현황 및 권한 관리", icon: "👥" },
-            { label: "차량관리", sub: "등록 차량 및 기사 현황", icon: "🚛" },
-            { label: "거래처관리", sub: "화주·거래처 정보 관리", icon: "🏢" },
-            { label: "급여관리", sub: "월별 기사 운임 정산", icon: "💰" },
-            { label: "근태관리", sub: "출퇴근·근무 현황", icon: "📋" },
-            { label: "운행일지", sub: "차량별 운행 기록", icon: "📍" },
-          ].map(item => (
-            <SettingRow
-              key={item.label}
-              label={item.label}
-              sub={item.sub}
-              onClick={() => onGoERP?.(item.label)}
-              right={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>}
-            />
-          ))}
         </div>
 
         <SectionHeader title="데이터" />
