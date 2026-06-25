@@ -1404,7 +1404,9 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
           onChange={e => { const f = e.target.files?.[0]; if (f) onSendFile(f); e.target.value = ""; }} />
         <div style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
           {/* + 버튼 */}
-          <button onClick={() => setShowAttachMenu(p => !p)}
+          <button
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => setShowAttachMenu(p => !p)}
             style={{ width: 32, height: 32, borderRadius: "50%", background: showAttachMenu ? "#1B2B4B" : "none", border: "none", color: showAttachMenu ? "#fff" : "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s", marginLeft: 2 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
@@ -1418,7 +1420,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             rows={1}
             style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13, color: "#111827", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }}
           />
-          <button onClick={onSend} disabled={!input.trim()}
+          <button onMouseDown={e => e.preventDefault()} onClick={onSend} disabled={!input.trim()}
             style={{
               width: 32, height: 32, borderRadius: "50%", background: input.trim() ? "#1B2B4B" : "#e5e7eb",
               border: "none", cursor: input.trim() ? "pointer" : "default",
