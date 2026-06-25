@@ -554,83 +554,112 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const myName = myProfile?.name || myEmail.split("@")[0] || "나";
   const filteredMsgs = msgSearch ? messages.filter(m => m.text?.includes(msgSearch)) : messages;
 
-  // ── 패널 크기 & 위치 ──
-  const PANEL_W = 360;
-  const PANEL_H = 580;
-  const BTN_BOTTOM = 152; // AI: 24, 계산기: 88, 메신저: 152
+  // ── 테마 (A형=블루/화이트, B형=네이비) ──
+  const isThemeA = localStorage.getItem("cardVersion") !== "B";
+  const themeHdr = isThemeA ? "linear-gradient(135deg, #3b82f6, #1d4ed8)" : "#1B2B4B";
+  const themeMyBubble = isThemeA ? "#2563eb" : "#1B2B4B";
+  const themeChatBg = isThemeA ? "#eff6ff" : "#f0f4f8";
 
-  const panelContent = (
+  // ── 패널 크기 & 위치 ──
+  const PANEL_W = mobileMode ? 360 : 700;
+  const PANEL_H = 580;
+  const BTN_BOTTOM = 152;
+
+  // ── 공통 ChatView props ──
+  const chatViewProps = activeRoom ? {
+    room: activeRoom,
+    roomName: getRoomName(activeRoom),
+    roomPhoto: getRoomPhoto(activeRoom),
+    messages: filteredMsgs,
+    myUid,
+    myProfile,
+    input,
+    setInput,
+    onSend: sendMessage,
+    onBack: () => { setActiveRoom(null); if (mobileMode) setView("friends"); },
+    onClose: mobileMode ? onClose : () => setOpen(false),
+    editMsg, setEditMsg, editText, setEditText,
+    onSaveEdit: saveEdit,
+    onDeleteMsg: deleteMessage,
+    msgSearch, setMsgSearch, msgContainerRef, inputRef,
+    onSendImage: sendImage,
+    onSendFile: sendFile,
+    onSendLocation: sendLocation,
+    onSendContact: () => setContactPickModal(true),
+    onSendNotice: () => setShowNoticeInput(true),
+    fileUploading, friends, mobileMode,
+    themeHdr, themeMyBubble, themeChatBg,
+  } : null;
+
+  const friendsViewProps = {
+    myProfile, friends, rooms, unreadMap, totalUnread,
+    getRoomName, getRoomPhoto,
+    onOpenDM: openDM,
+    onOpenRoom: (room) => { setActiveRoom(room); if (mobileMode) setView("chat"); },
+    onOpenProfile: () => setView("profile"),
+    onOpenPeerProfile: (f) => setProfileView(f),
+    onNewGroup: () => setNewGroupModal(true),
+    onClose: mobileMode ? onClose : () => setOpen(false),
+    onLeaveRoom: leaveRoom,
+    myUid, mobileMode,
+    themeHdr,
+    activeRoomId: activeRoom?.id,
+  };
+
+  // ── PC: 좌우 분할 레이아웃 ──
+  const pcSplitContent = (
     <div style={{
       width: "100%", height: "100%",
-      display: "flex", flexDirection: "column",
+      display: "flex",
       background: "#fff",
       fontFamily: "'Noto Sans KR', sans-serif",
-      ...(mobileMode ? {} : {
-        borderRadius: 20, overflow: "hidden",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
-        border: "1px solid #e2e8f0",
-      }),
+      borderRadius: 20, overflow: "hidden",
+      boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
+      border: "1px solid #e2e8f0",
     }}>
-      {/* ─── 친구 목록 뷰 ─── */}
-      {view === "friends" && (
-        <FriendsView
-          myProfile={myProfile}
-          friends={friends}
-          rooms={rooms}
-          unreadMap={unreadMap}
-          totalUnread={totalUnread}
-          getRoomName={getRoomName}
-          getRoomPhoto={getRoomPhoto}
-          onOpenDM={openDM}
-          onOpenRoom={(room) => { setActiveRoom(room); setView("chat"); }}
-          onOpenProfile={() => setView("profile")}
-          onOpenPeerProfile={(f) => setProfileView(f)}
-          onNewGroup={() => setNewGroupModal(true)}
-          onClose={mobileMode ? onClose : () => setOpen(false)}
-          onLeaveRoom={leaveRoom}
-          myUid={myUid}
-          mobileMode={mobileMode}
-        />
-      )}
+      {/* 왼쪽: 친구/채팅 목록 */}
+      <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #e5e7eb", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {view === "profile" ? (
+          <ProfileView
+            myProfile={myProfile}
+            editingProfile={editingProfile}
+            editName={editName} editStatusMsg={editStatusMsg}
+            editPosition={editPosition} editPhone={editPhone}
+            setEditName={setEditName} setEditStatusMsg={setEditStatusMsg}
+            setEditPosition={setEditPosition} setEditPhone={setEditPhone}
+            onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(myProfile?.phone || ""); setEditingProfile(true); }}
+            onSave={saveProfile}
+            onCancel={() => setEditingProfile(false)}
+            onBack={() => setView("friends")}
+            onClose={() => setOpen(false)}
+            onPhotoUpload={uploadProfilePhoto}
+            photoUploading={photoUploading}
+            photoFileRef={photoFileRef}
+            themeHdr={themeHdr}
+          />
+        ) : (
+          <FriendsView {...friendsViewProps} />
+        )}
+      </div>
+      {/* 오른쪽: 채팅 */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {activeRoom && chatViewProps ? (
+          <ChatView {...chatViewProps} />
+        ) : (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#9ca3af", gap: 12 }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span style={{ fontSize: 14 }}>채팅방을 선택해주세요</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-      {/* ─── 채팅 뷰 ─── */}
-      {view === "chat" && activeRoom && (
-        <ChatView
-          room={activeRoom}
-          roomName={getRoomName(activeRoom)}
-          roomPhoto={getRoomPhoto(activeRoom)}
-          messages={filteredMsgs}
-          myUid={myUid}
-          myProfile={myProfile}
-          input={input}
-          setInput={setInput}
-          onSend={sendMessage}
-          onBack={() => setView("friends")}
-          onClose={mobileMode ? onClose : () => setOpen(false)}
-          editMsg={editMsg}
-          setEditMsg={setEditMsg}
-          editText={editText}
-          setEditText={setEditText}
-          onSaveEdit={saveEdit}
-          onDeleteMsg={deleteMessage}
-          msgSearch={msgSearch}
-          setMsgSearch={setMsgSearch}
-          msgContainerRef={msgContainerRef}
-          inputRef={inputRef}
-          fileRef={fileRef}
-          fileAllRef={fileAllRef}
-          onSendImage={sendImage}
-          onSendFile={sendFile}
-          onSendLocation={sendLocation}
-          onSendContact={() => setContactPickModal(true)}
-          onSendNotice={() => setShowNoticeInput(true)}
-          fileUploading={fileUploading}
-          friends={friends}
-          mobileMode={mobileMode}
-        />
-      )}
-
-      {/* ─── 내 프로필 뷰 ─── */}
+  // ── 모바일: 기존 단일 뷰 ──
+  const mobileContent = (
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "#fff", fontFamily: "'Noto Sans KR', sans-serif" }}>
+      {view === "friends" && <FriendsView {...friendsViewProps} />}
+      {view === "chat" && activeRoom && chatViewProps && <ChatView {...chatViewProps} />}
       {view === "profile" && (
         <ProfileView
           myProfile={myProfile}
@@ -643,14 +672,17 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           onSave={saveProfile}
           onCancel={() => setEditingProfile(false)}
           onBack={() => setView("friends")}
-          onClose={mobileMode ? onClose : () => setOpen(false)}
+          onClose={onClose}
           onPhotoUpload={uploadProfilePhoto}
           photoUploading={photoUploading}
           photoFileRef={photoFileRef}
+          themeHdr={themeHdr}
         />
       )}
     </div>
   );
+
+  const panelContent = mobileMode ? mobileContent : pcSplitContent;
 
   if (mobileMode) {
     return (
@@ -985,7 +1017,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 }
 
 // ════════════════ 친구 목록 뷰 ════════════════
-function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode }) {
+function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, themeHdr, activeRoomId }) {
   const [tab, setTab] = useState("chats"); // chats | friends
   const [search, setSearch] = useState("");
   const [contextMenu, setContextMenu] = useState(null); // { room, x, y }
@@ -1022,7 +1054,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* 헤더 */}
-      <div style={{ background: "#1B2B4B", padding: "14px 16px 0", flexShrink: 0 }}>
+      <div style={{ background: themeHdr, padding: "14px 16px 0", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>메신저</span>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1074,9 +1106,9 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                 onTouchStart={e => handleTouchStart(room, e)}
                 onTouchEnd={() => handleTouchEnd(room)}
                 onTouchMove={() => { clearTimeout(longPressTimer.current); longPressTimer.current = null; }}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6", transition: "background 0.1s", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6", transition: "background 0.1s", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none", background: room.id === activeRoomId ? "#eff6ff" : "transparent" }}
+                onMouseEnter={e => { if (room.id !== activeRoomId) e.currentTarget.style.background = "#f8fafc"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = room.id === activeRoomId ? "#eff6ff" : "transparent"; }}>
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <Avatar name={name} photo={photo} size={44} bgColor={room.type === "group" ? "#374151" : "#1B2B4B"} />
                   {room.type === "group" && (
@@ -1184,14 +1216,17 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, fileRef, fileAllRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg }) {
   const [showSearch, setShowSearch] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [imgPreview, setImgPreview] = useState(null);
+  const photoInputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* 헤더 */}
-      <div style={{ background: "#1B2B4B", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+      <div style={{ background: themeHdr, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
@@ -1219,7 +1254,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
       )}
 
       {/* 메시지 영역 */}
-      <div ref={msgContainerRef} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 2, scrollbarWidth: "thin", scrollbarColor: "#e5e7eb transparent", background: "#f0f4f8" }}>
+      <div ref={msgContainerRef} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 2, scrollbarWidth: "thin", scrollbarColor: "#e5e7eb transparent", background: themeChatBg }}>
         {messages.length === 0 && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>
             대화를 시작해보세요.
@@ -1276,11 +1311,11 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                       ) : msg.type === "image" ? (
                         <div style={{ borderRadius: 12, overflow: "hidden", maxWidth: 200 }}>
                           <img src={msg.imageUrl} style={{ width: "100%", display: "block", cursor: "pointer" }}
-                            onClick={() => window.open(msg.imageUrl, "_blank")} />
+                            onClick={() => setImgPreview(msg.imageUrl)} />
                         </div>
                       ) : msg.type === "file" ? (
                         <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, background: isMine ? "#1B2B4B" : "#fff", border: isMine ? "none" : "1px solid #e5e7eb", maxWidth: 220, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, background: isMine ? themeMyBubble : "#fff", border: isMine ? "none" : "1px solid #e5e7eb", maxWidth: 220, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, background: isMine ? "rgba(255,255,255,0.15)" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isMine ? "#fff" : "#1B2B4B"} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             </div>
@@ -1302,7 +1337,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           </div>
                         </a>
                       ) : msg.type === "contact" ? (
-                        <div style={{ background: isMine ? "#1B2B4B" : "#fff", border: isMine ? "none" : "1px solid #e5e7eb", borderRadius: 14, padding: "12px 14px", minWidth: 160, maxWidth: 220, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+                        <div style={{ background: isMine ? themeMyBubble : "#fff", border: isMine ? "none" : "1px solid #e5e7eb", borderRadius: 14, padding: "12px 14px", minWidth: 160, maxWidth: 220, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${isMine ? "rgba(255,255,255,0.15)" : "#f3f4f6"}` }}>
                             <Avatar name={msg.contactName} photo={msg.contactPhoto} size={36} />
                             <div>
@@ -1331,7 +1366,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           style={{
                             padding: "8px 12px",
                             borderRadius: isMine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                            background: isMine ? "#1B2B4B" : "#fff",
+                            background: isMine ? themeMyBubble : "#fff",
                             color: isMine ? "#fff" : "#111827",
                             fontSize: 13, lineHeight: 1.5,
                             wordBreak: "break-word", whiteSpace: "pre-wrap",
@@ -1378,9 +1413,23 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
       {/* + 첨부 메뉴 */}
       {showAttachMenu && (
         <div style={{ padding: "10px 12px", background: "#f8fafc", borderTop: "1px solid #e5e7eb", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {/* 사진: label+input (iOS Safari 호환) */}
+          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60 }}
+            onClick={() => setShowAttachMenu(false)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>사진</span>
+            <input ref={photoInputRef} type="file" accept="image/*" style={{ display: "none" }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) onSendImage(f); e.target.value = ""; }} />
+          </label>
+          {/* 파일: label+input */}
+          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60 }}
+            onClick={() => setShowAttachMenu(false)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>파일</span>
+            <input ref={fileInputRef} type="file" style={{ display: "none" }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) onSendFile(f); e.target.value = ""; }} />
+          </label>
           {[
-            { label: "사진", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, action: () => { fileRef.current?.click(); setShowAttachMenu(false); } },
-            { label: "파일", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, action: () => { fileAllRef.current?.click(); setShowAttachMenu(false); } },
             { label: "위치", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>, action: () => { onSendLocation(); setShowAttachMenu(false); } },
             { label: "연락처", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, action: () => { onSendContact(); setShowAttachMenu(false); } },
             { label: "공지", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>, action: () => { onSendNotice(); setShowAttachMenu(false); } },
@@ -1396,16 +1445,12 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
 
       {/* 입력창 */}
       <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: showAttachMenu ? "none" : "1px solid #e5e7eb", flexShrink: 0 }}>
-        <input ref={fileRef} type="file" accept="image/*"
-          style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) onSendImage(f); e.target.value = ""; }} />
-        <input ref={fileAllRef} type="file"
-          style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) onSendFile(f); e.target.value = ""; }} />
         <div style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
-          {/* + 버튼 */}
+          {/* + 버튼 - onTouchStart preventDefault로 iOS 키보드 유지 */}
           <button
             onMouseDown={e => e.preventDefault()}
+            onTouchStart={e => e.preventDefault()}
+            onTouchEnd={e => { e.stopPropagation(); setShowAttachMenu(p => !p); }}
             onClick={() => setShowAttachMenu(p => !p)}
             style={{ width: 32, height: 32, borderRadius: "50%", background: showAttachMenu ? "#1B2B4B" : "none", border: "none", color: showAttachMenu ? "#fff" : "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s", marginLeft: 2 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1420,9 +1465,14 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             rows={1}
             style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13, color: "#111827", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }}
           />
-          <button onMouseDown={e => e.preventDefault()} onClick={onSend} disabled={!input.trim()}
+          <button
+            onMouseDown={e => e.preventDefault()}
+            onTouchStart={e => e.preventDefault()}
+            onTouchEnd={e => { e.stopPropagation(); if (input.trim()) onSend(); }}
+            onClick={onSend}
+            disabled={!input.trim()}
             style={{
-              width: 32, height: 32, borderRadius: "50%", background: input.trim() ? "#1B2B4B" : "#e5e7eb",
+              width: 32, height: 32, borderRadius: "50%", background: input.trim() ? themeMyBubble : "#e5e7eb",
               border: "none", cursor: input.trim() ? "pointer" : "default",
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
               transition: "background 0.15s",
@@ -1433,15 +1483,59 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
           </button>
         </div>
       </div>
+
+      {/* 이미지 미리보기 모달 */}
+      {imgPreview && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 200000, background: "rgba(0,0,0,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setImgPreview(null)}
+          onKeyDown={e => {
+            if (e.key === "Escape") setImgPreview(null);
+            if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+              fetch(imgPreview).then(r => r.blob()).then(blob => {
+                navigator.clipboard?.write?.([new ClipboardItem({ [blob.type]: blob })]).catch(() => {});
+              }).catch(() => {});
+            }
+          }}
+          tabIndex={0}
+          ref={el => el?.focus()}
+        >
+          <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 10 }} onClick={e => e.stopPropagation()}>
+            <a href={imgPreview} download target="_blank" rel="noopener noreferrer"
+              style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              저장
+            </a>
+            <button
+              onClick={() => {
+                fetch(imgPreview).then(r => r.blob()).then(blob => {
+                  navigator.clipboard?.write?.([new ClipboardItem({ [blob.type]: blob })]).then(() => {
+                    alert("이미지가 복사되었습니다.");
+                  }).catch(() => alert("이 브라우저에서는 복사가 지원되지 않습니다."));
+                }).catch(() => {});
+              }}
+              style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              복사
+            </button>
+            <button onClick={() => setImgPreview(null)}
+              style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              닫기
+            </button>
+          </div>
+          <img src={imgPreview} style={{ maxWidth: "90vw", maxHeight: "80vh", borderRadius: 12, objectFit: "contain" }}
+            onClick={e => e.stopPropagation()} />
+          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 12 }}>Ctrl+C 복사 · ESC 닫기</div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ════════════════ 내 프로필 뷰 ════════════════
-function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editPosition, editPhone, setEditName, setEditStatusMsg, setEditPosition, setEditPhone, onEdit, onSave, onCancel, onBack, onClose, onPhotoUpload, photoUploading, photoFileRef }) {
+function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editPosition, editPhone, setEditName, setEditStatusMsg, setEditPosition, setEditPhone, onEdit, onSave, onCancel, onBack, onClose, onPhotoUpload, photoUploading, photoFileRef, themeHdr }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ background: "#1B2B4B", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ background: themeHdr || "#1B2B4B", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
