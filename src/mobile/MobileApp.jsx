@@ -2335,8 +2335,9 @@ const title =
   </div>
 )}
 
-    {/* 🔍 글씨 크기 전용 래퍼 (화면 스케일 ❌, 글씨만 ⭕) */}
+    {/* 🔍 글씨 크기 전용 래퍼 — 메신저 열릴 때 inert+aria-hidden으로 배경 input 포커스/네비 차단 */}
     <div
+      {...(showMobileMessenger ? { inert: "", "aria-hidden": "true" } : {})}
       className="flex flex-col flex-1"
       style={{
         fontSize:
@@ -14542,17 +14543,6 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       </div>
 
       {/* 로그아웃 확인 모달 */}
-      {confirmDialog && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-[280px] flex flex-col gap-4">
-            <div className="text-[14px] font-semibold text-gray-800 text-center">{confirmDialog.message}</div>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmDialog(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">취소</button>
-              <button onClick={async () => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); await fn(); }} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-[13px] font-semibold">삭제</button>
-            </div>
-          </div>
-        </div>
-      )}
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowLogoutConfirm(false)}>
           <div className="w-full bg-white rounded-t-3xl p-6" onClick={e => e.stopPropagation()}>
