@@ -27,6 +27,23 @@
           if (now - lastTouch < 300) { e.preventDefault(); }
           lastTouch = now;
         }, { passive: false });
+
+        // Force reset zoom to 1.0 on page load (overrides browser remembered zoom / foldable screen switch)
+        function forceResetZoom() {
+          var meta = document.querySelector('meta[name=viewport]');
+          if (!meta) return;
+          meta.content = 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+          setTimeout(function() {
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+          }, 300);
+        }
+        forceResetZoom();
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', forceResetZoom);
+        }
+        document.addEventListener('visibilitychange', function() {
+          if (document.visibilityState === 'visible') { forceResetZoom(); }
+        });
       })();
     </script>
 

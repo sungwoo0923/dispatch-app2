@@ -5053,6 +5053,7 @@ const summary = useMemo(() => {
                       style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                       onContextMenu={(e) => e.preventDefault()}
                       onTouchStart={multiSelectMode ? undefined : (e) => {
+                        if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
                         longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                         longPressTimerRef.current = setTimeout(() => {
                           setLongPressOrder(o);
@@ -5061,6 +5062,7 @@ const summary = useMemo(() => {
                       }}
                       onTouchMove={(e) => {
                         if (!longPressTimerRef.current) return;
+                        if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
                         const dx = Math.abs(e.touches[0].clientX - longPressStartPos.current.x);
                         const dy = Math.abs(e.touches[0].clientY - longPressStartPos.current.y);
                         if (dx > 8 || dy > 8) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
@@ -14334,6 +14336,7 @@ return (
                   style={{ scrollMarginTop: 90, WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                   onContextMenu={(e) => e.preventDefault()}
                   onTouchStart={(e) => {
+                    if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
                     longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                     longPressTimerRef.current = setTimeout(() => {
                       setLongPressOrder(o);
@@ -14342,6 +14345,7 @@ return (
                   }}
                   onTouchMove={(e) => {
                     if (!longPressTimerRef.current) return;
+                    if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
                     const dx = Math.abs(e.touches[0].clientX - longPressStartPos.current.x);
                     const dy = Math.abs(e.touches[0].clientY - longPressStartPos.current.y);
                     if (dx > 8 || dy > 8) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
