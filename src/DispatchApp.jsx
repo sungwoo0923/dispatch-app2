@@ -40406,6 +40406,46 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     });
     return [...map.values()].filter(g => g.length >= 2).sort((a, b) => b.length - a.length);
   }, [placeRows]);
+
+  // 업체명+주소 기준 중복 그룹 (같은 곳에 담당자만 다른 경우)
+  const placeAddrDupGroups = React.useMemo(() => {
+    const map = new Map();
+    placeRows.forEach(p => {
+      const name = (p.업체명 || "").trim().toLowerCase().replace(/\s+/g, "");
+      const addr = (p.주소 || "").trim().toLowerCase().replace(/\s+/g, "");
+      const key = name + "||" + addr;
+      if (!name) return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(p);
+    });
+    return [...map.values()].filter(g => g.length >= 2);
+  }, [placeRows]);
+
+  // 동일 업체명+주소 병합 처리된 placeRows
+  const mergedPlaceRows = React.useMemo(() => {
+    const addrDupMap = new Map();
+    placeAddrDupGroups.forEach(group => {
+      const name = (group[0].업체명 || "").trim().toLowerCase().replace(/\s+/g, "");
+      const addr = (group[0].주소 || "").trim().toLowerCase().replace(/\s+/g, "");
+      addrDupMap.set(name + "||" + addr, group);
+    });
+    const seenKeys = new Set();
+    return placeRows.map(p => {
+      const name = (p.업체명 || "").trim().toLowerCase().replace(/\s+/g, "");
+      const addr = (p.주소 || "").trim().toLowerCase().replace(/\s+/g, "");
+      const key = name + "||" + addr;
+      if (addrDupMap.has(key)) {
+        if (seenKeys.has(key)) return null; // skip duplicates
+        seenKeys.add(key);
+        const group = addrDupMap.get(key);
+        // merge contacts from all docs
+        const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", _dupId: g.id })).filter(c => c.name);
+        const primary = group[0];
+        return { ...primary, _mergedIds: group.map(g => g.id), _allContacts: allContacts, 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") };
+      }
+      return p;
+    }).filter(Boolean);
+  }, [placeRows, placeAddrDupGroups]);
   const [placeQ, setPlaceQ] = React.useState("");
   const [placeSearched, setPlaceSearched] = React.useState(false);
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
@@ -40670,20 +40710,20 @@ React.useEffect(() => {
   // 하차지 거래처 함수들
   // ═══════════════════════════════════════════════════
   const gradeStats = React.useMemo(() => {
-    const stats = { 전체: placeRows.length, 일반: 0, 블랙: 0, 주의: 0, 이탈: 0 };
-    placeRows.forEach(r => { const g = r.등급 || "일반"; if (stats[g] !== undefined) stats[g]++; });
+    const stats = { 전체: mergedPlaceRows.length, 일반: 0, 블랙: 0, 주의: 0, 이탈: 0 };
+    mergedPlaceRows.forEach(r => { const g = r.등급 || "일반"; if (stats[g] !== undefined) stats[g]++; });
     return stats;
-  }, [placeRows]);
+  }, [mergedPlaceRows]);
 
   const filteredPlaces = React.useMemo(() => {
-    let list = placeRows;
+    let list = mergedPlaceRows;
     if (placeGradeFilter !== "전체") list = list.filter(r => (r.등급 || "일반") === placeGradeFilter);
     if (!placeSearched || !placeQ.trim()) return placeGradeFilter !== "전체" ? list : [];
     const nq = norm(placeQ);
     if (placeFilterType === "업체명") return list.filter((r) => norm(r.업체명 || "").includes(nq));
     if (placeFilterType === "주소") return list.filter((r) => norm(r.주소 || "").includes(nq));
     return list;
-  }, [placeRows, placeQ, placeSearched, placeFilterType, placeGradeFilter]);
+  }, [mergedPlaceRows, placeQ, placeSearched, placeFilterType, placeGradeFilter]);
 
   const togglePlaceOne = (id) => setPlaceSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const togglePlaceAll = () => {
@@ -41014,15 +41054,80 @@ React.useEffect(() => {
         <button onClick={() => setPlaceDupOpen(false)} className="text-white/60 hover:text-white text-xl">✕</button>
       </div>
       <div className="flex-1 overflow-y-auto p-6">
-        {placeDupGroups.length === 0 ? (
+        {/* 동일 업체명+주소 담당자 병합 섹션 */}
+        {placeAddrDupGroups.length > 0 && (
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[14px] font-bold text-[#1B2B4B]">같은 업체명+주소, 다른 담당자 ({placeAddrDupGroups.length}건)</span>
+              <button onClick={async () => {
+                if (!window.confirm(`${placeAddrDupGroups.length}건의 중복 거래처를 병합하시겠습니까?\n담당자 정보가 1개의 거래처로 합쳐집니다.`)) return;
+                for (const group of placeAddrDupGroups) {
+                  const primary = group[0];
+                  const duplicates = group.slice(1);
+                  const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", isPrimary: false })).filter(c => c.name);
+                  if (allContacts.length > 0) allContacts[0].isPrimary = true;
+                  await upsertPlace?.({ ...primary, _id: primary.id, contacts: allContacts });
+                  for (const dup of duplicates) {
+                    await removePlace(dup.id);
+                  }
+                  setPlaceRows(prev => {
+                    const dupIds = new Set(duplicates.map(d => d.id));
+                    return prev.filter(p => !dupIds.has(p.id)).map(p => p.id === primary.id ? { ...p, 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") } : p);
+                  });
+                }
+                setPlaceDupDone(true);
+              }} className="h-[32px] px-4 rounded-lg text-[13px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243a60] transition">
+                전체 자동 병합
+              </button>
+            </div>
+            <div className="space-y-3">
+              {placeAddrDupGroups.map((group, gi) => (
+                <div key={gi} className="border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
+                  <div className="bg-[#1B2B4B]/5 px-4 py-2 flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">{group[0].업체명} <span className="text-gray-400 font-normal text-[12px]">· {group[0].주소}</span></span>
+                    <button onClick={async () => {
+                      const primary = group[0];
+                      const duplicates = group.slice(1);
+                      const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", isPrimary: false })).filter(c => c.name);
+                      if (allContacts.length > 0) allContacts[0].isPrimary = true;
+                      await upsertPlace?.({ ...primary, _id: primary.id, contacts: allContacts });
+                      for (const dup of duplicates) await removePlace(dup.id);
+                      const dupIds = new Set(duplicates.map(d => d.id));
+                      setPlaceRows(prev => prev.filter(p => !dupIds.has(p.id)).map(p => p.id === primary.id ? { ...p, 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") } : p));
+                    }} className="h-[26px] px-3 rounded-lg text-[12px] font-semibold border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition">
+                      병합
+                    </button>
+                  </div>
+                  <table className="w-full text-[12px]">
+                    <tbody>
+                      {group.map((p, pi) => (
+                        <tr key={p.id} className={`border-b border-gray-100 ${pi === 0 ? "bg-blue-50/30" : ""}`}>
+                          <td className="px-3 py-2 text-center w-12">
+                            {pi === 0 ? <span className="text-[10px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/10 px-1.5 py-0.5 rounded">대표</span>
+                              : <span className="text-[10px] text-gray-400">병합</span>}
+                          </td>
+                          <td className="px-3 py-2 font-semibold">{p.업체명}</td>
+                          <td className="px-3 py-2 text-gray-500">{p.주소 || "-"}</td>
+                          <td className="px-3 py-2">{p.담당자 || "-"}</td>
+                          <td className="px-3 py-2">{p.담당자번호 || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {placeDupGroups.length === 0 && placeAddrDupGroups.length === 0 ? (
           <div className="text-center text-gray-400 py-12 text-[14px]">
             {placeDupDone ? "중복 거래처가 정리되었습니다." : "중복된 거래처가 없습니다."}
           </div>
-        ) : (
+        ) : placeDupGroups.length > 0 ? (
           <div className="space-y-4">
             {placeDupGroups.length > 0 && (
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[13px] text-gray-500">업체명 기준 중복 {placeDupGroups.length}건</span>
+                <span className="text-[13px] font-bold text-[#1B2B4B]">업체명 기준 중복 {placeDupGroups.length}건</span>
                 <button
                   onClick={async () => {
                     if (!window.confirm("체크된 항목을 모두 삭제하시겠습니까?")) return;
@@ -41103,7 +41208,7 @@ React.useEffect(() => {
               );
             })}
           </div>
-        )}
+        ) : null}
       </div>
       <div className="px-6 py-4 border-t border-gray-100 shrink-0">
         <button onClick={() => setPlaceDupOpen(false)}

@@ -243,7 +243,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [selectedNotice, setSelectedNotice] = useState(null);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [users, setUsers] = useState([]);
-  const [approvalNotifBanner, setApprovalNotifBanner] = useState(null);
+  const [approvalNotifQueue, setApprovalNotifQueue] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState(null); // { message, onConfirm }
 
 React.useEffect(() => {
@@ -567,12 +567,15 @@ React.useEffect(() => {
         if (data.type === "approval_request") {
           msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
           notifStatus = "request";
+        } else if (data.type === "re_request") {
+          msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 재요청이 있습니다.`;
+          notifStatus = "request";
         } else {
           const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
           msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
           notifStatus = data.status;
         }
-        setApprovalNotifBanner({ id: docId, msg, status: notifStatus });
+        setApprovalNotifQueue(prev => [...prev, { id: docId, msg, status: notifStatus }]);
       });
     }, () => {});
     return unsub;
@@ -581,23 +584,30 @@ React.useEffect(() => {
   return (
     <div className="bg-gray-50 min-h-screen p-5 space-y-4">
 
-      {/* 결재 알림 배너 */}
-      {approvalNotifBanner && (
+      {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
+      {approvalNotifQueue.length > 0 && (() => {
+        const banner = approvalNotifQueue[0];
+        const dismissBanner = () => {
+          if (banner?.id) {
+            updateDoc(doc(db, "notifications", banner.id), { read: true }).catch(() => {});
+          }
+          setApprovalNotifQueue(prev => prev.slice(1));
+        };
+        return (
         <div className="fixed top-5 right-5 z-[9999] flex items-center gap-3 px-5 py-3.5 bg-white border border-gray-200 rounded-2xl shadow-xl" style={{ animation: "fadeIn 0.3s ease-out", minWidth: 280 }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#fff", background: approvalNotifBanner.status === "approved" ? "#1B2B4B" : approvalNotifBanner.status === "rejected" ? "#DC2626" : approvalNotifBanner.status === "hold" ? "#6B7280" : "#1B2B4B" }}>
-            {approvalNotifBanner.status === "approved" ? "승" : approvalNotifBanner.status === "rejected" ? "반" : approvalNotifBanner.status === "hold" ? "보" : "결"}
+          {approvalNotifQueue.length > 1 && (
+            <div style={{ position: "absolute", top: -8, right: -8, background: "#DC2626", color: "#fff", borderRadius: "50%", width: 20, height: 20, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {approvalNotifQueue.length}
+            </div>
+          )}
+          <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#fff", background: banner.status === "approved" ? "#1B2B4B" : banner.status === "rejected" ? "#DC2626" : banner.status === "hold" ? "#6B7280" : "#1B2B4B" }}>
+            {banner.status === "approved" ? "승" : banner.status === "rejected" ? "반" : banner.status === "hold" ? "보" : "결"}
           </div>
-          <span className="text-[13px] font-semibold text-gray-800 flex-1">{approvalNotifBanner.msg}</span>
-          <button onClick={() => {
-            if (approvalNotifBanner?.id) {
-              updateDoc(doc(db, "notifications", approvalNotifBanner.id), { read: true }).catch(() => {});
-              // sessionStorage에서도 제거해서 다음 세션에서 다시 물어볼 일 없게
-              try { const k = `notif_shown_${user?.uid}`; const s = new Set(JSON.parse(sessionStorage.getItem(k)||"[]")); s.delete(approvalNotifBanner.id); sessionStorage.setItem(k, JSON.stringify([...s])); } catch {}
-            }
-            setApprovalNotifBanner(null);
-          }} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+          <span className="text-[13px] font-semibold text-gray-800 flex-1">{banner.msg}</span>
+          <button onClick={dismissBanner} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
         </div>
-      )}
+        );
+      })()}
 
       {/* ===== KPI 4개 ===== */}
       <div className="grid grid-cols-4 gap-4">
@@ -882,6 +892,13 @@ React.useEffect(() => {
                       <td className="px-3 py-2.5 text-center text-[13px] font-medium text-gray-800">{dateLabel}</td>
                       <td className="px-3 py-2.5 text-center">{(() => {
                         const myApprover = (s.approvers || []).find(a => a.uid === auth.currentUser?.uid && a.status === "pending");
+                        if (myApprover && s.isReRequest) return (
+                          <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
+                            className="text-[11px] font-bold px-2 py-1 rounded-lg animate-pulse"
+                            style={{ background: "#DC2626", color: "#fff" }}>
+                            재요청
+                          </button>
+                        );
                         if (myApprover) return (
                           <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
                             className="text-[11px] font-bold px-2 py-1 rounded-lg bg-[#1B2B4B] text-white animate-pulse">
@@ -1097,7 +1114,7 @@ React.useEffect(() => {
         const isSuperAdmin = role === "superadmin" || role === "totalMaster";
         const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
         const anyApproverActed = approvers.length > 0 && approvers.some(a => a.status && a.status !== "pending");
-        const canEdit = (isAuthor && !anyApproverActed) || (isSuperAdmin && overallStatus !== "approved");
+        const canEdit = (isAuthor && (!anyApproverActed || overallStatus === "rejected")) || (isSuperAdmin && overallStatus !== "approved");
         const canDelete = (isAuthor && (!anyApproverActed || overallStatus === "approved")) || isSuperAdmin;
         const isHoldAndAuthor = isAuthor && overallStatus === "hold";
         const myApproverIdx = approvers.findIndex(a => a.uid === auth.currentUser?.uid);
@@ -1185,12 +1202,11 @@ React.useEffect(() => {
                         <button key={st} onClick={async () => {
                           const newApprovers = [...approvers];
                           newApprovers[myApproverIdx] = { ...newApprovers[myApproverIdx], status: st };
-                          await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
-                          setSelectedSchedule(prev => ({ ...prev, approvers: newApprovers }));
+                          await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers, isReRequest: false });
+                          setSelectedSchedule(prev => ({ ...prev, approvers: newApprovers, isReRequest: false }));
                           // 결재 요청 알림을 읽음 처리
                           const notifId = `req_${selectedSchedule.id}_${auth.currentUser?.uid}`;
                           updateDoc(doc(db, "notifications", notifId), { read: true }).catch(() => {});
-                          setApprovalNotifBanner(null);
                           if (selectedSchedule.authorUid) {
                             const approverName = me?.name || auth.currentUser?.displayName || "";
                             addDoc(collection(db, "notifications"), { toUid: selectedSchedule.authorUid, type: "approval", status: st, scheduleType: selectedSchedule.type || "", approverName, scheduleId: selectedSchedule.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
@@ -1208,9 +1224,23 @@ React.useEffect(() => {
               {isHoldAndAuthor && (
                 <button onClick={async () => {
                   const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
-                  await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers });
+                  await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers, isReRequest: false });
                   setSelectedSchedule(null);
                 }} className="w-full mb-3 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">재결재 요청</button>
+              )}
+              {isAuthor && overallStatus === "rejected" && (
+                <button onClick={async () => {
+                  const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
+                  await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers, isReRequest: true });
+                  setSelectedSchedule(prev => ({ ...prev, approvers: resetApprovers, isReRequest: true }));
+                  for (const a of resetApprovers) {
+                    if (a.uid) {
+                      const notifId = `req_${selectedSchedule.id}_${a.uid}`;
+                      setDoc(doc(db, "notifications", notifId), { toUid: a.uid, type: "re_request", fromName: me?.name || "작성자", scheduleType: selectedSchedule.type || "", scheduleId: selectedSchedule.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
+                    }
+                  }
+                  setSelectedSchedule(null);
+                }} className="w-full mb-3 py-2.5 rounded-xl bg-[#DC2626] text-white text-[13px] font-semibold hover:bg-[#b91c1c] transition">재요청</button>
               )}
               {(canEdit || canDelete) && !isViewer && (
                 <div className="flex gap-2 pt-3 border-t border-gray-100">

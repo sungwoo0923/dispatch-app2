@@ -722,7 +722,7 @@ const [alarmEnabled, setAlarmEnabled] = useState(
 const [handovers, setHandovers] = useState([]);
 const [currentUser, setCurrentUser] = useState(null);
 const [mobileUsers, setMobileUsers] = useState([]);
-const [approvalNotifBanner, setApprovalNotifBanner] = useState(null);
+const [approvalNotifQueue, setApprovalNotifQueue] = useState([]);
 const [confirmDialog, setConfirmDialog] = useState(null);
 const [loginTime] = useState(() => new Date());
 const [handoverOpen, setHandoverOpen] = useState(false);
@@ -1391,12 +1391,15 @@ useEffect(() => {
       if (data.type === "approval_request") {
         msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
         notifStatus = "request";
+      } else if (data.type === "re_request") {
+        msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 재요청이 있습니다.`;
+        notifStatus = "request";
       } else {
         const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
         msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
         notifStatus = data.status;
       }
-      setApprovalNotifBanner({ id: change.doc.id, msg, status: notifStatus });
+      setApprovalNotifQueue(prev => [...prev, { id: change.doc.id, msg, status: notifStatus }]);
     });
   }, () => {});
   return unsub;
@@ -2383,18 +2386,31 @@ const title =
     </div>
   </div>
 )}
-{approvalNotifBanner && (
+{approvalNotifQueue.length > 0 && (() => {
+  const banner = approvalNotifQueue[0];
+  const dismissBanner = () => {
+    if (banner?.id) updateDoc(doc(db, "notifications", banner.id), { read: true }).catch(() => {});
+    setApprovalNotifQueue(prev => prev.slice(1));
+  };
+  return (
   <div className="fixed top-5 left-0 right-0 z-[99999] flex justify-center pointer-events-none px-4">
-    <div className={`pointer-events-auto flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl ${
+    <div className={`pointer-events-auto relative flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl ${
       cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-900 border border-gray-200"
     }`} style={{ animation: "successBannerIn 0.3s ease-out", maxWidth: "85vw" }}>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 11, fontWeight: 700, color: "#fff", background: approvalNotifBanner.status === "approved" ? "#1B2B4B" : approvalNotifBanner.status === "rejected" ? "#DC2626" : approvalNotifBanner.status === "hold" ? "#6B7280" : "#1B2B4B" }}>
-        {approvalNotifBanner.status === "approved" ? "승" : approvalNotifBanner.status === "rejected" ? "반" : approvalNotifBanner.status === "hold" ? "보" : "결"}
+      {approvalNotifQueue.length > 1 && (
+        <div style={{ position: "absolute", top: -8, right: -8, background: "#DC2626", color: "#fff", borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {approvalNotifQueue.length}
+        </div>
+      )}
+      <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 11, fontWeight: 700, color: "#fff", background: banner.status === "approved" ? "#1B2B4B" : banner.status === "rejected" ? "#DC2626" : banner.status === "hold" ? "#6B7280" : "#1B2B4B" }}>
+        {banner.status === "approved" ? "승" : banner.status === "rejected" ? "반" : banner.status === "hold" ? "보" : "결"}
       </div>
-      <span className="text-[13px] font-semibold flex-1">{approvalNotifBanner.msg}</span>
-      <button onClick={() => { if (approvalNotifBanner?.id) updateDoc(doc(db, "notifications", approvalNotifBanner.id), { read: true }).catch(() => {}); setApprovalNotifBanner(null); }} className={`text-lg leading-none ml-2 ${cardVersionB ? "text-white/60" : "text-gray-400"}`}>✕</button>
+      <span className="text-[13px] font-semibold flex-1">{banner.msg}</span>
+      <button onClick={dismissBanner} className={`text-lg leading-none ml-2 ${cardVersionB ? "text-white/60" : "text-gray-400"}`}>✕</button>
     </div>
   </div>
+  );
+})()}
 )}
 {showUnassignedEntryPopup && page === "list" && (
   <div
@@ -2838,6 +2854,13 @@ onGoSchedule={() => {
                   <td className="px-2 py-2.5 text-center text-gray-600">{s.name || s.writer || "-"}</td>
                   <td className="px-2 py-2.5 text-center">{(() => {
                     const myApprover = (s.approvers || []).find(a => a.uid === currentUser?.uid && a.status === "pending");
+                    if (myApprover && s.isReRequest) return (
+                      <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
+                        className="text-[12px] font-bold px-2 py-1 rounded-lg animate-pulse text-white"
+                        style={{ background: "#DC2626" }}>
+                        재요청
+                      </button>
+                    );
                     if (myApprover) return (
                       <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
                         className={`text-[12px] font-bold px-2 py-1 rounded-lg animate-pulse ${cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-blue-600 text-white"}`}>
@@ -2863,7 +2886,7 @@ onGoSchedule={() => {
   const isSuperAdmin = role === "superadmin" || role === "totalMaster";
   const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
   const anyApproverActed = approvers.length > 0 && approvers.some(a => a.status && a.status !== "pending");
-  const canEdit = (isAuthor && !anyApproverActed) || (isSuperAdmin && overallStatus !== "approved");
+  const canEdit = (isAuthor && (!anyApproverActed || overallStatus === "rejected")) || (isSuperAdmin && overallStatus !== "approved");
   const canDelete = (isAuthor && (!anyApproverActed || overallStatus === "approved")) || isSuperAdmin;
   const isHoldAndAuthor = isAuthor && overallStatus === "hold";
   const myApproverIdx = approvers.findIndex(a => a.uid === currentUser?.uid);
@@ -2945,12 +2968,11 @@ onGoSchedule={() => {
                   <button key={st} onClick={async () => {
                     const newApprovers = [...approvers];
                     newApprovers[myApproverIdx] = { ...newApprovers[myApproverIdx], status: st };
-                    await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers });
-                    setSelectedSchedule(prev => ({ ...prev, approvers: newApprovers }));
-                    // 결재 요청 알림 읽음 처리 + 배너 닫기
+                    await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers, isReRequest: false });
+                    setSelectedSchedule(prev => ({ ...prev, approvers: newApprovers, isReRequest: false }));
+                    // 결재 요청 알림 읽음 처리
                     const notifId = `req_${selectedSchedule.id}_${currentUser?.uid}`;
                     updateDoc(doc(db, "notifications", notifId), { read: true }).catch(() => {});
-                    setApprovalNotifBanner(null);
                     if (selectedSchedule.authorUid) {
                       addDoc(collection(db, "notifications"), {
                         toUid: selectedSchedule.authorUid, type: "approval", status: st,
@@ -2972,9 +2994,23 @@ onGoSchedule={() => {
         {isHoldAndAuthor && (
           <button onClick={async () => {
             const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
-            await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers });
+            await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers, isReRequest: false });
             setSelectedSchedule(null);
           }} className="w-full mb-3 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold">재결재 요청</button>
+        )}
+        {isAuthor && overallStatus === "rejected" && (
+          <button onClick={async () => {
+            const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
+            await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers, isReRequest: true });
+            const myInfo = mobileUsers.find(u => (u.uid || u.id) === currentUser?.uid);
+            for (const a of resetApprovers) {
+              if (a.uid) {
+                const notifId = `req_${selectedSchedule.id}_${a.uid}`;
+                setDoc(doc(db, "notifications", notifId), { toUid: a.uid, type: "re_request", fromName: myInfo?.name || "작성자", scheduleType: selectedSchedule.type || "", scheduleId: selectedSchedule.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
+              }
+            }
+            setSelectedSchedule(null);
+          }} className="w-full mb-3 py-2.5 rounded-xl text-white text-[13px] font-semibold" style={{ background: "#DC2626" }}>재요청</button>
         )}
         {(canEdit || canDelete) && (
           <div className="flex gap-2 pt-3 border-t border-gray-100">
