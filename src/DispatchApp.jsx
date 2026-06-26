@@ -2525,6 +2525,7 @@ return (
                 focusOrderId={focusOrderId}
                 clearFocusOrder={() => setFocusOrderId(null)}
                 isViewer={isViewer}
+                setCargoAddPopup={setCargoAddPopup}
               />
             )}
             {배차현황Tab === "미배차현황" && (
@@ -2538,6 +2539,7 @@ return (
                 places={places}
                 upsertDriver={upsertDriver}
                 isViewer={isViewer}
+                setCargoAddPopup={setCargoAddPopup}
               />
             )}
           </div>
@@ -6593,6 +6595,21 @@ const labelCls =
   "block text-[15px] font-semibold text-black mb-1";
     const reqStar = <span className="text-red-500">*</span>;
     const AutoBadge = ({ show }) => null;
+function CargoExtraChips({ value, onChange }) {
+  const parts = (value || "").split("+").filter(Boolean);
+  const base = parts[0] || "";
+  const extras = parts.slice(1);
+  if (!extras.length) return null;
+  return extras.map((item, i) => (
+    <span key={i} className="inline-flex items-center gap-0.5 text-[12px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">
+      {item}
+      <button type="button"
+        onClick={(e) => { e.stopPropagation(); const newEx = extras.filter((_, j) => j !== i); onChange(newEx.length ? base + "+" + newEx.join("+") : base); }}
+        className="ml-0.5 text-[#1B2B4B]/60 hover:text-red-500 font-bold leading-none text-[14px] cursor-pointer">×</button>
+    </span>
+  ));
+}
+
 function FuelPriceWidget({ apiKey }) {
   const [prices, setPrices] = React.useState([]);
 
@@ -7839,7 +7856,7 @@ className={`
       onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(form.화물내용||"").trim(); onChange("화물내용", cur ? cur+"+"+item : item); } })}>
       + 추가
     </button>
-    {(() => { const ex=(form.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}
+    <CargoExtraChips value={form.화물내용} onChange={(v) => onChange("화물내용", v)} />
   </label>
 
   <div className="relative">
@@ -18621,7 +18638,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
 </Field>
 
-    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(copyTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
+    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} onChange={(v) => setCopyTarget(p=>({...p,화물내용:v}))} /></span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -19924,7 +19941,7 @@ value={copyTarget?.화물수량 || ""}
             <label className="flex items-center gap-1 flex-wrap">화물내용
               <button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer"
                 onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>
-              {(() => { const ex=(editTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}
+              <CargoExtraChips value={editTarget?.화물내용} onChange={(v) => setEditTarget(p=>({...p,화물내용:v}))} />
             </label>
 
 
@@ -22517,6 +22534,7 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
   isViewer = false,
+  setCargoAddPopup = () => {},
 }) {
 const [companyBankData, setCompanyBankData] = React.useState(null);
 React.useEffect(() => {
@@ -26585,7 +26603,7 @@ return (
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
-<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget?.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(editTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
+<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget?.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button><CargoExtraChips value={editTarget?.화물내용} onChange={(v) => setEditTarget(p=>({...p,화물내용:v}))} /></span>}>
   <div className="relative w-full">
 
     <input
@@ -27949,7 +27967,7 @@ setCopyPlaceOptions(list);
 
 </Field>
 
-<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(copyTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
+<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} onChange={(v) => setCopyTarget(p=>({...p,화물내용:v}))} /></span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -33773,7 +33791,7 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, isViewer = false }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, isViewer = false, setCargoAddPopup = () => {} }) {
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -34872,7 +34890,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </select>
                       </div>
                     </Field>
-                    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(copyTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
+                    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} onChange={(v) => setCopyTarget(p=>({...p,화물내용:v}))} /></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" />
                         <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }}>
