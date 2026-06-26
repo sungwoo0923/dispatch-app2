@@ -7832,13 +7832,14 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls + " flex items-center gap-1"}>
+  <label className={labelCls + " flex items-center gap-1 flex-wrap"}>
     화물내용
     <button type="button"
       className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
       onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(form.화물내용||"").trim(); onChange("화물내용", cur ? cur+"+"+item : item); } })}>
       + 추가
     </button>
+    {(() => { const ex=(form.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[10px] font-bold text-[#1B2B4B]">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}
   </label>
 
   <div className="relative">
@@ -10337,8 +10338,8 @@ setTimeout(() => {
 {cargoAddPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
     onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-72 overflow-hidden border" onClick={e => e.stopPropagation()}>
-      <div className="bg-[#1B2B4B] px-5 py-3">
+    <div className="bg-white rounded-2xl shadow-2xl w-80 border" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-5 py-3 rounded-t-2xl">
         <div className="text-[14px] font-bold text-white">화물내용 추가</div>
       </div>
       <div className="p-5">
@@ -10351,7 +10352,7 @@ setTimeout(() => {
             autoFocus
           />
           <select
-            className="w-[82px] border-0 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+            className="w-[90px] shrink-0 border border-gray-300 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
             value={_cargoAddType}
             onChange={e => _setCargoAddType(e.target.value)}
           >
@@ -18618,7 +18619,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
 </Field>
 
-    <Field label={<span className="flex items-center gap-1">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button></span>}>
+    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(copyTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[10px] font-bold text-[#1B2B4B]">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -19918,9 +19919,10 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             {/* 🔵 화물내용 */}
             {/* ------------------------------------------------ */}
-            <label className="flex items-center gap-1">화물내용
+            <label className="flex items-center gap-1 flex-wrap">화물내용
               <button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer"
                 onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>
+              {(() => { const ex=(editTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[10px] font-bold text-[#1B2B4B]">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}
             </label>
 
 
@@ -26587,7 +26589,7 @@ return (
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
-<Field label={<span className="flex items-center gap-1">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget?.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button></span>}>
+<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget?.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(editTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[10px] font-bold text-[#1B2B4B]">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
   <div className="relative w-full">
 
     <input
@@ -27959,7 +27961,7 @@ setCopyPlaceOptions(list);
 
 </Field>
 
-<Field label="화물내용">
+<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(copyTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[10px] font-bold text-[#1B2B4B]">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -34882,7 +34884,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </select>
                       </div>
                     </Field>
-                    <Field label={<span className="flex items-center gap-1">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button></span>}>
+                    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>{(() => { const ex=(copyTarget?.화물내용||"").split("+").filter(Boolean).slice(1); return ex.length ? <span className="text-[10px] font-bold text-[#1B2B4B]">{ex.length===1?ex[0]:`${ex.length}개 등록`}</span> : null; })()}</span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" />
                         <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }}>

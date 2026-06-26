@@ -1577,14 +1577,14 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           {/* 답장 인용 */}
                           {msg.replyToText && (
                             <div style={{
-                              padding: "5px 10px", marginBottom: 2,
-                              borderRadius: isMine ? "10px 10px 0 0" : "10px 10px 0 0",
-                              background: isMine ? "rgba(255,255,255,0.15)" : "#f1f5f9",
-                              borderLeft: `3px solid ${isMine ? "rgba(255,255,255,0.5)" : themeMyBubble}`,
-                              maxWidth: 220,
+                              padding: "6px 10px 5px", marginBottom: 3,
+                              borderRadius: "10px 10px 0 0",
+                              background: isMine ? "rgba(0,0,0,0.18)" : "#e8edf5",
+                              borderLeft: `3px solid ${isMine ? "rgba(255,255,255,0.7)" : themeMyBubble}`,
+                              maxWidth: 240,
                             }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: isMine ? "rgba(255,255,255,0.7)" : themeMyBubble, marginBottom: 1 }}>{msg.replyToSender}</div>
-                              <div style={{ fontSize: 11, color: isMine ? "rgba(255,255,255,0.6)" : "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>{msg.replyToText}</div>
+                              <div style={{ fontSize: 10, fontWeight: 800, color: isMine ? "rgba(255,255,255,0.85)" : themeMyBubble, marginBottom: 2 }}>{msg.replyToSender}</div>
+                              <div style={{ fontSize: 11, fontWeight: 500, color: isMine ? "rgba(255,255,255,0.75)" : "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{msg.replyToText}</div>
                             </div>
                           )}
                           <div

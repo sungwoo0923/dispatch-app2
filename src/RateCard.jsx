@@ -145,6 +145,7 @@ const [detailModal, setDetailModal] = useState(null);
   const [printHistory, setPrintHistory] = useState(() => JSON.parse(localStorage.getItem("rateCardHistory") || "[]"));
   const [historyModal, setHistoryModal] = useState(false);
   const [historySelected, setHistorySelected] = useState(new Set());
+  const [historyDetailModal, setHistoryDetailModal] = useState(null); // history entry to show
   // 🔥 거래처 제외 필터
   const [excludeQuery, setExcludeQuery] = useState("");
   const [excludeList, setExcludeList] = useState([]);       // 제외할 거래처명 배열
@@ -725,22 +726,22 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <div className="text-white/60">{COMPANY.address}</div>
               </div>
             </div>
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <div className="text-[18px] font-bold text-[#1B2B4B]">운송 단가표</div>
-                <div className="text-[12px] text-gray-400">발행일: {today}</div>
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 overflow-x-auto">
+              <div className="shrink-0">
+                <div className="text-[16px] font-bold text-[#1B2B4B]">운송 단가표</div>
+                <div className="text-[11px] text-gray-400">발행일: {today}</div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
-                  <span className="text-[15px] font-bold text-[#1B2B4B]">{result.pickup}</span>
-                  <span className="text-blue-500 font-bold text-lg">→</span>
-                  <span className="text-[15px] font-bold text-[#1B2B4B]">{result.drop}</span>
+              <div className="flex items-center gap-1.5 flex-nowrap">
+                <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 whitespace-nowrap">
+                  <span className="text-[13px] font-bold text-[#1B2B4B]">{result.pickup}</span>
+                  <span className="text-blue-500 font-bold">→</span>
+                  <span className="text-[13px] font-bold text-[#1B2B4B]">{result.drop}</span>
                 </div>
-                <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-[12px] text-gray-600">차량: <b className="text-[#1B2B4B]">{result.groupLabel}</b></div>
-                <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 text-[12px] font-bold text-indigo-700">{result.viewMode}</div>
-                {result.mixedFilter!=="전체" && <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-[12px] font-bold text-violet-700">{result.mixedFilter}</div>}
-<div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-[12px] text-blue-600 font-semibold">{result.fareField==="청구운임"?"청구가 기준":"기사운임 기준"}</div>
-                <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-[12px] text-gray-500">조회 <b className="text-[#1B2B4B]">{result.totalCount}</b>건</div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-[11px] text-gray-600 whitespace-nowrap">차량: <b className="text-[#1B2B4B]">{result.groupLabel}</b></div>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-2 text-[11px] font-bold text-indigo-700 whitespace-nowrap">{result.viewMode}</div>
+                {result.mixedFilter!=="전체" && <div className="bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-2 text-[11px] font-bold text-violet-700 whitespace-nowrap">{result.mixedFilter}</div>}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2 text-[11px] text-blue-600 font-semibold whitespace-nowrap">{result.fareField==="청구운임"?"청구가 기준":"기사운임 기준"}</div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-[11px] text-gray-500 whitespace-nowrap">조회 <b className="text-[#1B2B4B]">{result.totalCount}</b>건</div>
               </div>
             </div>
           </div>
@@ -1012,7 +1013,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-[16px] font-bold text-[#1B2B4B]">단가표 발행 이력</h3>
-                <p className="text-[12px] text-gray-400 mt-0.5">인쇄/PDF 저장 버튼을 누른 내역이 기록됩니다</p>
+                <p className="text-[12px] text-gray-400 mt-0.5">인쇄/PDF 저장 버튼을 누른 내역이 기록됩니다 · 더블클릭 시 상세보기</p>
               </div>
               <div className="flex items-center gap-2">
                 {historySelected.size > 0 && (
@@ -1040,7 +1041,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                     const timeStr = dt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
                     return (
                       <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${historySelected.has(i) ? "border-[#1B2B4B] bg-gray-50" : "border-gray-100 bg-white hover:bg-gray-50"}`}
-                        onClick={() => setHistorySelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}>
+                        onClick={() => setHistorySelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+                        onDoubleClick={() => setHistoryDetailModal(h)}>
                         <input type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] shrink-0" />
                         <div className="mt-0.5 w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold flex-shrink-0 bg-gray-200 text-gray-600">
                           {h.source === "manual" ? "수" : "자"}
@@ -1073,6 +1075,104 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           </div>
         </div>
       )}
+
+      {/* 발행이력 상세 팝업 */}
+      {historyDetailModal && (() => {
+        const h = historyDetailModal;
+        const dt = new Date(h.ts);
+        const dateStr = dt.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+        const timeStr = dt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+        // Reconstruct result rows from dispatchData for this history entry
+        const pu = (h.pickup || "").replace(/\s/g, "").toLowerCase();
+        const dr = (h.drop || "").replace(/\s/g, "").toLowerCase();
+        const vg = VEHICLE_GROUPS.find(g => g.label === h.vehicle);
+        const matched = dispatchData.filter(r => {
+          const rPu = clean(r.상차지명 || ""); const rDr = clean(r.하차지명 || "");
+          const rPuA = clean(r.상차지주소 || ""); const rDrA = clean(r.하차지주소 || "");
+          const puOk = rPu.includes(pu) || pu.includes(rPu) || rPuA.includes(pu);
+          const drOk = rDr.includes(dr) || dr.includes(rDr) || rDrA.includes(dr);
+          if (!puOk || !drOk) return false;
+          if (vg) {
+            const rv = (r.차량종류 || "").toLowerCase();
+            return vg.keywords.some(k => rv.includes(k));
+          }
+          return true;
+        }).filter(r => {
+          if (!h.mixedFilter || h.mixedFilter === "전체") return true;
+          if (h.mixedFilter === "혼적") return r.혼적 === true || r.혼적 === "true" || r.혼적 === 1;
+          if (h.mixedFilter === "독차") return !r.혼적 || r.혼적 === false || r.혼적 === "false" || r.혼적 === 0;
+          return true;
+        });
+        const ff = h.fareField || "청구운임";
+        // Build bucket stats
+        const bucketMap = {};
+        matched.forEach(r => {
+          const ton = extractTon(r.차량톤수 || ""); const b = getTonBucket(ton);
+          if (!b) return;
+          const fare = Number(String(r[ff] || "0").replace(/[^\d]/g,""));
+          if (!fare) return;
+          if (!bucketMap[b.label]) bucketMap[b.label] = { ...b, fares: [] };
+          bucketMap[b.label].fares.push(fare);
+        });
+        const rows = TON_BUCKETS.filter(b => bucketMap[b.label]).map(b => {
+          const fares = bucketMap[b.label].fares.sort((a,b2) => a-b2);
+          const avg = Math.round(fares.reduce((a,v)=>a+v,0)/fares.length/10000)*10000;
+          const min = fares[0]; const max = fares[fares.length-1];
+          const variance = fares.length > 1 ? Math.round(Math.sqrt(fares.reduce((s,v)=>s+(v-avg)**2,0)/fares.length)/1000) : 0;
+          return { display: b.display, avg, min, max, count: fares.length, variance };
+        });
+        return (
+          <div className="fixed inset-0 bg-black/60 z-[999999] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+              <div className="bg-[#1B2B4B] px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div>
+                  <div className="text-white font-bold text-[15px]">발행 이력 상세</div>
+                  <div className="text-white/55 text-[11px] mt-0.5">{dateStr} {timeStr} 발행 · {h.source === "manual" ? "수동작성" : "자동생성"}</div>
+                </div>
+                <button onClick={() => setHistoryDetailModal(null)} className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg">×</button>
+              </div>
+              <div className="px-6 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap text-[12px]">
+                <span className="font-bold text-[#1B2B4B] text-[14px]">{h.pickup}</span>
+                <span className="text-gray-400">→</span>
+                <span className="font-bold text-[#1B2B4B] text-[14px]">{h.drop}</span>
+                {h.client && <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-600">[{h.client}]</span>}
+                {h.vehicle && <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-600">{h.vehicle}</span>}
+                {h.mixedFilter && h.mixedFilter !== "전체" && <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-600">{h.mixedFilter}</span>}
+                <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] rounded font-semibold">{ff}</span>
+              </div>
+              <div className="overflow-y-auto flex-1 p-4">
+                {rows.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 text-[13px]">해당 조건의 데이터를 찾을 수 없습니다</div>
+                ) : (
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="bg-[#1B2B4B]">
+                        {["차량 톤수","권장 단가","운임 범위","데이터 수","변동성"].map(h2=>(
+                          <th key={h2} className="px-3 py-3 text-center text-[12px] font-bold text-white">{h2}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row,i) => (
+                        <tr key={i} className={`border-b border-gray-100 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                          <td className="px-3 py-3 text-center font-bold text-[#1B2B4B]">{row.display}</td>
+                          <td className="px-3 py-3 text-center font-bold text-[#1B2B4B] text-[15px]">{row.avg.toLocaleString()}원</td>
+                          <td className="px-3 py-3 text-center text-gray-500">{row.min.toLocaleString()} ~ {row.max.toLocaleString()}원</td>
+                          <td className="px-3 py-3 text-center text-gray-500">{row.count}건</td>
+                          <td className="px-3 py-3 text-center text-gray-500">{row.variance > 40 ? "높음" : row.variance > 20 ? "보통" : "낮음"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end rounded-b-2xl">
+                <button onClick={() => setHistoryDetailModal(null)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
