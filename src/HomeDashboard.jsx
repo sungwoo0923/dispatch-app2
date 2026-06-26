@@ -894,9 +894,8 @@ React.useEffect(() => {
                         const myApprover = (s.approvers || []).find(a => a.uid === auth.currentUser?.uid && a.status === "pending");
                         if (myApprover && s.isReRequest) return (
                           <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
-                            className="text-[11px] font-bold px-2 py-1 rounded-lg animate-pulse"
-                            style={{ background: "#DC2626", color: "#fff" }}>
-                            재요청
+                            className="text-[11px] font-bold px-2 py-1 rounded-lg bg-[#1B2B4B] text-white animate-pulse">
+                            재요청대기
                           </button>
                         );
                         if (myApprover) return (
@@ -1124,7 +1123,12 @@ React.useEffect(() => {
           <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 560, maxHeight: "90vh", overflowY: "auto" }}>
             {/* 헤더 */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B]">
-              <h3 className="font-bold text-white text-[15px] tracking-widest">{typeLabel[selectedSchedule.type] || "일정 신청서"}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-white text-[15px] tracking-widest">{typeLabel[selectedSchedule.type] || "일정 신청서"}</h3>
+                {selectedSchedule.isReRequest && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#DC2626", borderRadius: 6, padding: "2px 8px", letterSpacing: "0.05em" }}>재요청</span>
+                )}
+              </div>
               <button onClick={() => setSelectedSchedule(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
 

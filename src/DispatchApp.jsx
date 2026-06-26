@@ -747,40 +747,85 @@ const upsertPlace = async (place) => {
   try {
     const name = (place?.업체명 || "").trim();
     if (!name) return;
+    const addr = (place?.주소 || "").trim();
+    const normAddr = addr.toLowerCase().replace(/\s+/g, "");
 
     let key = place._id;
+    let existingData = null;
     if (!key) {
       const normalizedKey = makePlaceKey(name);
       // 1차: 정규화된 키로 문서 존재 확인
       const normalizedSnap = await getDoc(doc(db, "places", normalizedKey));
       if (normalizedSnap.exists()) {
         key = normalizedKey;
+        existingData = normalizedSnap.data();
       } else {
-        // 2차: 같은 업체명으로 저장된 레거시 문서 검색 (addDoc으로 생성된 자동ID 방지)
+        // 2차: 같은 업체명으로 저장된 레거시 문서 검색 (업체명+주소 우선 매칭)
         const legacySnap = await getDocs(
-          query(collection(db, "places"), where("업체명", "==", name), limit(1))
+          query(collection(db, "places"), where("업체명", "==", name))
         );
-        key = legacySnap.empty ? normalizedKey : legacySnap.docs[0].id;
+        if (!legacySnap.empty) {
+          // 주소가 같은 doc 우선 선택
+          const sameAddrDoc = legacySnap.docs.find(d => {
+            const existAddr = (d.data().주소 || "").trim().toLowerCase().replace(/\s+/g, "");
+            return existAddr === normAddr;
+          });
+          const picked = sameAddrDoc || legacySnap.docs[0];
+          key = picked.id;
+          existingData = picked.data();
+        } else {
+          key = normalizedKey;
+        }
       }
+    } else {
+      // _id 제공된 경우 기존 데이터 로드
+      const existSnap = await getDoc(doc(db, "places", key));
+      if (existSnap.exists()) existingData = existSnap.data();
     }
 
     const ref = doc(db, "places", key);
 
+    // contacts 배열 병합: 새 담당자가 있으면 기존 contacts에 추가 (중복 방지)
+    let mergedContacts;
+    if (Array.isArray(place.contacts)) {
+      // contacts 배열 직접 제공 시 그대로 사용
+      mergedContacts = place.contacts;
+    } else {
+      const existingContacts = Array.isArray(existingData?.contacts) ? existingData.contacts : [];
+      const newName = (place.담당자 || "").trim();
+      const newPhone = (place.담당자번호 || "").trim();
+      if (newName) {
+        const alreadyExists = existingContacts.some(c => (c.name || "").trim() === newName);
+        if (!alreadyExists) {
+          mergedContacts = [...existingContacts, { name: newName, phone: newPhone, isPrimary: existingContacts.length === 0 }];
+        } else {
+          // 이미 있는 담당자면 연락처만 업데이트
+          mergedContacts = existingContacts.map(c => (c.name || "").trim() === newName ? { ...c, phone: newPhone } : c);
+        }
+      } else {
+        mergedContacts = existingContacts;
+      }
+    }
+
+    // primary contact 결정
+    const primaryContact = mergedContacts.find(c => c.isPrimary) || mergedContacts[0];
+
     const data = {
       업체명: name,
-      주소: (place.주소 || "").trim(),
-      ...(Array.isArray(place.contacts) ? { contacts: place.contacts } : {}),
-      담당자: (place.담당자 || "").trim(),
-      담당자번호: (place.담당자번호 || "").trim(),
-      등급: place.등급 || "일반",
-      등급변경일: place.등급변경일 || null,
-      메모: place.메모 || "",
+      주소: addr,
+      contacts: mergedContacts,
+      담당자: primaryContact?.name || (place.담당자 || "").trim(),
+      담당자번호: primaryContact?.phone || (place.담당자번호 || "").trim(),
+      등급: place.등급 || existingData?.등급 || "일반",
+      등급변경일: place.등급변경일 || existingData?.등급변경일 || null,
+      메모: place.메모 !== undefined ? place.메모 : (existingData?.메모 || ""),
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
-      companyName: place.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
+      companyName: place.companyName || existingData?.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
     };
 
     await setDoc(ref, data, { merge: true });
+    return key;
 
   } catch (e) {
     console.error("⛔ upsertPlace 오류:", e);
@@ -40441,7 +40486,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         // merge contacts from all docs
         const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", _dupId: g.id })).filter(c => c.name);
         const primary = group[0];
-        return { ...primary, _mergedIds: group.map(g => g.id), _allContacts: allContacts, 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") };
+        return { ...primary, _mergedIds: group.map(g => g.id), _allContacts: allContacts, 담당자: primary.담당자 || allContacts[0]?.name || "", 담당자번호: primary.담당자번호 || allContacts[0]?.phone || "" };
       }
       return p;
     }).filter(Boolean);
@@ -41014,7 +41059,12 @@ React.useEffect(() => {
                           </td>
                           <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate">{r.업체명||""}</td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate">{r.주소||""}</td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-700">{r.담당자||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-700">
+                            {r.담당자||""}
+                            {r._allContacts && r._allContacts.length > 1 && (
+                              <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white">+{r._allContacts.length - 1}명</span>
+                            )}
+                          </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-700">{r.담당자번호||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <div className="flex flex-col items-center gap-0.5">

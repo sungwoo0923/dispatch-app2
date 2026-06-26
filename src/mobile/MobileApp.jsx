@@ -2856,9 +2856,8 @@ onGoSchedule={() => {
                     const myApprover = (s.approvers || []).find(a => a.uid === currentUser?.uid && a.status === "pending");
                     if (myApprover && s.isReRequest) return (
                       <button onClick={e => { e.stopPropagation(); setSelectedSchedule(s); }}
-                        className="text-[12px] font-bold px-2 py-1 rounded-lg animate-pulse text-white"
-                        style={{ background: "#DC2626" }}>
-                        재요청
+                        className={`text-[12px] font-bold px-2 py-1 rounded-lg animate-pulse ${cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-blue-600 text-white"}`}>
+                        재요청대기
                       </button>
                     );
                     if (myApprover) return (
@@ -2895,7 +2894,12 @@ onGoSchedule={() => {
   <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-3" style={{ overflowY: "auto" }}>
     <div className="bg-white w-full rounded-2xl overflow-hidden shadow-2xl my-4" style={{ maxWidth: 420 }}>
       <div className="flex justify-between items-center px-5 py-4 bg-[#1B2B4B]">
-        <h3 className="font-bold text-white tracking-widest" style={{ fontSize: 14 }}>{typeLabel[selectedSchedule.type] || "일정 신청서"}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold text-white tracking-widest" style={{ fontSize: 14 }}>{typeLabel[selectedSchedule.type] || "일정 신청서"}</h3>
+          {selectedSchedule.isReRequest && (
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: "#DC2626", borderRadius: 5, padding: "2px 6px" }}>재요청</span>
+          )}
+        </div>
         <button onClick={() => setSelectedSchedule(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div className="px-5 py-5">
