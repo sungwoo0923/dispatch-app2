@@ -339,7 +339,7 @@ const [detailModal, setDetailModal] = useState(null);
   };
 
   const handleManualPrint = () => {
-    addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length, client: manualInfo.client, savedRows: manualRows.map(r => ({ display: r.display, avg: Number(r.avg)||0, min: Number(r.min)||0, max: Number(r.max)||0, count: 1, variance: 0 })) });
+    addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length, client: manualInfo.client, savedRows: manualRows.map(r => ({ display: r.display, avg: Number(String(r.avg).replace(/[^\d]/g,""))||0, min: Number(String(r.min).replace(/[^\d]/g,""))||0, max: Number(String(r.max).replace(/[^\d]/g,""))||0, count: 1, variance: 0 })) });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>단가표_${manualInfo.pickup}_${manualInfo.drop}</title>

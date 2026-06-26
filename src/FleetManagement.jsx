@@ -535,7 +535,10 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                   if (!ws) return <span style={{ fontSize: 12, color: "#d1d5db" }}>–</span>;
                   const start = ws?.toDate?.() || (ws?.seconds ? new Date(ws.seconds * 1000) : null);
                   if (!start) return <span style={{ fontSize: 12, color: "#d1d5db" }}>–</span>;
-                  const ms = Date.now() - start.getTime();
+                  const isOut = d.상태 === "퇴근" || d.상태 === "최종퇴근";
+                  const ms = isOut && d.근무시간
+                    ? d.근무시간 * 60 * 1000
+                    : Date.now() - start.getTime();
                   const h = Math.floor(ms / 3600000);
                   const m = Math.floor((ms % 3600000) / 60000);
                   return <span style={{ fontSize: 12, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>;
