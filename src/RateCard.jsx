@@ -339,7 +339,7 @@ const [detailModal, setDetailModal] = useState(null);
   };
 
   const handleManualPrint = () => {
-    addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length, client: manualInfo.client });
+    addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length, client: manualInfo.client, savedRows: manualRows.map(r => ({ display: r.display, avg: Number(r.avg)||0, min: Number(r.min)||0, max: Number(r.max)||0, count: 1, variance: 0 })) });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>단가표_${manualInfo.pickup}_${manualInfo.drop}</title>
@@ -434,7 +434,7 @@ ${manualInfo.note ? `<div class="notice"><b>※ 특이사항</b><br>${manualInfo
 
   const handlePrint = () => {
     if (!result) return;
-    addHistoryEntry({ source: "auto", pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, fareField: result.fareField, mixedFilter: result.mixedFilter, rowCount: result.rows.length, client: "" });
+    addHistoryEntry({ source: "auto", pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, fareField: result.fareField, mixedFilter: result.mixedFilter, rowCount: result.rows.length, client: "", savedRows: result.rows });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>단가표_${result.pickup}_${result.drop}</title>
@@ -1082,45 +1082,9 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
         const dt = new Date(h.ts);
         const dateStr = dt.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
         const timeStr = dt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-        // Reconstruct result rows from dispatchData for this history entry
-        const pu = (h.pickup || "").replace(/\s/g, "").toLowerCase();
-        const dr = (h.drop || "").replace(/\s/g, "").toLowerCase();
-        const vg = VEHICLE_GROUPS.find(g => g.label === h.vehicle);
-        const matched = dispatchData.filter(r => {
-          const rPu = clean(r.상차지명 || ""); const rDr = clean(r.하차지명 || "");
-          const rPuA = clean(r.상차지주소 || ""); const rDrA = clean(r.하차지주소 || "");
-          const puOk = rPu.includes(pu) || pu.includes(rPu) || rPuA.includes(pu);
-          const drOk = rDr.includes(dr) || dr.includes(rDr) || rDrA.includes(dr);
-          if (!puOk || !drOk) return false;
-          if (vg) {
-            const rv = (r.차량종류 || "").toLowerCase();
-            return vg.keywords.some(k => rv.includes(k));
-          }
-          return true;
-        }).filter(r => {
-          if (!h.mixedFilter || h.mixedFilter === "전체") return true;
-          if (h.mixedFilter === "혼적") return r.혼적 === true || r.혼적 === "true" || r.혼적 === 1;
-          if (h.mixedFilter === "독차") return !r.혼적 || r.혼적 === false || r.혼적 === "false" || r.혼적 === 0;
-          return true;
-        });
         const ff = h.fareField || "청구운임";
-        // Build bucket stats
-        const bucketMap = {};
-        matched.forEach(r => {
-          const ton = extractTon(r.차량톤수 || ""); const b = getTonBucket(ton);
-          if (!b) return;
-          const fare = Number(String(r[ff] || "0").replace(/[^\d]/g,""));
-          if (!fare) return;
-          if (!bucketMap[b.label]) bucketMap[b.label] = { ...b, fares: [] };
-          bucketMap[b.label].fares.push(fare);
-        });
-        const rows = TON_BUCKETS.filter(b => bucketMap[b.label]).map(b => {
-          const fares = bucketMap[b.label].fares.sort((a,b2) => a-b2);
-          const avg = Math.round(fares.reduce((a,v)=>a+v,0)/fares.length/10000)*10000;
-          const min = fares[0]; const max = fares[fares.length-1];
-          const variance = fares.length > 1 ? Math.round(Math.sqrt(fares.reduce((s,v)=>s+(v-avg)**2,0)/fares.length)/1000) : 0;
-          return { display: b.display, avg, min, max, count: fares.length, variance };
-        });
+        // Use saved rows from publish time (not reconstructed from current data)
+        const rows = h.savedRows || [];
         return (
           <div className="fixed inset-0 bg-black/60 z-[999999] flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
