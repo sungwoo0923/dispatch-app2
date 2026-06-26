@@ -1491,7 +1491,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                     <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
                   </div>
                 )}
-                <div style={{ display: "flex", justifyContent: isMine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6, marginTop: isContinued ? 1 : 8 }}>
+                <div id={`msg-${msg.id}`} style={{ display: "flex", justifyContent: isMine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6, marginTop: isContinued ? 1 : 8 }}>
                   {/* 상대방 아바타 */}
                   {!isMine && (
                     <div style={{ width: 32, flexShrink: 0, alignSelf: "flex-end", marginBottom: 2 }}>
@@ -1576,13 +1576,24 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                         >
                           {/* 답장 인용 */}
                           {msg.replyToText && (
-                            <div style={{
-                              padding: "6px 10px 5px", marginBottom: 3,
-                              borderRadius: "10px 10px 0 0",
-                              background: isMine ? "rgba(0,0,0,0.18)" : "#e8edf5",
-                              borderLeft: `3px solid ${isMine ? "rgba(255,255,255,0.7)" : themeMyBubble}`,
-                              maxWidth: 240,
-                            }}>
+                            <div
+                              onClick={() => {
+                                const el = document.getElementById(`msg-${msg.replyToId}`);
+                                if (el && msgContainerRef.current) {
+                                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                  el.style.transition = "background 0.3s";
+                                  el.style.background = "rgba(27,43,75,0.15)";
+                                  setTimeout(() => { el.style.background = ""; }, 1200);
+                                }
+                              }}
+                              style={{
+                                padding: "6px 10px 5px", marginBottom: 3,
+                                borderRadius: "10px 10px 0 0",
+                                background: isMine ? "rgba(0,0,0,0.18)" : "#e8edf5",
+                                borderLeft: `3px solid ${isMine ? "rgba(255,255,255,0.7)" : themeMyBubble}`,
+                                maxWidth: 240,
+                                cursor: "pointer",
+                              }}>
                               <div style={{ fontSize: 10, fontWeight: 800, color: isMine ? "rgba(255,255,255,0.85)" : themeMyBubble, marginBottom: 2 }}>{msg.replyToSender}</div>
                               <div style={{ fontSize: 11, fontWeight: 500, color: isMine ? "rgba(255,255,255,0.75)" : "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{msg.replyToText}</div>
                             </div>

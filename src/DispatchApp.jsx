@@ -2274,6 +2274,13 @@ React.useEffect(() => {
   };
 
 
+  // 화물내용 +추가 팝업 (공통)
+  const [cargoAddPopup, setCargoAddPopup] = React.useState(null);
+  const [_cargoAddQty, _setCargoAddQty] = React.useState("");
+  const [_cargoAddType, _setCargoAddType] = React.useState("");
+  const [_cargoEditValue, _setCargoEditValue] = React.useState("");
+  React.useEffect(() => { if (cargoAddPopup) _setCargoEditValue(cargoAddPopup.initialValue || ""); }, [cargoAddPopup]);
+
   if (!user) {
     return (
       <div className="w-full h-screen flex items-center justify-center text-gray-500">
@@ -2481,6 +2488,7 @@ return (
             isViewer={isViewer}
             showAlert={showAlert}
             userCompany={userCompany || localStorage.getItem("userCompany") || ""}
+            setCargoAddPopup={setCargoAddPopup}
           />
         </div>
 
@@ -3009,6 +3017,90 @@ return (
           {calcOpen && <FloatingCalculator onClose={() => setCalcOpen(false)} />}
         </>
 
+{/* ── 화물내용 +추가 팝업 ── */}
+{cargoAddPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]"
+    onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] border" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-5 py-3 rounded-t-2xl flex items-center justify-between">
+        <div className="text-[14px] font-bold text-white">화물내용 관리</div>
+        <button onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }} className="text-white/60 hover:text-white text-lg font-bold">✕</button>
+      </div>
+      <div className="p-5">
+        {(() => {
+          const parts = _cargoEditValue.split("+").filter(Boolean);
+          const base = parts[0] || "";
+          const extras = parts.slice(1);
+          return extras.length > 0 ? (
+            <div className="mb-4">
+              <div className="text-[12px] font-semibold text-gray-500 mb-2">등록된 추가 항목 (× 누르면 삭제)</div>
+              <div className="flex flex-wrap gap-2">
+                {extras.map((item, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-3 py-1 rounded-full">
+                    {item}
+                    <button type="button" onClick={() => {
+                      const newEx = extras.filter((_,j) => j !== i);
+                      const newVal = newEx.length ? base+"+"+newEx.join("+") : base;
+                      _setCargoEditValue(newVal);
+                      cargoAddPopup.onCommit(newVal);
+                    }} className="text-[#1B2B4B]/50 hover:text-red-500 font-bold text-[15px] leading-none cursor-pointer">×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4 text-[12px] text-gray-400">추가된 항목이 없습니다.</div>
+          );
+        })()}
+        <div className="text-[12px] font-semibold text-gray-500 mb-2">새 항목 추가</div>
+        <div className="flex gap-2 mb-2">
+          <input
+            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+            placeholder="수량 (예: 2)"
+            value={_cargoAddQty}
+            onChange={e => _setCargoAddQty(e.target.value)}
+            autoFocus
+            onKeyDown={e => {
+              if (e.key === "Enter") {
+                const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
+                if (item.trim()) {
+                  const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
+                  _setCargoEditValue(newVal);
+                  cargoAddPopup.onCommit(newVal);
+                  _setCargoAddQty(""); _setCargoAddType("");
+                }
+              }
+            }}
+          />
+          <select
+            className="w-[90px] shrink-0 border border-gray-300 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+            value={_cargoAddType}
+            onChange={e => _setCargoAddType(e.target.value)}
+          >
+            <option value="">없음</option>
+            <option value="파레트">파레트</option>
+            <option value="박스">박스</option>
+            <option value="통">통</option>
+            <option value="롤">롤</option>
+          </select>
+        </div>
+        <button className="w-full py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold mb-4"
+          onClick={() => {
+            const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
+            if (item.trim()) {
+              const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
+              _setCargoEditValue(newVal);
+              cargoAddPopup.onCommit(newVal);
+              _setCargoAddQty(""); _setCargoAddType("");
+            }
+          }}>추가</button>
+        <button className="w-full py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
+          onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>닫기</button>
+      </div>
+    </div>
+  </div>
+)}
+
     </ToastProvider>
   );
 }
@@ -3174,6 +3266,7 @@ return (
     isViewer = false,
     showAlert = (msg) => showAlert(msg),  // ★ 추가 (폴백 포함)
     userCompany = "",
+    setCargoAddPopup = () => {},
   }) {
 
       const [useNewForm, setUseNewForm] = React.useState(false);
@@ -6680,12 +6773,7 @@ function calcHistoryScore(row, form) {
 const [smartDriverQuery, setSmartDriverQuery] = React.useState("");
 const [smartDriverMatched, setSmartDriverMatched] = React.useState([]);
 const [driverConflictPopup, setDriverConflictPopup] = React.useState(null);
-// 화물내용 +추가 팝업 (공통): { onAdd: (item:string) => void }
-const [cargoAddPopup, setCargoAddPopup] = React.useState(null);
-const [_cargoAddQty, _setCargoAddQty] = React.useState("");
-const [_cargoAddType, _setCargoAddType] = React.useState("");
-const [_cargoEditValue, _setCargoEditValue] = React.useState("");
-React.useEffect(() => { if (cargoAddPopup) _setCargoEditValue(cargoAddPopup.initialValue || ""); }, [cargoAddPopup]);
+// cargoAddPopup is passed in via props from DispatchApp
 // { mode: "overwrite"|"new", existing: driver, input: {plate,name,phone} }
 
 const parseDriverText = (text) => {
@@ -10351,91 +10439,6 @@ setTimeout(() => {
   );
 })()}
 {/* ===== 기사 정보 충돌 팝업 ===== */}
-{/* ── 화물내용 +추가 팝업 ── */}
-{cargoAddPopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-    onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[400px] border" onClick={e => e.stopPropagation()}>
-      <div className="bg-[#1B2B4B] px-5 py-3 rounded-t-2xl flex items-center justify-between">
-        <div className="text-[14px] font-bold text-white">화물내용 관리</div>
-        <button onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }} className="text-white/60 hover:text-white text-lg font-bold">✕</button>
-      </div>
-      <div className="p-5">
-        {/* 등록된 추가 항목 목록 */}
-        {(() => {
-          const parts = _cargoEditValue.split("+").filter(Boolean);
-          const base = parts[0] || "";
-          const extras = parts.slice(1);
-          return extras.length > 0 ? (
-            <div className="mb-4">
-              <div className="text-[12px] font-semibold text-gray-500 mb-2">등록된 추가 항목 (× 누르면 삭제)</div>
-              <div className="flex flex-wrap gap-2">
-                {extras.map((item, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-3 py-1 rounded-full">
-                    {item}
-                    <button type="button" onClick={() => {
-                      const newEx = extras.filter((_,j) => j !== i);
-                      const newVal = newEx.length ? base+"+"+newEx.join("+") : base;
-                      _setCargoEditValue(newVal);
-                      cargoAddPopup.onCommit(newVal);
-                    }} className="text-[#1B2B4B]/50 hover:text-red-500 font-bold text-[15px] leading-none cursor-pointer">×</button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="mb-4 text-[12px] text-gray-400">추가된 항목이 없습니다.</div>
-          );
-        })()}
-        {/* 새 항목 추가 */}
-        <div className="text-[12px] font-semibold text-gray-500 mb-2">새 항목 추가</div>
-        <div className="flex gap-2 mb-2">
-          <input
-            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
-            placeholder="수량 (예: 2)"
-            value={_cargoAddQty}
-            onChange={e => _setCargoAddQty(e.target.value)}
-            autoFocus
-            onKeyDown={e => {
-              if (e.key === "Enter") {
-                const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
-                if (item.trim()) {
-                  const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
-                  _setCargoEditValue(newVal);
-                  cargoAddPopup.onCommit(newVal);
-                  _setCargoAddQty(""); _setCargoAddType("");
-                }
-              }
-            }}
-          />
-          <select
-            className="w-[90px] shrink-0 border border-gray-300 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
-            value={_cargoAddType}
-            onChange={e => _setCargoAddType(e.target.value)}
-          >
-            <option value="">없음</option>
-            <option value="파레트">파레트</option>
-            <option value="박스">박스</option>
-            <option value="통">통</option>
-            <option value="롤">롤</option>
-          </select>
-        </div>
-        <button className="w-full py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold mb-4"
-          onClick={() => {
-            const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
-            if (item.trim()) {
-              const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
-              _setCargoEditValue(newVal);
-              cargoAddPopup.onCommit(newVal);
-              _setCargoAddQty(""); _setCargoAddType("");
-            }
-          }}>추가</button>
-        <button className="w-full py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
-          onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>닫기</button>
-      </div>
-    </div>
-  </div>
-)}
 
 {driverConflictPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
