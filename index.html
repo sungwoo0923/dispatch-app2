@@ -28,28 +28,38 @@
           lastTouch = now;
         }, { passive: false });
 
-        // Force reset zoom to 1.0 on page load (overrides browser remembered zoom / foldable screen switch)
+        // Force zoom = 1.0 permanently (overrides Chrome browser-level zoom / foldable screen switch)
         function forceResetZoom() {
           var meta = document.querySelector('meta[name=viewport]');
           if (!meta) return;
-          meta.content = 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-          setTimeout(function() {
-            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-          }, 300);
+          // Toggle trick: remove then re-add to force Chrome to re-evaluate at scale 1
+          meta.content = 'width=device-width, initial-scale=1.0';
+          // Use rAF so browser processes the above before we lock it down
+          requestAnimationFrame(function() {
+            meta.content = 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+          });
         }
         forceResetZoom();
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', forceResetZoom);
         }
+        window.addEventListener('load', forceResetZoom);
         document.addEventListener('visibilitychange', function() {
           if (document.visibilityState === 'visible') { forceResetZoom(); }
         });
+        // visualViewport API: detect any browser-level zoom and snap back
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', function() {
+            var scale = window.visualViewport.scale;
+            if (scale < 0.95 || scale > 1.05) { forceResetZoom(); }
+          });
+        }
       })();
     </script>
 
       <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
 
 
