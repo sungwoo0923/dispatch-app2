@@ -8617,6 +8617,9 @@ const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 
 
   const [화물수량, set화물수량] = useState(() => detectCargoNum(form.화물내용||""));
   const [화물타입, set화물타입] = useState(() => detectCargoType(form.화물내용||""));
+  const [mCargoAddPopup, setMCargoAddPopup] = useState(false);
+  const [mCargoAddQty, setMCargoAddQty] = useState("");
+  const [mCargoAddType, setMCargoAddType] = useState("");
 
   // Sync split local state when form values change from outside (e.g. SmartOrderParser apply)
   useEffect(() => {
@@ -9408,47 +9411,75 @@ const pickDrop = (c) => {
         {/* 화물내용 */}
         <RowLabelInput
           label="화물내용"
+          right={<button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white" onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>}
           input={
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <input
-                  className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
-                  placeholder="예: 3"
-                  value={화물수량}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    set화물수량(v);
-                    update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
-                  }}
-                />
-                <select
-                  className="w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
-                  value={화물타입}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    set화물타입(t);
-                    update("화물내용", t ? `${화물수량}${t}` : 화물수량);
-                  }}
-                >
-                  <option value="">없음</option>
-                  <option value="파레트">파레트</option>
-                  <option value="박스">박스</option>
-                  <option value="통">통</option>
-                  <option value="롤">롤</option>
-                </select>
-              </div>
-              <button type="button"
-                className="self-start px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg"
-                onClick={() => {
-                  const cur = (form.화물내용 || "").trim();
-                  const base = cur ? (cur + (화물타입 && !cur.endsWith(화물타입) ? 화물타입 : "")) : "";
-                  set화물타입("");
-                  set화물수량("");
-                  update("화물내용", base ? base + "+" : "");
-                }}>+ 추가</button>
+            <div className="flex items-center gap-2">
+              <input
+                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
+                placeholder="예: 3"
+                value={화물수량}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  set화물수량(v);
+                  update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
+                }}
+              />
+              <select
+                className="w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+                value={화물타입}
+                onChange={(e) => {
+                  const t = e.target.value;
+                  set화물타입(t);
+                  update("화물내용", t ? `${화물수량}${t}` : 화물수량);
+                }}
+              >
+                <option value="">없음</option>
+                <option value="파레트">파레트</option>
+                <option value="박스">박스</option>
+                <option value="통">통</option>
+                <option value="롤">롤</option>
+              </select>
             </div>
           }
         />
+        {/* 화물내용 추가 팝업 */}
+        {mCargoAddPopup && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+            onClick={() => setMCargoAddPopup(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-72 overflow-hidden border" onClick={e => e.stopPropagation()}>
+              <div className="bg-[#1B2B4B] px-5 py-3">
+                <div className="text-[14px] font-bold text-white">화물내용 추가</div>
+              </div>
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                    placeholder="수량 (예: 2)" value={mCargoAddQty} onChange={e => setMCargoAddQty(e.target.value)} autoFocus />
+                  <select className="w-[82px] border-0 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+                    value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
+                    <option value="">없음</option>
+                    <option value="파레트">파레트</option>
+                    <option value="박스">박스</option>
+                    <option value="통">통</option>
+                    <option value="롤">롤</option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
+                    onClick={() => setMCargoAddPopup(false)}>취소</button>
+                  <button className="flex-1 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold"
+                    onClick={() => {
+                      const item = mCargoAddType ? `${mCargoAddQty}${mCargoAddType}` : mCargoAddQty;
+                      if (item.trim()) {
+                        const cur = (form.화물내용 || "").trim();
+                        update("화물내용", cur ? cur + "+" + item.trim() : item.trim());
+                      }
+                      setMCargoAddPopup(false);
+                    }}>추가</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 상/하차방법 */}

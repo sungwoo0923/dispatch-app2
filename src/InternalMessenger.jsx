@@ -1388,6 +1388,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
   const fileInputRef = useRef(null);
   const [ctxMenu, setCtxMenu] = useState(null); // {msg, x, y}
   const [showEmojiPicker, setShowEmojiPicker] = useState(null); // msg
+  const [selfSentToast, setSelfSentToast] = useState(false);
   const longPressTimer = useRef(null);
   const EMOJI_LIST = ["👍","❤️","😆","😮","😢","✅"];
 
@@ -1671,7 +1672,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             </div>
             {[
               { label: "답장", action: () => { onReply?.(msg); setCtxMenu(null); } },
-              { label: "나에게 보내기", action: () => { onSendToSelf?.(msg.text); setCtxMenu(null); } },
+              { label: "나에게 보내기", action: () => { onSendToSelf?.(msg.text); setCtxMenu(null); setSelfSentToast(true); setTimeout(() => setSelfSentToast(false), 2500); } },
               { label: "복사", action: () => { navigator.clipboard?.writeText(msg.text || ""); setCtxMenu(null); } },
               ...(isMine ? [
                 { label: "수정", action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } },
@@ -1825,6 +1826,16 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
           <img src={imgPreview} style={{ maxWidth: "90vw", maxHeight: "80vh", borderRadius: 12, objectFit: "contain" }}
             onClick={e => e.stopPropagation()} />
           <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 12 }}>Ctrl+C 복사 · ESC 닫기</div>
+        </div>
+      )}
+
+      {/* 나에게 보내기 완료 토스트 */}
+      {selfSentToast && (
+        <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", zIndex: 9999999,
+          background: "#1B2B4B", color: "#fff", borderRadius: 10, padding: "10px 22px",
+          fontSize: 13, fontWeight: 700, boxShadow: "0 4px 16px rgba(0,0,0,0.25)", whiteSpace: "nowrap",
+          pointerEvents: "none" }}>
+          나에게 보냈습니다
         </div>
       )}
     </div>

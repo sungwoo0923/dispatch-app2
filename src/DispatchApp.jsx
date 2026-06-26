@@ -6667,6 +6667,10 @@ function calcHistoryScore(row, form) {
 const [smartDriverQuery, setSmartDriverQuery] = React.useState("");
 const [smartDriverMatched, setSmartDriverMatched] = React.useState([]);
 const [driverConflictPopup, setDriverConflictPopup] = React.useState(null);
+// 화물내용 +추가 팝업 (공통): { onAdd: (item:string) => void }
+const [cargoAddPopup, setCargoAddPopup] = React.useState(null);
+const [_cargoAddQty, _setCargoAddQty] = React.useState("");
+const [_cargoAddType, _setCargoAddType] = React.useState("");
 // { mode: "overwrite"|"new", existing: driver, input: {plate,name,phone} }
 
 const parseDriverText = (text) => {
@@ -7828,7 +7832,14 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls}>화물내용</label>
+  <label className={labelCls + " flex items-center gap-1"}>
+    화물내용
+    <button type="button"
+      className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
+      onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(form.화물내용||"").trim(); onChange("화물내용", cur ? cur+"+"+item : item); } })}>
+      + 추가
+    </button>
+  </label>
 
   <div className="relative">
 
@@ -7900,21 +7911,6 @@ className={`
     </div>
 
   </div>
-  {/* +추가 버튼 */}
-  <button
-    type="button"
-    className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
-    onClick={() => {
-      const cur = (form.화물내용 || "").trim();
-      const suffix = form.화물타입 || "";
-      const addSuffix = suffix && !cur.endsWith(suffix) ? suffix : "";
-      const base = cur ? (cur + addSuffix) : "";
-      const newVal = base ? base + "+" : "";
-      onChange("화물타입", "");
-      onChange("화물내용", newVal);
-      setTimeout(() => cargoInputRef.current?.focus(), 0);
-    }}
-  >+ 추가</button>
 </div>
 
 
@@ -10337,6 +10333,50 @@ setTimeout(() => {
   );
 })()}
 {/* ===== 기사 정보 충돌 팝업 ===== */}
+{/* ── 화물내용 +추가 팝업 ── */}
+{cargoAddPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+    onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>
+    <div className="bg-white rounded-2xl shadow-2xl w-72 overflow-hidden border" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-5 py-3">
+        <div className="text-[14px] font-bold text-white">화물내용 추가</div>
+      </div>
+      <div className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <input
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+            placeholder="수량 (예: 2)"
+            value={_cargoAddQty}
+            onChange={e => _setCargoAddQty(e.target.value)}
+            autoFocus
+          />
+          <select
+            className="w-[82px] border-0 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+            value={_cargoAddType}
+            onChange={e => _setCargoAddType(e.target.value)}
+          >
+            <option value="">없음</option>
+            <option value="파레트">파레트</option>
+            <option value="박스">박스</option>
+            <option value="통">통</option>
+            <option value="롤">롤</option>
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
+            onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>취소</button>
+          <button className="flex-1 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold"
+            onClick={() => {
+              const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
+              if (item.trim()) cargoAddPopup.onAdd(item.trim());
+              setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType("");
+            }}>추가</button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
 {driverConflictPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden border">
@@ -18578,7 +18618,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
 </Field>
 
-    <Field label="화물내용">
+    <Field label={<span className="flex items-center gap-1">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button></span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -18632,13 +18672,6 @@ value={copyTarget?.화물수량 || ""}
   </div>
 
 </Field>
-<button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
-  onClick={() => {
-    const cur = (copyTarget?.화물내용 || "").trim();
-    const suffix = copyTarget?.화물타입 || "";
-    const base = cur ? (cur + (suffix && !cur.endsWith(suffix) ? suffix : "")) : "";
-    setCopyTarget(p => ({ ...p, 화물타입: "", 화물수량: "", 화물내용: base ? base + "+" : "" }));
-  }}>+ 추가</button>
 
   </div>
 </div>
@@ -19885,7 +19918,10 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             {/* 🔵 화물내용 */}
             {/* ------------------------------------------------ */}
-            <label>화물내용</label>
+            <label className="flex items-center gap-1">화물내용
+              <button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer"
+                onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button>
+            </label>
 
 
 <div className="relative">
@@ -19936,13 +19972,6 @@ value={copyTarget?.화물수량 || ""}
   </div>
 
 </div>
-<button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
-  onClick={() => {
-    const cur = (editTarget.화물내용 || "").trim();
-    const suffix = editTarget.화물타입 || "";
-    const base = cur ? (cur + (suffix && !cur.endsWith(suffix) ? suffix : "")) : "";
-    setEditTarget(p => ({ ...p, 화물타입: "", 화물수량: "", 화물내용: base ? base + "+" : "" }));
-  }}>+ 추가</button>
 
             {/* 🔵 차량정보 */}
 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -26558,7 +26587,7 @@ return (
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
-<Field label="화물내용">
+<Field label={<span className="flex items-center gap-1">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(editTarget?.화물내용||"").trim(); setEditTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button></span>}>
   <div className="relative w-full">
 
     <input
@@ -26604,13 +26633,6 @@ return (
 
   </div>
 </Field>
-<button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
-  onClick={() => {
-    const cur = (editTarget?.화물내용 || "").trim();
-    const suffix = editTarget?.화물타입 || "";
-    const base = cur ? (cur + (suffix && !cur.endsWith(suffix) ? suffix : "")) : "";
-    setEditTarget(p => ({ ...p, 화물타입: "", 화물수량: "", 화물내용: base ? base + "+" : "" }));
-  }}>+ 추가</button>
 
 
 {/* 🔥 차량종류 + 차량톤수 (같은 줄) */}
@@ -34860,15 +34882,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </select>
                       </div>
                     </Field>
-                    <Field label="화물내용">
+                    <Field label={<span className="flex items-center gap-1">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ onAdd: (item) => { const cur=(copyTarget?.화물내용||"").trim(); setCopyTarget(p=>({...p,화물내용:cur?cur+"+"+item:item})); } })}>+ 추가</button></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" />
                         <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }}>
                           <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
                         </select>
                       </div>
-                      <button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
-                        onClick={() => { const cur=(copyTarget?.화물내용||"").trim(); const sfx=copyTarget?.화물타입||""; const base=cur?(cur+(sfx&&!cur.endsWith(sfx)?sfx:"")):""; setCopyTarget(p=>({...p,화물타입:"",화물수량:"",화물내용:base?base+"+":""})); }}>+ 추가</button>
                     </Field>
                   </div>
                 </div>
@@ -41550,6 +41570,8 @@ React.useEffect(() => {
 function RevenuePasswordSection({ companyName }) {
   const [currentPw, setCurrentPw] = React.useState(null);
   const [loaded, setLoaded] = React.useState(false);
+  const [changeMode, setChangeMode] = React.useState(false);
+  const [oldPw, setOldPw] = React.useState("");
   const [newPw, setNewPw] = React.useState("");
   const [confirmPw, setConfirmPw] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -41564,14 +41586,17 @@ function RevenuePasswordSection({ companyName }) {
     return () => unsub();
   }, [companyName]);
 
+  const resetForm = () => { setOldPw(""); setNewPw(""); setConfirmPw(""); setMsg(""); setChangeMode(false); };
+
   const handleSave = async () => {
-    if (!newPw) { setMsg("비밀번호를 입력하세요."); return; }
+    if (changeMode && oldPw !== currentPw) { setMsg("현재 비밀번호가 일치하지 않습니다."); return; }
+    if (!newPw) { setMsg("새 비밀번호를 입력하세요."); return; }
     if (newPw !== confirmPw) { setMsg("비밀번호가 일치하지 않습니다."); return; }
     setSaving(true);
     try {
       await setDoc(doc(db, "companySettings", companyName), { revenuePassword: newPw }, { merge: true });
-      setMsg("비밀번호가 저장되었습니다.");
-      setNewPw(""); setConfirmPw("");
+      setMsg(changeMode ? "비밀번호가 변경되었습니다." : "비밀번호가 저장되었습니다.");
+      resetForm();
     } catch(e) { setMsg("저장 실패: " + e.message); }
     setSaving(false);
   };
@@ -41580,6 +41605,7 @@ function RevenuePasswordSection({ companyName }) {
     if (!window.confirm("비밀번호를 초기화하시겠습니까?")) return;
     await setDoc(doc(db, "companySettings", companyName), { revenuePassword: null }, { merge: true });
     setMsg("비밀번호가 초기화되었습니다.");
+    resetForm();
   };
 
   return (
@@ -41593,34 +41619,60 @@ function RevenuePasswordSection({ companyName }) {
           <div className="text-[13px] text-gray-400">로딩 중...</div>
         ) : (
           <>
-            <div className="text-[13px] text-gray-500">
-              현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-400"}>{currentPw ? "비밀번호 설정됨" : "비밀번호 미설정"}</b>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">새 비밀번호</label>
-                <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="새 비밀번호" value={newPw} onChange={e => { setNewPw(e.target.value); setMsg(""); }} />
+            <div className="flex items-center justify-between">
+              <div className="text-[13px] text-gray-500">
+                현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-400"}>{currentPw ? "비밀번호 설정됨" : "비밀번호 미설정"}</b>
               </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">비밀번호 확인</label>
-                <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="비밀번호 확인" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setMsg(""); }} />
-              </div>
-            </div>
-            {msg && <div className={`text-[12px] font-medium ${msg.includes("실패") || msg.includes("일치") || msg.includes("입력") ? "text-red-500" : "text-emerald-600"}`}>{msg}</div>}
-            <div className="flex gap-2">
-              <button onClick={handleSave} disabled={saving}
-                className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
-                {saving ? "저장 중..." : "저장"}
-              </button>
-              {currentPw && (
-                <button onClick={handleReset}
-                  className="px-5 py-2.5 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
-                  초기화
+              {currentPw && !changeMode && (
+                <button onClick={() => { setChangeMode(true); setMsg(""); }}
+                  className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
+                  변경
                 </button>
               )}
             </div>
+            {(!currentPw || changeMode) && (
+              <>
+                {changeMode && (
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">현재 비밀번호</label>
+                    <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                      placeholder="현재 비밀번호" value={oldPw} onChange={e => { setOldPw(e.target.value); setMsg(""); }} />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">새 비밀번호</label>
+                    <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                      placeholder="새 비밀번호" value={newPw} onChange={e => { setNewPw(e.target.value); setMsg(""); }} />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">비밀번호 확인</label>
+                    <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                      placeholder="비밀번호 확인" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setMsg(""); }} />
+                  </div>
+                </div>
+                {msg && <div className={`text-[12px] font-medium ${msg.includes("실패") || msg.includes("일치") || msg.includes("입력") ? "text-red-500" : "text-emerald-600"}`}>{msg}</div>}
+                <div className="flex gap-2">
+                  <button onClick={handleSave} disabled={saving}
+                    className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
+                    {saving ? "저장 중..." : (changeMode ? "변경 저장" : "저장")}
+                  </button>
+                  {changeMode && (
+                    <button onClick={resetForm}
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold hover:bg-gray-50 transition">
+                      취소
+                    </button>
+                  )}
+                  {currentPw && (
+                    <button onClick={handleReset}
+                      className="px-5 py-2.5 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
+                      초기화
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            {msg && !changeMode && !currentPw && <div className={`text-[12px] font-medium ${msg.includes("실패") ? "text-red-500" : "text-emerald-600"}`}>{msg}</div>}
           </>
         )}
       </div>
