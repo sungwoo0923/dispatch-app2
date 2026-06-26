@@ -108,6 +108,7 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
 
     const onStart = (e) => {
       if (disabled) return;
+      if (e.touches.length > 1) { dragging.current = false; return; } // 멀티터치 무시
       startX.current = e.touches[0].clientX;
       startY.current = e.touches[0].clientY;
       isHoriz.current = null;
@@ -117,6 +118,7 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
 
     const onMove = (e) => {
       if (!dragging.current || disabled) return;
+      if (e.touches.length > 1) { dragging.current = false; doClose(); return; } // 멀티터치면 즉시 취소
       const dx = e.touches[0].clientX - startX.current;
       const dy = e.touches[0].clientY - startY.current;
 
