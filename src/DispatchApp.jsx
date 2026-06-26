@@ -5916,13 +5916,15 @@ const dropStops = safeParseStops(form.경유하차목록)
 
 const now = Date.now();
 const SFXS_CARGO = ["파레트","파렛트","박스","통"];
-let _cargoBase = String(form.화물내용 || "");
+const _fullCargo = String(form.화물내용 || "");
+const _cargoExtras = _fullCargo.replace(/^[^+]*/, "");  // "+1박스" 등 추가항목 보존
+let _cargoBase = _fullCargo.split("+")[0];  // 기본값만 파싱
 for (const s of SFXS_CARGO) {
   if (_cargoBase.endsWith(s)) { _cargoBase = _cargoBase.slice(0, -s.length).trim(); break; }
 }
 const _finalCargo = form.화물타입
-  ? `${_cargoBase}${form.화물타입}`
-  : (form.화물내용 || "");
+  ? `${_cargoBase}${form.화물타입}${_cargoExtras}`
+  : _fullCargo;
 
 const rec = {
   ...form,
