@@ -2508,6 +2508,7 @@ return (
             upsertDriver={upsertDriver}
             darkMode={darkMode}
             isViewer={isViewer}
+            setCargoAddPopup={setCargoAddPopup}
             key={menu}
           />
         )}
@@ -3686,7 +3687,7 @@ function detectCargoType(cargo = "") {
 // 🔥 화물내용에서 단위 suffix 제거 (순수 숫자/텍스트만 반환)
 // ================================
 function extractCargoBase(cargo = "") {
-  const s = String(cargo).trim();
+  const s = String(cargo).split("+")[0].trim();  // only the base, not extras
   if (!s) return "";
 
   // 알려진 suffix를 뒤에서부터 제거 (긴 것 먼저)
@@ -17413,19 +17414,20 @@ const head = isDark
   const latest = dispatchData.find(d => d._id === row._id);
   const raw=String(latest?.화물내용||row.화물내용||"");
 
-  // ✅ suffix 기반 분리만 수행
+  // ✅ suffix 기반 분리만 수행 (base만 파싱 — 추가항목 포함된 경우 오염 방지)
   const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
   let cargoNum = "", cargoType = "";
+  const rawBase17 = raw.split("+")[0];
   for (const s of KNOWN_SUFFIXES) {
-    if (raw.endsWith(s)) {
-      cargoNum = raw.slice(0, -s.length).trim();
+    if (rawBase17.endsWith(s)) {
+      cargoNum = rawBase17.slice(0, -s.length).trim();
       cargoType = s;
       break;
     }
   }
-  // ✅ suffix 매칭 안 되면 → 원본 전체를 화물수량에 보존
+  // ✅ suffix 매칭 안 되면 → 원본 base를 화물수량에 보존
   if (!cargoType) {
-    cargoNum = raw;
+    cargoNum = rawBase17;
     cargoType = "";
   }
 
@@ -17530,19 +17532,20 @@ onDoubleClick={(e) => {
 
   const rawCargo = String(latest?.화물내용 || "");
 
-  // ✅ suffix 기반 분리만 수행
+  // ✅ suffix 기반 분리만 수행 (base만 파싱)
   const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
   let cargoQty = "", cargoType = "";
+  const rawCargoBase = rawCargo.split("+")[0];
   for (const s of KNOWN_SUFFIXES) {
-    if (rawCargo.endsWith(s)) {
-      cargoQty = rawCargo.slice(0, -s.length).trim();
+    if (rawCargoBase.endsWith(s)) {
+      cargoQty = rawCargoBase.slice(0, -s.length).trim();
       cargoType = s;
       break;
     }
   }
-  // ✅ suffix 매칭 안 되면 → 원본 전체를 화물수량에 보존
+  // ✅ suffix 매칭 안 되면 → base를 화물수량에 보존
   if (!cargoType) {
-    cargoQty = rawCargo;
+    cargoQty = rawCargoBase;
     cargoType = "";
   }
 
@@ -21077,8 +21080,9 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
               const raw = String(latest?.화물내용 || "");
               const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
               let cargoNum = "", cargoType = "";
-              for (const s of KNOWN_SUFFIXES) { if (raw.endsWith(s)) { cargoNum = raw.slice(0, -s.length).trim(); cargoType = s; break; } }
-              if (!cargoType) { cargoNum = raw; cargoType = ""; }
+              const rawBase21 = raw.split("+")[0];
+              for (const s of KNOWN_SUFFIXES) { if (rawBase21.endsWith(s)) { cargoNum = rawBase21.slice(0, -s.length).trim(); cargoType = s; break; } }
+              if (!cargoType) { cargoNum = rawBase21; cargoType = ""; }
               const ton = r.차량톤수 || "";
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
@@ -24731,19 +24735,20 @@ if (first) {
 
   const cargoRaw = String(latestFirst.화물내용 || "");
 
-  // ✅ suffix 기반 분리만 수행
+  // ✅ suffix 기반 분리만 수행 (base만 파싱)
   const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
   let cargoQty = "", cargoType = "";
+  const cargoRawBase = cargoRaw.split("+")[0];
   for (const s of KNOWN_SUFFIXES) {
-    if (cargoRaw.endsWith(s)) {
-      cargoQty = cargoRaw.slice(0, -s.length).trim();
+    if (cargoRawBase.endsWith(s)) {
+      cargoQty = cargoRawBase.slice(0, -s.length).trim();
       cargoType = s;
       break;
     }
   }
-  // ✅ suffix 매칭 안 되면 → 원본 전체를 화물수량에 보존
+  // ✅ suffix 매칭 안 되면 → base를 화물수량에 보존
   if (!cargoType) {
-    cargoQty = cargoRaw;
+    cargoQty = cargoRawBase;
     cargoType = "";
   }
 
@@ -28022,14 +28027,10 @@ setCopyPlaceOptions(list);
       value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
         const v = e.target.value;
-
-        setCopyTarget(p => ({
-          ...p,
-          화물수량: v,
-          화물내용: p.화물타입
-            ? `${v}${p.화물타입}`
-            : v
-        }));
+        setCopyTarget(p => {
+          const extras = (p.화물내용 || "").replace(/^[^+]*/, "");
+          return { ...p, 화물수량: v, 화물내용: (p.화물타입 ? `${v}${p.화물타입}` : v) + extras };
+        });
       }}
       placeholder="1"
     />
@@ -28040,14 +28041,10 @@ setCopyPlaceOptions(list);
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
-
-        setCopyTarget(p => ({
-          ...p,
-          화물타입: type,
-          화물내용: type
-            ? `${p.화물수량 || ""}${type}`
-            : (p.화물수량 || "")
-        }));
+        setCopyTarget(p => {
+          const extras = (p.화물내용 || "").replace(/^[^+]*/, "");
+          return { ...p, 화물타입: type, 화물내용: (type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")) + extras };
+        });
       }}
     >
       <option value="">없음</option>
@@ -29606,8 +29603,9 @@ setCopyPlaceOptions(list);
               const raw = String(r.화물내용 || "");
               const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
               let cargoNum = "", cargoType = "";
-              for (const s of KNOWN_SUFFIXES) { if (raw.endsWith(s)) { cargoNum = raw.slice(0, -s.length).trim(); cargoType = s; break; } }
-              if (!cargoType) { cargoNum = raw; cargoType = ""; }
+              const rawBase29 = raw.split("+")[0];
+              for (const s of KNOWN_SUFFIXES) { if (rawBase29.endsWith(s)) { cargoNum = rawBase29.slice(0, -s.length).trim(); cargoType = s; break; } }
+              if (!cargoType) { cargoNum = rawBase29; cargoType = ""; }
               const ton = r.차량톤수 || "";
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
