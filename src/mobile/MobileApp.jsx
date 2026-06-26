@@ -6703,14 +6703,18 @@ const pickupTimeText = order.상차시간
   };
   const handleSmartSearch = (text) => {
     if (!text.trim()) { setSmartMatched([]); return; }
-    const { plate: pl } = parseDriverText(text);
-    if (!pl) {
-      // 차량번호 없으면 드롭다운 표시 안 함
-      setSmartMatched([]);
+    const { plate: pl, name: nm } = parseDriverText(text);
+    if (pl) {
+      const results = drivers.filter(d => normD(d.차량번호).includes(normD(pl)));
+      setSmartMatched(results.slice(0, 8));
       return;
     }
-    const results = drivers.filter(d => normD(d.차량번호).includes(normD(pl)));
-    setSmartMatched(results.slice(0, 8));
+    if (nm && nm.length >= 2) {
+      const results = drivers.filter(d => d.이름 && d.이름.includes(nm));
+      setSmartMatched(results.slice(0, 8));
+      return;
+    }
+    setSmartMatched([]);
   };
   const driversRef = React.useRef(drivers);
   React.useEffect(() => { driversRef.current = drivers; }, [drivers]);
@@ -9405,32 +9409,43 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="화물내용"
           input={
-            <div className="flex items-center gap-2">
-              <input
-                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
-                placeholder="예: 3"
-                value={화물수량}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  set화물수량(v);
-                  update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
-                }}
-              />
-              <select
-                className="w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
-                value={화물타입}
-                onChange={(e) => {
-                  const t = e.target.value;
-                  set화물타입(t);
-                  update("화물내용", t ? `${화물수량}${t}` : 화물수량);
-                }}
-              >
-                <option value="">없음</option>
-                <option value="파레트">파레트</option>
-                <option value="박스">박스</option>
-                <option value="통">통</option>
-                <option value="롤">롤</option>
-              </select>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <input
+                  className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
+                  placeholder="예: 3"
+                  value={화물수량}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    set화물수량(v);
+                    update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
+                  }}
+                />
+                <select
+                  className="w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+                  value={화물타입}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    set화물타입(t);
+                    update("화물내용", t ? `${화물수량}${t}` : 화물수량);
+                  }}
+                >
+                  <option value="">없음</option>
+                  <option value="파레트">파레트</option>
+                  <option value="박스">박스</option>
+                  <option value="통">통</option>
+                  <option value="롤">롤</option>
+                </select>
+              </div>
+              <button type="button"
+                className="self-start px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg"
+                onClick={() => {
+                  const cur = (form.화물내용 || "").trim();
+                  const base = cur ? (cur + (화물타입 && !cur.endsWith(화물타입) ? 화물타입 : "")) : "";
+                  set화물타입("");
+                  set화물수량("");
+                  update("화물내용", base ? base + "+" : "");
+                }}>+ 추가</button>
             </div>
           }
         />

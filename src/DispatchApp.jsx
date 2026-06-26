@@ -6731,6 +6731,8 @@ const results = plate
         if (!aExact && bExact) return 1;
         return 0;
       })
+  : (name && name.length >= 2)
+  ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
   : [];
 setSmartDriverMatched(results.slice(0, 8));
 };
@@ -7877,7 +7879,6 @@ className={`
           }
 
           if (!type) {
-            // 없음: suffix만 제거, 나머지 텍스트만 남김 (빈칸이면 빈칸)
             onChange("화물내용", cleaned);
             setTimeout(() => cargoInputRef.current?.focus(), 0);
           } else {
@@ -7899,6 +7900,21 @@ className={`
     </div>
 
   </div>
+  {/* +추가 버튼 */}
+  <button
+    type="button"
+    className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
+    onClick={() => {
+      const cur = (form.화물내용 || "").trim();
+      const suffix = form.화물타입 || "";
+      const addSuffix = suffix && !cur.endsWith(suffix) ? suffix : "";
+      const base = cur ? (cur + addSuffix) : "";
+      const newVal = base ? base + "+" : "";
+      onChange("화물타입", "");
+      onChange("화물내용", newVal);
+      setTimeout(() => cargoInputRef.current?.focus(), 0);
+    }}
+  >+ 추가</button>
 </div>
 
 
@@ -15449,11 +15465,14 @@ const results = plate
       .filter(d => nd4(d.차량번호) === nd4(plate))
       .sort((a, b) => {
         const aExact = nd4(a.이름) === nd4(name) && nd4(a.전화번호) === nd4(phone);
+
         const bExact = nd4(b.이름) === nd4(name) && nd4(b.전화번호) === nd4(phone);
         if (aExact && !bExact) return -1;
         if (!aExact && bExact) return 1;
         return 0;
       })
+  : (name && name.length >= 2)
+  ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
   : [];
 setSmartList4(results.slice(0,8));
 };
@@ -18613,6 +18632,13 @@ value={copyTarget?.화물수량 || ""}
   </div>
 
 </Field>
+<button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
+  onClick={() => {
+    const cur = (copyTarget?.화물내용 || "").trim();
+    const suffix = copyTarget?.화물타입 || "";
+    const base = cur ? (cur + (suffix && !cur.endsWith(suffix) ? suffix : "")) : "";
+    setCopyTarget(p => ({ ...p, 화물타입: "", 화물수량: "", 화물내용: base ? base + "+" : "" }));
+  }}>+ 추가</button>
 
   </div>
 </div>
@@ -19910,6 +19936,13 @@ value={copyTarget?.화물수량 || ""}
   </div>
 
 </div>
+<button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
+  onClick={() => {
+    const cur = (editTarget.화물내용 || "").trim();
+    const suffix = editTarget.화물타입 || "";
+    const base = cur ? (cur + (suffix && !cur.endsWith(suffix) ? suffix : "")) : "";
+    setEditTarget(p => ({ ...p, 화물타입: "", 화물수량: "", 화물내용: base ? base + "+" : "" }));
+  }}>+ 추가</button>
 
             {/* 🔵 차량정보 */}
 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -23613,6 +23646,8 @@ const results = plate
         if (!aExact && bExact) return 1;
         return 0;
       })
+  : (name && name.length >= 2)
+  ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
   : [];
 setSmartList5(results.slice(0,8));
 };
@@ -26569,6 +26604,13 @@ return (
 
   </div>
 </Field>
+<button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
+  onClick={() => {
+    const cur = (editTarget?.화물내용 || "").trim();
+    const suffix = editTarget?.화물타입 || "";
+    const base = cur ? (cur + (suffix && !cur.endsWith(suffix) ? suffix : "")) : "";
+    setEditTarget(p => ({ ...p, 화물타입: "", 화물수량: "", 화물내용: base ? base + "+" : "" }));
+  }}>+ 추가</button>
 
 
 {/* 🔥 차량종류 + 차량톤수 (같은 줄) */}
@@ -34825,6 +34867,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
                         </select>
                       </div>
+                      <button type="button" className="mt-1 px-2 py-0.5 text-[11px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition-colors"
+                        onClick={() => { const cur=(copyTarget?.화물내용||"").trim(); const sfx=copyTarget?.화물타입||""; const base=cur?(cur+(sfx&&!cur.endsWith(sfx)?sfx:"")):""; setCopyTarget(p=>({...p,화물타입:"",화물수량:"",화물내용:base?base+"+":""})); }}>+ 추가</button>
                     </Field>
                   </div>
                 </div>

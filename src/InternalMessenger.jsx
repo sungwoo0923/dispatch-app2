@@ -544,6 +544,45 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }).catch(() => {});
   };
 
+  // ── 이모티콘 반응 ──
+  const addReaction = async (msgId, emoji) => {
+    if (!myUid || !msgId) return;
+    const msgRef = doc(db, MSGS_COLL, msgId);
+    const snap = await getDoc(msgRef).catch(() => null);
+    if (!snap?.exists()) return;
+    const reactions = snap.data().reactions || {};
+    const emojiUsers = reactions[emoji] || [];
+    const already = emojiUsers.includes(myUid);
+    // 토글: 이미 있으면 제거, 없으면 추가
+    const newList = already ? emojiUsers.filter(u => u !== myUid) : [...emojiUsers, myUid];
+    const newReactions = { ...reactions, [emoji]: newList };
+    // 빈 배열은 키 삭제
+    if (newList.length === 0) delete newReactions[emoji];
+    await updateDoc(msgRef, { reactions: newReactions }).catch(() => {});
+  };
+
+  // ── 나에게 보내기 ──
+  const sendToSelf = async (text) => {
+    if (!myUid || !text) return;
+    // 나에게 방 찾거나 생성
+    let selfRoom = rooms.find(r => r.type === "self" && r.members?.includes(myUid));
+    if (!selfRoom) {
+      const ref = await addDoc(collection(db, ROOMS_COLL), {
+        type: "self", members: [myUid],
+        memberProfiles: { [myUid]: { name: myProfile?.name || "", photo: myProfile?.photo || "" } },
+        createdAt: serverTimestamp(), lastMsg: text, lastAt: serverTimestamp(),
+        lastSenderUid: myUid,
+      });
+      selfRoom = { id: ref.id };
+    }
+    await addDoc(collection(db, MSGS_COLL), {
+      roomId: selfRoom.id, text, type: "text",
+      senderUid: myUid, senderName: myProfile?.name || "나",
+      senderPhoto: myProfile?.photo || "",
+      createdAt: serverTimestamp(), readBy: [myUid], totalMembers: 1,
+    });
+  };
+
   // ── 채팅방 나가기 ──
   const leaveRoom = async (roomId) => {
     if (!window.confirm("채팅방에서 나가시겠습니까?\n나가면 대화 내용이 삭제됩니다.")) return;
@@ -622,6 +661,31 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const PANEL_W = mobileMode ? 360 : 700;
   const PANEL_H = 580;
   const BTN_BOTTOM = 152;
+  const [panelW, setPanelW] = useState(PANEL_W);
+  const [panelH, setPanelH] = useState(PANEL_H);
+  const resizingRef = useRef(null);
+  const startResizePanelDrag = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = panelW;
+    const startH = panelH;
+    resizingRef.current = true;
+    const onMove = (ev) => {
+      if (!resizingRef.current) return;
+      const dx = startX - ev.clientX;
+      const dy = startY - ev.clientY;
+      setPanelW(Math.max(500, Math.min(1200, startW + dx)));
+      setPanelH(Math.max(400, Math.min(900, startH + dy)));
+    };
+    const onUp = () => {
+      resizingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   // pendingRoom일 때 표시용 가상 room 객체
   const displayRoom = activeRoom || (pendingRoom ? {
@@ -657,6 +721,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     themeHdr, themeMyBubble, themeChatBg,
     replyTo, setReplyTo,
     onReply: (msg) => setReplyTo({ id: msg.id, text: msg.text, senderName: msg.senderName }),
+    onAddReaction: addReaction,
+    onSendToSelf: sendToSelf,
   } : null;
 
   const friendsViewProps = {
@@ -687,7 +753,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       border: "1px solid #e2e8f0",
     }}>
       {/* 왼쪽: 친구/채팅 목록 */}
-      <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #e5e7eb", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ width: Math.round(panelW * 240 / 700), flexShrink: 0, borderRight: "1px solid #e5e7eb", overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {view === "profile" ? (
           <ProfileView
             myProfile={myProfile}
@@ -934,8 +1000,24 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       {open && (
         <div style={{
           position: "fixed", bottom: BTN_BOTTOM + 64, right: 24,
-          width: PANEL_W, height: PANEL_H, zIndex: 99997,
+          width: panelW, height: panelH, zIndex: 99997,
         }}>
+          {/* 리사이즈 핸들 (패널 왼쪽 상단 모서리) */}
+          <div
+            onMouseDown={startResizePanelDrag}
+            style={{
+              position: "absolute", top: 0, left: 0,
+              width: 18, height: 18, cursor: "nw-resize",
+              zIndex: 10, borderRadius: "8px 0 8px 0",
+              background: "rgba(27,43,75,0.18)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+            title="드래그하여 크기 조정"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1 9L9 1M1 5L5 1M5 9L9 5" stroke="#1B2B4B" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
           {panelContent}
         </div>
       )}
@@ -1298,12 +1380,53 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf }) {
   const [showSearch, setShowSearch] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
   const photoInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [ctxMenu, setCtxMenu] = useState(null); // {msg, x, y}
+  const [showEmojiPicker, setShowEmojiPicker] = useState(null); // msg
+  const longPressTimer = useRef(null);
+  const EMOJI_LIST = ["👍","❤️","😆","😮","😢","✅"];
+
+  useEffect(() => {
+    if (!ctxMenu && !showEmojiPicker) return;
+    const handler = (e) => {
+      if (!e.target.closest("[data-ctx-menu]") && !e.target.closest("[data-emoji-picker]")) {
+        setCtxMenu(null);
+        setShowEmojiPicker(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, [ctxMenu, showEmojiPicker]);
+
+  const handleMsgContextMenu = (e, msg) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const x = e.clientX || (e.touches?.[0]?.clientX ?? 0);
+    const y = e.clientY || (e.touches?.[0]?.clientY ?? 0);
+    setCtxMenu({ msg, x, y });
+    setShowEmojiPicker(null);
+  };
+
+  const startLongPress = (e, msg) => {
+    if (!mobileMode) return;
+    longPressTimer.current = setTimeout(() => {
+      const touch = e.touches?.[0];
+      if (touch) handleMsgContextMenu({ preventDefault: () => {}, stopPropagation: () => {}, clientX: touch.clientX, clientY: touch.clientY }, msg);
+    }, 500);
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
@@ -1444,7 +1567,12 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           <button onClick={() => setEditMsg(null)} style={{ background: "#e5e7eb", color: "#374151", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, cursor: "pointer" }}>취소</button>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", flexDirection: "column" }}>
+                        <div style={{ display: "flex", flexDirection: "column" }}
+                          onContextMenu={mobileMode ? undefined : (e) => handleMsgContextMenu(e, msg)}
+                          onTouchStart={mobileMode ? (e) => startLongPress(e, msg) : undefined}
+                          onTouchEnd={mobileMode ? cancelLongPress : undefined}
+                          onTouchMove={mobileMode ? cancelLongPress : undefined}
+                        >
                           {/* 답장 인용 */}
                           {msg.replyToText && (
                             <div style={{
@@ -1471,6 +1599,25 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                             {msg.text}
                             {msg.edited && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 4 }}>(수정됨)</span>}
                           </div>
+                          {/* 이모티콘 반응 표시 */}
+                          {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3, justifyContent: isMine ? "flex-end" : "flex-start" }}>
+                              {Object.entries(msg.reactions).filter(([, uids]) => uids.length > 0).map(([emoji, uids]) => (
+                                <button key={emoji}
+                                  onClick={() => onAddReaction?.(msg.id, emoji)}
+                                  style={{
+                                    display: "flex", alignItems: "center", gap: 2,
+                                    padding: "1px 5px", borderRadius: 10, fontSize: 12,
+                                    background: uids.includes(myUid) ? "#dbeafe" : "#f3f4f6",
+                                    border: uids.includes(myUid) ? "1px solid #93c5fd" : "1px solid #e5e7eb",
+                                    cursor: "pointer", fontWeight: 600, color: "#374151",
+                                  }}>
+                                  <span>{emoji}</span>
+                                  <span style={{ fontSize: 10 }}>{uids.length}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* 시간 + 액션 */}
@@ -1487,18 +1634,6 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                             }
                             return <span style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>;
                           })()}
-                          {msg.type !== "deleted" && (
-                            <div style={{ display: "flex", gap: 2 }}>
-                              <button onClick={() => onReply?.(msg)}
-                                style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>답장</button>
-                              {isMine && <>
-                                <button onClick={() => { setEditMsg(msg); setEditText(msg.text); }}
-                                  style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>수정</button>
-                                <button onClick={() => onDeleteMsg(msg.id)}
-                                  style={{ background: "none", border: "none", color: "#fca5a5", fontSize: 10, cursor: "pointer", padding: "1px 3px" }}>삭제</button>
-                              </>}
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
@@ -1510,6 +1645,54 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         })()}
         <div />
       </div>
+
+      {/* ── 컨텍스트 메뉴 ── */}
+      {ctxMenu && (() => {
+        const { msg, x, y } = ctxMenu;
+        const isMine = msg.senderUid === myUid;
+        const menuW = 160, menuH = 220;
+        const safeX = Math.min(x, window.innerWidth - menuW - 8);
+        const safeY = y + menuH > window.innerHeight ? y - menuH : y;
+        return (
+          <div data-ctx-menu="1" style={{
+            position: "fixed", left: safeX, top: safeY, zIndex: 999999,
+            background: "#fff", borderRadius: 14, boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+            border: "1px solid #e5e7eb", overflow: "hidden", minWidth: menuW,
+          }}>
+            {/* 이모티콘 빠른 반응 */}
+            <div style={{ display: "flex", gap: 2, padding: "8px 10px", borderBottom: "1px solid #f3f4f6", justifyContent: "space-between" }}>
+              {EMOJI_LIST.map(em => (
+                <button key={em} onClick={() => { onAddReaction?.(msg.id, em); setCtxMenu(null); }}
+                  style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 3px", borderRadius: 6,
+                    background: (msg.reactions?.[em] || []).includes(myUid) ? "#dbeafe" : "transparent" }}>
+                  {em}
+                </button>
+              ))}
+            </div>
+            {[
+              { label: "답장", action: () => { onReply?.(msg); setCtxMenu(null); } },
+              { label: "나에게 보내기", action: () => { onSendToSelf?.(msg.text); setCtxMenu(null); } },
+              { label: "복사", action: () => { navigator.clipboard?.writeText(msg.text || ""); setCtxMenu(null); } },
+              ...(isMine ? [
+                { label: "수정", action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } },
+                { label: "삭제", action: () => { onDeleteMsg(msg.id); setCtxMenu(null); }, danger: true },
+              ] : []),
+            ].map(({ label, action, danger }) => (
+              <button key={label} onClick={action} style={{
+                display: "block", width: "100%", textAlign: "left",
+                padding: "10px 16px", background: "none", border: "none",
+                fontSize: 13, fontWeight: 600, cursor: "pointer",
+                color: danger ? "#ef4444" : "#111827",
+                borderBottom: "1px solid #f9fafb",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "#f9fafb"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                {label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* + 첨부 메뉴 */}
       {showAttachMenu && (
