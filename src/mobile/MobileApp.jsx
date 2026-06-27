@@ -2411,7 +2411,6 @@ const title =
   </div>
   );
 })()}
-)}
 {showUnassignedEntryPopup && page === "list" && (
   <div
     className="fixed inset-0 z-[80] flex items-end justify-center"
@@ -7607,11 +7606,12 @@ const handleAssignClick = () => {
                   if (te) return "톤수일치";
                   return "노선일치";
                 };
+                const validDetailMatches = detailFareMatches.filter(r => r.claim > 0);
                 const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
-                detailFareMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
+                validDetailMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
                 const visibleMatches = detailFareFilter === "all"
-                  ? detailFareMatches
-                  : detailFareMatches.filter(r => getLabel(r) === detailFareFilter);
+                  ? validDetailMatches
+                  : validDetailMatches.filter(r => getLabel(r) === detailFareFilter);
                 const claims = visibleMatches.map(r => r.claim).filter(v => v > 0);
                 const fareMin = claims.length ? Math.min(...claims) : 0;
                 const fareMax = claims.length ? Math.max(...claims) : 0;
@@ -7620,7 +7620,7 @@ const handleAssignClick = () => {
                 const getBarPct = (f) => fareRange > 0 ? Math.min(100, Math.max(0, ((f - fareMin) / fareRange) * 100)) : 50;
                 const tabs = ["all", "완전일치", "부분일치", "톤수일치", "노선일치"];
 
-                if (detailFareMatches.length === 0) return (
+                if (validDetailMatches.length === 0) return (
                   <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -7640,7 +7640,7 @@ const handleAssignClick = () => {
                     <div className="px-4 pt-3 pb-2 border-b border-gray-100">
                       <div className="flex gap-1.5 flex-wrap">
                         {tabs.map(t => {
-                          const cnt = t === "all" ? detailFareMatches.length : (counts[t] || 0);
+                          const cnt = t === "all" ? validDetailMatches.length : (counts[t] || 0);
                           if (t !== "all" && cnt === 0) return null;
                           return (
                             <button key={t} onClick={() => setDetailFareFilter(t)}
@@ -9940,12 +9940,13 @@ const pickDrop = (c) => {
                   if (te) return "톤수일치";
                   return "노선일치";
                 };
+                const validFareMatches = fareMatches.filter(r => r.claim > 0);
                 const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
-                fareMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
+                validFareMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
 
                 const visibleMatches = mobileFareFilter === "all"
-                  ? fareMatches
-                  : fareMatches.filter(r => getLabel(r) === mobileFareFilter);
+                  ? validFareMatches
+                  : validFareMatches.filter(r => getLabel(r) === mobileFareFilter);
                 const claims = visibleMatches.map(r => r.claim).filter(v => v > 0);
                 const fareMin = claims.length ? Math.min(...claims) : 0;
                 const fareMax = claims.length ? Math.max(...claims) : 0;
@@ -9955,7 +9956,7 @@ const pickDrop = (c) => {
 
                 const tabs = ["all", "완전일치", "부분일치", "톤수일치", "노선일치"];
 
-                if (fareMatches.length === 0) return (
+                if (validFareMatches.length === 0) return (
                   <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -9976,7 +9977,7 @@ const pickDrop = (c) => {
                     <div className="px-4 pt-3 pb-2 border-b border-gray-100">
                       <div className="flex gap-1.5 flex-wrap">
                         {tabs.map(t => {
-                          const cnt = t === "all" ? fareMatches.length : (counts[t] || 0);
+                          const cnt = t === "all" ? validFareMatches.length : (counts[t] || 0);
                           if (t !== "all" && cnt === 0) return null;
                           return (
                             <button key={t} onClick={() => setMobileFareFilter(t)}
@@ -13194,7 +13195,7 @@ if (!filtered.length) {
 }
 
 // ❗ 2️⃣ 무조건 리스트 보여줌 (핵심)
-setMatchedRows(filtered);
+setMatchedRows(filtered.filter(r => Number(r.청구운임||0) > 0));
 
 // ❗ 3️⃣ 동일 화물만 따로 체크
 const sameExactRows = filtered.filter(r => {

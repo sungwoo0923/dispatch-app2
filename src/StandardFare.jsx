@@ -732,7 +732,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
       }
     });
 
-    setResult(withLevel);
+    setResult(withLevel.filter(r => Number(String(r.청구운임||0).replace(/[^\d]/g,"")) > 0));
     setAiFare(calcAiFare(baseGroup));
     setSearched(true);
     if (withLevel.length === 0) alert("조회된 데이터가 없습니다.");
