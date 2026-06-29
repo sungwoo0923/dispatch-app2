@@ -177,27 +177,27 @@ const CITIES = {
 
 // ─── 차량 종류 ─────────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
-  {id:"bike",   name:"오토바이",      base:6000,  perKm:150,  min:12000,  L100km:4,  smallOnly:true},
-  {id:"damas",  name:"라보/다마스",   base:10000, perKm:280,  min:20000,  L100km:8,  smallOnly:true},
-  {id:"1ton",   name:"1톤",          base:15000, perKm:550,  min:40000,  L100km:12},
-  {id:"1.4ton", name:"1.4톤",        base:18000, perKm:630,  min:48000,  L100km:14},
-  {id:"2.5ton", name:"2.5톤",        base:24000, perKm:800,  min:65000,  L100km:18},
-  {id:"3.5ton", name:"3.5톤",        base:30000, perKm:950,  min:85000,  L100km:22},
-  {id:"3.5tonW",name:"3.5톤(광폭)",  base:34000, perKm:1050, min:95000,  L100km:24},
-  {id:"5ton",   name:"5톤",          base:38000, perKm:1100, min:105000, L100km:27},
-  {id:"5tonP",  name:"5톤+",         base:40000, perKm:1150, min:115000, L100km:29},
-  {id:"5tonAx", name:"5톤+축",       base:42000, perKm:1200, min:120000, L100km:30},
-  {id:"11ton",  name:"11톤",         base:55000, perKm:1450, min:155000, L100km:35},
-  {id:"18ton",  name:"18톤",         base:70000, perKm:1800, min:210000, L100km:38},
-  {id:"25ton",  name:"25톤",         base:88000, perKm:2100, min:265000, L100km:42},
-  {id:"trailer",name:"추레라",       base:100000,perKm:2300, min:310000, L100km:45},
-  {id:"lowbed", name:"로베드",       base:110000,perKm:2500, min:340000, L100km:47},
+  {id:"bike",   name:"오토바이",      base:8000,   perKm:200,  min:15000,  L100km:4,  smallOnly:true},
+  {id:"damas",  name:"라보/다마스",   base:20000,  perKm:380,  min:30000,  L100km:8,  smallOnly:true},
+  {id:"1ton",   name:"1톤",          base:50000,  perKm:500,  min:60000,  L100km:12},
+  {id:"1.4ton", name:"1.4톤",        base:55000,  perKm:580,  min:70000,  L100km:14},
+  {id:"2.5ton", name:"2.5톤",        base:70000,  perKm:750,  min:90000,  L100km:18},
+  {id:"3.5ton", name:"3.5톤",        base:82000,  perKm:900,  min:105000, L100km:22},
+  {id:"3.5tonW",name:"3.5톤(광폭)",  base:90000,  perKm:980,  min:115000, L100km:24},
+  {id:"5ton",   name:"5톤",          base:100000, perKm:1050, min:130000, L100km:27},
+  {id:"5tonP",  name:"5톤+",         base:110000, perKm:1120, min:145000, L100km:29},
+  {id:"5tonAx", name:"5톤+축",       base:115000, perKm:1180, min:155000, L100km:30},
+  {id:"11ton",  name:"11톤",         base:130000, perKm:1400, min:190000, L100km:35},
+  {id:"18ton",  name:"18톤",         base:195000, perKm:1700, min:270000, L100km:38},
+  {id:"25ton",  name:"25톤",         base:250000, perKm:2000, min:330000, L100km:42},
+  {id:"trailer",name:"추레라",       base:290000, perKm:2200, min:380000, L100km:45},
+  {id:"lowbed", name:"로베드",       base:320000, perKm:2400, min:420000, L100km:47},
 ];
 
 const CARGO_TYPES = [
   {id:"일반",  name:"일반"},
-  {id:"냉장",  name:"냉장/냉동", surcharge:0.12},
-  {id:"위험물",name:"위험물",   surcharge:0.20},
+  {id:"냉장",  name:"냉장/냉동", surcharge:0.30},
+  {id:"위험물",name:"위험물",   surcharge:0.25},
 ];
 
 const PREF_LABELS = ["없음","보통","다소 선호","선호","매우 선호"];
@@ -324,11 +324,11 @@ function calcRate(fromC,toC,vtId,ctId){
 
 // ─── 혼적(합짐) 요율표 ────────────────────────────────────────────────────
 const MIXED_TIERS=[
-  {maxKm:100,  base:28000, per100kg:3500,  label:"단거리"},
-  {maxKm:200,  base:42000, per100kg:5500,  label:"중단거리"},
-  {maxKm:300,  base:58000, per100kg:8000,  label:"중거리"},
-  {maxKm:500,  base:78000, per100kg:12000, label:"장거리"},
-  {maxKm:Infinity, base:95000, per100kg:16000, label:"초장거리"},
+  {maxKm:100,  base:35000,  per100kg:5000,  label:"단거리"},
+  {maxKm:200,  base:55000,  per100kg:7000,  label:"중단거리"},
+  {maxKm:300,  base:75000,  per100kg:10000, label:"중거리"},
+  {maxKm:500,  base:100000, per100kg:15000, label:"장거리"},
+  {maxKm:Infinity, base:130000, per100kg:20000, label:"초장거리"},
 ];
 
 function calcMixedRate(fromC,toC,ctId,weightKg,cbm){
