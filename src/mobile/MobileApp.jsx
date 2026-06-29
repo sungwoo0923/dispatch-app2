@@ -11907,32 +11907,32 @@ const M_CITIES = {
 
 // 통합 운임조회용 차량 타입 (PC와 동일한 요율)
 const MOBILE_VT = [
-  {id:"bike",   name:"오토바이",  base:8000,   perKm:200,  min:15000,  L100km:4},
-  {id:"damas",  name:"라보/다마스",base:20000,  perKm:380,  min:30000,  L100km:8},
-  {id:"1ton",   name:"1톤",      base:50000,  perKm:500,  min:60000,  L100km:12},
-  {id:"1.4ton", name:"1.4톤",   base:55000,  perKm:580,  min:70000,  L100km:14},
-  {id:"2.5ton", name:"2.5톤",   base:70000,  perKm:750,  min:90000,  L100km:18},
-  {id:"3.5ton", name:"3.5톤",   base:82000,  perKm:900,  min:105000, L100km:22},
-  {id:"3.5tonW",name:"3.5톤광폭",base:90000,  perKm:980,  min:115000, L100km:24},
-  {id:"5ton",   name:"5톤",     base:100000, perKm:1050, min:130000, L100km:27},
-  {id:"5tonP",  name:"5톤+",    base:110000, perKm:1120, min:145000, L100km:29},
-  {id:"5tonAx", name:"5톤+축",  base:115000, perKm:1180, min:155000, L100km:30},
-  {id:"11ton",  name:"11톤",    base:130000, perKm:1400, min:190000, L100km:35},
-  {id:"18ton",  name:"18톤",    base:195000, perKm:1700, min:270000, L100km:38},
-  {id:"25ton",  name:"25톤",    base:250000, perKm:2000, min:330000, L100km:42},
-  {id:"trailer",name:"추레라",  base:290000, perKm:2200, min:380000, L100km:45},
+  {id:"bike",   name:"오토바이",  base:5000,   perKm:130,  min:10000,  L100km:4},
+  {id:"damas",  name:"라보/다마스",base:12000,  perKm:200,  min:18000,  L100km:8},
+  {id:"1ton",   name:"1톤",      base:60000,  perKm:240,  min:60000,  L100km:12},
+  {id:"1.4ton", name:"1.4톤",   base:66000,  perKm:270,  min:67000,  L100km:14},
+  {id:"2.5ton", name:"2.5톤",   base:67000,  perKm:405,  min:85000,  L100km:18},
+  {id:"3.5ton", name:"3.5톤",   base:79000,  perKm:490,  min:95000,  L100km:22},
+  {id:"3.5tonW",name:"3.5톤광폭",base:86000,  perKm:540,  min:105000, L100km:24},
+  {id:"5ton",   name:"5톤",     base:76000,  perKm:740,  min:100000, L100km:27},
+  {id:"5tonP",  name:"5톤+",    base:84000,  perKm:810,  min:110000, L100km:29},
+  {id:"5tonAx", name:"5톤+축",  base:87000,  perKm:850,  min:115000, L100km:30},
+  {id:"11ton",  name:"11톤",    base:103000, perKm:1120, min:165000, L100km:35},
+  {id:"18ton",  name:"18톤",    base:142000, perKm:1580, min:230000, L100km:38},
+  {id:"25ton",  name:"25톤",    base:174000, perKm:1960, min:290000, L100km:42},
+  {id:"trailer",name:"추레라",  base:200000, perKm:2260, min:335000, L100km:45},
 ];
 const MOBILE_CARGO_TYPES = [
   {id:"일반",   name:"일반",      surcharge:0},
-  {id:"냉장",   name:"냉장/냉동", surcharge:0.30},
-  {id:"위험물", name:"위험물",    surcharge:0.25},
+  {id:"냉장",   name:"냉장/냉동", surcharge:0.15},
+  {id:"위험물", name:"위험물",    surcharge:0.20},
 ];
 const MOBILE_MIXED_TIERS=[
-  {maxKm:100,  base:35000, per100kg:5000,  label:"단거리"},
-  {maxKm:200,  base:55000, per100kg:7000,  label:"중단거리"},
-  {maxKm:300,  base:75000, per100kg:10000, label:"중거리"},
-  {maxKm:500,  base:100000,per100kg:15000, label:"장거리"},
-  {maxKm:Infinity, base:130000, per100kg:20000, label:"초장거리"},
+  {maxKm:100,  base:28000, per100kg:4000,  label:"단거리"},
+  {maxKm:200,  base:42000, per100kg:6000,  label:"중단거리"},
+  {maxKm:300,  base:58000, per100kg:8500,  label:"중거리"},
+  {maxKm:500,  base:78000, per100kg:13000, label:"장거리"},
+  {maxKm:Infinity, base:95000, per100kg:17000, label:"초장거리"},
 ];
 const MOBILE_SM={
   "1ton":20000,"1.4ton":22000,"2.5ton":25000,"3.5ton":25000,"3.5tonW":27000,
