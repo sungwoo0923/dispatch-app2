@@ -11780,12 +11780,12 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
     const unsubProfile = onSnapshot(doc(db, "userProfiles", currentUser.uid), snap => {
       if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
     }, () => {});
-    const q = query(collection(db, "schedules"), where("authorUid", "==", currentUser.uid));
+    const q = query(collection(db, "schedules"), where("companyName", "==", myCompany));
     const unsub = onSnapshot(q, snap => {
       setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, () => {});
     return () => { unsubProfile(); unsub(); };
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, myCompany]);
 
   const saveHireDate = async (val) => {
     setHireDate(val);
@@ -11800,7 +11800,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
     }
   };
 
-  const leave = calcLeaveBalance(hireDate, mySchedules, currentUser?.uid);
+  const leave = calcLeaveBalance(hireDate, mySchedules, currentUser?.uid, myName);
 
   return (
     <div className="px-4 py-5 space-y-4 pb-24">

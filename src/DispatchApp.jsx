@@ -2380,7 +2380,7 @@ React.useEffect(() => {
 
   // 매출관리 비밀번호 - 회사별 Firestore 로드
   useEffect(() => {
-    const co = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+    const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
     if (!co) return;
     const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
       const data = snap.data();
@@ -2830,7 +2830,7 @@ return (
                     {role === "totalMaster" && (
                       <button type="button" onClick={async () => {
                         if (!window.confirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
-                        const co = userCompany || localStorage.getItem("userCompany") || "";
+                        const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
                         await setDoc(doc(db, "companySettings", co), { revenuePassword: null }, { merge: true });
                         showAlert("비밀번호가 초기화되었습니다.");
                       }} className="w-full mt-2 py-2.5 border border-red-300 text-red-500 rounded-xl text-[13px] font-semibold hover:bg-red-50 transition">초기화 (최고관리자)</button>
@@ -2885,7 +2885,7 @@ return (
 
         {menu === "회사관리" && (
           <CompanyManagementWrapper
-            userCompany={userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""}
+            userCompany={localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || ""}
             role={role}
             userId={auth?.currentUser?.uid || localStorage.getItem("uid") || ""}
             user={user}
@@ -42021,18 +42021,22 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const [hireDate, setHireDate] = useState("");
   const [hireDateSaving, setHireDateSaving] = useState(false);
   const [mySchedules, setMySchedules] = useState([]);
+  const [myName, setMyName] = useState("");
 
   useEffect(() => {
     if (!user?.uid) return;
     const unsubProfile = onSnapshot(doc(db, "userProfiles", user.uid), snap => {
       if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
     }, () => {});
-    const q = query(collection(db, "schedules"), where("authorUid", "==", user.uid));
+    const unsubUser = onSnapshot(doc(db, "users", user.uid), snap => {
+      if (snap.exists()) setMyName(snap.data().name || "");
+    }, () => {});
+    const q = query(collection(db, "schedules"), where("companyName", "==", co));
     const unsub = onSnapshot(q, snap => {
       setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, () => {});
-    return () => { unsubProfile(); unsub(); };
-  }, [user?.uid]);
+    return () => { unsubProfile(); unsubUser(); unsub(); };
+  }, [user?.uid, co]);
 
   const saveHireDate = async (val) => {
     setHireDate(val);
@@ -42047,7 +42051,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     }
   };
 
-  const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid);
+  const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid, myName || user?.displayName);
 
   return (
     <div className="p-6 max-w-2xl">
@@ -42476,7 +42480,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
 }
 
 function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
-  const companyName = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+  const companyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
   const isAdmin = role === "admin" || role === "totalMaster";
 

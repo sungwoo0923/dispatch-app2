@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion } from "firebase/firestore";
 import { db } from "./firebase";
-import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday } from "./attendanceUtils";
+import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday, KR_NATIONAL_HOLIDAYS } from "./attendanceUtils";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
 
@@ -77,30 +77,44 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   }, [employees, isAdmin, user]);
 
   // 해당 직원의 특정 날짜 실제 상태 산출 — 휴가/외근 일정이 있으면 자동기록(출근 등)보다 항상 우선
-  const resolveStatus = (uid, ds) => {
+  const resolveStatus = (uid, ds, name) => {
     const rec = recordMap[`${uid}_${ds}`];
-    const leave = findApprovedLeaveForDate(schedules, uid, ds);
+    const leave = findApprovedLeaveForDate(schedules, uid, ds, name);
     if (leave) return { status: leave, rec };
-    if (rec) return { status: rec.status, rec };
-    if (ds > todayDateStr) return { status: null, rec: null };
-    if (isHoliday(ds, holidays)) return { status: "공휴일", rec: null };
-    if (isWeekend(ds)) return { status: "휴무", rec: null };
-    return { status: "출근", rec: null };
+    if (rec && rec.status) return { status: rec.status, rec };
+    if (ds > todayDateStr) return { status: null, rec };
+    if (isHoliday(ds, holidays)) return { status: "공휴일", rec };
+    if (isWeekend(ds)) return { status: "휴무", rec };
+    return { status: "출근", rec };
   };
 
   const saveEdit = async (status, time) => {
     if (!editCell) return;
     const { uid, name, date } = editCell;
+    const editorName = employees.find(e => e.uid === user?.uid)?.name || user?.email || "관리자";
+    const historyEntry = {
+      status: status === null ? "미출근(초기화)" : status,
+      checkInTime: time || null,
+      editedByName: editorName,
+      editedAt: new Date().toISOString(),
+    };
     if (status === null) {
-      await deleteDoc(doc(db, "attendance", `${date}_${uid}`));
+      await setDoc(doc(db, "attendance", `${date}_${uid}`), {
+        uid, name, date, month: date.slice(0, 7),
+        status: null, checkInTime: null, source: "manual",
+        editedBy: user?.uid || "", editedByName: editorName, editedAt: new Date().toISOString(),
+        companyName: company,
+        history: arrayUnion(historyEntry),
+      }, { merge: true });
       setEditCell(null);
       return;
     }
     await setDoc(doc(db, "attendance", `${date}_${uid}`), {
       uid, name, date, month: date.slice(0, 7),
       status, checkInTime: time || null,
-      source: "manual", editedBy: user?.uid || "", editedAt: new Date().toISOString(),
+      source: "manual", editedBy: user?.uid || "", editedByName: editorName, editedAt: new Date().toISOString(),
       companyName: company,
+      history: arrayUnion(historyEntry),
     }, { merge: true });
     setEditCell(null);
   };
@@ -125,7 +139,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     dayList.forEach(d => {
       const ds = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       if (ds > todayDateStr) return;
-      const { status } = resolveStatus(summaryEmp.uid, ds);
+      const { status } = resolveStatus(summaryEmp.uid, ds, summaryEmp.name || summaryEmp.email);
       if (!status) return;
       counts[status] = (counts[status] || 0) + 1;
     });
@@ -151,11 +165,22 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
       {isAdmin && showHolidayPanel && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
-          <div className="text-[14px] font-bold text-[#1B2B4B] mb-2">공휴일 관리 ({company})</div>
+          <div className="text-[14px] font-bold text-[#1B2B4B] mb-1">대한민국 법정공휴일 ({year}년, 자동 반영)</div>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {(KR_NATIONAL_HOLIDAYS[year] || []).map(([d, label]) => (
+              <div key={d} className="px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-100 text-[12px] font-semibold text-red-600">
+                {d} · {label}
+              </div>
+            ))}
+            {!(KR_NATIONAL_HOLIDAYS[year] || []).length && (
+              <div className="text-[12px] text-gray-400">{year}년 법정공휴일 데이터가 아직 등록되지 않았습니다. 아래에서 직접 추가해주세요.</div>
+            )}
+          </div>
+          <div className="text-[14px] font-bold text-[#1B2B4B] mb-2">회사 지정 휴일 추가 ({company})</div>
           <div className="flex items-center gap-2 mb-3">
             <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)}
               className="px-3 py-2 rounded-lg border-2 border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none" />
-            <input type="text" placeholder="명칭 (예: 지방선거일)" value={newHolidayLabel} onChange={e => setNewHolidayLabel(e.target.value)}
+            <input type="text" placeholder="명칭 (예: 창립기념일)" value={newHolidayLabel} onChange={e => setNewHolidayLabel(e.target.value)}
               className="px-3 py-2 rounded-lg border-2 border-gray-200 text-[13px] font-medium text-[#1B2B4B] outline-none flex-1 max-w-xs" />
             <button onClick={addHoliday} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold">추가</button>
           </div>
@@ -167,7 +192,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               </div>
             ))}
             {holidays.filter(h => h.date.startsWith(`${year}-`)).length === 0 && (
-              <div className="text-[12px] text-gray-400">{year}년 등록된 공휴일이 없습니다.</div>
+              <div className="text-[12px] text-gray-400">{year}년 등록된 회사 지정 휴일이 없습니다.</div>
             )}
           </div>
         </div>
@@ -216,7 +241,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 </td>
                 {dayList.map(d => {
                   const ds = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-                  const { status: effStatus, rec } = resolveStatus(emp.uid, ds);
+                  const { status: effStatus, rec } = resolveStatus(emp.uid, ds, emp.name || emp.email);
                   const label = effStatus ? (effStatus.length > 2 ? effStatus.slice(0, 2) : effStatus) : "";
                   const colorCls = effStatus ? (ATTENDANCE_STATUS_COLOR[effStatus] || "bg-gray-100 text-gray-500") : "";
                   return (
@@ -307,6 +332,19 @@ function EditForm({ editCell, onSave, onCancel }) {
         <button onClick={() => onSave(status, status === "출근" ? `${editCell.date}T${time}:00` : null)}
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60]">저장</button>
       </div>
+      {editCell.current?.history?.length > 0 && (
+        <div className="pt-3 border-t border-gray-100">
+          <div className="text-[12px] font-bold text-[#1B2B4B] mb-1.5">수정 이력</div>
+          <div className="space-y-1.5 max-h-32 overflow-y-auto">
+            {[...editCell.current.history].sort((a, b) => (b.editedAt || "").localeCompare(a.editedAt || "")).map((h, i) => (
+              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1.5">
+                <span className="font-semibold text-gray-600">{h.status}{h.checkInTime ? ` · ${h.checkInTime.slice(11, 16)}` : ""}</span>
+                <span>{h.editedByName || "관리자"} · {(h.editedAt || "").slice(0, 16).replace("T", " ")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1108,13 +1108,23 @@ React.useEffect(() => {
               const me = users.find(u => u.id === user?.uid);
               const userName = me?.name || "사용자";
               const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
+              const selectedAuthor = (role === "superadmin" || role === "totalMaster") && scheduleForm.authorName
+                ? users.find(u => u.name === scheduleForm.authorName)
+                : null;
               if (selectedSchedule?.id) {
                 const updatedFields = { type: scheduleForm.type, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData };
-                if ((role === "superadmin" || role === "totalMaster") && scheduleForm.authorName) updatedFields.name = scheduleForm.authorName;
+                if (selectedAuthor) {
+                  updatedFields.name = selectedAuthor.name;
+                  updatedFields.authorUid = selectedAuthor.uid || selectedAuthor.id;
+                }
                 await updateDoc(doc(db, "schedules", selectedSchedule.id), updatedFields);
                 setSelectedSchedule(prev => ({ ...prev, ...updatedFields }));
               } else {
-                const newDocRef = await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, authorUid: user?.uid || "", start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData, approvalStatus: "pending", createdAt: serverTimestamp(), companyName: getViewCompany() });
+                const newDocRef = await addDoc(collection(db, "schedules"), {
+                  type: scheduleForm.type,
+                  name: selectedAuthor ? selectedAuthor.name : userName,
+                  authorUid: selectedAuthor ? (selectedAuthor.uid || selectedAuthor.id) : (user?.uid || ""),
+                  start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, approvers: approversData, approvalStatus: "pending", createdAt: serverTimestamp(), companyName: getViewCompany() });
                 // 결재자에게 최초 결재 요청 알림 발송
                 for (const a of approversData) {
                   if (a.uid) setDoc(doc(db, "notifications", `req_${newDocRef.id}_${a.uid}`), { toUid: a.uid, type: "approval_request", fromName: userName, scheduleType: scheduleForm.type, scheduleId: newDocRef.id, createdAt: serverTimestamp(), read: false }).catch(() => {});

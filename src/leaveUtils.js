@@ -19,8 +19,13 @@ function daysBetween(startStr, endStr) {
   return Math.max(1, Math.round((end - start) / MS_PER_DAY) + 1);
 }
 
+function normalizeName(name) {
+  return (name || "").trim().replace(/\d+$/, "");
+}
+
 // hireDate: "YYYY-MM-DD" 문자열, schedules: 본인 휴가/외근 일정 배열(승인여부 무관, 내부에서 필터링)
-export function calcLeaveBalance(hireDate, schedules, uid) {
+// employeeName: authorUid가 어긋난 과거 데이터(관리자 대리등록 등)도 동일인으로 매칭하기 위한 보조 키
+export function calcLeaveBalance(hireDate, schedules, uid, employeeName) {
   if (!hireDate) return null;
   const hire = new Date(hireDate + "T00:00:00");
   const now = new Date();
@@ -33,11 +38,14 @@ export function calcLeaveBalance(hireDate, schedules, uid) {
   const entitlement = isAnnual ? 15 : Math.min(11, monthsOfService);
   const leaveLabel = isAnnual ? "연차" : "월차";
 
+  const normEmpName = normalizeName(employeeName);
   let used = 0;
   let sickDays = 0;
   let fieldDays = 0;
   (schedules || []).forEach(s => {
-    if (s.authorUid !== uid) return;
+    const sameUid = s.authorUid === uid;
+    const sameName = normEmpName && normalizeName(s.name) === normEmpName;
+    if (!sameUid && !sameName) return;
     const approvers = s.approvers || [];
     const anyRejected = approvers.some(a => a.status === "rejected");
     if (anyRejected) return; // 반려 건만 제외, 나머지(승인/대기 포함)는 모두 사용일수로 집계

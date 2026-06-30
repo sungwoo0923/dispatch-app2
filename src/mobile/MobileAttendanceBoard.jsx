@@ -17,6 +17,7 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
 
   const company = userCompany || localStorage.getItem("userCompany") || "";
   const uid = currentUser?.uid;
+  const myName = currentUser?.displayName || currentUser?.name || currentUser?.email?.split("@")[0] || "";
 
   const monthStr = `${year}-${String(month).padStart(2, "0")}`;
   useEffect(() => {
@@ -29,13 +30,13 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
   }, [uid, monthStr]);
 
   useEffect(() => {
-    if (!uid) return;
-    const q = query(collection(db, "schedules"), where("authorUid", "==", uid));
+    if (!company) return;
+    const q = query(collection(db, "schedules"), where("companyName", "==", company));
     const unsub = onSnapshot(q, snap => {
       setSchedules(snap.docs.map(d => d.data()));
     }, () => {});
     return () => unsub();
-  }, [uid]);
+  }, [company]);
 
   useEffect(() => {
     const q = query(collection(db, "holidays"), where("companyName", "==", company));
@@ -60,7 +61,7 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
   for (let d = 1; d <= numDays; d++) cells.push(d);
 
   const resolveStatus = (ds) => {
-    const leave = findApprovedLeaveForDate(schedules, uid, ds);
+    const leave = findApprovedLeaveForDate(schedules, uid, ds, myName);
     if (leave) return leave;
     const rec = recordMap[ds];
     if (rec) return rec.status;
