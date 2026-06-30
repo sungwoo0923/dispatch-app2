@@ -42021,14 +42021,14 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 
   useEffect(() => {
     if (!user?.uid) return;
-    getDoc(doc(db, "userProfiles", user.uid)).then(snap => {
+    const unsubProfile = onSnapshot(doc(db, "userProfiles", user.uid), snap => {
       if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
-    }).catch(() => {});
+    }, () => {});
     const q = query(collection(db, "schedules"), where("authorUid", "==", user.uid));
     const unsub = onSnapshot(q, snap => {
       setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, () => {});
-    return () => unsub();
+    return () => { unsubProfile(); unsub(); };
   }, [user?.uid]);
 
   const saveHireDate = async (val) => {
@@ -42094,6 +42094,14 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   </div>
                   <div className="col-span-3 text-[10px] text-gray-400">
                     총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계 · 휴가/외근 결재 승인 건 기준
+                  </div>
+                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">병가</div>
+                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.sickDays}일</div>
+                  </div>
+                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">외근</div>
+                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.fieldDays}일</div>
                   </div>
                 </div>
               ) : (

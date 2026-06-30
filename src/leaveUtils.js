@@ -34,15 +34,22 @@ export function calcLeaveBalance(hireDate, schedules, uid) {
   const leaveLabel = isAnnual ? "연차" : "월차";
 
   let used = 0;
+  let sickDays = 0;
+  let fieldDays = 0;
   (schedules || []).forEach(s => {
     if (s.authorUid !== uid) return;
-    if (getOverallApprovalStatusSimple(s) !== "approved") return;
+    const approvers = s.approvers || [];
+    const allApproved = approvers.length > 0 && approvers.every(a => a.status === "approved");
+    const isApproved = s.approvalStatus === "approved" || allApproved || getOverallApprovalStatusSimple(s) === "approved";
+    if (!isApproved) return;
     const start = new Date(s.start + "T00:00:00");
     if (start < COUNT_START) return; // 2025년 이전 사용분은 카운트 제외(2026년부터 카운트)
     if (s.type === "휴가") used += daysBetween(s.start, s.end);
     else if (s.type === "오전반차" || s.type === "오후반차") used += 0.5;
+    else if (s.type === "병가") sickDays += daysBetween(s.start, s.end);
+    else if (s.type === "외근") fieldDays += daysBetween(s.start, s.end);
   });
 
   const remaining = Math.max(0, entitlement - used);
-  return { isAnnual, leaveLabel, entitlement, used, remaining, monthsOfService };
+  return { isAnnual, leaveLabel, entitlement, used, remaining, monthsOfService, sickDays, fieldDays };
 }

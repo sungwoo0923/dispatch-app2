@@ -11760,14 +11760,14 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
   useEffect(() => {
     if (!currentUser?.uid) return;
-    getDoc(doc(db, "userProfiles", currentUser.uid)).then(snap => {
+    const unsubProfile = onSnapshot(doc(db, "userProfiles", currentUser.uid), snap => {
       if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
-    }).catch(() => {});
+    }, () => {});
     const q = query(collection(db, "schedules"), where("authorUid", "==", currentUser.uid));
     const unsub = onSnapshot(q, snap => {
       setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, () => {});
-    return () => unsub();
+    return () => { unsubProfile(); unsub(); };
   }, [currentUser?.uid]);
 
   const saveHireDate = async (val) => {
@@ -11812,6 +11812,14 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
             </div>
             <div className="col-span-3 text-[10px] text-gray-400 mt-1">
               총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계
+            </div>
+            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
+              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.sickDays}일</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">병가</div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
+              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.fieldDays}일</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">외근</div>
             </div>
           </div>
         ) : (

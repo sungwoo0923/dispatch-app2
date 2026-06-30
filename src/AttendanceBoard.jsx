@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
-import { ATTENDANCE_STATUS_COLOR } from "./attendanceUtils";
+import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate } from "./attendanceUtils";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
 
@@ -17,8 +17,17 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [employees, setEmployees] = useState([]);
   const [records, setRecords] = useState([]);
   const [editCell, setEditCell] = useState(null); // { uid, name, date }
+  const [schedules, setSchedules] = useState([]);
 
   const company = userCompany || localStorage.getItem("userCompany") || "";
+
+  useEffect(() => {
+    const q = query(collection(db, "schedules"), where("companyName", "==", company));
+    const unsub = onSnapshot(q, snap => {
+      setSchedules(snap.docs.map(d => d.data()));
+    }, () => {});
+    return () => unsub();
+  }, [company]);
 
   useEffect(() => {
     const q = query(collection(db, "users"), where("companyName", "==", company));
@@ -51,6 +60,11 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const saveEdit = async (status, time) => {
     if (!editCell) return;
     const { uid, name, date } = editCell;
+    if (status === null) {
+      await deleteDoc(doc(db, "attendance", `${date}_${uid}`));
+      setEditCell(null);
+      return;
+    }
     await setDoc(doc(db, "attendance", `${date}_${uid}`), {
       uid, name, date, month: date.slice(0, 7),
       status, checkInTime: time || null,
@@ -106,8 +120,14 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 {dayList.map(d => {
                   const ds = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
                   const rec = recordMap[`${emp.uid}_${ds}`];
-                  const label = rec?.status ? (rec.status.length > 2 ? rec.status.slice(0, 2) : rec.status) : "";
-                  const colorCls = rec?.status ? (ATTENDANCE_STATUS_COLOR[rec.status] || "bg-gray-100 text-gray-500") : "";
+                  let derivedStatus = null;
+                  if (!rec && ds <= todayDateStr) {
+                    derivedStatus = findApprovedLeaveForDate(schedules, emp.uid, ds);
+                    if (!derivedStatus && isWeekend(ds)) derivedStatus = "휴무";
+                  }
+                  const effStatus = rec?.status || derivedStatus;
+                  const label = effStatus ? (effStatus.length > 2 ? effStatus.slice(0, 2) : effStatus) : "";
+                  const colorCls = effStatus ? (ATTENDANCE_STATUS_COLOR[effStatus] || "bg-gray-100 text-gray-500") : "";
                   return (
                     <td key={d} className={`px-0.5 py-1.5 text-center border-b border-gray-50 ${ds === todayDateStr ? "bg-[#1B2B4B]/5" : ""}`}>
                       <button
@@ -166,6 +186,10 @@ function EditForm({ editCell, onSave, onCancel }) {
       )}
       <div className="flex gap-2 pt-2">
         <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-bold hover:bg-gray-50">취소</button>
+        {editCell.current && (
+          <button onClick={() => onSave(null, null)}
+            className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-500 text-[13px] font-bold hover:bg-gray-50">미출근(초기화)</button>
+        )}
         <button onClick={() => onSave(status, status === "출근" ? `${editCell.date}T${time}:00` : null)}
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60]">저장</button>
       </div>
