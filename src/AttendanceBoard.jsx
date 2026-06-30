@@ -27,9 +27,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const company = userCompany || localStorage.getItem("userCompany") || "";
 
   useEffect(() => {
-    const q = query(collection(db, "schedules"), where("companyName", "==", company));
-    const unsub = onSnapshot(q, snap => {
-      setSchedules(snap.docs.map(d => d.data()));
+    const unsub = onSnapshot(collection(db, "schedules"), snap => {
+      setSchedules(snap.docs.map(d => d.data()).filter(s => (s.companyName || "돌캐") === company));
     }, () => {});
     return () => unsub();
   }, [company]);
