@@ -2380,7 +2380,7 @@ React.useEffect(() => {
 
   // 매출관리 비밀번호 - 회사별 Firestore 로드
   useEffect(() => {
-    const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+    const co = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
     if (!co) return;
     const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
       const data = snap.data();
@@ -2830,7 +2830,7 @@ return (
                     {role === "totalMaster" && (
                       <button type="button" onClick={async () => {
                         if (!window.confirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
-                        const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+                        const co = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
                         await setDoc(doc(db, "companySettings", co), { revenuePassword: null }, { merge: true });
                         showAlert("비밀번호가 초기화되었습니다.");
                       }} className="w-full mt-2 py-2.5 border border-red-300 text-red-500 rounded-xl text-[13px] font-semibold hover:bg-red-50 transition">초기화 (최고관리자)</button>
@@ -2885,7 +2885,7 @@ return (
 
         {menu === "회사관리" && (
           <CompanyManagementWrapper
-            userCompany={localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || ""}
+            userCompany={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim()}
             role={role}
             userId={auth?.currentUser?.uid || localStorage.getItem("uid") || ""}
             user={user}
@@ -42480,7 +42480,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
 }
 
 function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
-  const companyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+  const companyName = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
   const isAdmin = role === "admin" || role === "totalMaster";
 
