@@ -42034,9 +42034,8 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     const unsubUser = onSnapshot(doc(db, "users", user.uid), snap => {
       if (snap.exists()) setMyName(snap.data().name || "");
     }, () => {});
-    const q = query(collection(db, "schedules"), where("companyName", "==", co));
-    const unsub = onSnapshot(q, snap => {
-      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsub = onSnapshot(collection(db, "schedules"), snap => {
+      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || "돌캐") === co));
     }, () => {});
     return () => { unsubProfile(); unsubUser(); unsub(); };
   }, [user?.uid, co]);
@@ -42054,7 +42053,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     }
   };
 
-  const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid, myName || user?.displayName);
+  const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid, myName || user?.displayName, []);
 
   return (
     <div className="p-6 max-w-2xl">

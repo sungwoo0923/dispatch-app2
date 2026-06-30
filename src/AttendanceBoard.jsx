@@ -75,15 +75,16 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     return employees.filter(e => e.uid === user?.uid);
   }, [employees, isAdmin, user]);
 
-  // 해당 직원의 특정 날짜 실제 상태 산출 — 휴가/외근 일정이 있으면 자동기록(출근 등)보다 항상 우선
+  // 해당 직원의 특정 날짜 실제 상태 산출 — 휴가/외근 일정이 있으면 자동기록(출근 등)보다 우선하되,
+  // 주말/공휴일은 원래 쉬는 날이므로 연차 등 사용으로 처리하지 않고 휴무/공휴일로 표시
   const resolveStatus = (uid, ds, name) => {
     const rec = recordMap[`${uid}_${ds}`];
-    const leave = findApprovedLeaveForDate(schedules, uid, ds, name);
-    if (leave) return { status: leave, rec };
     if (rec && rec.status) return { status: rec.status, rec };
     if (ds > todayDateStr) return { status: null, rec };
     if (isHoliday(ds, holidays)) return { status: "공휴일", rec };
     if (isWeekend(ds)) return { status: "휴무", rec };
+    const leave = findApprovedLeaveForDate(schedules, uid, ds, name);
+    if (leave) return { status: leave, rec };
     return { status: "출근", rec };
   };
 

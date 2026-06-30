@@ -60,13 +60,13 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
   for (let d = 1; d <= numDays; d++) cells.push(d);
 
   const resolveStatus = (ds) => {
-    const leave = findApprovedLeaveForDate(schedules, uid, ds, myName);
-    if (leave) return leave;
     const rec = recordMap[ds];
     if (rec) return rec.status;
     if (ds > todayDateStr) return null;
     if (isHoliday(ds, holidays)) return "공휴일";
     if (isWeekend(ds)) return "휴무";
+    const leave = findApprovedLeaveForDate(schedules, uid, ds, myName);
+    if (leave) return leave;
     return "출근";
   };
 
