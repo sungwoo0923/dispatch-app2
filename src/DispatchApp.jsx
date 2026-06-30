@@ -1071,6 +1071,7 @@ function OrderInfoModal({ row, onClose }) {
     .filter((s, i, arr) => s && (s.업체명 || s.주소) && arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
   const mergedCargo = mergeViaCargoText(row.화물내용, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
   const mergedTon = mergeViaTonnage(row.차량톤수, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
+  const hasWaypointCargo = pickupStops.length > 0 || dropStops.length > 0;
   const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
   const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
@@ -1111,6 +1112,7 @@ function OrderInfoModal({ row, onClose }) {
                   {(s.화물내용 || s.화물수량) && <Row label="화물내용" value={s.화물내용 || s.화물수량} />}
                   {s.차량톤수 && <Row label="톤수" value={s.차량톤수} />}
                   {s.상차시간 && <Row label="상차시간" value={s.상차시간} />}
+                  {s.방법 && <Row label="상차방법" value={s.방법} />}
                 </div>
               ))}
             </Section>
@@ -1129,15 +1131,22 @@ function OrderInfoModal({ row, onClose }) {
                   {(s.화물내용 || s.화물수량) && <Row label="화물내용" value={s.화물내용 || s.화물수량} />}
                   {s.차량톤수 && <Row label="톤수" value={s.차량톤수} />}
                   {s.하차시간 && <Row label="하차시간" value={s.하차시간} />}
+                  {s.방법 && <Row label="하차방법" value={s.방법} />}
                 </div>
               ))}
             </Section>
           )}
           <Section title="화물 정보">
-            <Row label="화물내용" value={mergedCargo || row.화물내용} />
-            <Row label="화물톤수" value={mergedTon || row.차량톤수} />
+            <Row label={hasWaypointCargo ? "총화물내용" : "화물내용"} value={mergedCargo || row.화물내용} />
+            <Row label={hasWaypointCargo ? "총화물톤수" : "화물톤수"} value={mergedTon || row.차량톤수} />
             <Row label="차량종류" value={row.차량종류} />
           </Section>
+          {(row.상차방법 || row.하차방법) && (
+            <Section title="작업 방식">
+              {row.상차방법 && <Row label="상차방법" value={row.상차방법} />}
+              {row.하차방법 && <Row label="하차방법" value={row.하차방법} />}
+            </Section>
+          )}
           <Section title="운임 정보">
             <Row label="청구운임" value={fmtMoney(row.청구운임)} />
             <Row label="기사운임" value={fmtMoney(row.기사운임)} />

@@ -1584,6 +1584,7 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     전화번호: "",
    혼적여부: "독차",
     적요: "",
+    전달사항: "",
     상차시간기준: null,
     하차시간기준: null,
     경유상차목록: [],
@@ -2005,6 +2006,7 @@ const groupedByDate = useMemo(() => {
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
       적요: form.적요 || "",
       메모: form.적요 || "",
+      전달사항: form.전달사항 || "",
 
       차량번호: form.차량번호 || "",
       기사명: form.기사명 || "",
@@ -6171,16 +6173,20 @@ const dropTime = order.하차시간 || "시간 없음";
           </div>
 
           {/* 하단 정보 */}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-            <span className="text-[0.75em] text-gray-500 truncate">
+          <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-gray-100">
+            <span className="text-[0.72em] text-gray-500 truncate leading-relaxed">
               {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
             </span>
-            <div className="flex items-center gap-1 shrink-0 ml-2">
-              <span className="text-[0.72em] text-gray-400 font-semibold">청</span>
-              <span className="text-[0.85em] font-bold text-gray-700">{fmtMoney(claim)}</span>
-              <span className="text-[0.72em] text-gray-300 mx-0.5">/</span>
-              <span className="text-[0.72em] text-gray-400 font-semibold">기</span>
-              <span className="text-[0.85em] font-bold text-[#1B2B4B]">{fmtMoney(fee)}</span>
+            <div className="flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded-lg bg-gray-50 border border-gray-100">
+              <span className="flex items-baseline gap-0.5">
+                <span className="text-[0.68em] text-gray-400 font-semibold">청구</span>
+                <span className="text-[0.82em] font-bold text-gray-700">{fmtMoney(claim)}</span>
+              </span>
+              <span className="w-px h-2.5 bg-gray-200" />
+              <span className="flex items-baseline gap-0.5">
+                <span className="text-[0.68em] text-gray-400 font-semibold">기사</span>
+                <span className="text-[0.82em] font-bold text-[#1B2B4B]">{fmtMoney(fee)}</span>
+              </span>
             </div>
           </div>
 
@@ -7093,6 +7099,7 @@ const handleAssignClick = () => {
       수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
       산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
       혼적여부: order.혼적여부 || "독차", 적요: order.메모 || "",
+      전달사항: order.전달사항 || "",
       기사명: name || "", 전화번호: phone || "",
       경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
       경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
@@ -7123,6 +7130,14 @@ const handleAssignClick = () => {
           </div>
           <div className={`text-[12px] text-gray-700 whitespace-pre-wrap leading-relaxed ${expandMemo ? "" : "line-clamp-2"}`}>
             {order.메모 || order.적요}
+          </div>
+        </div>
+      )}
+      {order.전달사항?.trim() && (
+        <div className="bg-gray-50 rounded-xl px-3 py-2 mt-2">
+          <div className="text-[11px] font-bold text-gray-500 mb-0.5">전달사항</div>
+          <div className="text-[12px] text-gray-700 whitespace-pre-wrap leading-relaxed">
+            {order.전달사항}
           </div>
         </div>
       )}
@@ -10016,6 +10031,21 @@ const pickDrop = (c) => {
         />
       </div>
 
+      {/* 전달사항 */}
+      <div className="bg-white rounded-lg border shadow-sm">
+        <RowLabelInput
+          label="전달사항"
+          input={
+            <textarea
+              className="w-full border rounded px-2 py-1 text-sm h-16"
+              placeholder="운송 기사님께 전달할 내용을 입력하세요"
+              value={form.전달사항 || ""}
+              onChange={(e) => update("전달사항", e.target.value)}
+            />
+          }
+        />
+      </div>
+
       <div className="mt-4 mb-8 space-y-2">
         <button
           onClick={onSave}
@@ -11598,9 +11628,20 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
       drawRow("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 2, true);
       drawRow("입금 계좌", `${companyBankData.계좌은행 || ""} ${companyBankData.계좌번호}`, 3, false);
       drawRow("예금주", companyBankData.예금주 || "", 4, false);
-      const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      alert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+      if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+        try {
+          const blobPromise = new Promise(res => canvas.toBlob(b => res(b), "image/png"));
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blobPromise })]);
+          alert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+          onClose();
+          return;
+        } catch (writeErr) {
+          // 클립보드 쓰기 실패 시 아래 폴백으로 진행
+        }
+      }
+      const fallbackUrl = canvas.toDataURL("image/png");
+      window.open(fallbackUrl, "_blank");
+      alert("이 브라우저에서는 이미지 복사가 지원되지 않습니다. 새 탭에 열린 이미지를 길게 눌러 저장해 주세요.");
       onClose();
     } catch { alert("이미지 복사에 실패했습니다."); }
   };
@@ -11611,12 +11652,24 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
     try {
       const [header, b64] = src.split(",");
       const mime = header.match(/:(.*?);/)?.[1] || "image/png";
-      const binary = atob(b64);
-      const arr = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-      const blob = new Blob([arr], { type: mime });
-      await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);
-      alert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+      const toBlob = () => {
+        const binary = atob(b64);
+        const arr = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+        return new Blob([arr], { type: mime });
+      };
+      if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ [mime]: Promise.resolve(toBlob()) })]);
+          alert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+          onClose();
+          return;
+        } catch (writeErr) {
+          // 클립보드 쓰기 실패 시 아래 폴백으로 진행
+        }
+      }
+      window.open(src, "_blank");
+      alert("이 브라우저에서는 이미지 복사가 지원되지 않습니다. 새 탭에 열린 이미지를 길게 눌러 저장해 주세요.");
       onClose();
     } catch { alert("사업자등록증 복사에 실패했습니다."); }
   };
