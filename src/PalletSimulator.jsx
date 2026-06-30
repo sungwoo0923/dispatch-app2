@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 
 const PALLET_SIZES = [
   // ── KPP 한국파렛트풀 (logisall.com 공식 제품) ─────────────────────────
@@ -27,21 +27,40 @@ const PALLET_COMPANIES = [
 
 // 제원 출처: 실차 기준 업계 표준 (1단 적재 기준 최대치)
 const TRUCKS = [
+  { id: "rabo",    name: "라보",       L: 2.4,  W: 1.45, maxKg: 600,   wc: 1 },
   { id: "1ton",    name: "1톤",        L: 2.8,  W: 1.60, maxKg: 1000,  wc: 1 },
   { id: "1.4ton",  name: "1.4톤",      L: 3.1,  W: 1.60, maxKg: 1400,  wc: 1 },
   { id: "1.4tonL", name: "1.4톤초장축", L: 3.8,  W: 1.70, maxKg: 1400,  wc: 1 },
   { id: "2.5ton",  name: "2.5톤",      L: 4.2,  W: 1.80, maxKg: 2500,  wc: 1 },
   { id: "3.5ton",  name: "3.5톤",      L: 4.4,  W: 2.00, maxKg: 3500,  wc: 2 },
   { id: "3.5tonW", name: "3.5톤광폭",  L: 4.4,  W: 2.35, maxKg: 3800,  wc: 2 },
-  { id: "5ton",    name: "5톤",        L: 6.2,  W: 2.30, maxKg: 5000,  wc: 2 },
-  { id: "5tonP",   name: "5톤+",       L: 7.3,  W: 2.30, maxKg: 5500,  wc: 2 },
-  { id: "5tonAx",  name: "5톤플축",    L: 8.5,  W: 2.30, maxKg: 6000,  wc: 2 },
-  { id: "11ton",   name: "11톤",       L: 9.1,  W: 2.35, maxKg: 11000, wc: 3 },
+  { id: "5ton",    name: "5톤(6M)",    L: 6.2,  W: 2.30, maxKg: 5000,  wc: 2 },
+  { id: "5tonP",   name: "5톤+(7M)",   L: 7.3,  W: 2.30, maxKg: 5500,  wc: 2 },
+  { id: "len74",   name: "7.4M",       L: 7.4,  W: 2.30, maxKg: 5800,  wc: 2 },
+  { id: "len80",   name: "8M",         L: 8.0,  W: 2.30, maxKg: 6000,  wc: 2 },
+  { id: "5tonAx",  name: "5톤플축(8M)", L: 8.5,  W: 2.30, maxKg: 6000,  wc: 2 },
+  { id: "len86",   name: "8.6M",       L: 8.6,  W: 2.35, maxKg: 6300,  wc: 3 },
+  { id: "11ton",   name: "11톤(9M)",   L: 9.1,  W: 2.35, maxKg: 11000, wc: 3 },
+  { id: "len90",   name: "9M",         L: 9.0,  W: 2.35, maxKg: 9000,  wc: 3 },
+  { id: "len96",   name: "9.6M",       L: 9.6,  W: 2.35, maxKg: 11000, wc: 3 },
   { id: "11tonL",  name: "11톤(롱)",   L: 10.2, W: 2.35, maxKg: 11000, wc: 3 },
-  { id: "18ton",   name: "18톤",       L: 10.2, W: 2.35, maxKg: 18000, wc: 3 },
+  { id: "18ton",   name: "18톤(10M)",  L: 10.2, W: 2.35, maxKg: 18000, wc: 3 },
   { id: "25ton",   name: "25톤",       L: 10.2, W: 2.35, maxKg: 25000, wc: 3 },
   { id: "trailer", name: "추레라",     L: 12.0, W: 2.40, maxKg: 27000, wc: 3 },
 ];
+
+// 공파렛트(빈 파렛트, 1100×1100mm 기준) 차량별 적재 가능 수량
+// 소형차량(라보~3.5톤광폭)은 적재함 형태가 표준화되어 있지 않아 업계 통상치를 사용,
+// 5톤(6M) 이상은 차량 길이에 비례하는 선형식(약 30개/m, 6M=150개 기준)을 사용한다.
+const EMPTY_PALLET_BASE = {
+  rabo: 25, "1ton": 35, "1.4ton": 40, "1.4tonL": 45, "2.5ton": 50,
+  "3.5ton": 70, "3.5tonW": 100,
+};
+function emptyPalletCapacity(truck) {
+  if (EMPTY_PALLET_BASE[truck.id] != null) return EMPTY_PALLET_BASE[truck.id];
+  if (truck.L >= 6) return Math.round((truck.L - 6) * 30 + 150);
+  return Math.round(truck.L * 25);
+}
 
 function calcFit(truckL, truckW, pw, pd, mode) {
   const f = (l, w, a, b) => ({
@@ -372,6 +391,10 @@ export default function PalletSimulator() {
   const [palletCount,   setPalletCount]   = useState(4);
   const [bodyType,      setBodyType]      = useState("윙바디");
   const [selectedId,    setSelectedId]    = useState(null);
+  const [cargoType,     setCargoType]     = useState("일반");
+
+  const isEmpty = cargoType === "공파렛트";
+  const countMax = isEmpty ? 999 : 20;
 
   const handleCompanyChange = (compId) => {
     setPalletCompany(compId);
@@ -379,7 +402,18 @@ export default function PalletSimulator() {
     if (first) setPalletSize(first.id);
   };
 
-  const pSize = PALLET_SIZES.find(p => p.id === palletSize) || PALLET_SIZES[0];
+  useEffect(() => {
+    if (isEmpty) {
+      setPalletCompany("KPP");
+      setPalletSize("kpp-n11");
+      if (palletCount > countMax) setPalletCount(countMax);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEmpty]);
+
+  const pSize = isEmpty
+    ? (PALLET_SIZES.find(p => p.id === "kpp-n11") || PALLET_SIZES[0])
+    : (PALLET_SIZES.find(p => p.id === palletSize) || PALLET_SIZES[0]);
 
   const weightKg = useMemo(() => {
     const v = parseFloat(weightVal) || 0;
@@ -390,11 +424,11 @@ export default function PalletSimulator() {
   const results = useMemo(() => TRUCKS.map(truck => {
     const fit      = calcFit(truck.L, truck.W, pSize.w, pSize.d, mode);
     const layers   = stacking === "2단" ? 2 : 1;
-    const maxPal   = fit.count * layers;
+    const maxPal   = isEmpty ? emptyPalletCapacity(truck) : fit.count * layers;
     const palletOk = palletCount <= maxPal;
-    const weightOk = totalKg === 0 || totalKg <= truck.maxKg;
+    const weightOk = isEmpty || totalKg === 0 || totalKg <= truck.maxKg;
     return { truck, fit, maxPal, palletOk, weightOk, ok: palletOk && weightOk };
-  }), [pSize, mode, stacking, palletCount, totalKg]);
+  }), [pSize, mode, stacking, palletCount, totalKg, isEmpty]);
 
   const okResults  = results.filter(r => r.ok);
   const displayRes = selectedId
@@ -412,7 +446,7 @@ export default function PalletSimulator() {
   const reset = () => {
     setPalletCompany("KPP"); setPalletSize("kpp-n11"); setMode("최적"); setStacking("1단");
     setWeightVal(""); setWeightUnit("kg"); setPalletCount(4);
-    setBodyType("윙바디"); setSelectedId(null);
+    setBodyType("윙바디"); setSelectedId(null); setCargoType("일반");
   };
 
   return (
@@ -434,8 +468,8 @@ export default function PalletSimulator() {
         <div className="flex flex-col gap-3 lg:flex-[34] lg:min-w-0 lg:overflow-y-auto lg:pr-1">
 
           {/* 파렛트 규격 — 2단계 (파레트사 → 크기) */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">파렛트 규격</div>
+          <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 ${isEmpty ? "opacity-40 pointer-events-none select-none" : ""}`}>
+            <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">파렛트 규격{isEmpty && " (1100×1100 고정)"}</div>
 
             {/* Step 1: 파레트사 선택 */}
             <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">① 파레트사 선택</div>
@@ -498,6 +532,22 @@ export default function PalletSimulator() {
             </div>
           </div>
 
+          {/* 화물 유형 */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">화물 유형</div>
+            <div className="flex rounded-xl border border-gray-200 overflow-hidden h-10">
+              {["일반","공파렛트"].map(t => (
+                <button key={t} onClick={() => setCargoType(t)}
+                  className={`flex-1 text-[13px] font-bold transition ${cargoType===t?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>{t}</button>
+              ))}
+            </div>
+            {isEmpty && (
+              <div className="mt-2 text-[11px] text-gray-400 font-medium leading-snug">
+                공파렛트(빈 파렛트, 1100×1100mm) 기준 차량 길이별 적재 가능 수량을 자동 계산합니다. 수량 제한 없이 입력하세요.
+              </div>
+            )}
+          </div>
+
           {/* 적재 옵션 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">적재 옵션</div>
@@ -527,39 +577,55 @@ export default function PalletSimulator() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">중량 · 수량</div>
 
-            <div className="text-[13px] font-bold text-[#1B2B4B] mb-1.5">파렛당 중량</div>
-            <div className="flex gap-2 mb-4">
-              <input type="number" value={weightVal} onChange={e => setWeightVal(e.target.value)}
-                placeholder="0" min="0"
-                className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none transition"/>
-              <div className="flex rounded-xl border border-gray-200 overflow-hidden">
-                {["kg","톤"].map(u => (
-                  <button key={u} onClick={() => setWeightUnit(u)}
-                    className={`px-3 py-2 text-[13px] font-bold transition ${weightUnit===u?"bg-[#1B2B4B] text-white":"bg-white text-gray-500"}`}>{u}</button>
-                ))}
-              </div>
-            </div>
+            {!isEmpty && (
+              <>
+                <div className="text-[13px] font-bold text-[#1B2B4B] mb-1.5">파렛당 중량</div>
+                <div className="flex gap-2 mb-4">
+                  <input type="number" value={weightVal} onChange={e => setWeightVal(e.target.value)}
+                    placeholder="0" min="0"
+                    className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none transition"/>
+                  <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                    {["kg","톤"].map(u => (
+                      <button key={u} onClick={() => setWeightUnit(u)}
+                        className={`px-3 py-2 text-[13px] font-bold transition ${weightUnit===u?"bg-[#1B2B4B] text-white":"bg-white text-gray-500"}`}>{u}</button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
-            <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">파렛 수량</div>
+            <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">파렛 수량{isEmpty && <span className="text-gray-400 font-medium"> (제한 없음)</span>}</div>
             <div className="flex items-center gap-3 mb-3">
               <button onClick={() => setPalletCount(p => Math.max(1, p - 1))}
                 className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-[#1B2B4B] hover:text-white text-[18px] font-black flex items-center justify-center transition">−</button>
-              <input type="number" min="1" max="20" value={palletCount}
-                onChange={e => setPalletCount(Math.max(1, Math.min(20, Number(e.target.value))))}
+              <input type="number" min="1" max={countMax} value={palletCount}
+                onChange={e => setPalletCount(Math.max(1, Math.min(countMax, Number(e.target.value))))}
                 className="flex-1 text-center py-1.5 text-[20px] font-black text-[#1B2B4B] border-2 border-[#1B2B4B]/20 rounded-xl focus:border-[#1B2B4B] outline-none"/>
-              <button onClick={() => setPalletCount(p => Math.min(20, p + 1))}
+              <button onClick={() => setPalletCount(p => Math.min(countMax, p + 1))}
                 className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-[#1B2B4B] hover:text-white text-[18px] font-black flex items-center justify-center transition">+</button>
             </div>
-            <input type="range" min="1" max="20" value={palletCount}
-              onChange={e => setPalletCount(Number(e.target.value))} className="w-full accent-[#1B2B4B] mb-2"/>
-            <div className="grid grid-cols-5 gap-1">
-              {[2,4,6,8,10,12,14,16,18,20].map(n => (
-                <button key={n} onClick={() => setPalletCount(n)}
-                  className={`py-1 text-[11px] font-bold rounded-lg transition ${palletCount===n?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-[#1B2B4B]/10"}`}>{n}</button>
-              ))}
-            </div>
+            {!isEmpty && (
+              <>
+                <input type="range" min="1" max="20" value={palletCount}
+                  onChange={e => setPalletCount(Number(e.target.value))} className="w-full accent-[#1B2B4B] mb-2"/>
+                <div className="grid grid-cols-5 gap-1">
+                  {[2,4,6,8,10,12,14,16,18,20].map(n => (
+                    <button key={n} onClick={() => setPalletCount(n)}
+                      className={`py-1 text-[11px] font-bold rounded-lg transition ${palletCount===n?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-[#1B2B4B]/10"}`}>{n}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            {isEmpty && (
+              <div className="grid grid-cols-5 gap-1">
+                {[50,100,150,192,256].map(n => (
+                  <button key={n} onClick={() => setPalletCount(n)}
+                    className={`py-1 text-[11px] font-bold rounded-lg transition ${palletCount===n?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-[#1B2B4B]/10"}`}>{n}</button>
+                ))}
+              </div>
+            )}
 
-            {totalKg > 0 && (
+            {!isEmpty && totalKg > 0 && (
               <div className="mt-3 rounded-xl bg-[#1B2B4B]/5 px-3 py-2 flex justify-between">
                 <span className="text-[12px] text-gray-500 font-semibold">총 중량</span>
                 <span className="text-[13px] font-black text-[#1B2B4B]">
