@@ -1,0 +1,41 @@
+// 출근기록부 공용 유틸
+export const LEAVE_TYPE_LABEL = {
+  "휴가": "연차", "오전반차": "오전반차", "오후반차": "오후반차",
+  "외근": "외근", "병가": "병가", "경조사": "경조사", "조퇴": "조퇴",
+};
+
+export function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function isWeekend(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+// 해당 날짜에 승인된 휴가/외근 일정이 있으면 그 유형 라벨을 반환
+export function findApprovedLeaveForDate(schedules, uid, dateStr) {
+  const hit = (schedules || []).find(s => {
+    if (s.authorUid !== uid) return false;
+    const approvers = s.approvers || [];
+    const allApproved = approvers.length > 0 && approvers.every(a => a.status === "approved");
+    if (s.approvalStatus !== "approved" && !allApproved) return false;
+    const start = s.start, end = s.end || s.start;
+    return dateStr >= start && dateStr <= end;
+  });
+  return hit ? (LEAVE_TYPE_LABEL[hit.type] || hit.type) : null;
+}
+
+export const ATTENDANCE_STATUS_COLOR = {
+  "출근": "bg-[#1B2B4B] text-white",
+  "휴무": "bg-gray-100 text-gray-400",
+  "연차": "bg-[#3A4F7A] text-white",
+  "오전반차": "bg-[#3A4F7A] text-white",
+  "오후반차": "bg-[#3A4F7A] text-white",
+  "외근": "bg-[#5A6E99] text-white",
+  "병가": "bg-[#5A6E99] text-white",
+  "경조사": "bg-[#5A6E99] text-white",
+  "조퇴": "bg-[#5A6E99] text-white",
+};

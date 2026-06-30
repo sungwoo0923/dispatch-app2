@@ -20,6 +20,8 @@ import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
+import AttendanceBoard from "./AttendanceBoard";
+import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
 
 // ================= 카운트 애니메이션 =================
@@ -1951,6 +1953,87 @@ useEffect(() => {
 
   return () => unsub();
 }, [userCompany, role]);
+
+  // ⭐ 출근기록부: 자동 출근체크 + 주말 출근여부 팝업
+  const [weekendCheckPopup, setWeekendCheckPopup] = useState(false);
+  useEffect(() => {
+    if (!user?.uid) return;
+    const company = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "")
+      : (userCompany || localStorage.getItem("userCompany") || "");
+    const today = attendanceTodayStr();
+    const attDocRef = doc(db, "attendance", `${today}_${user.uid}`);
+
+    (async () => {
+      const existing = await getDoc(attDocRef);
+      if (existing.exists()) return; // 이미 오늘 기록됨
+
+      // 휴가/외근 결재 승인 여부 확인
+      const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", user.uid)));
+      const mySchedules = schedSnap.docs.map(d => d.data());
+      const leaveLabel = findApprovedLeaveForDate(mySchedules, user.uid, today);
+
+      const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
+
+      if (leaveLabel) {
+        await setDoc(attDocRef, {
+          uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
+          status: leaveLabel, checkInTime: null, source: "leave", companyName: company,
+        });
+        return;
+      }
+
+      if (isWeekend(today)) {
+        setWeekendCheckPopup(true);
+        return;
+      }
+
+      await setDoc(attDocRef, {
+        uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
+        status: "출근", checkInTime: new Date().toISOString(), source: "auto", companyName: company,
+      });
+    })();
+  }, [user?.uid, userCompany, role]);
+
+  const handleWeekendCheckIn = async (checkIn) => {
+    setWeekendCheckPopup(false);
+    if (!user?.uid) return;
+    const company = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "")
+      : (userCompany || localStorage.getItem("userCompany") || "");
+    const today = attendanceTodayStr();
+    const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
+    await setDoc(doc(db, "attendance", `${today}_${user.uid}`), {
+      uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
+      status: checkIn ? "출근" : "휴무",
+      checkInTime: checkIn ? new Date().toISOString() : null,
+      source: "weekend_choice", companyName: company,
+    });
+  };
+
+  // ⭐ 출근 처리 실시간 알림 배너 (전사 공유)
+  useEffect(() => {
+    const company = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "")
+      : (userCompany || localStorage.getItem("userCompany") || "");
+    if (!company) return;
+    const today = attendanceTodayStr();
+    let firstLoad = true;
+    const q = query(collection(db, "attendance"), where("companyName", "==", company), where("date", "==", today));
+    const unsub = onSnapshot(q, snap => {
+      if (firstLoad) { firstLoad = false; return; }
+      snap.docChanges().forEach(ch => {
+        if (ch.type === "added") {
+          const d = ch.doc.data();
+          if (d.status === "출근") {
+            sflowToast(`${d.name || "직원"}님이 출근처리 되었습니다.`, "system");
+          }
+        }
+      });
+    }, () => {});
+    return () => unsub();
+  }, [userCompany, role]);
+
   // ⭐ 여기 추가!
   const [배차현황Tab, set배차현황Tab] = useState("배차현황");
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
@@ -2338,6 +2421,20 @@ React.useEffect(() => {
 return (
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
+      {weekendCheckPopup && (
+        <div className="fixed inset-0 bg-black/40 z-[999999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="text-[16px] font-black text-[#1B2B4B] mb-2">주말 출근 확인</div>
+            <div className="text-[13px] text-gray-500 mb-5">오늘은 주말입니다. 출근 처리 하시겠습니까?</div>
+            <div className="flex gap-2">
+              <button onClick={() => handleWeekendCheckIn(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-bold hover:bg-gray-50">아니오 (휴무)</button>
+              <button onClick={() => handleWeekendCheckIn(true)}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60]">예 (출근)</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="min-w-max">
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6" style={{width:"100vw",left:0}}>
@@ -42110,7 +42207,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 // ─────────── 회사관리 탭 래퍼 ───────────
 function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
   const [tab, setTab] = React.useState("회사정보");
-  const tabs = ["회사정보", "내정보"];
+  const tabs = ["회사정보", "내정보", "출근기록부"];
 
   return (
     <div>
@@ -42142,6 +42239,9 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
           userCompany={userCompany}
           role={role}
         />
+      )}
+      {tab === "출근기록부" && (
+        <AttendanceBoard userCompany={userCompany} role={role} user={user} />
       )}
     </div>
   );
