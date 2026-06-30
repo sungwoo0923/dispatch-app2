@@ -53,7 +53,7 @@ function createDb() {
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager({ forceOwnership: true }),
+        tabManager: persistentSingleTabManager({ forceOwnership: false }),
       }),
     });
   } catch {

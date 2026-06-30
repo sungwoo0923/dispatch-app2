@@ -2832,6 +2832,7 @@ return (
                         if (!window.confirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
                         const co = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
                         await setDoc(doc(db, "companySettings", co), { revenuePassword: null }, { merge: true });
+                        setRevenuePassword(null);
                         showAlert("비밀번호가 초기화되었습니다.");
                       }} className="w-full mt-2 py-2.5 border border-red-300 text-red-500 rounded-xl text-[13px] font-semibold hover:bg-red-50 transition">초기화 (최고관리자)</button>
                     )}
@@ -41924,6 +41925,7 @@ function RevenuePasswordSection({ companyName }) {
     setSaving(true);
     try {
       await setDoc(doc(db, "companySettings", companyName.trim()), { revenuePassword: newPw }, { merge: true });
+      setCurrentPw(newPw);
       clearForm();
       showMsg(changeMode ? "비밀번호가 변경되었습니다." : "비밀번호가 저장되었습니다.");
     } catch(e) { showMsg("저장 실패: " + e.message, "err"); }
@@ -41934,6 +41936,7 @@ function RevenuePasswordSection({ companyName }) {
     if (!window.confirm("비밀번호를 초기화하시겠습니까?")) return;
     try {
       await setDoc(doc(db, "companySettings", companyName.trim()), { revenuePassword: null }, { merge: true });
+      setCurrentPw(null);
       clearForm();
       showMsg("비밀번호가 초기화되었습니다.");
     } catch(e) { showMsg("초기화 실패: " + e.message, "err"); }
