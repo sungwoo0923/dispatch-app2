@@ -15,23 +15,32 @@ export function isWeekend(dateStr) {
   return day === 0 || day === 6;
 }
 
-// 이름 끝의 숫자(여분계정 구분용, 예: "박성우2")를 제거해 동일인 여부를 비교하기 위한 정규화
+// 이름 끝의 숫자(여분계정 구분용, 예: "박성우2")를 제거하고 공백을 정리해 동일인 여부를 비교하기 위한 정규화
 function normalizeName(name) {
-  return (name || "").trim().replace(/\d+$/, "");
+  return (name || "").replace(/\s+/g, "").replace(/\d+$/, "");
 }
 
-// 해당 날짜에 등록된 휴가/외근 일정(반려 제외)이 있으면 그 유형 라벨을 반환
+// 결재자 목록을 보고 해당 일정이 실제로 "승인 완료" 상태인지 판단
+// 결재자가 1명이라도 지정돼 있으면 전원이 승인(approved)해야 승인 완료로 간주하고,
+// 결재자가 아예 없는 과거 데이터는(결재 절차 도입 전 등록분) 반려되지 않은 이상 그대로 인정한다.
+function isScheduleApproved(s) {
+  const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, status: s.approvalStatus || "pending" }] : []);
+  if (approvers.length === 0) return true;
+  if (approvers.some(a => a.status === "rejected")) return false;
+  return approvers.every(a => a.status === "approved");
+}
+
+// 해당 날짜에 등록된 휴가/외근 일정 중 승인 완료된 건이 있으면 그 유형 라벨을 반환
 // authorUid가 일치하지 않더라도(관리자가 대신 등록해 authorUid가 어긋난 과거 데이터 등) name이 동일인으로 판단되면 매칭
 export function findApprovedLeaveForDate(schedules, uid, dateStr, employeeName) {
   const normEmpName = normalizeName(employeeName);
   const hit = (schedules || []).find(s => {
-    const sameUid = s.authorUid === uid;
-    const sameName = normEmpName && normalizeName(s.name) === normEmpName;
+    const sameUid = !!uid && s.authorUid === uid;
+    const sameName = !!normEmpName && normalizeName(s.name) === normEmpName;
     if (!sameUid && !sameName) return false;
-    const approvers = s.approvers || [];
-    const anyRejected = approvers.some(a => a.status === "rejected");
-    if (anyRejected) return false;
+    if (!isScheduleApproved(s)) return false;
     const start = s.start, end = s.end || s.start;
+    if (!start) return false;
     return dateStr >= start && dateStr <= end;
   });
   return hit ? (LEAVE_TYPE_LABEL[hit.type] || hit.type) : null;
