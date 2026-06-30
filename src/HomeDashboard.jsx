@@ -1059,7 +1059,7 @@ React.useEffect(() => {
       {scheduleOpen && (
         <Modal title="휴가 / 외근 일정 등록" onClose={() => setScheduleOpen(false)}>
           <div className="space-y-3">
-            {(role === "superadmin" || role === "totalMaster") && selectedSchedule?.id && (
+            {(role === "admin" || role === "totalMaster") && (
               <div>
                 <div className="text-[11px] text-gray-400 mb-1">작성자</div>
                 <select className={formInput} value={scheduleForm.authorName} onChange={e => setScheduleForm({ ...scheduleForm, authorName: e.target.value })}>
@@ -1108,7 +1108,7 @@ React.useEffect(() => {
               const me = users.find(u => u.id === user?.uid);
               const userName = me?.name || "사용자";
               const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
-              const selectedAuthor = (role === "superadmin" || role === "totalMaster") && scheduleForm.authorName
+              const selectedAuthor = (role === "admin" || role === "totalMaster") && scheduleForm.authorName
                 ? users.find(u => u.name === scheduleForm.authorName)
                 : null;
               if (selectedSchedule?.id) {
@@ -1140,7 +1140,7 @@ React.useEffect(() => {
         const me = users.find(u => u.id === user?.uid);
         const overallStatus = getOverallApprovalStatus(selectedSchedule);
         const isAuthor = user?.uid === selectedSchedule.authorUid;
-        const isSuperAdmin = role === "superadmin" || role === "totalMaster";
+        const isSuperAdmin = role === "admin" || role === "totalMaster";
         const approvers = selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName, status: selectedSchedule.approvalStatus || "pending" }] : []);
         const anyApproverActed = approvers.length > 0 && approvers.some(a => a.status && a.status !== "pending");
         const canEdit = (isAuthor && (!anyApproverActed || overallStatus === "rejected")) || (isSuperAdmin && overallStatus !== "approved");
