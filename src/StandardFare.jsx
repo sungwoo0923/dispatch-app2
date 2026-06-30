@@ -947,14 +947,14 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 <table className="w-full min-w-[1500px] text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B]">
-                      {["상차일","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
+                      {["상차일","긴급","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
                         <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {result.length === 0 ? (
-                      <tr><td colSpan={15} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                      <tr><td colSpan={16} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                     ) : (
                       result.map((r, i) => {
                         // 경유지 정보 조합
@@ -979,6 +979,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                         return (
                           <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                             <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
+                            <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                              {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-300">-</span>}
+                            </td>
                             <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
                             <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
                             <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.하차지명}</td>

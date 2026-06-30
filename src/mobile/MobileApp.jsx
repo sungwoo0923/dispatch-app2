@@ -1420,7 +1420,7 @@ useEffect(() => {
   if (unreadPopupShownRef.current) return;
   if (userReadNoticeAt === null || userReadScheduleAt === null) return;
   const hasUnreadNotice = notices.some(n => (n.createdAt?.seconds || 0) > userReadNoticeAt);
-  const hasUnreadSchedule = schedules.some(s => (s.createdAt?.seconds || 0) > userReadScheduleAt);
+  const hasUnreadSchedule = schedules.some(s => (s.approvers || []).some(a => a.uid === currentUser.uid && (!a.status || a.status === "pending")));
   const hasUnreadHandover = handovers.some(h => h.receiverUid === currentUser.uid && !(h.readBy || []).includes(currentUser.uid));
   if (!hasUnreadNotice && !hasUnreadSchedule && !hasUnreadHandover) return;
   unreadPopupShownRef.current = true;
@@ -1439,8 +1439,23 @@ const [detailFrom, setDetailFrom] = useState(null);
   const [cardVersionB, setCardVersionB] = useState(() => localStorage.getItem("cardVersion") === "B");
 
   useEffect(() => {
-    document.body.style.overflow = showMenu ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    if (!showMenu) return;
+    const scrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.width = "";
+      document.body.style.overflow = "";
+      window.scrollTo(0, scrollY);
+    };
   }, [showMenu]);
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
   const appVersion = APP_VERSION;
@@ -2428,7 +2443,7 @@ const title =
 })()}
 {showUnreadPopup && (() => {
   const unreadNotices = notices.filter(n => (n.createdAt?.seconds || 0) > (userReadNoticeAt || 0));
-  const unreadSchedules = schedules.filter(s => (s.createdAt?.seconds || 0) > (userReadScheduleAt || 0));
+  const unreadSchedules = schedules.filter(s => (s.approvers || []).some(a => a.uid === currentUser?.uid && (!a.status || a.status === "pending")));
   const unreadHandovers = handovers.filter(h => h.receiverUid === currentUser?.uid && !(h.readBy || []).includes(currentUser?.uid));
   const totalCount = unreadNotices.length + unreadSchedules.length + unreadHandovers.length;
   if (totalCount === 0) return null;
@@ -2458,7 +2473,7 @@ const title =
             <div className="mb-3">
               <div style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", padding: "6px 0 4px", letterSpacing: "0.05em", textTransform: "uppercase" }}>일정 {unreadSchedules.length}건</div>
               {unreadSchedules.slice(0, 3).map(s => (
-                <button key={s.id} onClick={() => { setPage("notice"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, background: "#F5F7FA", border: "none", marginBottom: 4, cursor: "pointer" }}>
+                <button key={s.id} onClick={() => { setPage("schedule"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, background: "#F5F7FA", border: "none", marginBottom: 4, cursor: "pointer" }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#1B2B4B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} — {s.start || ""}</div>
                 </button>
               ))}
@@ -2505,7 +2520,7 @@ const title =
             <div className="mb-3">
               <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", padding: "6px 0 4px" }}>일정</div>
               {unreadSchedules.slice(0, 3).map(s => (
-                <button key={s.id} onClick={() => { setPage("notice"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 10, background: "#F8F8F8", border: "1px solid #eee", marginBottom: 5, cursor: "pointer" }}>
+                <button key={s.id} onClick={() => { setPage("schedule"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 10, background: "#F8F8F8", border: "1px solid #eee", marginBottom: 5, cursor: "pointer" }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} — {s.start || ""}</div>
                 </button>
               ))}
@@ -3468,7 +3483,11 @@ onGoSchedule={() => {
   </div>
 )}
 
-        {page === "list" && (
+        {page === "list" && !ordersLoaded && (
+          <MobileLoadingScreen cardVersionB={cardVersionB} />
+        )}
+
+        {page === "list" && ordersLoaded && (
           <MobileOrderList
             groupedByDate={groupedByDate}
             statusTab={statusTab}
@@ -4260,6 +4279,42 @@ function DetailRow({ label, value }) {
     <div className="flex gap-2">
       <span className="text-gray-400 w-14 shrink-0">{label}</span>
       <span className="text-gray-700 font-medium">{value}</span>
+    </div>
+  );
+}
+
+function MobileLoadingScreen({ cardVersionB }) {
+  const ESTIMATED_SEC = 5;
+  const [remain, setRemain] = useState(ESTIMATED_SEC);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setRemain((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (cardVersionB) {
+    return (
+      <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", border: "4px solid rgba(27,43,75,0.12)", borderTopColor: "#1B2B4B", animation: "kpfSpin 0.9s linear infinite" }} />
+        <div style={{ marginTop: 22, fontSize: 14, fontWeight: 700, color: "#1B2B4B", letterSpacing: "-0.2px" }}>오더 목록을 불러오는 중입니다</div>
+        <div style={{ marginTop: 6, fontSize: 12, color: "#8b93a6" }}>
+          {remain > 0 ? `약 ${remain}초 후 표시됩니다` : "잠시만 기다려주세요"}
+        </div>
+        <style>{`@keyframes kpfSpin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
+      <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #eef0f4", borderTopColor: "#1B2B4B", animation: "kpfSpin 0.9s linear infinite" }} />
+      <div style={{ marginTop: 20, fontSize: 13, fontWeight: 700, color: "#374151" }}>오더 목록을 불러오는 중입니다</div>
+      <div style={{ marginTop: 6, fontSize: 12, color: "#9ca3af" }}>
+        {remain > 0 ? `약 ${remain}초 후 표시됩니다` : "잠시만 기다려주세요"}
+      </div>
+      <style>{`@keyframes kpfSpin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -7726,6 +7781,9 @@ const handleAssignClick = () => {
                                   <div className="flex items-center gap-1.5 mb-1">
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tagColor}`}>{tagLabel}</span>
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fareLevelCls}`}>{fareLevel}</span>
+                                    {o.긴급 === true && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">긴급</span>
+                                    )}
                                     <span className="text-[11px] text-gray-400">{o.상차일 || ""}</span>
                                   </div>
                                   <div className="text-[13px] font-bold text-gray-900 truncate">
@@ -10077,6 +10135,9 @@ const pickDrop = (c) => {
                                   <div className="flex items-center gap-1.5 mb-1">
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tagColor}`}>{tagLabel}</span>
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fareLevelCls}`}>{fareLevel}</span>
+                                    {o.긴급 === true && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">긴급</span>
+                                    )}
                                     <span className="text-[11px] text-gray-400">{o.상차일 || ""}</span>
                                   </div>
                                   <div className="text-[13px] font-bold text-gray-900 truncate">
@@ -10171,7 +10232,12 @@ const pickDrop = (c) => {
             </div>
             <div className="bg-[#1B2B4B] px-5 py-4">
               <div className="flex items-center justify-between">
-                <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
+                <div className="flex items-center gap-1.5">
+                  <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
+                  {fareDetailItem.긴급 === true && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">긴급</span>
+                  )}
+                </div>
                 <button onClick={() => setFareDetailItem(null)}
                   className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg">×</button>
               </div>
@@ -13494,6 +13560,9 @@ const fares = baseRows.map((r) =>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-1">
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fareLevelCls}`}>{fareLevel}</span>
+                        {r.긴급 === true && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">긴급</span>
+                        )}
                         <span className="text-[11px] text-gray-400">{(r.상차일||"").slice(0,10)}</span>
                       </div>
                       <div className="text-[13px] font-bold text-gray-900 truncate">
@@ -13550,7 +13619,12 @@ const fares = baseRows.map((r) =>
             </div>
             <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-4`}>
               <div className="flex items-center justify-between">
-                <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
+                <div className="flex items-center gap-1.5">
+                  <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
+                  {fareDetailItemStd.긴급 === true && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">긴급</span>
+                  )}
+                </div>
                 <button onClick={() => setFareDetailItemStd(null)}
                   className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg">×</button>
               </div>

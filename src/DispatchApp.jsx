@@ -19058,6 +19058,9 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec.긴급 === true && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
+                          )}
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
@@ -19428,6 +19431,9 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec.긴급 === true && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
+                          )}
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
@@ -21337,6 +21343,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                       <div className="flex gap-1">
+                        {rec.긴급 === true && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>}
                         {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
                         {rec._match?.label === "부분일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>}
                         {rec._match?.label === "톤수일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
@@ -21480,6 +21487,9 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec.긴급 === true && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
+                          )}
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
@@ -28374,6 +28384,9 @@ setCopyPlaceOptions(list);
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec.긴급 === true && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
+                          )}
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
@@ -29841,6 +29854,7 @@ setCopyPlaceOptions(list);
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                       <div className="flex gap-1">
+                        {rec.긴급 === true && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>}
                         {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
                         {rec._match?.label === "부분일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>}
                         {rec._match?.label === "톤수일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
@@ -30012,6 +30026,9 @@ setCopyPlaceOptions(list);
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec.긴급 === true && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
+                          )}
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
