@@ -672,6 +672,8 @@ const toggleTheme = () => {
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
 const [showUnassignedEntryPopup, setShowUnassignedEntryPopup] = useState(false);
+const [showUnreadPopup, setShowUnreadPopup] = useState(false);
+const unreadPopupShownRef = useRef(false);
 const [ordersLoaded, setOrdersLoaded] = useState(false);
 const [focusUnassignedOrderId, setFocusUnassignedOrderId] = useState(null);
 const popupLastShownDateRef = useRef(null);        // 마지막으로 팝업을 띄운 KST 날짜(YYYY-MM-DD)
@@ -1412,6 +1414,19 @@ useEffect(() => {
   setHasNewSchedule(schedules.some(s => (s.createdAt?.seconds || 0) > userReadScheduleAt));
 }, [schedules, currentUser, userReadScheduleAt]);
 
+// 공지/일정/인수인계 미확인 팝업 (로그인 후 1회)
+useEffect(() => {
+  if (!currentUser?.uid) return;
+  if (unreadPopupShownRef.current) return;
+  if (userReadNoticeAt === null || userReadScheduleAt === null) return;
+  const hasUnreadNotice = notices.some(n => (n.createdAt?.seconds || 0) > userReadNoticeAt);
+  const hasUnreadSchedule = schedules.some(s => (s.createdAt?.seconds || 0) > userReadScheduleAt);
+  const hasUnreadHandover = handovers.some(h => h.receiverUid === currentUser.uid && !(h.readBy || []).includes(currentUser.uid));
+  if (!hasUnreadNotice && !hasUnreadSchedule && !hasUnreadHandover) return;
+  unreadPopupShownRef.current = true;
+  const timer = setTimeout(() => setShowUnreadPopup(true), 1800);
+  return () => clearTimeout(timer);
+}, [currentUser, notices, schedules, handovers, userReadNoticeAt, userReadScheduleAt]);
 
 
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -2411,145 +2426,110 @@ const title =
   </div>
   );
 })()}
-{showUnassignedEntryPopup && page === "list" && (
-  <div
-    className="fixed inset-0 z-[80] flex items-end justify-center"
-    style={{ background: "rgba(0,0,0,0.45)" }}
-    onClick={() => setShowUnassignedEntryPopup(false)}
-  >
-    <div
-      className="w-full max-w-lg overflow-hidden"
-      style={{
-        borderRadius: "20px 20px 0 0",
-        background: cardVersionB ? "#fff" : "#fff",
-        maxHeight: "80vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* 헤더 */}
-      {cardVersionB ? (
+{showUnreadPopup && (() => {
+  const unreadNotices = notices.filter(n => (n.createdAt?.seconds || 0) > (userReadNoticeAt || 0));
+  const unreadSchedules = schedules.filter(s => (s.createdAt?.seconds || 0) > (userReadScheduleAt || 0));
+  const unreadHandovers = handovers.filter(h => h.receiverUid === currentUser?.uid && !(h.readBy || []).includes(currentUser?.uid));
+  const totalCount = unreadNotices.length + unreadSchedules.length + unreadHandovers.length;
+  if (totalCount === 0) return null;
+  return cardVersionB ? (
+    /* ── B스타일 ── */
+    <div className="fixed inset-0 z-[80] flex items-end justify-center" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowUnreadPopup(false)}>
+      <div className="w-full max-w-lg" style={{ borderRadius: "20px 20px 0 0", background: "#fff", maxHeight: "75vh", display: "flex", flexDirection: "column", borderTop: "3px solid #1B2B4B" }} onClick={e => e.stopPropagation()}>
         <div style={{ background: "#1B2B4B", padding: "16px 20px 14px" }}>
-          <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "-0.3px" }}>미배차현황</div>
-          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 3 }}>
-            미배차 <span style={{ color: "#fff", fontWeight: 600 }}>{unassignedOrders.length}</span>건
-            {undeliveredOrders.length > 0 && <> · 정보미전달 <span style={{ color: "#fff", fontWeight: 600 }}>{undeliveredOrders.length}</span>건</>}
+          <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "-0.3px" }}>확인하지 않은 항목</div>
+          <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, marginTop: 3 }}>
+            공지·일정·인수인계 <span style={{ color: "#fff", fontWeight: 700 }}>{totalCount}</span>건이 확인을 기다립니다
           </div>
         </div>
-      ) : (
-        <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid #f0f0f0" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#111", letterSpacing: "-0.3px" }}>미배차현황</div>
-          <div style={{ fontSize: 12, color: "#999", marginTop: 3 }}>
-            미배차 {unassignedOrders.length}건
-            {undeliveredOrders.length > 0 && ` · 정보미전달 ${undeliveredOrders.length}건`}
-          </div>
-        </div>
-      )}
-
-      {/* 목록 */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
-        {unassignedOrders.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: 13 }}>
-            미배차 오더가 없습니다
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {[...unassignedOrders]
-              .filter(o => o.상차지명 && o.하차지명 && getPickupDate(o))
-              .sort((a, b) => {
-                const da = getPickupDate(a) || "";
-                const db = getPickupDate(b) || "";
-                if (da !== db) return da.localeCompare(db);
-                return String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""));
-              })
-              .slice(0, 8)
-              .map((o) => (
-                <button
-                  key={o.id}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "9px 12px",
-                    borderRadius: cardVersionB ? 10 : 12,
-                    background: cardVersionB ? "#F5F7FA" : "#F8F8F8",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => {
-                    setUnassignedTypeFilter("전체");
-                    setFocusUnassignedOrderId(o.id);
-                    setPage("unassigned");
-                    setShowUnassignedEntryPopup(false);
-                    window.scrollTo(0, 0);
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{
-                      fontSize: 13, fontWeight: 600,
-                      color: cardVersionB ? "#1B2B4B" : "#222",
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    }}>
-                      {o.상차지명} → {o.하차지명}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", flexShrink: 0 }}>
-                      {formatDateHeader(getPickupDate(o))}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
-                    {[o.상차시간, o.차량톤수 || o.톤수, o.차량종류 || o.차종].filter(Boolean).join(" · ")}
-                  </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
+          {unreadNotices.length > 0 && (
+            <div className="mb-3">
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", padding: "6px 0 4px", letterSpacing: "0.05em", textTransform: "uppercase" }}>공지사항 {unreadNotices.length}건</div>
+              {unreadNotices.slice(0, 3).map(n => (
+                <button key={n.id} onClick={() => { setPage("notice"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, background: "#F5F7FA", border: "none", marginBottom: 4, cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1B2B4B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title || n.content?.slice(0, 30) || "공지사항"}</div>
+                  <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : ""}</div>
                 </button>
               ))}
-          </div>
-        )}
-      </div>
-
-      {/* 하단 버튼 */}
-      <div style={{ padding: "10px 14px 20px", display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #f0f0f0" }}>
-        <button
-          style={{
-            padding: "13px 0", borderRadius: 12, fontSize: 14, fontWeight: 700,
-            background: cardVersionB ? "#1B2B4B" : "#111",
-            color: "#fff", border: "none", cursor: "pointer",
-          }}
-          onClick={() => {
-            setFocusUnassignedOrderId(null);
-            setUnassignedTypeFilter("전체");
-            setPage("unassigned");
-            setShowUnassignedEntryPopup(false);
-            window.scrollTo(0, 0);
-          }}
-        >
-          미배차현황 전체 보기
-        </button>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            style={{
-              flex: 1, padding: "11px 0", borderRadius: 12, fontSize: 13, fontWeight: 600,
-              background: "#F0F0F0", color: "#555", border: "none", cursor: "pointer",
-            }}
-            onClick={() => {
-              localStorage.setItem("hideUnassignedPopupDate", todayKST());
-              setShowUnassignedEntryPopup(false);
-            }}
-          >
-            오늘 하루 안 보기
-          </button>
-          <button
-            style={{
-              flex: 1, padding: "11px 0", borderRadius: 12, fontSize: 13, fontWeight: 600,
-              background: "#F0F0F0", color: "#555", border: "none", cursor: "pointer",
-            }}
-            onClick={() => setShowUnassignedEntryPopup(false)}
-          >
-            닫기
-          </button>
+            </div>
+          )}
+          {unreadSchedules.length > 0 && (
+            <div className="mb-3">
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", padding: "6px 0 4px", letterSpacing: "0.05em", textTransform: "uppercase" }}>일정 {unreadSchedules.length}건</div>
+              {unreadSchedules.slice(0, 3).map(s => (
+                <button key={s.id} onClick={() => { setPage("notice"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, background: "#F5F7FA", border: "none", marginBottom: 4, cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1B2B4B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} — {s.start || ""}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {unreadHandovers.length > 0 && (
+            <div className="mb-3">
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", padding: "6px 0 4px", letterSpacing: "0.05em", textTransform: "uppercase" }}>인수인계 {unreadHandovers.length}건</div>
+              {unreadHandovers.slice(0, 3).map(h => (
+                <button key={h.id} onClick={() => { setPage("handover"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, background: "#F5F7FA", border: "none", marginBottom: 4, cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1B2B4B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.authorName || ""} → {h.receiverName || ""}</div>
+                  <div style={{ fontSize: 11, color: "#888", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.text || ""}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{ padding: "10px 14px 28px", borderTop: "1px solid #f0f0f0" }}>
+          <button onClick={() => setShowUnreadPopup(false)} style={{ width: "100%", padding: "13px 0", borderRadius: 12, fontSize: 14, fontWeight: 700, background: "#1B2B4B", color: "#fff", border: "none", cursor: "pointer" }}>확인</button>
         </div>
       </div>
     </div>
-  </div>
-)}
+  ) : (
+    /* ── A스타일 ── */
+    <div className="fixed inset-0 z-[80] flex items-center justify-center px-5" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setShowUnreadPopup(false)}>
+      <div style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 360, maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.18)", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f0f0f0" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#111", letterSpacing: "-0.5px" }}>미확인 알림</div>
+          <div style={{ fontSize: 12, color: "#999", marginTop: 3 }}>확인하지 않은 항목 {totalCount}건</div>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "10px 16px" }}>
+          {unreadNotices.length > 0 && (
+            <div className="mb-3">
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", padding: "6px 0 4px" }}>공지사항</div>
+              {unreadNotices.slice(0, 3).map(n => (
+                <button key={n.id} onClick={() => { setPage("notice"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 10, background: "#F8F8F8", border: "1px solid #eee", marginBottom: 5, cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title || n.content?.slice(0, 30) || "공지사항"}</div>
+                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : ""}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {unreadSchedules.length > 0 && (
+            <div className="mb-3">
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", padding: "6px 0 4px" }}>일정</div>
+              {unreadSchedules.slice(0, 3).map(s => (
+                <button key={s.id} onClick={() => { setPage("notice"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 10, background: "#F8F8F8", border: "1px solid #eee", marginBottom: 5, cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} — {s.start || ""}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {unreadHandovers.length > 0 && (
+            <div className="mb-3">
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", padding: "6px 0 4px" }}>인수인계</div>
+              {unreadHandovers.slice(0, 3).map(h => (
+                <button key={h.id} onClick={() => { setPage("handover"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 10, background: "#F8F8F8", border: "1px solid #eee", marginBottom: 5, cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{h.authorName || ""} → {h.receiverName || ""}</div>
+                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.text || ""}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{ padding: "10px 16px 20px", borderTop: "1px solid #f0f0f0", display: "flex", gap: 8 }}>
+          <button onClick={() => setShowUnreadPopup(false)} style={{ flex: 1, padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 700, background: "#111", color: "#fff", border: "none", cursor: "pointer" }}>확인</button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 
 {/* 오더 삭제 확인 팝업 (상세보기) */}
 {deleteConfirmMobile && (
@@ -5585,6 +5565,7 @@ function MobileOrderInfoModal({ order: row, onClose }) {
 // 길게 누르기 컨텍스트 메뉴 (bottom sheet)
 // ────────────────────────────────────────────────────────────────
 function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete, onUploadLink, onOrderInfo }) {
+  const mountTimeRef = useRef(Date.now());
   const menuItems = [
     {
       label: "일부 수정",
@@ -5646,7 +5627,7 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
                 ? `border-gray-100 ${item.danger ? "text-red-500" : "text-[#1B2B4B]"} active:bg-[#1B2B4B]/5`
                 : `border-gray-100 ${item.danger ? "text-red-500" : "text-gray-900"} active:bg-blue-50`
             }`}
-            onClick={() => { item.action?.(); onClose(); }}
+            onClick={(e) => { e.stopPropagation(); if (Date.now() - mountTimeRef.current < 350) return; item.action?.(); onClose(); }}
           >
             <span className={item.danger ? "text-red-400" : (bStyle ? "text-[#1B2B4B]/70" : "text-blue-500")}>{item.svg}</span>
             <div>
@@ -5673,6 +5654,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
   const [fee, setFee] = useState(order.기사운임 ? Number(order.기사운임).toLocaleString() : "");
   const [payType, setPayType] = useState(order.지급방식 || "");
   const [dispType, setDispType] = useState(order.배차방식 || "");
+  const [deliverState, setDeliverState] = useState(order.업체전달상태 || "미전달");
   const [saving, setSaving] = useState(false);
 
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
@@ -5733,6 +5715,9 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         기사운임: Number(String(fee).replace(/[^\d]/g, "")) || 0,
         지급방식: payType,
         배차방식: dispType,
+        업체전달상태: deliverState,
+        정보전달상태: deliverState,
+        정보전달완료: deliverState === "전달완료",
         updatedAt: serverTimestamp(),
         _lastModified: Date.now(),
       };
@@ -5804,6 +5789,25 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
               <option value="">선택</option>
               {["24시","직접배차","인성","고정기사"].map(v => <option key={v}>{v}</option>)}
             </select>
+          </div>
+        </div>
+
+        {/* 전달상태 */}
+        <div className="mb-4">
+          <label className={labelCls}>전달상태</label>
+          <div className="flex gap-2">
+            {["미전달", "전달완료"].map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setDeliverState(v)}
+                className={`flex-1 py-2 rounded-lg text-[13px] font-semibold border transition ${
+                  deliverState === v
+                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                    : "bg-white text-gray-600 border-gray-300"
+                }`}
+              >{v}</button>
+            ))}
           </div>
         </div>
 
@@ -7253,7 +7257,7 @@ const handleAssignClick = () => {
         <CopySelectModal
           order={order}
           onClose={() => setShowCopyModal(false)}
-          onAfterFullCopy={() => { setShowCopyModal(false); setConfirmDeliver(true); }}
+          onAfterFullCopy={() => { setShowCopyModal(false); if (!localDelivered && order.업체전달상태 !== "전달완료") { setConfirmDeliver(true); } }}
           onAfterDriverCopy={() => setShowCopyModal(false)}
           onCopySuccess={() => showSuccess?.("기사 복사 완료")}
           cardVersionB={cardVersionB}
@@ -11224,7 +11228,7 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
       const _ttM=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return raw;const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return tp&&tp!=="없음"?`${val}${tp}`:val;};
       const _pkgM=(str)=>{const s=String(str||"").trim().replace(/,/g,"");if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)\s*톤/);return ton?parseFloat(ton[1])*1000:0;};
       const _fkgM=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-      const _scM=(main,stops)=>{const all=[main,...stops.map(_ctM)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
+      const _scM=(main,stops)=>{const mainParts=main?main.split("+").map(s=>s.trim()).filter(Boolean):[];const all=[...mainParts,...stops.map(_ctM)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
 
       const _pStopsMf=_ssM(order.경유상차목록||order.경유지_상차).filter(s=>s?.업체명?.trim());
       const _dStopsMf=_ssM(order.경유하차목록||order.경유지_하차).filter(s=>s?.업체명?.trim());
@@ -11292,7 +11296,7 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
       const _ttMd=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return raw;const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return tp&&tp!=="없음"?`${val}${tp}`:val;};
       const _pkgMd=(str)=>{const s=String(str||"").trim().replace(/,/g,"");if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)\s*톤/);return ton?parseFloat(ton[1])*1000:0;};
       const _fkgMd=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-      const _scMd=(main,stops)=>{const all=[main,...stops.map(_ctMd)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
+      const _scMd=(main,stops)=>{const mainParts=main?main.split("+").map(s=>s.trim()).filter(Boolean):[];const all=[...mainParts,...stops.map(_ctMd)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
 
       const _pStopsMd=_ssMd(order.경유상차목록||order.경유지_상차).filter(s=>s?.업체명?.trim());
       const _dStopsMd=_ssMd(order.경유하차목록||order.경유지_하차).filter(s=>s?.업체명?.trim());

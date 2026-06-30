@@ -784,30 +784,33 @@ React.useEffect(() => {
         {/* 헤더: 탭 + 등록 버튼 */}
         <div className="flex items-center border-b border-gray-100 px-4">
           <div className="flex gap-0">
-            {[
-              { key: "공지사항", count: notices.length },
-              { key: "휴가/외근", count: schedules.length },
-              { key: "인수인계", count: handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length > 0 ? handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length : handovers.length },
-            ].map(({ key, count }) => {
-              const isActive = boardTab === key;
-              const unreadCount = key === "인수인계" ? handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length : 0;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setBoardTab(key)}
-                  className={`relative px-5 py-3.5 text-[13px] font-semibold transition border-b-2 ${
-                    isActive
-                      ? "text-[#1B2B4B] border-[#1B2B4B]"
-                      : "text-gray-400 border-transparent hover:text-gray-600"
-                  }`}
-                >
-                  {key}
-                  {unreadCount > 0 && (
-                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold">{unreadCount}</span>
-                  )}
-                </button>
-              );
-            })}
+            {(() => {
+              const pendingApprovalCount = schedules.filter(s => (s.approvers || []).some(a => a.uid === user?.uid && (!a.status || a.status === "pending"))).length;
+              const unreadHandoverCount = handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length;
+              return [
+                { key: "공지사항", badge: 0 },
+                { key: "휴가/외근", badge: pendingApprovalCount },
+                { key: "인수인계", badge: unreadHandoverCount },
+              ].map(({ key, badge }) => {
+                const isActive = boardTab === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setBoardTab(key)}
+                    className={`relative px-5 py-3.5 text-[13px] font-semibold transition border-b-2 ${
+                      isActive
+                        ? "text-[#1B2B4B] border-[#1B2B4B]"
+                        : "text-gray-400 border-transparent hover:text-gray-600"
+                    }`}
+                  >
+                    {key}
+                    {badge > 0 && (
+                      <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{badge}</span>
+                    )}
+                  </button>
+                );
+              });
+            })()}
           </div>
           <div className="ml-auto">
             {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }} />}
