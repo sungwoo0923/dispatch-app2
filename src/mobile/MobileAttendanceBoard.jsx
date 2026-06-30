@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 
@@ -14,10 +14,20 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
   const [records, setRecords] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [myUserDoc, setMyUserDoc] = useState(null);
 
   const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const uid = currentUser?.uid;
-  const myName = currentUser?.displayName || currentUser?.name || currentUser?.email?.split("@")[0] || "";
+  // 휴가 일정의 name 매칭은 users 컬렉션의 실제 등록명을 기준으로 해야 함 — Firebase Auth displayName/이메일은 실명과 다를 수 있어 매칭 누락의 원인이 됨
+  const myName = myUserDoc?.name || currentUser?.displayName || currentUser?.name || currentUser?.email?.split("@")[0] || "";
+
+  useEffect(() => {
+    if (!uid) return;
+    const unsub = onSnapshot(doc(db, "users", uid), snap => {
+      setMyUserDoc(snap.exists() ? snap.data() : null);
+    }, () => {});
+    return () => unsub();
+  }, [uid]);
 
   const monthStr = `${year}-${String(month).padStart(2, "0")}`;
   useEffect(() => {
