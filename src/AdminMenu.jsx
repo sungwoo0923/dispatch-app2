@@ -15,6 +15,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
+import { POSITION_OPTIONS } from "./hrConstants";
+
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
 const generateCompanyCode = () => {
@@ -679,9 +681,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">직책</label>
-                    <input value={editPosition} onChange={e => setEditPosition(e.target.value)}
-                      placeholder="예: 대리, 팀장, 과장"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                    <select value={editPosition} onChange={e => setEditPosition(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                      <option value="">선택 안 함</option>
+                      {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
+                        <option value={editPosition}>{editPosition}</option>
+                      )}
+                      {POSITION_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">핸드폰번호</label>

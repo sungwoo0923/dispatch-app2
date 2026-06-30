@@ -20,6 +20,7 @@ import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
+import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_COLORS } from "./hrConstants";
 import AttendanceBoard from "./AttendanceBoard";
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
@@ -42262,22 +42263,81 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
         <AttendanceBoard userCompany={userCompany} role={role} user={user} />
       )}
       {tab === "인사관리부" && canViewHR && (
-        <HRManagementPage userCompany={userCompany} role={role} />
+        <HRManagementPage userCompany={userCompany} role={role} userId={userId} />
       )}
     </div>
   );
 }
 
 // ─────────── 인사관리부 ───────────
-function HRManagementPage({ userCompany, role }) {
+function HRResumePrintButton({ row, resume, photo }) {
+  const handlePrint = () => {
+    const r = resume || {};
+    const win = window.open("", "_blank", "width=860,height=1000");
+    if (!win) return;
+    const esc = (s) => (s || "").toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const eduRows = (r.education || []).map(e => `<tr><td>${esc(e.period)}</td><td>${esc(e.school)}</td><td>${esc(e.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 학력사항이 없습니다</td></tr>`;
+    const careerRows = (r.career || []).map(c => `<tr><td>${esc(c.period)}</td><td>${esc(c.company)}</td><td>${esc(c.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 경력사항이 없습니다</td></tr>`;
+    const certRows = (r.certificates || []).map(c => `<tr><td>${esc(c.date)}</td><td>${esc(c.name)}</td><td>${esc(c.issuer)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 자격증이 없습니다</td></tr>`;
+    win.document.write(`
+      <html><head><title>${esc(row.name)} 이력서</title>
+      <style>
+        body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; padding: 32px; color: #1B2B4B; }
+        h1 { text-align: center; font-size: 22px; letter-spacing: 12px; margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+        th, td { border: 1px solid #ccc; padding: 7px 10px; font-size: 12.5px; }
+        th { background: #f3f4f6; text-align: center; width: 90px; }
+        .photo-box { width: 110px; height: 140px; border: 1px solid #999; float: right; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #999; overflow: hidden; }
+        .photo-box img { width: 100%; height: 100%; object-fit: cover; }
+        .basic-table td { vertical-align: middle; }
+        .section-title { font-size: 14px; font-weight: bold; border-left: 4px solid #1B2B4B; padding-left: 8px; margin: 18px 0 8px; }
+        .intro { white-space: pre-wrap; border: 1px solid #ccc; padding: 12px; min-height: 100px; font-size: 12.5px; line-height: 1.6; }
+      </style></head>
+      <body>
+        <h1>이 력 서</h1>
+        <div class="photo-box">${photo ? `<img src="${photo}" />` : "증명사진"}</div>
+        <table class="basic-table">
+          <tr><th>성명</th><td>${esc(row.name)}</td><th>생년월일</th><td>${esc(r.birthDate)}</td></tr>
+          <tr><th>연락처</th><td>${esc(row.phone)}</td><th>이메일</th><td>${esc(row.email)}</td></tr>
+          <tr><th>주소</th><td colspan="3">${esc(r.address)}</td></tr>
+          <tr><th>소속</th><td>${esc(row.team || "미배정")} / ${esc(row.position || "-")}</td><th>입사일</th><td>${esc(row.hireDate)}</td></tr>
+        </table>
+        <div class="section-title">학력사항</div>
+        <table><tr><th>기간</th><th>학교명</th><th>내용</th></tr>${eduRows}</table>
+        <div class="section-title">경력사항</div>
+        <table><tr><th>기간</th><th>근무처</th><th>내용</th></tr>${careerRows}</table>
+        <div class="section-title">자격/면허</div>
+        <table><tr><th>취득일</th><th>자격명</th><th>발급기관</th></tr>${certRows}</table>
+        <div class="section-title">자기소개</div>
+        <div class="intro">${esc(r.intro) || ""}</div>
+      </body></html>
+    `);
+    win.document.close();
+    setTimeout(() => { win.print(); }, 300);
+  };
+  return (
+    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition">🖨 인쇄</button>
+  );
+}
+
+function HRManagementPage({ userCompany, role, userId }) {
   const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const now = new Date();
+  const canManage = role === "totalMaster" || role === "hrManager";
   const [members, setMembers] = React.useState([]);
   const [profiles, setProfiles] = React.useState({}); // uid -> { hireDate }
   const [schedules, setSchedules] = React.useState([]);
   const [holidays, setHolidays] = React.useState([]);
   const [records, setRecords] = React.useState([]);
-  const [selected, setSelected] = React.useState(null);
+  const [resumes, setResumes] = React.useState({}); // uid -> resume data
+  const [selectedUid, setSelectedUid] = React.useState(null);
+  const [activeTab, setActiveTab] = React.useState("이력서");
+  const [teamFilter, setTeamFilter] = React.useState("전체");
+  const [search, setSearch] = React.useState("");
+  const [editMode, setEditMode] = React.useState(false);
+  const [draft, setDraft] = React.useState(null);
+  const [photoUploading, setPhotoUploading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!company) return;
@@ -42324,6 +42384,15 @@ function HRManagementPage({ userCompany, role }) {
     return () => unsub();
   }, [company, monthStr]);
 
+  React.useEffect(() => {
+    const unsub = onSnapshot(collection(db, "hrResumes"), snap => {
+      const m = {};
+      snap.docs.forEach(d => { m[d.id] = d.data(); });
+      setResumes(m);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
   const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const numDaysSoFar = now.getDate();
 
@@ -42354,92 +42423,282 @@ function HRManagementPage({ userCompany, role }) {
         const months = Math.max(0, (now.getFullYear() - hire.getFullYear()) * 12 + (now.getMonth() - hire.getMonth()) - (now.getDate() < hire.getDate() ? 1 : 0));
         tenureLabel = months >= 12 ? `${Math.floor(months / 12)}년 ${months % 12}개월` : `${months}개월`;
       }
-      return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, pendingApprovals };
+      return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, pendingApprovals, team: m.team || "미배정" };
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar]);
 
-  const totalPending = rows.reduce((s, r) => s + r.pendingApprovals, 0);
-  const avgRemaining = rows.filter(r => r.leave).length
-    ? (rows.filter(r => r.leave).reduce((s, r) => s + r.leave.remaining, 0) / rows.filter(r => r.leave).length).toFixed(1)
-    : "-";
+  const filteredRows = React.useMemo(() => {
+    return rows.filter(r => {
+      if (teamFilter !== "전체" && r.team !== teamFilter) return false;
+      if (search && !(r.name || "").includes(search) && !(r.position || "").includes(search)) return false;
+      return true;
+    });
+  }, [rows, teamFilter, search]);
 
-  return (
-    <div className="p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-[22px] font-black text-[#1B2B4B]">인사관리부</h2>
-        <span className="text-[12px] text-gray-400">{company} · {now.getFullYear()}년 {now.getMonth() + 1}월 기준</span>
-      </div>
+  const grouped = React.useMemo(() => {
+    const g = {};
+    filteredRows.forEach(r => {
+      const key = r.team || "미배정";
+      if (!g[key]) g[key] = [];
+      g[key].push(r);
+    });
+    return g;
+  }, [filteredRows]);
 
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        {[
-          { l: "전체 인원", v: `${rows.length}명` },
-          { l: "이달 평균 출근", v: `${rows.length ? (rows.reduce((s, r) => s + r.workDays, 0) / rows.length).toFixed(1) : 0}일` },
-          { l: "결재 대기 건", v: `${totalPending}건` },
-          { l: "평균 잔여 휴가", v: `${avgRemaining}일` },
-        ].map(s => (
-          <div key={s.l} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-            <div className="text-[11px] text-gray-400 font-semibold mb-1">{s.l}</div>
-            <div className="text-[20px] font-black text-[#1B2B4B]">{s.v}</div>
+  React.useEffect(() => {
+    if (!selectedUid && rows.length) setSelectedUid(rows[0].uid);
+  }, [rows, selectedUid]);
+
+  const selected = rows.find(r => r.uid === selectedUid) || null;
+  const resume = selectedUid ? (resumes[selectedUid] || {}) : {};
+  const canEditThis = canManage || selectedUid === userId;
+
+  const startEdit = () => { setDraft({ ...resume, education: resume.education || [], career: resume.career || [], certificates: resume.certificates || [] }); setEditMode(true); };
+  const cancelEdit = () => { setDraft(null); setEditMode(false); };
+  const saveResume = async () => {
+    if (!selectedUid || !draft) return;
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "hrResumes", selectedUid), draft, { merge: true });
+      setEditMode(false);
+      setDraft(null);
+    } catch (err) {
+      alert("저장 실패: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedUid) return;
+    setPhotoUploading(true);
+    const imgEl = new Image();
+    const objUrl = URL.createObjectURL(file);
+    imgEl.onload = async () => {
+      URL.revokeObjectURL(objUrl);
+      const MAX = 400;
+      let w = imgEl.width, h = imgEl.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(imgEl, 0, 0, w, h);
+      const dataUrl = cv.toDataURL("image/jpeg", 0.75);
+      try {
+        await setDoc(doc(db, "hrResumes", selectedUid), { photoUrl: dataUrl }, { merge: true });
+      } catch (err) {
+        alert("사진 저장 실패: " + err.message);
+      } finally {
+        setPhotoUploading(false);
+      }
+    };
+    imgEl.onerror = () => { URL.revokeObjectURL(objUrl); setPhotoUploading(false); };
+    imgEl.src = objUrl;
+  };
+
+  const setTeam = async (uid, team) => {
+    try { await setDoc(doc(db, "users", uid), { team }, { merge: true }); }
+    catch (err) { alert("팀 변경 실패: " + err.message); }
+  };
+
+  const listField = (key, label, placeholder) => {
+    const items = draft?.[key] || [];
+    return (
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[12px] font-bold text-gray-600">{label}</span>
+          <button onClick={() => setDraft(d => ({ ...d, [key]: [...(d[key] || []), {}] }))} className="text-[11px] text-[#1B2B4B] font-bold hover:underline">+ 추가</button>
+        </div>
+        {items.length === 0 && <div className="text-[11px] text-gray-300">항목 없음</div>}
+        {items.map((it, i) => (
+          <div key={i} className="flex gap-1.5 mb-1.5">
+            {Object.keys(placeholder).map(f => (
+              <input key={f} value={it[f] || ""} placeholder={placeholder[f]}
+                onChange={e => setDraft(d => { const arr = [...d[key]]; arr[i] = { ...arr[i], [f]: e.target.value }; return { ...d, [key]: arr }; })}
+                className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]" />
+            ))}
+            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} className="px-2 text-gray-300 hover:text-red-500">✕</button>
           </div>
         ))}
       </div>
+    );
+  };
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-        <table className="w-full text-[13px] border-collapse">
-          <thead>
-            <tr className="bg-[#1B2B4B]">
-              {["이름", "직책", "권한", "입사일", "근속", "구분", "잔여휴가", "이달출근", "병가", "결재대기"].map(h => (
-                <th key={h} className="px-3 py-2.5 text-center text-[12px] font-semibold text-white whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {rows.length === 0 ? (
-              <tr><td colSpan={10} className="py-16 text-center text-[13px] text-gray-400">등록된 인원이 없습니다</td></tr>
-            ) : rows.map((r, idx) => (
-              <tr key={r.uid} className={`hover:bg-blue-50/30 transition cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`} onClick={() => setSelected(r)}>
-                <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{r.name || r.email}</td>
-                <td className="px-3 py-2.5 text-center text-gray-600">{r.position || "-"}</td>
-                <td className="px-3 py-2.5 text-center text-[12px] font-bold text-[#1B2B4B]">{ROLE_LABELS_HR[r.role] || r.role || "-"}</td>
-                <td className="px-3 py-2.5 text-center text-gray-500 text-[12px]">{r.hireDate || "-"}</td>
-                <td className="px-3 py-2.5 text-center text-gray-500 text-[12px]">{r.tenureLabel}</td>
-                <td className="px-3 py-2.5 text-center text-[12px] text-gray-600">{r.leave?.leaveLabel || "-"}</td>
-                <td className="px-3 py-2.5 text-center font-bold text-[#1B2B4B]">{r.leave ? `${r.leave.remaining}일` : "-"}</td>
-                <td className="px-3 py-2.5 text-center text-gray-600">{r.workDays}일</td>
-                <td className="px-3 py-2.5 text-center text-red-500 font-semibold">{r.sickDays || "-"}</td>
-                <td className="px-3 py-2.5 text-center">
-                  {r.pendingApprovals > 0 ? <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-600 border border-amber-200">{r.pendingApprovals}건</span> : <span className="text-gray-300">-</span>}
-                </td>
-              </tr>
+  return (
+    <div className="p-5 flex gap-4" style={{ minHeight: 600 }}>
+      {/* 좌측: 팀별 인원 목록 */}
+      <div className="w-[300px] flex-shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col" style={{ maxHeight: 780 }}>
+        <div className="p-3 border-b border-gray-100">
+          <h2 className="text-[16px] font-black text-[#1B2B4B] mb-2">인사관리부</h2>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
+            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B] mb-2" />
+          <div className="flex flex-wrap gap-1">
+            {["전체", ...TEAM_OPTIONS, "미배정"].map(t => (
+              <button key={t} onClick={() => setTeamFilter(t)}
+                className={`px-2 py-1 rounded-full text-[10.5px] font-bold border transition ${teamFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>{t}</button>
             ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="text-[11px] text-gray-400 mt-2">행을 클릭하면 상세 정보를 볼 수 있습니다. 입사일은 각 직원이 내정보 탭에서 직접 등록합니다.</div>
-
-      {selected && (
-        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4" onClick={() => setSelected(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-            <div className="text-[16px] font-black text-[#1B2B4B] mb-0.5">{selected.name || selected.email}</div>
-            <div className="text-[12px] text-gray-400 mb-4">{selected.position || "직책 미설정"} · {ROLE_LABELS_HR[selected.role] || selected.role}</div>
-            <div className="space-y-2 text-[13px]">
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">이메일</span><span className="font-semibold text-gray-800">{selected.email || "-"}</span></div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">연락처</span><span className="font-semibold text-gray-800">{selected.phone || "-"}</span></div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">입사일</span><span className="font-semibold text-gray-800">{selected.hireDate || "미등록"}</span></div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">근속기간</span><span className="font-semibold text-gray-800">{selected.tenureLabel}</span></div>
-              {selected.leave && (
-                <>
-                  <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">{selected.leave.leaveLabel} 발생/사용/잔여</span><span className="font-semibold text-gray-800">{selected.leave.entitlement}일 / {selected.leave.used}일 / {selected.leave.remaining}일</span></div>
-                  <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">병가 / 외근</span><span className="font-semibold text-gray-800">{selected.leave.sickDays}일 / {selected.leave.fieldDays}일</span></div>
-                </>
-              )}
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">이달 출근일수</span><span className="font-semibold text-gray-800">{selected.workDays}일</span></div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">결재 대기</span><span className="font-semibold text-gray-800">{selected.pendingApprovals}건</span></div>
-            </div>
-            <button onClick={() => setSelected(null)} className="w-full mt-4 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-bold hover:bg-gray-50">닫기</button>
           </div>
         </div>
-      )}
+        <div className="overflow-y-auto flex-1">
+          {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[12px] text-gray-300">인원이 없습니다</div>}
+          {Object.entries(grouped).map(([team, members2]) => (
+            <div key={team}>
+              <div className={`px-3 py-1.5 text-[11px] font-bold sticky top-0 border-b ${TEAM_COLORS[team] || TEAM_COLORS["미배정"]}`}>{team} ({members2.length})</div>
+              {members2.map(r => {
+                const photo = resumes[r.uid]?.photoUrl;
+                return (
+                  <div key={r.uid} onClick={() => { setSelectedUid(r.uid); setEditMode(false); setDraft(null); }}
+                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-gray-50 transition ${selectedUid === r.uid ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                    <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex-shrink-0 overflow-hidden flex items-center justify-center text-[10px] text-gray-400">
+                      {photo ? <img src={photo} className="w-full h-full object-cover" /> : (r.name || "?").slice(0, 1)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] font-bold text-gray-800 truncate">{r.name || r.email}</div>
+                      <div className="text-[10.5px] text-gray-400 truncate">{r.position || "직책 미설정"}</div>
+                    </div>
+                    {r.pendingApprovals > 0 && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 우측: 상세 패널 */}
+      <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col min-w-0">
+        {!selected ? (
+          <div className="flex-1 flex items-center justify-center text-[13px] text-gray-300">왼쪽에서 인원을 선택하세요</div>
+        ) : (
+          <>
+            <div className="px-5 pt-4 pb-0 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="text-[17px] font-black text-[#1B2B4B]">{selected.name || selected.email}</div>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">{ROLE_LABELS_HR[selected.role] || selected.role}</span>
+                {canManage ? (
+                  <select value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
+                    className={`text-[11px] font-bold border rounded-full px-2 py-0.5 focus:outline-none ${TEAM_COLORS[selected.team] || TEAM_COLORS["미배정"]}`}>
+                    {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    <option value="미배정">미배정</option>
+                  </select>
+                ) : (
+                  <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${TEAM_COLORS[selected.team] || TEAM_COLORS["미배정"]}`}>{selected.team}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 mb-2">
+                {["이력서", "근태/근속"].map(t => (
+                  <button key={t} onClick={() => { setActiveTab(t); cancelEdit(); }}
+                    className={`px-3 py-1.5 rounded-xl text-[12.5px] font-bold transition ${activeTab === t ? "bg-[#1B2B4B] text-white" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {activeTab === "이력서" ? (
+                <div>
+                  <div className="flex justify-end gap-2 mb-3">
+                    <HRResumePrintButton row={selected} resume={resume} photo={resume.photoUrl} />
+                    {canEditThis && !editMode && (
+                      <button onClick={startEdit} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:opacity-90">✎ 수정</button>
+                    )}
+                    {editMode && (
+                      <>
+                        <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold hover:bg-gray-50">취소</button>
+                        <button onClick={saveResume} disabled={saving} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:opacity-90 disabled:opacity-50">{saving ? "저장 중..." : "저장"}</button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="border border-gray-200 rounded-xl p-5">
+                    <div className="flex gap-5 mb-5">
+                      <div className="w-[100px] h-[128px] flex-shrink-0 border border-gray-300 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center relative">
+                        {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[10px] text-gray-300">증명사진</span>}
+                        {canEditThis && (
+                          <label className={`absolute bottom-0 inset-x-0 text-center text-[10px] py-1 cursor-pointer ${photoUploading ? "bg-gray-200 text-gray-400" : "bg-black/60 text-white hover:bg-black/75"}`}>
+                            {photoUploading ? "업로드중" : "사진 변경"}
+                            <input type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={handlePhotoUpload} />
+                          </label>
+                        )}
+                      </div>
+                      <div className="flex-1 grid grid-cols-2 gap-2 text-[12.5px]">
+                        <div><div className="text-gray-400 text-[11px] mb-0.5">성명</div><div className="font-bold text-gray-800">{selected.name}</div></div>
+                        <div><div className="text-gray-400 text-[11px] mb-0.5">생년월일</div>
+                          {editMode ? <input value={draft.birthDate || ""} onChange={e => setDraft(d => ({ ...d, birthDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.birthDate || "-"}</div>}
+                        </div>
+                        <div><div className="text-gray-400 text-[11px] mb-0.5">연락처</div><div className="font-semibold text-gray-700">{selected.phone || "-"}</div></div>
+                        <div><div className="text-gray-400 text-[11px] mb-0.5">이메일</div><div className="font-semibold text-gray-700">{selected.email || "-"}</div></div>
+                        <div className="col-span-2"><div className="text-gray-400 text-[11px] mb-0.5">주소</div>
+                          {editMode ? <input value={draft.address || ""} onChange={e => setDraft(d => ({ ...d, address: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.address || "-"}</div>}
+                        </div>
+                        <div><div className="text-gray-400 text-[11px] mb-0.5">소속</div><div className="font-semibold text-gray-700">{selected.team} / {selected.position || "-"}</div></div>
+                        <div><div className="text-gray-400 text-[11px] mb-0.5">입사일</div><div className="font-semibold text-gray-700">{selected.hireDate || "미등록"}</div></div>
+                      </div>
+                    </div>
+
+                    {editMode ? (
+                      <>
+                        {listField("education", "학력사항", { period: "기간", school: "학교명", detail: "내용" })}
+                        {listField("career", "경력사항", { period: "기간", company: "근무처", detail: "내용" })}
+                        {listField("certificates", "자격/면허", { date: "취득일", name: "자격명", issuer: "발급기관" })}
+                        <div className="mb-2">
+                          <div className="text-[12px] font-bold text-gray-600 mb-1">자기소개</div>
+                          <textarea value={draft.intro || ""} onChange={e => setDraft(d => ({ ...d, intro: e.target.value }))} rows={5}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12.5px] focus:outline-none focus:border-[#1B2B4B] resize-none" />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mb-4">
+                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">학력사항</div>
+                          {(resume.education || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.education || []).map((e, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-400">{e.period}</span><span className="font-semibold">{e.school}</span><span>{e.detail}</span></div>
+                          ))}
+                        </div>
+                        <div className="mb-4">
+                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">경력사항</div>
+                          {(resume.career || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.career || []).map((c, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-400">{c.period}</span><span className="font-semibold">{c.company}</span><span>{c.detail}</span></div>
+                          ))}
+                        </div>
+                        <div className="mb-4">
+                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">자격/면허</div>
+                          {(resume.certificates || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.certificates || []).map((c, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-400">{c.date}</span><span className="font-semibold">{c.name}</span><span>{c.issuer}</span></div>
+                          ))}
+                        </div>
+                        <div>
+                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">자기소개</div>
+                          <div className="text-[12.5px] text-gray-600 whitespace-pre-wrap leading-relaxed">{resume.intro || <span className="text-gray-300">등록된 자기소개가 없습니다</span>}</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { l: "입사일", v: selected.hireDate || "미등록" },
+                    { l: "근속기간", v: selected.tenureLabel },
+                    { l: selected.leave ? selected.leave.leaveLabel + " 발생/사용/잔여" : "휴가", v: selected.leave ? `${selected.leave.entitlement}일 / ${selected.leave.used}일 / ${selected.leave.remaining}일` : "입사일 미등록" },
+                    { l: "이달 출근일수", v: `${selected.workDays}일` },
+                    { l: "이달 연차/반차", v: `${selected.leaveDays}일` },
+                    { l: "병가 / 외근", v: selected.leave ? `${selected.leave.sickDays}일 / ${selected.leave.fieldDays}일` : "-" },
+                    { l: "결재 대기 건", v: `${selected.pendingApprovals}건` },
+                  ].map(s => (
+                    <div key={s.l} className="px-4 py-3 rounded-xl border border-gray-100 bg-gray-50/40">
+                      <div className="text-[11px] text-gray-400 font-semibold mb-1">{s.l}</div>
+                      <div className="text-[15px] font-black text-[#1B2B4B]">{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
