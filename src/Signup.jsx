@@ -157,6 +157,7 @@ function SignupForm({ signupType, onBack }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [position, setPosition] = useState("");
+  const [hireDate, setHireDate] = useState("");
   const [address, setAddress] = useState("");
   const [addressDetail, setAddressDetail] = useState("");
   const [termsAgreed, setTermsAgreed] = useState(false);
@@ -292,6 +293,7 @@ function SignupForm({ signupType, onBack }) {
         name: name.trim(),
         phone: phone.trim(),
         position: position || "",
+        hireDate: hireDate || "",
         address: fullAddress,
         role: "admin",
         approved: false,
@@ -299,6 +301,9 @@ function SignupForm({ signupType, onBack }) {
         status: null,
         createdAt: serverTimestamp(),
       });
+      if (hireDate) {
+        await setDoc(doc(db, "userProfiles", uid), { hireDate }, { merge: true }).catch(() => {});
+      }
       await addDoc(collection(db, "transportApplications"), {
         type: signupType,
         companyName: companyName.trim(),
@@ -488,6 +493,12 @@ function SignupForm({ signupType, onBack }) {
               <option value="">직책 선택 (선택사항)</option>
               {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
+          </Field>
+
+          <Field label="입사일">
+            <input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+            <p className="text-[11px] text-gray-400 mt-1.5 pl-1">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
           </Field>
 
           {/* 계정 정보 */}

@@ -77,6 +77,7 @@ export default function DriverRegister() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [vehicleType, setVehicleType] = useState("");
+  const [hireDate, setHireDate] = useState("");
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [gpsAgreed, setGpsAgreed] = useState(false);
@@ -120,12 +121,16 @@ export default function DriverRegister() {
         phone: phone.trim(),
         vehicleType: vehicleType || "",
         companyName: companyName.trim(),
+        hireDate: hireDate || "",
         approved: false,
         termsAgreed,
         privacyAgreed,
         gpsAgreed,
         createdAt: serverTimestamp(),
       });
+      if (hireDate) {
+        await setDoc(doc(db, "userProfiles", uid), { hireDate }, { merge: true }).catch(() => {});
+      }
 
       await setDoc(doc(db, "drivers", uid), {
         uid,
@@ -238,6 +243,13 @@ export default function DriverRegister() {
               </select>
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">입사일</label>
+            <input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition" />
+            <p className="text-[11px] text-gray-400 mt-1.5">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
           </div>
         </div>
 
