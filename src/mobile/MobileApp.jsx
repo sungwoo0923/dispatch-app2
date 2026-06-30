@@ -406,6 +406,72 @@ const safeParseStops = (raw) => {
 const validStops = (raw) =>
   safeParseStops(raw).filter(s => s && typeof s === "object" && (s.업체명?.trim() || s.주소?.trim()));
 
+// kg 추출 (예: "1836kg", "3톤", "3.5" 등 방어적으로 파싱)
+const parseKgValue = (s = "") => {
+  const str = String(s ?? "").trim();
+  if (!str) return 0;
+  const kgM = str.match(/(\d+(?:\.\d+)?)\s*kg/i);
+  if (kgM) return parseFloat(kgM[1]) || 0;
+  const tonM = str.match(/(\d+(?:\.\d+)?)\s*톤/);
+  if (tonM) return (parseFloat(tonM[1]) || 0) * 1000;
+  const numOnly = str.match(/^(\d+(?:\.\d+)?)$/);
+  if (numOnly) return parseFloat(numOnly[1]) || 0;
+  return 0;
+};
+
+// 파레트 수량 추출 (예: "3파레트", "3" 등 방어적으로 파싱)
+const parsePalletValue = (s = "") => {
+  const str = String(s ?? "").trim();
+  if (!str) return 0;
+  const m = str.match(/(\d+(?:\.\d+)?)\s*(파레트|파렛트|팔레트)/i);
+  if (m) return parseFloat(m[1]) || 0;
+  const numOnly = str.match(/^(\d+(?:\.\d+)?)$/);
+  if (numOnly) return parseFloat(numOnly[1]) || 0;
+  return 0;
+};
+
+// 경유지의 톤수값/톤수타입을 kg로 환산
+const stopKg = (stop) => {
+  if (!stop) return 0;
+  const val = parseFloat(stop.톤수값);
+  if (!isNaN(val) && val > 0) {
+    return stop.톤수타입 === "톤" ? val * 1000 : val;
+  }
+  return parseKgValue(stop.차량톤수 || "");
+};
+
+// 경유지의 화물내용에서 파레트 수량 추출 (화물타입이 파레트인 경우만)
+const stopPallet = (stop) => {
+  if (!stop) return 0;
+  if (stop.화물타입 && stop.화물타입 !== "파레트") return 0;
+  const val = parseFloat(stop.화물내용);
+  if (!isNaN(val) && val > 0) return val;
+  return parsePalletValue(stop.화물내용 || "");
+};
+
+// 메인 주문 + 경유지(상/하차) 전체의 kg/파레트 합계
+const getOrderCargoTotals = (order = {}) => {
+  const baseKg = parseKgValue(order.톤수 || order.차량톤수 || "");
+  const baseCargoText = order.화물내용 || "";
+  const basePallet = parsePalletValue(baseCargoText);
+
+  const pStops = validStops(order.경유상차목록 || order.경유지_상차);
+  const dStops = validStops(order.경유하차목록 || order.경유지_하차);
+  const allStops = [...pStops, ...dStops];
+
+  let extraKg = 0, extraPallet = 0;
+  allStops.forEach(s => {
+    extraKg += stopKg(s);
+    extraPallet += stopPallet(s);
+  });
+
+  return {
+    totalKg: baseKg + extraKg,
+    totalPallet: basePallet + extraPallet,
+    hasWaypointCargo: extraKg > 0 || extraPallet > 0,
+  };
+};
+
 // 산재보험료
 const getSanjae = (o = {}) => o.산재보험료 ?? 0;
 
@@ -5014,6 +5080,8 @@ const summary = useMemo(() => {
             <option value="탑차">탑차</option>
             <option value="냉장탑">냉장탑</option>
             <option value="냉동탑">냉동탑</option>
+            <option value="냉장/냉동탑">냉장/냉동탑</option>
+            <option value="냉장/냉동윙">냉장/냉동윙</option>
             <option value="오토바이">오토바이</option>
           </select>
 
@@ -5975,9 +6043,12 @@ const dropTime = order.하차시간 || "시간 없음";
   const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
   const dropStatus = getDayStatusForCard(order.하차일, "drop");
 
-  const ton = order.톤수 || order.차량톤수 || "";
   const carType = order.차량종류 || order.차종 || "";
-  const cargo = order.화물내용 || "";
+  const { totalKg, totalPallet, hasWaypointCargo } = getOrderCargoTotals(order);
+  const ton = hasWaypointCargo && totalKg > 0 ? `${totalKg}kg` : (order.톤수 || order.차량톤수 || "");
+  const cargo = hasWaypointCargo && totalPallet > 0
+    ? `${totalPallet}파레트`
+    : (order.화물내용 || "");
   const bottomText = [ton && `${ton}`, carType, cargo]
     .filter(Boolean)
     .join(" · ");
@@ -9497,6 +9568,8 @@ const pickDrop = (c) => {
               <option value="냉동탑">냉동탑</option>
               <option value="냉장윙">냉장윙</option>
               <option value="냉동윙">냉동윙</option>
+              <option value="냉장/냉동탑">냉장/냉동탑</option>
+              <option value="냉장/냉동윙">냉장/냉동윙</option>
               <option value="오토바이">오토바이</option>
               <option value="기타">기타</option>
             </select>
@@ -13557,6 +13630,8 @@ const fares = baseRows.map((r) =>
                 <option value="냉동탑">냉동탑</option>
                 <option value="냉장윙">냉장윙</option>
                 <option value="냉동윙">냉동윙</option>
+                <option value="냉장/냉동탑">냉장/냉동탑</option>
+                <option value="냉장/냉동윙">냉장/냉동윙</option>
                 <option value="오토바이">오토바이</option>
               </select>
             </div>
