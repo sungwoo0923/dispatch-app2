@@ -6088,7 +6088,11 @@ const dropTime = order.하차시간 || "시간 없음";
             )}
             {isCold && (
               <span className="text-[0.68em] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
-                {String(order.차량종류 || order.차종 || "").includes("냉동") ? "냉동" : "냉장"}
+                {(() => {
+                  const vt = String(order.차량종류 || order.차종 || "");
+                  const hasCold = vt.includes("냉장") && vt.includes("냉동");
+                  return hasCold ? "냉장/냉동" : vt.includes("냉동") ? "냉동" : "냉장";
+                })()}
               </span>
             )}
             {isUrgentOrder(order) && (
@@ -6560,6 +6564,7 @@ function MobileOrderDetail({
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
+  const { totalKg, totalPallet, hasWaypointCargo } = getOrderCargoTotals(order);
 
   useEffect(() => {
     setCarNo(order.차량번호 || "");
@@ -7156,9 +7161,13 @@ const handleAssignClick = () => {
               <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
               {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
               {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+              {(s.화물내용 || s.차량톤수 || s.톤수값) && (
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  화물정보 : {[s.화물내용, (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : s.차량톤수)].filter(Boolean).join(" · ")}
+                </div>
+              )}
               <div className="flex gap-2 mt-0.5 flex-wrap">
-                {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
-                {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+                {s.방법 && <span className="text-[10px] text-gray-500 border border-gray-200 px-1 py-0.5 rounded">상차방법 : {s.방법}</span>}
                 {s.상차시간 && <span className="text-[10px] text-gray-500">{s.상차시간}</span>}
               </div>
               {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
@@ -7186,9 +7195,13 @@ const handleAssignClick = () => {
               <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
               {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
               {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+              {(s.화물내용 || s.차량톤수 || s.톤수값) && (
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  화물정보 : {[s.화물내용, (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : s.차량톤수)].filter(Boolean).join(" · ")}
+                </div>
+              )}
               <div className="flex gap-2 mt-0.5 flex-wrap">
-                {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
-                {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+                {s.방법 && <span className="text-[10px] text-gray-500 border border-gray-200 px-1 py-0.5 rounded">하차방법 : {s.방법}</span>}
                 {s.하차시간 && <span className="text-[10px] text-gray-500">{s.하차시간}</span>}
               </div>
               {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
@@ -7201,6 +7214,11 @@ const handleAssignClick = () => {
             <div className="text-[13px] font-bold text-gray-900">{order.하차지명 || "-"}</div>
             {order.하차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{order.하차지주소}</div>}
             <div className="text-[11px] text-gray-400 mt-0.5">{하차일시 || "-"}</div>
+            {(order.화물내용 || order.차량톤수 || order.톤수) && (
+              <div className="text-[10px] text-gray-500 mt-0.5">
+                화물정보 : {[order.화물내용, (order.차량톤수 || order.톤수)].filter(Boolean).join(" · ")}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -7209,8 +7227,8 @@ const handleAssignClick = () => {
         <div className="flex border-t border-gray-100 mt-2.5">
           {(order.차량톤수 || order.톤수) && (
             <div className="flex-1 text-center py-2.5 border-r border-gray-100">
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">톤수</div>
-              <div className="text-[12px] font-semibold text-gray-800">{order.차량톤수 || order.톤수}</div>
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{hasWaypointCargo ? "총톤수" : "톤수"}</div>
+              <div className="text-[12px] font-semibold text-gray-800">{hasWaypointCargo && totalKg > 0 ? `${totalKg}kg` : (order.차량톤수 || order.톤수)}</div>
             </div>
           )}
           {(order.차량종류 || order.차종) && (
@@ -7221,8 +7239,8 @@ const handleAssignClick = () => {
           )}
           {order.화물내용 && (
             <div className="flex-1 text-center py-2.5 border-r border-gray-100 last:border-r-0">
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">화물</div>
-              <div className="text-[12px] font-semibold text-gray-800">{order.화물내용}</div>
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{hasWaypointCargo ? "총화물" : "화물"}</div>
+              <div className="text-[12px] font-semibold text-gray-800">{hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}</div>
             </div>
           )}
           {order.혼적여부 && order.혼적여부 !== "독차" && (
@@ -8528,7 +8546,7 @@ const STOP_TIMES = [
   "","즉시","오전 6시","오전 7시","오전 8시","오전 9시","오전 10시","오전 11시",
   "오후 12시","오후 1시","오후 2시","오후 3시","오후 4시","오후 5시","오후 6시","오후 7시","오후 8시",
 ];
-const emptyStop = () => ({ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차시간:"", 하차시간:"" });
+const emptyStop = () => ({ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" });
 
 const openStopSheet = (type) => {
   const existing = validStops(type === "pickup" ? form.경유상차목록 : form.경유하차목록);
@@ -10997,6 +11015,22 @@ const pickDrop = (c) => {
                   {STOP_TIMES.map(t => <option key={t} value={t}>{t || "시간 선택"}</option>)}
                 </select>
               </div>
+            </div>
+            {/* 상/하차방법 */}
+            <div>
+              <div className="text-[10px] text-gray-500 font-semibold mb-1">{stopSheet === "pickup" ? "상차방법" : "하차방법"}</div>
+              <select
+                className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                value={stop.방법 || ""}
+                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 방법: e.target.value } : s))}
+              >
+                <option value="">{stopSheet === "pickup" ? "상차방법" : "하차방법"}</option>
+                <option value="지게차">지게차</option>
+                <option value="크레인">크레인</option>
+                <option value="수작업">수작업</option>
+                <option value="직접수작업">직접수작업</option>
+                <option value="수도움">수도움</option>
+              </select>
             </div>
             {/* 메모 */}
             <input
