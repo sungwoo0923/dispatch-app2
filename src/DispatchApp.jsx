@@ -19,6 +19,7 @@ import AiAssistant from "./AiAssistant";
 import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
 import InternalMessenger from "./InternalMessenger";
+import { calcLeaveBalance } from "./leaveUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
 
 // ================= 카운트 애니메이션 =================
@@ -41917,6 +41918,37 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 
   const navigate = useNavigate();
 
+  const [hireDate, setHireDate] = useState("");
+  const [hireDateSaving, setHireDateSaving] = useState(false);
+  const [mySchedules, setMySchedules] = useState([]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    getDoc(doc(db, "userProfiles", user.uid)).then(snap => {
+      if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
+    }).catch(() => {});
+    const q = query(collection(db, "schedules"), where("authorUid", "==", user.uid));
+    const unsub = onSnapshot(q, snap => {
+      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [user?.uid]);
+
+  const saveHireDate = async (val) => {
+    setHireDate(val);
+    if (!user?.uid) return;
+    setHireDateSaving(true);
+    try {
+      await setDoc(doc(db, "userProfiles", user.uid), { hireDate: val }, { merge: true });
+    } catch (err) {
+      showAlert("입사일 저장 실패: " + err.message);
+    } finally {
+      setHireDateSaving(false);
+    }
+  };
+
+  const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid);
+
   return (
     <div className="p-6 max-w-2xl">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -41936,6 +41968,40 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
               <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">이메일</div>
               <div className="text-[14px] font-semibold text-gray-800 break-all">{user?.email || "-"}</div>
+            </div>
+          </div>
+
+          {/* 입사일 / 연차·월차 */}
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700 mb-2">입사일 / 연차·월차</div>
+            <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-[12px] font-semibold text-gray-500 w-16 flex-shrink-0">입사일</span>
+                <input type="date" value={hireDate} onChange={e => saveHireDate(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
+                {hireDateSaving && <span className="text-[11px] text-gray-400">저장 중...</span>}
+              </div>
+              {leave ? (
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">구분</div>
+                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.leaveLabel}</div>
+                  </div>
+                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">사용</div>
+                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.used}일</div>
+                  </div>
+                  <div className="bg-[#1B2B4B] rounded-lg px-3 py-2">
+                    <div className="text-[10px] text-white/50 font-semibold mb-0.5">잔여</div>
+                    <div className="text-[14px] font-black text-white">{leave.remaining}일</div>
+                  </div>
+                  <div className="col-span-3 text-[10px] text-gray-400">
+                    총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계 · 휴가/외근 결재 승인 건 기준
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[11px] text-gray-400">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
+              )}
             </div>
           </div>
 

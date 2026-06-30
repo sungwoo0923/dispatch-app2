@@ -36,6 +36,7 @@ import {
 import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
+import { calcLeaveBalance } from "../leaveUtils";
 
 
 
@@ -11753,8 +11754,71 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
   const avatarLetter = myName.slice(0, 1).toUpperCase();
 
+  const [hireDate, setHireDate] = useState("");
+  const [hireDateSaving, setHireDateSaving] = useState(false);
+  const [mySchedules, setMySchedules] = useState([]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    getDoc(doc(db, "userProfiles", currentUser.uid)).then(snap => {
+      if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
+    }).catch(() => {});
+    const q = query(collection(db, "schedules"), where("authorUid", "==", currentUser.uid));
+    const unsub = onSnapshot(q, snap => {
+      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [currentUser?.uid]);
+
+  const saveHireDate = async (val) => {
+    setHireDate(val);
+    if (!currentUser?.uid) return;
+    setHireDateSaving(true);
+    try {
+      await setDoc(doc(db, "userProfiles", currentUser.uid), { hireDate: val }, { merge: true });
+    } catch (err) {
+      // no-op: 저장 실패는 다음 진입 시 재시도
+    } finally {
+      setHireDateSaving(false);
+    }
+  };
+
+  const leave = calcLeaveBalance(hireDate, mySchedules, currentUser?.uid);
+
   return (
     <div className="px-4 py-5 space-y-4 pb-24">
+      {/* 입사일 / 연차·월차 */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">입사일 / 연차·월차</div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[12px] text-gray-500 font-semibold w-12 flex-shrink-0">입사일</span>
+          <input type="date" value={hireDate} onChange={e => saveHireDate(e.target.value)}
+            className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[13px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
+          {hireDateSaving && <span className="text-[10px] text-gray-400 flex-shrink-0">저장중</span>}
+        </div>
+        {leave ? (
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
+              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.leaveLabel}</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">구분</div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
+              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.used}일</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">사용</div>
+            </div>
+            <div className="bg-[#1B2B4B] rounded-xl p-2.5 text-center">
+              <div className="text-[15px] font-extrabold text-white">{leave.remaining}일</div>
+              <div className="text-[10px] text-white/50 mt-0.5">잔여</div>
+            </div>
+            <div className="col-span-3 text-[10px] text-gray-400 mt-1">
+              총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계
+            </div>
+          </div>
+        ) : (
+          <div className="text-[11px] text-gray-400">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
+        )}
+      </div>
+
       {/* 프로필 카드 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
