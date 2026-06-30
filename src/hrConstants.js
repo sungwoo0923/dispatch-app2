@@ -7,12 +7,8 @@ export const TEAM_OPTIONS = [
   "운영팀", "운송팀", "경리/회계팀", "개발팀", "법무팀", "인사팀",
 ];
 
-export const TEAM_COLORS = {
-  "운영팀": "bg-blue-50 text-blue-700 border-blue-200",
-  "운송팀": "bg-amber-50 text-amber-700 border-amber-200",
-  "경리/회계팀": "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "개발팀": "bg-violet-50 text-violet-700 border-violet-200",
-  "법무팀": "bg-rose-50 text-rose-700 border-rose-200",
-  "인사팀": "bg-cyan-50 text-cyan-700 border-cyan-200",
-  "미배정": "bg-gray-100 text-gray-500 border-gray-200",
-};
+// 팀 배지는 알록달록한 색 대신 프로그램 톤(네이비/그레이)에 맞춘 단일 톤으로 통일
+export const TEAM_BADGE_CLASS = "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/15";
+export const TEAM_BADGE_CLASS_UNASSIGNED = "bg-gray-100 text-gray-400 border-gray-200";
+
+export const EMPLOYMENT_STATUS_OPTIONS = ["재직", "휴직", "퇴사"];

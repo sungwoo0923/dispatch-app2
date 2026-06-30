@@ -15,7 +15,12 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-import { POSITION_OPTIONS } from "./hrConstants";
+import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
+
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -64,6 +69,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [editRole, setEditRole] = useState("");
   const [editCompany, setEditCompany] = useState("");
   const [editPosition, setEditPosition] = useState("");
+  const [editTeam, setEditTeam] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [showMobilePreview, setShowMobilePreview] = useState(false);
 
@@ -240,6 +246,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     setEditRole(u.role || "user");
     setEditCompany(u.companyName || "");
     setEditPosition(u.position || "");
+    setEditTeam(u.team || "");
     setEditMode(false);
   };
 
@@ -248,19 +255,48 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!editName.trim()) return alert("이름을 입력하세요.");
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
     if (editRole === "hrManager" && !isTotalMaster) return alert("인사관리자 권한은 최고관리자만 부여할 수 있습니다.");
+    const history = [...(manageUser.personnelHistory || [])];
+    const prevPosition = manageUser.position || "";
+    const nextPosition = editPosition.trim();
+    if (prevPosition !== nextPosition && nextPosition) {
+      history.push({ date: todayStr(), type: "직책변경", detail: `${prevPosition || "(미지정)"} → ${nextPosition}` });
+    }
+    const prevTeam = manageUser.team || "";
+    if (prevTeam !== editTeam && editTeam) {
+      history.push({ date: todayStr(), type: "부서변경", detail: `${prevTeam || "미배정"} → ${editTeam}` });
+    }
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),
       role: editRole,
       companyName: editCompany.trim(),
-      position: editPosition.trim(),
+      position: nextPosition,
+      team: editTeam,
+      personnelHistory: history,
     };
     try {
       await setDoc(doc(db, "users", manageUser.id), payload, { merge: true });
-      setManageUser(null);
+      setManageUser(prev => ({ ...prev, ...payload }));
       setEditMode(false);
     } catch (err) {
       alert("저장 중 오류가 발생했습니다.");
+    }
+  };
+
+  const setResignStatus = async (u, resign) => {
+    if (isViewer) return _viewerAlert();
+    if (resign) {
+      if (!window.confirm(`"${u.name || u.email}" 계정을 퇴사 처리하시겠습니까?\n퇴사 처리된 계정은 즉시 로그인이 차단됩니다.`)) return;
+    }
+    const history = [...(u.personnelHistory || []), { date: todayStr(), type: resign ? "퇴사" : "복직", detail: resign ? "퇴사 처리" : "복직 처리" }];
+    const payload = resign
+      ? { employmentStatus: "퇴사", resignedAt: todayStr(), personnelHistory: history }
+      : { employmentStatus: "재직", resignedAt: null, personnelHistory: history };
+    try {
+      await setDoc(doc(db, "users", u.id), payload, { merge: true });
+      if (manageUser?.id === u.id) setManageUser(prev => ({ ...prev, ...payload }));
+    } catch (err) {
+      alert("처리 중 오류가 발생했습니다.");
     }
   };
 
@@ -402,87 +438,197 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       <div className="flex gap-6">
         <div className="flex-1 min-w-0">
 
-          {/* ====== 회원 관리 탭 ====== */}
+          {/* ====== 회원 관리 탭 (목록 + 상세) ====== */}
           {adminTab === "members" && (
-            <>
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 mb-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white flex-1 min-w-[200px] max-w-[320px] focus-within:border-[#1B2B4B] transition">
+            <div className="flex gap-4" style={{ minHeight: 560 }}>
+              {/* 좌측 목록 */}
+              <div className="w-[330px] flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col" style={{ maxHeight: 720 }}>
+                <div className="p-3 border-b border-gray-100 space-y-2">
+                  <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
                     <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                     <input value={search} onChange={e => setSearch(e.target.value)}
                       placeholder="이메일 · 이름 · 회사명 검색"
                       className="flex-1 px-2 py-2 text-[13px] outline-none" />
                   </div>
-                  <div className="flex items-center">
-                    <select
-                      value={roleFilter}
-                      onChange={e => setRoleFilter(e.target.value)}
-                      className="h-[36px] px-3 pr-8 rounded-lg text-[13px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none cursor-pointer appearance-none"
-                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
-                    >
-                      <option value="all">전체 권한</option>
-                      {ROLES.map(r => (
-                        <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="ml-auto text-[13px] text-gray-400 font-medium">{filtered.length}명 표시 중</div>
+                  <select
+                    value={roleFilter}
+                    onChange={e => setRoleFilter(e.target.value)}
+                    className="w-full h-[34px] px-3 pr-8 rounded-lg text-[12.5px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none cursor-pointer appearance-none"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+                  >
+                    <option value="all">전체 권한</option>
+                    {ROLES.map(r => (
+                      <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
+                    ))}
+                  </select>
+                  <div className="text-[11px] text-gray-400">{filtered.length}명 표시 중</div>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                  {filtered.length === 0 ? (
+                    <div className="py-16 text-center text-[12px] text-gray-300">검색 결과가 없습니다</div>
+                  ) : filtered.map(u => {
+                    const isMe = me?.uid === u.id;
+                    const resigned = u.employmentStatus === "퇴사";
+                    return (
+                      <div key={u.id} onClick={() => openManage(u)}
+                        className={`px-3.5 py-2.5 border-b border-gray-50 cursor-pointer transition ${manageUser?.id === u.id ? "bg-blue-50" : "hover:bg-gray-50"} ${resigned ? "opacity-50" : ""}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="text-[13px] font-semibold text-gray-800 truncate">{u.name || u.email}</div>
+                          <DotBadge active={u.approved && !resigned} activeLabel={resigned ? "퇴사" : "승인"} inactiveLabel={resigned ? "퇴사" : "대기"} />
+                        </div>
+                        <div className="text-[11px] text-gray-400 mt-0.5 truncate">{u.email}</div>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 font-semibold">{u.team || "미배정"}</span>
+                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold">{ROLE_LABELS[u.role || "user"] || u.role}</span>
+                          {isMe && <span className="text-[10px] text-blue-500 font-semibold">나</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-visible">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-[#1B2B4B]">
-                      {["이메일", "이름", "직책", "연락처", "권한", "회사명", "승인", "관리"].map(h => (
-                        <th key={h} className="px-4 py-3 text-center text-[13px] font-semibold text-white whitespace-nowrap border-b border-white/10">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filtered.length === 0 ? (
-                      <tr><td colSpan={8} className="py-16 text-center text-[13px] text-gray-400">검색 결과가 없습니다</td></tr>
-                    ) : filtered.map((u, idx) => {
-                      const isMe = me?.uid === u.id;
-                      const canManage = isTotalMaster || (u.companyName || "돌캐") === effectiveCompany;
-                      return (
-                        <tr key={u.id} className={`transition hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                          <td className="px-4 py-3 text-center">
-                            <div className="text-[13px] text-gray-700 font-medium">{u.email}</div>
-                            {isMe && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600 font-semibold">나</span>}
-                            {u.email === TOTAL_MASTER_EMAIL && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold ml-1">총마스터</span>}
-                          </td>
-                          <td className="px-4 py-3 text-center text-[13px] font-semibold text-gray-800">{u.name || <span className="text-gray-300">-</span>}</td>
-                          <td className="px-4 py-3 text-center text-[13px] text-gray-600">{u.position || <span className="text-gray-300">-</span>}</td>
-                          <td className="px-4 py-3 text-center text-[13px] text-gray-600">{u.phone || <span className="text-gray-300">-</span>}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="text-[13px] font-bold text-[#1B2B4B]">
-                              {ROLE_LABELS[u.role || "user"] || u.role || "실무자"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center text-[13px] text-gray-600">
-                            {u.companyName || <span className="text-gray-300">-</span>}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <DotBadge active={u.approved} activeLabel="승인" inactiveLabel="대기" />
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {canManage ? (
-                              <button
-                                onClick={() => openManage(u)}
-                                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
-                              >
-                                관리
-                              </button>
-                            ) : <span className="text-gray-300 text-[12px]">-</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              {/* 우측 상세 패널 */}
+              <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm min-w-0">
+                {!manageUser ? (
+                  <div className="h-full flex items-center justify-center text-[13px] text-gray-300 py-24">왼쪽에서 회원을 선택하세요</div>
+                ) : (() => {
+                  const u = manageUser;
+                  const canManage = isTotalMaster || (u.companyName || "돌캐") === effectiveCompany;
+                  const resigned = u.employmentStatus === "퇴사";
+                  return (
+                    <div>
+                      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-[16px] font-bold text-gray-800">{u.name || u.email}</h3>
+                            {u.email === TOTAL_MASTER_EMAIL && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">총마스터</span>}
+                            {resigned && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-500 border border-red-200 font-semibold">퇴사 ({u.resignedAt || "-"})</span>}
+                          </div>
+                          <p className="text-[12px] text-gray-400 mt-0.5">{u.email}</p>
+                        </div>
+                        {canManage && !editMode && (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setEditMode(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition">정보 수정</button>
+                            <button onClick={() => setResignStatus(u, !resigned)} className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${resigned ? "border-gray-200 text-gray-600 hover:bg-gray-50" : "border-red-200 text-red-500 hover:bg-red-50"}`}>
+                              {resigned ? "복직 처리" : "퇴사 처리"}
+                            </button>
+                            {me?.uid !== u.id && (
+                              <button onClick={() => removeUser(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-400 hover:bg-gray-50 transition">계정 삭제</button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {!editMode ? (
+                        <div className="p-6">
+                          <div className="grid grid-cols-2 gap-x-8 gap-y-0 border border-gray-100 rounded-xl overflow-hidden mb-5">
+                            {[
+                              ["이름", u.name || "-"],
+                              ["직책", u.position || "-"],
+                              ["부서", u.team || "미배정"],
+                              ["연락처", u.phone || "-"],
+                              ["권한", ROLE_LABELS[u.role] || u.role || "-"],
+                              ["회사명", u.companyName || "-"],
+                            ].map(([label, value], i) => (
+                              <div key={label} className={`flex items-center px-4 py-3 ${i % 2 === 0 ? "border-r border-gray-100" : ""} ${i < 4 ? "border-b border-gray-50" : ""}`}>
+                                <span className="text-[12px] text-gray-400 w-16 shrink-0">{label}</span>
+                                <span className="text-[13px] font-medium text-gray-800">{value}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <button onClick={() => toggleApprove(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+                              {u.approved ? "승인 해제" : "승인"}
+                            </button>
+                          </div>
+
+                          {/* 인사발령 이력 */}
+                          <div className="mt-5">
+                            <div className="text-[12.5px] font-bold text-gray-600 border-l-4 border-[#1B2B4B] pl-2 mb-2">인사발령 이력</div>
+                            {(u.personnelHistory || []).length === 0 ? (
+                              <div className="text-[12px] text-gray-300 px-1">등록된 발령 이력이 없습니다</div>
+                            ) : (
+                              <div className="border border-gray-100 rounded-xl divide-y divide-gray-50">
+                                {[...(u.personnelHistory || [])].reverse().map((h, i) => (
+                                  <div key={i} className="flex items-center gap-3 px-4 py-2 text-[12.5px]">
+                                    <span className="text-gray-400 w-24 shrink-0">{h.date}</span>
+                                    <span className="font-semibold text-gray-600 w-16 shrink-0">{h.type}</span>
+                                    <span className="text-gray-700">{h.detail}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-6">
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">회사명</label>
+                              <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
+                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                            </div>
+                            <div>
+                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>
+                              <input value={editName} onChange={e => setEditName(e.target.value)}
+                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                            </div>
+                            <div>
+                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">직책</label>
+                              <select value={editPosition} onChange={e => setEditPosition(e.target.value)}
+                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                                <option value="">선택 안 함</option>
+                                {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
+                                  <option value={editPosition}>{editPosition}</option>
+                                )}
+                                {POSITION_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">부서</label>
+                              <select value={editTeam} onChange={e => setEditTeam(e.target.value)}
+                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                                <option value="">미배정</option>
+                                {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">핸드폰번호</label>
+                              <input value={editPhone}
+                                onChange={e => {
+                                  let v = e.target.value.replace(/[^0-9]/g, "");
+                                  if (v.length > 7) v = v.replace(/(\d{3})(\d{4})(\d+)/, "$1-$2-$3");
+                                  else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1-$2");
+                                  setEditPhone(v);
+                                }}
+                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                            </div>
+                            <div>
+                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">권한</label>
+                              <select value={editRole} onChange={e => setEditRole(e.target.value)}
+                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          <div className="flex gap-3">
+                            <button onClick={() => setEditMode(false)}
+                              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">
+                              취소
+                            </button>
+                            <button onClick={saveEdit}
+                              className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
+                              저장
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
-            </>
+            </div>
           )}
 
           {/* ====== 연동 화주사 탭 ====== */}
@@ -610,120 +756,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           </div>
         )}
       </div>
-
-      {/* ====== 회원 관리 팝업 ====== */}
-      {manageUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setManageUser(null); setEditMode(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-white font-bold text-[15px]">회원 관리</h3>
-                <p className="text-white/60 text-[12px] mt-0.5">{manageUser.email}</p>
-              </div>
-              <button onClick={() => { setManageUser(null); setEditMode(false); }} className="text-white/60 hover:text-white text-lg">✕</button>
-            </div>
-
-            {!editMode ? (
-              <>
-                {/* 회원 정보 */}
-                <div className="border-b border-gray-100">
-                  {[
-                    ["이름", manageUser.name || "-"],
-                    ["직책", manageUser.position || "-"],
-                    ["연락처", manageUser.phone || "-"],
-                    ["권한", ROLE_LABELS[manageUser.role] || manageUser.role || "-"],
-                    ["회사명", manageUser.companyName || "-"],
-                    ["승인 상태", manageUser.approved ? "승인됨" : "미승인"],
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex items-center px-6 py-3 border-b border-gray-50 last:border-b-0 odd:bg-gray-50/50">
-                      <span className="text-[12px] text-gray-400 w-24 shrink-0">{label}</span>
-                      <span className="text-[13px] font-medium text-gray-800">{value}</span>
-                    </div>
-                  ))}
-                </div>
-                {/* 액션 버튼 */}
-                <div className="p-5 space-y-2">
-                  <button
-                    onClick={() => toggleApprove(manageUser)}
-                    className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition"
-                  >
-                    {manageUser.approved ? "승인 해제" : "승인"}
-                  </button>
-                  <button
-                    onClick={() => setEditMode(true)}
-                    className="w-full py-2.5 rounded-xl border border-[#1B2B4B]/40 text-[13px] font-semibold text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
-                  >
-                    정보 수정
-                  </button>
-                  {me?.uid !== manageUser.id && (
-                    <button
-                      onClick={() => removeUser(manageUser)}
-                      className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-red-500 hover:bg-red-50 transition"
-                    >
-                      계정 삭제
-                    </button>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                {/* 수정 폼 */}
-                <div className="p-6 space-y-4">
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">회사명</label>
-                    <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
-                  </div>
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>
-                    <input value={editName} onChange={e => setEditName(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
-                  </div>
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">직책</label>
-                    <select value={editPosition} onChange={e => setEditPosition(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
-                      <option value="">선택 안 함</option>
-                      {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
-                        <option value={editPosition}>{editPosition}</option>
-                      )}
-                      {POSITION_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">핸드폰번호</label>
-                    <input value={editPhone}
-                      onChange={e => {
-                        let v = e.target.value.replace(/[^0-9]/g, "");
-                        if (v.length > 7) v = v.replace(/(\d{3})(\d{4})(\d+)/, "$1-$2-$3");
-                        else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1-$2");
-                        setEditPhone(v);
-                      }}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
-                  </div>
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">권한</label>
-                    <select value={editRole} onChange={e => setEditRole(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
-                      {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-3 px-6 pb-6">
-                  <button onClick={() => setEditMode(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">
-                    취소
-                  </button>
-                  <button onClick={saveEdit}
-                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
-                    저장
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ====== 연동 화주사 관리 팝업 ====== */}
       {managingLinkedApp && (

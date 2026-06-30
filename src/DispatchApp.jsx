@@ -20,7 +20,7 @@ import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
-import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_COLORS } from "./hrConstants";
+import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 import AttendanceBoard from "./AttendanceBoard";
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
@@ -42279,6 +42279,7 @@ function HRResumePrintButton({ row, resume, photo }) {
     const eduRows = (r.education || []).map(e => `<tr><td>${esc(e.period)}</td><td>${esc(e.school)}</td><td>${esc(e.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 학력사항이 없습니다</td></tr>`;
     const careerRows = (r.career || []).map(c => `<tr><td>${esc(c.period)}</td><td>${esc(c.company)}</td><td>${esc(c.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 경력사항이 없습니다</td></tr>`;
     const certRows = (r.certificates || []).map(c => `<tr><td>${esc(c.date)}</td><td>${esc(c.name)}</td><td>${esc(c.issuer)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 자격증이 없습니다</td></tr>`;
+    const familyRows = (r.family || []).map(f => `<tr><td>${esc(f.relation)}</td><td>${esc(f.name)}</td><td>${esc(f.birth)}</td><td>${esc(f.job)}</td></tr>`).join("") || `<tr><td colspan="4" style="color:#999;text-align:center;">등록된 가족관계가 없습니다</td></tr>`;
     win.document.write(`
       <html><head><title>${esc(row.name)} 이력서</title>
       <style>
@@ -42308,6 +42309,8 @@ function HRResumePrintButton({ row, resume, photo }) {
         <table><tr><th>기간</th><th>근무처</th><th>내용</th></tr>${careerRows}</table>
         <div class="section-title">자격/면허</div>
         <table><tr><th>취득일</th><th>자격명</th><th>발급기관</th></tr>${certRows}</table>
+        <div class="section-title">가족관계</div>
+        <table><tr><th>관계</th><th>성명</th><th>생년월일/연령</th><th>직업</th></tr>${familyRows}</table>
         <div class="section-title">자기소개</div>
         <div class="intro">${esc(r.intro) || ""}</div>
       </body></html>
@@ -42316,7 +42319,45 @@ function HRResumePrintButton({ row, resume, photo }) {
     setTimeout(() => { win.print(); }, 300);
   };
   return (
-    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition">🖨 인쇄</button>
+    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition">인쇄</button>
+  );
+}
+
+function HRAttendancePrintButton({ row }) {
+  const handlePrint = () => {
+    const r = row || {};
+    const win = window.open("", "_blank", "width=860,height=1000");
+    if (!win) return;
+    const esc = (s) => (s || "").toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    win.document.write(`
+      <html><head><title>${esc(r.name)} 근태/근속 현황</title>
+      <style>
+        body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; padding: 32px; color: #1B2B4B; }
+        h1 { text-align: center; font-size: 22px; letter-spacing: 12px; margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+        th, td { border: 1px solid #ccc; padding: 9px 12px; font-size: 13px; }
+        th { background: #f3f4f6; text-align: left; width: 160px; }
+      </style></head>
+      <body>
+        <h1>근태 / 근속 현황</h1>
+        <table>
+          <tr><th>성명</th><td>${esc(r.name)}</td></tr>
+          <tr><th>소속</th><td>${esc(r.team || "미배정")} / ${esc(r.position || "-")}</td></tr>
+          <tr><th>입사일</th><td>${esc(r.hireDate) || "미등록"}</td></tr>
+          <tr><th>근속기간</th><td>${esc(r.tenureLabel)}</td></tr>
+          <tr><th>${esc(r.leave ? r.leave.leaveLabel + " 발생/사용/잔여" : "휴가")}</th><td>${r.leave ? `${r.leave.entitlement}일 / ${r.leave.used}일 / ${r.leave.remaining}일` : "입사일 미등록"}</td></tr>
+          <tr><th>이달 출근일수</th><td>${r.workDays}일</td></tr>
+          <tr><th>이달 연차/반차</th><td>${r.leaveDays}일</td></tr>
+          <tr><th>병가 / 외근</th><td>${r.leave ? `${r.leave.sickDays}일 / ${r.leave.fieldDays}일` : "-"}</td></tr>
+          <tr><th>결재 대기 건</th><td>${r.pendingApprovals}건</td></tr>
+        </table>
+      </body></html>
+    `);
+    win.document.close();
+    setTimeout(() => { win.print(); }, 300);
+  };
+  return (
+    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition">인쇄</button>
   );
 }
 
@@ -42453,7 +42494,40 @@ function HRManagementPage({ userCompany, role, userId }) {
   const resume = selectedUid ? (resumes[selectedUid] || {}) : {};
   const canEditThis = canManage || selectedUid === userId;
 
-  const startEdit = () => { setDraft({ ...resume, education: resume.education || [], career: resume.career || [], certificates: resume.certificates || [] }); setEditMode(true); };
+  const resumeRef = React.useRef(null);
+  const attendanceRef = React.useRef(null);
+  const [exportingPdf, setExportingPdf] = React.useState(false);
+
+  const exportPdf = async (el, filename) => {
+    if (!el) return;
+    setExportingPdf(true);
+    try {
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+      pdf.save(filename);
+    } catch (err) {
+      alert("PDF 저장 실패: " + err.message);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const startEdit = () => { setDraft({ ...resume, education: resume.education || [], career: resume.career || [], certificates: resume.certificates || [], family: resume.family || [] }); setEditMode(true); };
   const cancelEdit = () => { setDraft(null); setEditMode(false); };
   const saveResume = async () => {
     if (!selectedUid || !draft) return;
@@ -42546,7 +42620,7 @@ function HRManagementPage({ userCompany, role, userId }) {
           {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[12px] text-gray-300">인원이 없습니다</div>}
           {Object.entries(grouped).map(([team, members2]) => (
             <div key={team}>
-              <div className={`px-3 py-1.5 text-[11px] font-bold sticky top-0 border-b ${TEAM_COLORS[team] || TEAM_COLORS["미배정"]}`}>{team} ({members2.length})</div>
+              <div className={`px-3 py-1.5 text-[11px] font-bold sticky top-0 border-b ${team === "미배정" ? TEAM_BADGE_CLASS_UNASSIGNED : TEAM_BADGE_CLASS}`}>{team} ({members2.length})</div>
               {members2.map(r => {
                 const photo = resumes[r.uid]?.photoUrl;
                 return (
@@ -42580,16 +42654,19 @@ function HRManagementPage({ userCompany, role, userId }) {
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">{ROLE_LABELS_HR[selected.role] || selected.role}</span>
                 {canManage ? (
                   <select value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
-                    className={`text-[11px] font-bold border rounded-full px-2 py-0.5 focus:outline-none ${TEAM_COLORS[selected.team] || TEAM_COLORS["미배정"]}`}>
+                    className={`text-[11px] font-bold border rounded-full px-2 py-0.5 focus:outline-none ${selected.team === "미배정" || !selected.team ? TEAM_BADGE_CLASS_UNASSIGNED : TEAM_BADGE_CLASS}`}>
                     {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     <option value="미배정">미배정</option>
                   </select>
                 ) : (
-                  <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${TEAM_COLORS[selected.team] || TEAM_COLORS["미배정"]}`}>{selected.team}</span>
+                  <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${selected.team === "미배정" || !selected.team ? TEAM_BADGE_CLASS_UNASSIGNED : TEAM_BADGE_CLASS}`}>{selected.team}</span>
+                )}
+                {selected.employmentStatus && selected.employmentStatus !== "재직" && (
+                  <span className="text-[11px] font-bold border rounded-full px-2 py-0.5 bg-gray-100 text-gray-500 border-gray-200">{selected.employmentStatus}</span>
                 )}
               </div>
               <div className="flex items-center gap-1 mb-2">
-                {["이력서", "근태/근속"].map(t => (
+                {["이력서", "근태/근속", "인사발령 이력"].map(t => (
                   <button key={t} onClick={() => { setActiveTab(t); cancelEdit(); }}
                     className={`px-3 py-1.5 rounded-xl text-[12.5px] font-bold transition ${activeTab === t ? "bg-[#1B2B4B] text-white" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>
                 ))}
@@ -42598,11 +42675,13 @@ function HRManagementPage({ userCompany, role, userId }) {
 
             <div className="flex-1 overflow-y-auto p-5">
               {activeTab === "이력서" ? (
-                <div>
-                  <div className="flex justify-end gap-2 mb-3">
+                <div className="flex flex-col items-center">
+                  <div className="flex justify-end gap-2 mb-3 w-full max-w-[820px]">
                     <HRResumePrintButton row={selected} resume={resume} photo={resume.photoUrl} />
+                    <button onClick={() => exportPdf(resumeRef.current, `이력서_${selected.name || selected.email}.pdf`)} disabled={exportingPdf}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
                     {canEditThis && !editMode && (
-                      <button onClick={startEdit} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:opacity-90">✎ 수정</button>
+                      <button onClick={startEdit} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:opacity-90">수정</button>
                     )}
                     {editMode && (
                       <>
@@ -42612,7 +42691,8 @@ function HRManagementPage({ userCompany, role, userId }) {
                     )}
                   </div>
 
-                  <div className="border border-gray-200 rounded-xl p-5">
+                  <div ref={resumeRef} className="w-full max-w-[820px] bg-white border border-gray-200 rounded-xl p-6">
+                    <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">이 력 서</div>
                     <div className="flex gap-5 mb-5">
                       <div className="w-[100px] h-[128px] flex-shrink-0 border border-gray-300 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center relative">
                         {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[10px] text-gray-300">증명사진</span>}
@@ -42643,6 +42723,7 @@ function HRManagementPage({ userCompany, role, userId }) {
                         {listField("education", "학력사항", { period: "기간", school: "학교명", detail: "내용" })}
                         {listField("career", "경력사항", { period: "기간", company: "근무처", detail: "내용" })}
                         {listField("certificates", "자격/면허", { date: "취득일", name: "자격명", issuer: "발급기관" })}
+                        {listField("family", "가족관계", { relation: "관계", name: "성명", birth: "생년월일/연령", job: "직업" })}
                         <div className="mb-2">
                           <div className="text-[12px] font-bold text-gray-600 mb-1">자기소개</div>
                           <textarea value={draft.intro || ""} onChange={e => setDraft(d => ({ ...d, intro: e.target.value }))} rows={5}
@@ -42669,6 +42750,12 @@ function HRManagementPage({ userCompany, role, userId }) {
                             <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-400">{c.date}</span><span className="font-semibold">{c.name}</span><span>{c.issuer}</span></div>
                           ))}
                         </div>
+                        <div className="mb-4">
+                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">가족관계</div>
+                          {(resume.family || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.family || []).map((f, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-16 text-gray-400">{f.relation}</span><span className="w-20 font-semibold">{f.name}</span><span className="w-28 text-gray-500">{f.birth}</span><span>{f.job}</span></div>
+                          ))}
+                        </div>
                         <div>
                           <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">자기소개</div>
                           <div className="text-[12.5px] text-gray-600 whitespace-pre-wrap leading-relaxed">{resume.intro || <span className="text-gray-300">등록된 자기소개가 없습니다</span>}</div>
@@ -42677,22 +42764,76 @@ function HRManagementPage({ userCompany, role, userId }) {
                     )}
                   </div>
                 </div>
+              ) : activeTab === "근태/근속" ? (
+                <div className="flex flex-col items-center">
+                  <div className="flex justify-end gap-2 mb-3 w-full max-w-[820px]">
+                    <HRAttendancePrintButton row={selected} />
+                    <button onClick={() => exportPdf(attendanceRef.current, `근태근속_${selected.name || selected.email}.pdf`)} disabled={exportingPdf}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
+                  </div>
+                  <div ref={attendanceRef} className="w-full max-w-[820px] bg-white border border-gray-200 rounded-xl p-6">
+                    <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">근태 / 근속 현황</div>
+                    <div className="text-[12.5px] text-gray-500 font-semibold mb-3">{selected.name} · {selected.team} / {selected.position || "-"}</div>
+                    <table className="w-full border-collapse text-[12.5px]">
+                      <tbody>
+                        {[
+                          { l: "입사일", v: selected.hireDate || "미등록" },
+                          { l: "근속기간", v: selected.tenureLabel },
+                          { l: selected.leave ? selected.leave.leaveLabel + " 발생/사용/잔여" : "휴가", v: selected.leave ? `${selected.leave.entitlement}일 / ${selected.leave.used}일 / ${selected.leave.remaining}일` : "입사일 미등록" },
+                          { l: "이달 출근일수", v: `${selected.workDays}일` },
+                          { l: "이달 연차/반차", v: `${selected.leaveDays}일` },
+                          { l: "병가 / 외근", v: selected.leave ? `${selected.leave.sickDays}일 / ${selected.leave.fieldDays}일` : "-" },
+                          { l: "결재 대기 건", v: `${selected.pendingApprovals}건` },
+                        ].map(s => (
+                          <tr key={s.l} className="border-b border-gray-100">
+                            <th className="text-left py-2.5 pr-4 text-gray-500 font-semibold w-[180px] align-top">{s.l}</th>
+                            <td className="py-2.5 text-gray-800 font-bold">{s.v}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { l: "입사일", v: selected.hireDate || "미등록" },
-                    { l: "근속기간", v: selected.tenureLabel },
-                    { l: selected.leave ? selected.leave.leaveLabel + " 발생/사용/잔여" : "휴가", v: selected.leave ? `${selected.leave.entitlement}일 / ${selected.leave.used}일 / ${selected.leave.remaining}일` : "입사일 미등록" },
-                    { l: "이달 출근일수", v: `${selected.workDays}일` },
-                    { l: "이달 연차/반차", v: `${selected.leaveDays}일` },
-                    { l: "병가 / 외근", v: selected.leave ? `${selected.leave.sickDays}일 / ${selected.leave.fieldDays}일` : "-" },
-                    { l: "결재 대기 건", v: `${selected.pendingApprovals}건` },
-                  ].map(s => (
-                    <div key={s.l} className="px-4 py-3 rounded-xl border border-gray-100 bg-gray-50/40">
-                      <div className="text-[11px] text-gray-400 font-semibold mb-1">{s.l}</div>
-                      <div className="text-[15px] font-black text-[#1B2B4B]">{s.v}</div>
+                <div className="flex flex-col items-center">
+                  <div className="w-full max-w-[820px] bg-white border border-gray-200 rounded-xl p-6">
+                    <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">인사발령 이력</div>
+                    <div className="flex gap-4 mb-5 text-[12.5px]">
+                      <div className="flex-1 px-4 py-3 rounded-lg border border-gray-100 bg-gray-50/50">
+                        <div className="text-[11px] text-gray-400 font-semibold mb-1">현재 재직상태</div>
+                        <div className="text-[14px] font-black text-[#1B2B4B]">{selected.employmentStatus || "재직"}</div>
+                      </div>
+                      <div className="flex-1 px-4 py-3 rounded-lg border border-gray-100 bg-gray-50/50">
+                        <div className="text-[11px] text-gray-400 font-semibold mb-1">퇴사일</div>
+                        <div className="text-[14px] font-black text-[#1B2B4B]">{selected.resignedAt || "-"}</div>
+                      </div>
                     </div>
-                  ))}
+                    <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-2">발령 이력</div>
+                    {(!selected.personnelHistory || selected.personnelHistory.length === 0) ? (
+                      <div className="text-[11.5px] text-gray-300 py-6 text-center">등록된 인사발령 이력이 없습니다</div>
+                    ) : (
+                      <table className="w-full border-collapse text-[12.5px]">
+                        <thead>
+                          <tr className="border-b border-gray-200 text-gray-400">
+                            <th className="text-left py-2 pr-4 font-semibold w-[120px]">일자</th>
+                            <th className="text-left py-2 pr-4 font-semibold w-[100px]">구분</th>
+                            <th className="text-left py-2 font-semibold">내용</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...selected.personnelHistory].reverse().map((h, i) => (
+                            <tr key={i} className="border-b border-gray-50">
+                              <td className="py-2 pr-4 text-gray-500">{h.date}</td>
+                              <td className="py-2 pr-4">
+                                <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold text-[11px]">{h.type}</span>
+                              </td>
+                              <td className="py-2 text-gray-700">{h.detail}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

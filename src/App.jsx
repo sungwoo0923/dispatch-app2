@@ -9,7 +9,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import ShipperApp from "./shipper/ShipperApp";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 
@@ -340,6 +340,14 @@ export default function App() {
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
         if (snap.exists()) {
           const data = snap.data();
+          if (data.employmentStatus === "퇴사") {
+            alert("퇴사 처리된 계정입니다. 관리자에게 문의해주세요.");
+            signOut(auth);
+            setUser(null);
+            setRole(null);
+            setLoading(false);
+            return;
+          }
           const dataRole = data.role || "user";
           setRole(dataRole);
           // approved !== false allows old accounts (undefined) and explicitly true
