@@ -39,9 +39,8 @@ export function calcLeaveBalance(hireDate, schedules, uid) {
   (schedules || []).forEach(s => {
     if (s.authorUid !== uid) return;
     const approvers = s.approvers || [];
-    const allApproved = approvers.length > 0 && approvers.every(a => a.status === "approved");
-    const isApproved = s.approvalStatus === "approved" || allApproved || getOverallApprovalStatusSimple(s) === "approved";
-    if (!isApproved) return;
+    const anyRejected = approvers.some(a => a.status === "rejected");
+    if (anyRejected) return; // 반려 건만 제외, 나머지(승인/대기 포함)는 모두 사용일수로 집계
     const start = new Date(s.start + "T00:00:00");
     if (start < COUNT_START) return; // 2025년 이전 사용분은 카운트 제외(2026년부터 카운트)
     if (s.type === "휴가") used += daysBetween(s.start, s.end);

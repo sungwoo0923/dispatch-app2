@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import MobileFleetView from "./MobileFleetView";
+import MobileAttendanceBoard from "./MobileAttendanceBoard";
 import MobileIntelView from "./MobileIntelView";
 import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
@@ -2333,6 +2334,7 @@ const title =
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "handover" ? "인수인계"
+  : page === "attendance" ? "출근기록부"
   : page === "myinfo" ? "내정보"
   : page === "settings" ? "설정"
   : page === "fleet" ? "지입차관리"
@@ -2606,7 +2608,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -2722,6 +2724,11 @@ onGoSchedule={() => {
   }
   setHasNewSchedule(false);
   setPage("schedule");
+  setShowMenu(false);
+}}
+
+onGoAttendance={() => {
+  setPage("attendance");
   setShowMenu(false);
 }}
 
@@ -3594,6 +3601,14 @@ setOpenMemo={setOpenMemo}
        {page === "fare" && (
           <MobileStandardFare onBack={() => setPage("list")} cardVersionB={cardVersionB} />
         )}
+        {page === "attendance" && (
+          <MobileAttendanceBoard
+            userCompany={userCompany || localStorage.getItem("userCompany") || ""}
+            role={role}
+            currentUser={currentUser}
+            cardVersionB={cardVersionB}
+          />
+        )}
         {page === "national-fare" && (
           <MobileNationalFare onBack={() => setPage("list")} cardVersionB={cardVersionB} />
         )}
@@ -4335,6 +4350,7 @@ function MobileSideMenu({
   hasNewSchedule,
   onDeleteAll,
   onGoHandover,
+  onGoAttendance,
   onGoMyInfo,
   onGoSettings,
   setUiScale,
@@ -4428,6 +4444,7 @@ function MobileSideMenu({
             <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} dark={dark} />
             <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} dark={dark} />
             <MenuItem label="인수인계" onClick={onGoHandover} dark={dark} />
+            <MenuItem label="출근기록부" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
           <MenuSection title="매출 / 운임표" dark={dark}>
             <MenuItem label="자사운임표" onClick={onGoFare} dark={dark} />

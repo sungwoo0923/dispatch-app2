@@ -15,13 +15,13 @@ export function isWeekend(dateStr) {
   return day === 0 || day === 6;
 }
 
-// 해당 날짜에 승인된 휴가/외근 일정이 있으면 그 유형 라벨을 반환
+// 해당 날짜에 등록된 휴가/외근 일정(반려 제외)이 있으면 그 유형 라벨을 반환
 export function findApprovedLeaveForDate(schedules, uid, dateStr) {
   const hit = (schedules || []).find(s => {
     if (s.authorUid !== uid) return false;
     const approvers = s.approvers || [];
-    const allApproved = approvers.length > 0 && approvers.every(a => a.status === "approved");
-    if (s.approvalStatus !== "approved" && !allApproved) return false;
+    const anyRejected = approvers.some(a => a.status === "rejected");
+    if (anyRejected) return false;
     const start = s.start, end = s.end || s.start;
     return dateStr >= start && dateStr <= end;
   });

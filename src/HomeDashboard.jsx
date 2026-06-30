@@ -235,6 +235,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [noticePage, setNoticePage] = useState(1);
   const SCHEDULE_PAGE_SIZE = 5;
   const [schedulePage, setSchedulePage] = useState(1);
+  const [scheduleAuthorSearch, setScheduleAuthorSearch] = useState("");
 
   const [handoverOpen, setHandoverOpen] = useState(false);
   const [handoverForm, setHandoverForm] = useState({ text: "", author: "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr });
@@ -454,8 +455,13 @@ React.useEffect(() => {
 
   const noticeTotalPages = Math.ceil(notices.length / NOTICE_PAGE_SIZE);
   const pagedNotices = useMemo(() => { const s = (noticePage - 1) * NOTICE_PAGE_SIZE; return notices.slice(s, s + NOTICE_PAGE_SIZE); }, [notices, noticePage]);
-  const scheduleTotalPages = Math.ceil(schedules.length / SCHEDULE_PAGE_SIZE);
-  const pagedSchedules = useMemo(() => { const s = (schedulePage - 1) * SCHEDULE_PAGE_SIZE; return schedules.slice(s, s + SCHEDULE_PAGE_SIZE); }, [schedules, schedulePage]);
+  const filteredSchedules = useMemo(() => {
+    const kw = scheduleAuthorSearch.trim();
+    if (!kw) return schedules;
+    return schedules.filter(s => (s.name || "").includes(kw));
+  }, [schedules, scheduleAuthorSearch]);
+  const scheduleTotalPages = Math.ceil(filteredSchedules.length / SCHEDULE_PAGE_SIZE);
+  const pagedSchedules = useMemo(() => { const s = (schedulePage - 1) * SCHEDULE_PAGE_SIZE; return filteredSchedules.slice(s, s + SCHEDULE_PAGE_SIZE); }, [filteredSchedules, schedulePage]);
 
   const HANDOVER_PAGE_SIZE = 5;
   const [handoverPage, setHandoverPage] = useState(1);
@@ -859,7 +865,18 @@ React.useEffect(() => {
 
           {/* 휴가/외근 탭 */}
           {boardTab === "휴가/외근" && (
-            schedules.length === 0 ? (
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="text"
+                value={scheduleAuthorSearch}
+                onChange={e => { setScheduleAuthorSearch(e.target.value); setSchedulePage(1); }}
+                placeholder="작성자 검색"
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] text-gray-700 focus:border-[#1B2B4B] outline-none w-44"
+              />
+            </div>
+          )}
+          {boardTab === "휴가/외근" && (
+            filteredSchedules.length === 0 ? (
               <div className="text-[13px] text-gray-400 py-6 text-center">등록된 일정이 없습니다</div>
             ) : (
               <>
