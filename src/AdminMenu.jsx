@@ -35,6 +35,7 @@ const fmtDate = (ts) => {
 const ROLE_LABELS = {
   totalMaster: "최고관리자",
   admin: "관리자",
+  hrManager: "인사관리자",
   user: "실무자",
   viewer: "조회전용",
   driver: "기사",
@@ -60,6 +61,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [editPhone, setEditPhone] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editCompany, setEditCompany] = useState("");
+  const [editPosition, setEditPosition] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [showMobilePreview, setShowMobilePreview] = useState(false);
 
@@ -77,7 +79,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const me = auth.currentUser;
   const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
   const ROLES = isTotalMaster
-    ? ["totalMaster", "admin", "user", "viewer", "driver", "shipper", "test"]
+    ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test"]
     : ["admin", "user", "viewer", "driver", "shipper", "test"];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || "돌캐";
 
@@ -235,6 +237,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     setEditPhone(u.phone || "");
     setEditRole(u.role || "user");
     setEditCompany(u.companyName || "");
+    setEditPosition(u.position || "");
     setEditMode(false);
   };
 
@@ -242,11 +245,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (isViewer) return _viewerAlert();
     if (!editName.trim()) return alert("이름을 입력하세요.");
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
+    if (editRole === "hrManager" && !isTotalMaster) return alert("인사관리자 권한은 최고관리자만 부여할 수 있습니다.");
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),
       role: editRole,
       companyName: editCompany.trim(),
+      position: editPosition.trim(),
     };
     try {
       await setDoc(doc(db, "users", manageUser.id), payload, { merge: true });
@@ -427,14 +432,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B]">
-                      {["이메일", "이름", "연락처", "권한", "회사명", "승인", "관리"].map(h => (
+                      {["이메일", "이름", "직책", "연락처", "권한", "회사명", "승인", "관리"].map(h => (
                         <th key={h} className="px-4 py-3 text-center text-[13px] font-semibold text-white whitespace-nowrap border-b border-white/10">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filtered.length === 0 ? (
-                      <tr><td colSpan={7} className="py-16 text-center text-[13px] text-gray-400">검색 결과가 없습니다</td></tr>
+                      <tr><td colSpan={8} className="py-16 text-center text-[13px] text-gray-400">검색 결과가 없습니다</td></tr>
                     ) : filtered.map((u, idx) => {
                       const isMe = me?.uid === u.id;
                       const canManage = isTotalMaster || (u.companyName || "돌캐") === effectiveCompany;
@@ -446,6 +451,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             {u.email === TOTAL_MASTER_EMAIL && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold ml-1">총마스터</span>}
                           </td>
                           <td className="px-4 py-3 text-center text-[13px] font-semibold text-gray-800">{u.name || <span className="text-gray-300">-</span>}</td>
+                          <td className="px-4 py-3 text-center text-[13px] text-gray-600">{u.position || <span className="text-gray-300">-</span>}</td>
                           <td className="px-4 py-3 text-center text-[13px] text-gray-600">{u.phone || <span className="text-gray-300">-</span>}</td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-[13px] font-bold text-[#1B2B4B]">
@@ -621,6 +627,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <div className="border-b border-gray-100">
                   {[
                     ["이름", manageUser.name || "-"],
+                    ["직책", manageUser.position || "-"],
                     ["연락처", manageUser.phone || "-"],
                     ["권한", ROLE_LABELS[manageUser.role] || manageUser.role || "-"],
                     ["회사명", manageUser.companyName || "-"],
@@ -668,6 +675,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>
                     <input value={editName} onChange={e => setEditName(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">직책</label>
+                    <input value={editPosition} onChange={e => setEditPosition(e.target.value)}
+                      placeholder="예: 대리, 팀장, 과장"
                       className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
                   </div>
                   <div>

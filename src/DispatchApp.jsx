@@ -42224,7 +42224,8 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 // ─────────── 회사관리 탭 래퍼 ───────────
 function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
   const [tab, setTab] = React.useState("회사정보");
-  const tabs = ["회사정보", "내정보", "출근기록부"];
+  const canViewHR = role === "totalMaster" || role === "hrManager";
+  const tabs = canViewHR ? ["회사정보", "내정보", "출근기록부", "인사관리부"] : ["회사정보", "내정보", "출근기록부"];
 
   return (
     <div>
@@ -42260,9 +42261,199 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       {tab === "출근기록부" && (
         <AttendanceBoard userCompany={userCompany} role={role} user={user} />
       )}
+      {tab === "인사관리부" && canViewHR && (
+        <HRManagementPage userCompany={userCompany} role={role} />
+      )}
     </div>
   );
 }
+
+// ─────────── 인사관리부 ───────────
+function HRManagementPage({ userCompany, role }) {
+  const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+  const now = new Date();
+  const [members, setMembers] = React.useState([]);
+  const [profiles, setProfiles] = React.useState({}); // uid -> { hireDate }
+  const [schedules, setSchedules] = React.useState([]);
+  const [holidays, setHolidays] = React.useState([]);
+  const [records, setRecords] = React.useState([]);
+  const [selected, setSelected] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!company) return;
+    const q = query(collection(db, "users"), where("companyName", "==", company));
+    const unsub = onSnapshot(q, snap => {
+      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false));
+    }, () => {});
+    return () => unsub();
+  }, [company]);
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(collection(db, "userProfiles"), snap => {
+      const m = {};
+      snap.docs.forEach(d => { m[d.id] = d.data(); });
+      setProfiles(m);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    if (!company) return;
+    const unsub = onSnapshot(collection(db, "schedules"), snap => {
+      setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || "돌캐") === company));
+    }, () => {});
+    return () => unsub();
+  }, [company]);
+
+  React.useEffect(() => {
+    if (!company) return;
+    const q = query(collection(db, "holidays"), where("companyName", "==", company));
+    const unsub = onSnapshot(q, snap => {
+      setHolidays(snap.docs.map(d => d.data()));
+    }, () => {});
+    return () => unsub();
+  }, [company]);
+
+  const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  React.useEffect(() => {
+    if (!company) return;
+    const q = query(collection(db, "attendance"), where("companyName", "==", company), where("month", "==", monthStr));
+    const unsub = onSnapshot(q, snap => {
+      setRecords(snap.docs.map(d => d.data()));
+    }, () => {});
+    return () => unsub();
+  }, [company, monthStr]);
+
+  const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const numDaysSoFar = now.getDate();
+
+  const rows = React.useMemo(() => {
+    return members.map(m => {
+      const hireDate = profiles[m.uid]?.hireDate || "";
+      const leave = hireDate ? calcLeaveBalance(hireDate, schedules, m.uid, m.name, holidays) : null;
+      let workDays = 0, leaveDays = 0, sickDays = 0;
+      for (let d = 1; d <= numDaysSoFar; d++) {
+        const ds = `${monthStr}-${String(d).padStart(2, "0")}`;
+        const rec = records.find(r => r.uid === m.uid && r.date === ds);
+        let status = rec?.status;
+        if (!status) {
+          if (isHoliday(ds, holidays) || isWeekend(ds)) continue;
+          status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || "출근";
+        }
+        if (status === "출근") workDays++;
+        else if (status === "연차" || status === "오전반차" || status === "오후반차") leaveDays++;
+        else if (status === "병가") sickDays++;
+      }
+      const pendingApprovals = schedules.filter(s => {
+        const approvers = s.approvers || [];
+        return approvers.some(a => a.uid === m.uid && (a.status || "pending") === "pending");
+      }).length;
+      let tenureLabel = "-";
+      if (hireDate) {
+        const hire = new Date(hireDate + "T00:00:00");
+        const months = Math.max(0, (now.getFullYear() - hire.getFullYear()) * 12 + (now.getMonth() - hire.getMonth()) - (now.getDate() < hire.getDate() ? 1 : 0));
+        tenureLabel = months >= 12 ? `${Math.floor(months / 12)}년 ${months % 12}개월` : `${months}개월`;
+      }
+      return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, pendingApprovals };
+    }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar]);
+
+  const totalPending = rows.reduce((s, r) => s + r.pendingApprovals, 0);
+  const avgRemaining = rows.filter(r => r.leave).length
+    ? (rows.filter(r => r.leave).reduce((s, r) => s + r.leave.remaining, 0) / rows.filter(r => r.leave).length).toFixed(1)
+    : "-";
+
+  return (
+    <div className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-[22px] font-black text-[#1B2B4B]">인사관리부</h2>
+        <span className="text-[12px] text-gray-400">{company} · {now.getFullYear()}년 {now.getMonth() + 1}월 기준</span>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        {[
+          { l: "전체 인원", v: `${rows.length}명` },
+          { l: "이달 평균 출근", v: `${rows.length ? (rows.reduce((s, r) => s + r.workDays, 0) / rows.length).toFixed(1) : 0}일` },
+          { l: "결재 대기 건", v: `${totalPending}건` },
+          { l: "평균 잔여 휴가", v: `${avgRemaining}일` },
+        ].map(s => (
+          <div key={s.l} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
+            <div className="text-[11px] text-gray-400 font-semibold mb-1">{s.l}</div>
+            <div className="text-[20px] font-black text-[#1B2B4B]">{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <table className="w-full text-[13px] border-collapse">
+          <thead>
+            <tr className="bg-[#1B2B4B]">
+              {["이름", "직책", "권한", "입사일", "근속", "구분", "잔여휴가", "이달출근", "병가", "결재대기"].map(h => (
+                <th key={h} className="px-3 py-2.5 text-center text-[12px] font-semibold text-white whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {rows.length === 0 ? (
+              <tr><td colSpan={10} className="py-16 text-center text-[13px] text-gray-400">등록된 인원이 없습니다</td></tr>
+            ) : rows.map((r, idx) => (
+              <tr key={r.uid} className={`hover:bg-blue-50/30 transition cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`} onClick={() => setSelected(r)}>
+                <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{r.name || r.email}</td>
+                <td className="px-3 py-2.5 text-center text-gray-600">{r.position || "-"}</td>
+                <td className="px-3 py-2.5 text-center text-[12px] font-bold text-[#1B2B4B]">{ROLE_LABELS_HR[r.role] || r.role || "-"}</td>
+                <td className="px-3 py-2.5 text-center text-gray-500 text-[12px]">{r.hireDate || "-"}</td>
+                <td className="px-3 py-2.5 text-center text-gray-500 text-[12px]">{r.tenureLabel}</td>
+                <td className="px-3 py-2.5 text-center text-[12px] text-gray-600">{r.leave?.leaveLabel || "-"}</td>
+                <td className="px-3 py-2.5 text-center font-bold text-[#1B2B4B]">{r.leave ? `${r.leave.remaining}일` : "-"}</td>
+                <td className="px-3 py-2.5 text-center text-gray-600">{r.workDays}일</td>
+                <td className="px-3 py-2.5 text-center text-red-500 font-semibold">{r.sickDays || "-"}</td>
+                <td className="px-3 py-2.5 text-center">
+                  {r.pendingApprovals > 0 ? <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-600 border border-amber-200">{r.pendingApprovals}건</span> : <span className="text-gray-300">-</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="text-[11px] text-gray-400 mt-2">행을 클릭하면 상세 정보를 볼 수 있습니다. 입사일은 각 직원이 내정보 탭에서 직접 등록합니다.</div>
+
+      {selected && (
+        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4" onClick={() => setSelected(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className="text-[16px] font-black text-[#1B2B4B] mb-0.5">{selected.name || selected.email}</div>
+            <div className="text-[12px] text-gray-400 mb-4">{selected.position || "직책 미설정"} · {ROLE_LABELS_HR[selected.role] || selected.role}</div>
+            <div className="space-y-2 text-[13px]">
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">이메일</span><span className="font-semibold text-gray-800">{selected.email || "-"}</span></div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">연락처</span><span className="font-semibold text-gray-800">{selected.phone || "-"}</span></div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">입사일</span><span className="font-semibold text-gray-800">{selected.hireDate || "미등록"}</span></div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">근속기간</span><span className="font-semibold text-gray-800">{selected.tenureLabel}</span></div>
+              {selected.leave && (
+                <>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">{selected.leave.leaveLabel} 발생/사용/잔여</span><span className="font-semibold text-gray-800">{selected.leave.entitlement}일 / {selected.leave.used}일 / {selected.leave.remaining}일</span></div>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">병가 / 외근</span><span className="font-semibold text-gray-800">{selected.leave.sickDays}일 / {selected.leave.fieldDays}일</span></div>
+                </>
+              )}
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">이달 출근일수</span><span className="font-semibold text-gray-800">{selected.workDays}일</span></div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100"><span className="text-gray-500">결재 대기</span><span className="font-semibold text-gray-800">{selected.pendingApprovals}건</span></div>
+            </div>
+            <button onClick={() => setSelected(null)} className="w-full mt-4 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-bold hover:bg-gray-50">닫기</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ROLE_LABELS_HR = {
+  totalMaster: "최고관리자",
+  admin: "관리자",
+  hrManager: "인사관리자",
+  user: "실무자",
+  viewer: "조회전용",
+  driver: "기사",
+  shipper: "화주",
+  test: "경리/회계",
+};
 
 // ─────────── PC ERP 관리 ───────────
 function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], dispatchData = [], user }) {

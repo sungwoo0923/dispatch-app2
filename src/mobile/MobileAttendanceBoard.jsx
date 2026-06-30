@@ -15,7 +15,7 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
   const [schedules, setSchedules] = useState([]);
   const [holidays, setHolidays] = useState([]);
 
-  const company = userCompany || localStorage.getItem("userCompany") || "";
+  const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const uid = currentUser?.uid;
   const myName = currentUser?.displayName || currentUser?.name || currentUser?.email?.split("@")[0] || "";
 

@@ -3053,7 +3053,7 @@ onGoAttendance={() => {
         <button onClick={() => { setScheduleOpen(false); }} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div className="p-5 space-y-3">
-        {(role === "superadmin" || role === "totalMaster") && selectedSchedule?.id && (
+        {role === "totalMaster" && selectedSchedule?.id && (
           <div>
             <div className="text-[11px] text-gray-400 mb-1">작성자</div>
             <select
@@ -3141,9 +3141,10 @@ onGoAttendance={() => {
             const me = mobileUsers.find(u => u.id === currentUser?.uid);
             const userName = me?.name || "사용자";
             const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
+            if (role !== "totalMaster" && approversData.length === 0) { alert("결재자를 1명 이상 선택해야 저장할 수 있습니다."); return; }
             if (selectedSchedule?.id) {
               const updatedFields = { type: scheduleForm.type, start: scheduleForm.start, end: scheduleForm.end || scheduleForm.start, memo: scheduleForm.memo, approvers: approversData };
-              if ((role === "superadmin" || role === "totalMaster") && scheduleForm.authorName) updatedFields.name = scheduleForm.authorName;
+              if (role === "totalMaster" && scheduleForm.authorName) updatedFields.name = scheduleForm.authorName;
               await updateDoc(doc(db, "schedules", selectedSchedule.id), updatedFields);
               setSelectedSchedule(prev => ({ ...prev, ...updatedFields }));
             } else {
@@ -3603,7 +3604,7 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "attendance" && (
           <MobileAttendanceBoard
-            userCompany={userCompany || localStorage.getItem("userCompany") || ""}
+            userCompany={localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || ""}
             role={role}
             currentUser={currentUser}
             cardVersionB={cardVersionB}

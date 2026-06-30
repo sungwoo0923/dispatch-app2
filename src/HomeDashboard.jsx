@@ -1059,7 +1059,7 @@ React.useEffect(() => {
       {scheduleOpen && (
         <Modal title="휴가 / 외근 일정 등록" onClose={() => setScheduleOpen(false)}>
           <div className="space-y-3">
-            {(role === "admin" || role === "totalMaster") && (
+            {role === "totalMaster" && (
               <div>
                 <div className="text-[11px] text-gray-400 mb-1">작성자</div>
                 <select className={formInput} value={scheduleForm.authorName} onChange={e => setScheduleForm({ ...scheduleForm, authorName: e.target.value })}>
@@ -1108,7 +1108,8 @@ React.useEffect(() => {
               const me = users.find(u => u.id === user?.uid);
               const userName = me?.name || "사용자";
               const approversData = scheduleForm.approvers.filter(a => a.uid).map(a => ({ uid: a.uid, name: a.name, status: a.status || "pending" }));
-              const selectedAuthor = (role === "admin" || role === "totalMaster") && scheduleForm.authorName
+              if (role !== "totalMaster" && approversData.length === 0) { alert("결재자를 1명 이상 선택해야 저장할 수 있습니다."); return; }
+              const selectedAuthor = role === "totalMaster" && scheduleForm.authorName
                 ? users.find(u => u.name === scheduleForm.authorName)
                 : null;
               if (selectedSchedule?.id) {
