@@ -21,7 +21,7 @@ import ExecutiveDashboard from "./ExecutiveDashboard";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import AttendanceBoard from "./AttendanceBoard";
-import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate } from "./attendanceUtils";
+import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
 
 // ================= 카운트 애니메이션 =================
@@ -1983,7 +1983,10 @@ useEffect(() => {
         return;
       }
 
-      if (isWeekend(today)) {
+      const holidaySnap = await getDocs(query(collection(db, "holidays"), where("companyName", "==", company)));
+      const myHolidays = holidaySnap.docs.map(d => d.data());
+
+      if (isWeekend(today) || isHoliday(today, myHolidays)) {
         setWeekendCheckPopup(true);
         return;
       }
@@ -2114,10 +2117,10 @@ useEffect(() => {
       return docCompany === myCompany;
     });
 
-    // 관리자/경리회계는 회사 내 전체 데이터
-    if (role === "admin" || role === "test" || role === "viewer") return byCompany;
+    // 실시간배차현황/배차현황 둘 다 접근 가능한 권한(관리자/경리회계/실무자/조회전용)은 회사 내 전체 데이터
+    if (role === "admin" || role === "test" || role === "viewer" || role === "user") return byCompany;
 
-    // 일반 계정은 회사 내 본인 데이터만
+    // 그 외 권한은 회사 내 본인 데이터만
     return byCompany.filter(o =>
       !o?.작성자 || o?.작성자 === user.email
     );

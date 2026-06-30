@@ -31,11 +31,17 @@ export function findApprovedLeaveForDate(schedules, uid, dateStr) {
 export const ATTENDANCE_STATUS_COLOR = {
   "출근": "bg-[#1B2B4B] text-white",
   "휴무": "bg-gray-100 text-gray-400",
-  "연차": "bg-[#3A4F7A] text-white",
-  "오전반차": "bg-[#3A4F7A] text-white",
-  "오후반차": "bg-[#3A4F7A] text-white",
-  "외근": "bg-[#5A6E99] text-white",
-  "병가": "bg-[#5A6E99] text-white",
-  "경조사": "bg-[#5A6E99] text-white",
-  "조퇴": "bg-[#5A6E99] text-white",
+  "공휴일": "bg-gray-200 text-gray-500",
+  "연차": "bg-violet-700 text-white",
+  "오전반차": "bg-amber-600 text-white",
+  "오후반차": "bg-amber-700 text-white",
+  "외근": "bg-blue-700 text-white",
+  "병가": "bg-red-700 text-white",
+  "경조사": "bg-emerald-700 text-white",
+  "조퇴": "bg-orange-700 text-white",
 };
+
+// 공휴일 여부 — holidays: [{date:"YYYY-MM-DD", label}]
+export function isHoliday(dateStr, holidays) {
+  return (holidays || []).some(h => h.date === dateStr);
+}
