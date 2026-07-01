@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDoc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday, KR_NATIONAL_HOLIDAYS } from "./attendanceUtils";
 
@@ -41,6 +41,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [editScheduleEmp, setEditScheduleEmp] = useState(null);
   const [editWorkStart, setEditWorkStart] = useState("09:00");
   const [editWorkEnd, setEditWorkEnd] = useState("18:00");
+
+  // 일괄 출근 복구
+  const [restoring, setRestoring] = useState(false);
 
   const company = userCompany || localStorage.getItem("userCompany") || "";
   const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -118,6 +121,59 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const saveWorkSchedule = async (uid) => {
     await setDoc(doc(db, "users", uid), { workStartTime: editWorkStart, workEndTime: editWorkEnd }, { merge: true });
     setEditScheduleEmp(null);
+  };
+
+  // ─── 7월 이전 기록 일괄 복구 ────────────────────────────────
+  const handleBulkRestore = async () => {
+    if (!window.confirm(`${company} 회사의 모든 직원에 대해 기록이 없는 과거 평일(주말·공휴일 제외)을 출근으로 일괄 등록합니다.\n\n계속 진행하시겠습니까?`)) return;
+    setRestoring(true);
+    try {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      // 2026년 1월 1일부터 어제까지 (당일 제외)
+      const startDate = new Date("2026-01-01");
+
+      let batch = writeBatch(db);
+      let count = 0;
+      let batchCount = 0;
+
+      for (const emp of employees) {
+        const cur = new Date(startDate);
+        while (cur < today) {
+          const ds = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+          if (ds >= todayStr) { cur.setDate(cur.getDate() + 1); continue; }
+          if (!isWeekend(ds) && !isHoliday(ds, holidays)) {
+            const existing = recordMap[`${emp.uid}_${ds}`];
+            if (!existing) {
+              const attRef = doc(db, "attendance", `${ds}_${emp.uid}`);
+              const leaveLabel = findApprovedLeaveForDate(schedules, emp.uid, ds, emp.name || emp.email);
+              batch.set(attRef, {
+                uid: emp.uid, name: emp.name || emp.email || "",
+                date: ds, month: ds.slice(0, 7),
+                status: leaveLabel || "출근",
+                checkInTime: leaveLabel ? null : `${ds}T09:00:00`,
+                source: "bulk_restore",
+                companyName: company,
+              }, { merge: true });
+              count++;
+              batchCount++;
+              if (batchCount >= 490) {
+                await batch.commit();
+                batch = writeBatch(db);
+                batchCount = 0;
+              }
+            }
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+      if (batchCount > 0) await batch.commit();
+      alert(`완료: ${count}개 기록이 복구되었습니다.`);
+    } catch (e) {
+      alert("복구 중 오류가 발생했습니다: " + e.message);
+    } finally {
+      setRestoring(false);
+    }
   };
 
   // ─── 오늘 퇴근 처리 ─────────────────────────────────────────
@@ -240,6 +296,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <div className="flex items-center gap-2">
           {isAdmin && (
             <>
+              <button onClick={handleBulkRestore} disabled={restoring}
+                className="px-3 py-1.5 rounded-lg border border-orange-300 text-[13px] font-bold text-orange-600 hover:bg-orange-50 disabled:opacity-40 transition">
+                {restoring ? "복구 중..." : "과거기록 복구"}
+              </button>
               <button onClick={() => { setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
                 className={`px-3 py-1.5 rounded-lg border text-[13px] font-bold transition ${showOfficePanel ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B] hover:bg-gray-50"}`}>
                 출근지 설정
@@ -475,9 +535,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         </div>
       )}
 
-      {/* 근무시간 편집 모달 */}
+      {/* 근무시간 편집 모달 - 월간요약 팝업보다 높은 z-index */}
       {editScheduleEmp && (
-        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4" onClick={() => setEditScheduleEmp(null)}>
+        <div className="fixed inset-0 bg-black/50 z-[999999] flex items-center justify-center p-4" onClick={() => setEditScheduleEmp(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5" onClick={e => e.stopPropagation()}>
             <div className="text-[15px] font-black text-[#1B2B4B] mb-1">{editScheduleEmp.name || editScheduleEmp.email}</div>
             <div className="text-[12px] text-gray-400 mb-4">정규 근무시간을 설정합니다.</div>

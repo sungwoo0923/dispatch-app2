@@ -3,11 +3,14 @@ import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/fire
 import { db } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 
+const ADMIN_ROLES = ["totalMaster", "admin"];
+
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
 }
 
-export default function MobileAttendanceBoard({ userCompany, currentUser }) {
+export default function MobileAttendanceBoard({ userCompany, role, currentUser }) {
+  const isAdmin = ADMIN_ROLES.includes(role);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -16,6 +19,13 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
   const [holidays, setHolidays] = useState([]);
   const [myUserDoc, setMyUserDoc] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
+
+  // 출근지 설정
+  const [officeLocation, setOfficeLocation] = useState(null);
+  const [showOfficePanel, setShowOfficePanel] = useState(false);
+  const [officeInput, setOfficeInput] = useState({ lat: "", lng: "", address: "" });
+  const [savingOffice, setSavingOffice] = useState(false);
+  const [gettingLoc, setGettingLoc] = useState(false);
 
   const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const uid = currentUser?.uid;
@@ -55,6 +65,41 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
     }, () => {});
     return () => unsub();
   }, [company]);
+
+  // 출근지 구독
+  useEffect(() => {
+    if (!company) return;
+    const unsub = onSnapshot(doc(db, "companySettings", company), snap => {
+      const data = snap.data();
+      setOfficeLocation(data?.officeLocation || null);
+      if (data?.officeLocation) {
+        setOfficeInput({ lat: String(data.officeLocation.lat), lng: String(data.officeLocation.lng), address: data.officeLocation.address || "" });
+      }
+    }, () => {});
+    return () => unsub();
+  }, [company]);
+
+  const saveOfficeLocation = async () => {
+    const lat = parseFloat(officeInput.lat);
+    const lng = parseFloat(officeInput.lng);
+    if (isNaN(lat) || isNaN(lng)) { alert("올바른 위도/경도를 입력해주세요."); return; }
+    setSavingOffice(true);
+    await setDoc(doc(db, "companySettings", company), {
+      officeLocation: { lat, lng, address: officeInput.address || "" }
+    }, { merge: true });
+    setSavingOffice(false);
+    setShowOfficePanel(false);
+  };
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) { alert("위치 기능을 지원하지 않습니다."); return; }
+    setGettingLoc(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => { setOfficeInput({ lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6), address: "현재 위치" }); setGettingLoc(false); },
+      () => { alert("위치 정보를 가져올 수 없습니다."); setGettingLoc(false); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const recordMap = useMemo(() => {
     const m = {};
@@ -105,6 +150,51 @@ export default function MobileAttendanceBoard({ userCompany, currentUser }) {
 
   return (
     <div className="px-3 py-3 space-y-3 pb-24">
+      {/* 관리자: 출근지 설정 */}
+      {isAdmin && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <div className="text-[13px] font-bold text-[#1B2B4B]">출근지 설정</div>
+              {officeLocation ? (
+                <div className="text-[11px] text-blue-600 mt-0.5">{officeLocation.address || `${officeLocation.lat?.toFixed(5)}, ${officeLocation.lng?.toFixed(5)}`}</div>
+              ) : (
+                <div className="text-[11px] text-gray-400 mt-0.5">미설정 — 설정 후 GPS 자동 출근 활성화</div>
+              )}
+            </div>
+            <button onClick={() => setShowOfficePanel(v => !v)}
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border transition ${showOfficePanel ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B]"}`}>
+              {showOfficePanel ? "닫기" : "설정"}
+            </button>
+          </div>
+          {showOfficePanel && (
+            <div className="border-t border-gray-100 pt-3 space-y-2">
+              <button onClick={getCurrentLocation} disabled={gettingLoc}
+                className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                {gettingLoc ? "위치 가져오는 중..." : "현재 위치를 출근지로 설정"}
+              </button>
+              <div className="text-[11px] text-gray-400 text-center">또는 직접 입력</div>
+              <div className="flex gap-2">
+                <input type="number" step="0.000001" placeholder="위도 (예: 37.566826)"
+                  value={officeInput.lat} onChange={e => setOfficeInput(p => ({ ...p, lat: e.target.value }))}
+                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                <input type="number" step="0.000001" placeholder="경도 (예: 126.9779)"
+                  value={officeInput.lng} onChange={e => setOfficeInput(p => ({ ...p, lng: e.target.value }))}
+                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+              </div>
+              <input type="text" placeholder="장소명 (예: 본사 사무실)"
+                value={officeInput.address} onChange={e => setOfficeInput(p => ({ ...p, address: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+              <div className="text-[10px] text-gray-400">반경 100m 이내 진입 시 자동 출근 · 300m 이탈 시 자동 퇴근</div>
+              <button onClick={saveOfficeLocation} disabled={savingOffice}
+                className="w-full py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold disabled:opacity-40">
+                {savingOffice ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 오늘 출퇴근 현황 카드 */}
       {month === now.getMonth() + 1 && year === now.getFullYear() && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
