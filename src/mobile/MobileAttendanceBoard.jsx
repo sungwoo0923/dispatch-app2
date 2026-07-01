@@ -28,6 +28,20 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
   const [checkInRequests, setCheckInRequests] = useState([]);
   const [requestingCheckIn, setRequestingCheckIn] = useState(false);
   const [showRequestPanel, setShowRequestPanel] = useState(false);
+  const [changeRequests, setChangeRequests] = useState([]);
+  const [showChangeReqPanel, setShowChangeReqPanel] = useState(false);
+
+  // 수정 요청 모달 (비관리자)
+  const [mobileChangeReqCell, setMobileChangeReqCell] = useState(null);
+  const [mobileChangeReqStatus, setMobileChangeReqStatus] = useState("출근");
+  const [mobileChangeReqTime, setMobileChangeReqTime] = useState("09:00");
+  const [mobileChangeReqCheckOut, setMobileChangeReqCheckOut] = useState("");
+  const [mobileChangeReqReason, setMobileChangeReqReason] = useState("");
+  const [submittingMobileChangeReq, setSubmittingMobileChangeReq] = useState(false);
+
+  // 거절 처리 (관리자 패널 인라인)
+  const [changeReqRejectId, setChangeReqRejectId] = useState(null);
+  const [changeReqRejectReason, setChangeReqRejectReason] = useState("");
 
   // 출근 요청 시간 모달
   const [showCheckInRequestModal, setShowCheckInRequestModal] = useState(false);
@@ -137,6 +151,19 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
     return () => unsub();
   }, [company, uid, isAdmin]);
 
+  // 수정 요청 구독
+  useEffect(() => {
+    if (!company || !uid) return;
+    const canEdit = role === "totalMaster" || role === "hrManager";
+    const q = canEdit
+      ? query(collection(db, "attendanceChangeRequests"), where("companyName", "==", company), where("status", "==", "pending"))
+      : query(collection(db, "attendanceChangeRequests"), where("uid", "==", uid));
+    const unsub = onSnapshot(q, snap => {
+      setChangeRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [company, uid, role]);
+
   const handleApproveRequest = async (req) => {
     await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
       uid: req.uid, name: req.name, date: req.date,
@@ -145,10 +172,72 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       source: "request_approved",
     }, { merge: true });
     await deleteDoc(doc(db, "attendanceRequests", req.id));
+    await addDoc(collection(db, "notifications"), {
+      toUid: req.uid, type: "attendance_result", status: "approved",
+      msg: `[출근요청] ${req.date} 출근 요청이 승인되었습니다.`,
+      read: false, createdAt: serverTimestamp(), companyName: company,
+    });
   };
 
   const handleRejectRequest = async (req) => {
     await deleteDoc(doc(db, "attendanceRequests", req.id));
+    await addDoc(collection(db, "notifications"), {
+      toUid: req.uid, type: "attendance_result", status: "rejected",
+      msg: `[출근요청] ${req.date} 출근 요청이 거절되었습니다.`,
+      read: false, createdAt: serverTimestamp(), companyName: company,
+    });
+  };
+
+  const approveMobileChangeRequest = async (req) => {
+    await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
+      uid: req.uid, name: req.name, date: req.date,
+      month: req.date.slice(0, 7), companyName: company,
+      status: req.requestedStatus,
+      checkInTime: req.requestedCheckIn || null,
+      checkOutTime: req.requestedCheckOut || null,
+      source: "change_request_approved",
+    }, { merge: true });
+    await setDoc(doc(db, "attendanceChangeRequests", req.id), { status: "approved" }, { merge: true });
+    await addDoc(collection(db, "notifications"), {
+      toUid: req.uid, type: "attendance_result", status: "approved",
+      msg: `[출근수정] ${req.date} 수정 요청이 승인되었습니다.`,
+      read: false, createdAt: serverTimestamp(), companyName: company,
+    });
+  };
+
+  const rejectMobileChangeRequest = async (req, reason) => {
+    await setDoc(doc(db, "attendanceChangeRequests", req.id), { status: "rejected", rejectionReason: reason }, { merge: true });
+    await addDoc(collection(db, "notifications"), {
+      toUid: req.uid, type: "attendance_result", status: "rejected",
+      rejectionReason: reason,
+      msg: `[출근수정] ${req.date} 수정 요청이 거절되었습니다.`,
+      read: false, createdAt: serverTimestamp(), companyName: company,
+    });
+    setChangeReqRejectId(null);
+    setChangeReqRejectReason("");
+  };
+
+  const submitMobileChangeRequest = async () => {
+    if (!mobileChangeReqCell || !uid) return;
+    setSubmittingMobileChangeReq(true);
+    try {
+      const { date } = mobileChangeReqCell;
+      const checkInIso = mobileChangeReqStatus === "출근" && mobileChangeReqTime ? `${date}T${mobileChangeReqTime}:00` : null;
+      const checkOutIso = mobileChangeReqStatus === "출근" && mobileChangeReqCheckOut ? `${date}T${mobileChangeReqCheckOut}:00` : null;
+      await addDoc(collection(db, "attendanceChangeRequests"), {
+        uid, name: myName, date,
+        requestedStatus: mobileChangeReqStatus,
+        requestedCheckIn: checkInIso,
+        requestedCheckOut: checkOutIso,
+        reason: mobileChangeReqReason,
+        companyName: company, status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      setMobileChangeReqCell(null);
+      setMobileChangeReqReason("");
+    } finally {
+      setSubmittingMobileChangeReq(false);
+    }
   };
 
   const recordMap = useMemo(() => {
@@ -156,6 +245,12 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
     records.forEach(r => { m[r.date] = r; });
     return m;
   }, [records]);
+
+  const rejectedChangeMap = useMemo(() => {
+    const m = {};
+    changeRequests.filter(r => r.status === "rejected").forEach(r => { m[r.date] = r.rejectionReason || "사유 없음"; });
+    return m;
+  }, [changeRequests]);
 
   const numDays = daysInMonth(year, month);
   const todayRec = recordMap[todayDateStr];
@@ -281,17 +376,73 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
           {showRequestPanel && (
             <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
               {checkInRequests.map(req => (
-                <div key={req.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
-                  <div>
-                    <div className="text-[13px] font-bold text-[#1B2B4B]">{req.name}</div>
-                    <div className="text-[11px] text-gray-500">{req.date} · 요청 {fmtTime(req.requestedAt)}</div>
+                <div key={req.id} className="bg-gray-50 rounded-xl px-3 py-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[13px] font-bold text-[#1B2B4B]">{req.name}</div>
+                      <div className="text-[11px] text-gray-500">{req.date} · 요청 {fmtTime(req.requestedAt)}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleApproveRequest(req)}
+                        className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
+                      <button onClick={() => setChangeReqRejectId(req.id)}
+                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => handleApproveRequest(req)}
-                      className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
-                    <button onClick={() => handleRejectRequest(req)}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
+                  {changeReqRejectId === req.id && (
+                    <div className="mt-2 flex gap-1.5">
+                      <input type="text" placeholder="거절 사유" value={changeReqRejectReason} onChange={e => setChangeReqRejectReason(e.target.value)}
+                        className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[#1B2B4B]" />
+                      <button onClick={() => handleRejectRequest(req, changeReqRejectReason)}
+                        className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-[12px] font-bold">확인</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 관리자: 수정 요청 처리 패널 */}
+      {canEditAttendance && changeRequests.filter(r => r.status === "pending").length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3">
+          <button onClick={() => setShowChangeReqPanel(v => !v)}
+            className="w-full flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-bold text-[#1B2B4B]">수정 요청</span>
+              <span className="px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{changeRequests.filter(r => r.status === "pending").length}건</span>
+            </div>
+            <span className="text-gray-400 text-[12px]">{showChangeReqPanel ? "접기" : "펼치기"}</span>
+          </button>
+          {showChangeReqPanel && (
+            <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
+              {changeRequests.filter(r => r.status === "pending").map(req => (
+                <div key={req.id} className="bg-gray-50 rounded-xl px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-[13px] font-bold text-[#1B2B4B]">{req.name} · {req.date}</div>
+                      <div className="text-[11px] text-gray-500">
+                        {req.requestedStatus}{req.requestedCheckIn ? ` · ${req.requestedCheckIn.slice(11, 16)}` : ""}
+                        {req.requestedCheckOut ? ` ~ ${req.requestedCheckOut.slice(11, 16)}` : ""}
+                      </div>
+                      {req.reason && <div className="text-[11px] text-gray-400 mt-0.5">사유: {req.reason}</div>}
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button onClick={() => approveMobileChangeRequest(req)}
+                        className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
+                      <button onClick={() => { setChangeReqRejectId(req.id); setChangeReqRejectReason(""); }}
+                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
+                    </div>
                   </div>
+                  {changeReqRejectId === req.id && (
+                    <div className="mt-2 flex gap-1.5">
+                      <input type="text" placeholder="거절 사유" value={changeReqRejectReason} onChange={e => setChangeReqRejectReason(e.target.value)}
+                        className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[#1B2B4B]" />
+                      <button onClick={() => rejectMobileChangeRequest(req, changeReqRejectReason)}
+                        className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-[12px] font-bold">확인</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -378,20 +529,31 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
               rec?.checkOutTime ? `퇴근 ${fmtTime(rec.checkOutTime)}` : "",
             ].filter(Boolean).join(" · ");
             const isPastOrToday = ds <= todayDateStr;
+            const hasRejected = !!rejectedChangeMap[ds];
+            const clickable = isPastOrToday && (canEditAttendance || true); // own cell only
             return (
-              <div key={i} className={`rounded-lg flex flex-col items-center justify-center py-1.5 relative ${ds === todayDateStr ? "ring-2 ring-[#1B2B4B]" : ""} ${isPastOrToday && canEditAttendance ? "cursor-pointer active:bg-gray-50" : ""}`}
+              <div key={i} className={`rounded-lg flex flex-col items-center justify-center py-1.5 relative ${ds === todayDateStr ? "ring-2 ring-[#1B2B4B]" : ""} ${isPastOrToday ? "cursor-pointer active:bg-gray-50" : ""}`}
                 title={tooltip}
                 onClick={() => {
-                  if (!isPastOrToday || !canEditAttendance) return;
-                  setMobileEditCell({ date: ds, status, rec });
-                  setMobileEditStatus(status || "출근");
-                  setMobileEditTime(rec?.checkInTime ? fmtTime(rec.checkInTime) : "09:00");
-                  setMobileEditCheckOut(rec?.checkOutTime ? fmtTime(rec.checkOutTime) : "");
-                  setMobileEditLateReason(rec?.lateReason || "");
+                  if (!isPastOrToday) return;
+                  if (canEditAttendance) {
+                    setMobileEditCell({ date: ds, status, rec });
+                    setMobileEditStatus(status || "출근");
+                    setMobileEditTime(rec?.checkInTime ? fmtTime(rec.checkInTime) : "09:00");
+                    setMobileEditCheckOut(rec?.checkOutTime ? fmtTime(rec.checkOutTime) : "");
+                    setMobileEditLateReason(rec?.lateReason || "");
+                  } else {
+                    setMobileChangeReqCell({ date: ds, status, rec });
+                    setMobileChangeReqStatus(status || "출근");
+                    setMobileChangeReqTime(rec?.checkInTime ? fmtTime(rec.checkInTime) : "09:00");
+                    setMobileChangeReqCheckOut(rec?.checkOutTime ? fmtTime(rec.checkOutTime) : "");
+                    setMobileChangeReqReason("");
+                  }
                 }}>
                 <div className="text-[11px] font-bold text-gray-500 mb-0.5">{d}</div>
                 <div className={`w-full mx-0.5 rounded text-[9px] font-bold py-1 text-center ${colorCls}`}>{label || "·"}</div>
                 {late && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" />}
+                {hasRejected && !late && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" title={rejectedChangeMap[ds]} />}
               </div>
             );
           })}
@@ -446,6 +608,61 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
               }} disabled={requestingCheckIn || !requestCheckInTime}
                 className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
                 {requestingCheckIn ? "요청 중..." : "요청"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 수정 요청 모달 (비관리자) */}
+      {mobileChangeReqCell && (
+        <div className="fixed inset-0 z-[9999] bg-black/40 flex items-end justify-center" onClick={() => setMobileChangeReqCell(null)}>
+          <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[15px] font-bold text-[#1B2B4B]">수정 요청</div>
+                <div className="text-[12px] text-gray-500">{mobileChangeReqCell.date}</div>
+              </div>
+              <button onClick={() => setMobileChangeReqCell(null)} className="text-gray-400 text-[20px] font-bold">×</button>
+            </div>
+            {rejectedChangeMap[mobileChangeReqCell.date] && (
+              <div className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                <div className="text-[11px] font-bold text-gray-500 mb-0.5">이전 요청 거절 사유</div>
+                <div className="text-[12px] text-gray-700">{rejectedChangeMap[mobileChangeReqCell.date]}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-[12px] font-semibold text-gray-600 mb-2">상태</div>
+              <select value={mobileChangeReqStatus} onChange={e => setMobileChangeReqStatus(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[14px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none">
+                {["출근","휴무","연차","오전반차","오후반차","외근","병가","경조사","조퇴"].map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            {mobileChangeReqStatus === "출근" && (
+              <>
+                <div>
+                  <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
+                  <input type="time" value={mobileChangeReqTime} onChange={e => setMobileChangeReqTime(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                </div>
+                <div>
+                  <div className="text-[12px] font-semibold text-gray-600 mb-1">퇴근 시간 (선택)</div>
+                  <input type="time" value={mobileChangeReqCheckOut} onChange={e => setMobileChangeReqCheckOut(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                </div>
+              </>
+            )}
+            <div>
+              <div className="text-[12px] font-semibold text-gray-600 mb-1">요청 사유</div>
+              <textarea placeholder="변경 요청 사유를 입력하세요" value={mobileChangeReqReason} onChange={e => setMobileChangeReqReason(e.target.value)} rows={2}
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[13px] text-[#1B2B4B] outline-none focus:border-[#1B2B4B] resize-none" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setMobileChangeReqCell(null)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-[14px] font-bold text-gray-600">취소</button>
+              <button onClick={submitMobileChangeRequest} disabled={submittingMobileChangeReq}
+                className="flex-2 px-8 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-50">
+                {submittingMobileChangeReq ? "요청 중..." : "수정 요청"}
               </button>
             </div>
           </div>

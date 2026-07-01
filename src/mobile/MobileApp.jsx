@@ -1601,6 +1601,16 @@ useEffect(() => {
       } else if (data.type === "re_request") {
         msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 재요청이 있습니다.`;
         notifStatus = "request";
+      } else if (data.type === "attendance_change_request") {
+        msg = `[출근수정요청] ${data.fromName || "직원"}님이 ${data.date || ""} 수정 요청을 했습니다.`;
+        notifStatus = "request";
+      } else if (data.type === "attendance_check_in_request") {
+        msg = `[출근요청] ${data.fromName || "직원"}님이 ${data.date || ""} 출근 요청을 했습니다.`;
+        notifStatus = "request";
+      } else if (data.type === "attendance_result") {
+        const statusLabel = data.status === "approved" ? "승인" : "거절";
+        msg = data.msg || `[출근수정] 요청이 ${statusLabel}되었습니다.`;
+        notifStatus = data.status;
       } else {
         const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
         msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;
