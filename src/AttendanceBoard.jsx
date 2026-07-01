@@ -23,7 +23,8 @@ function fmtTime(iso) {
 
 export default function AttendanceBoard({ userCompany, role, user }) {
   const isAdmin = ADMIN_ROLES.includes(role);
-  const canEditAttendance = role === "totalMaster" || role === "hrManager";
+  const canApproveRequests = role === "totalMaster" || role === "hrManager";
+  const canEditAttendance = role === "totalMaster";
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -179,7 +180,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   // ─── 수정 요청 구독 ──────────────────────────────────────────
   useEffect(() => {
     if (!company) return;
-    const q = canEditAttendance
+    const q = canApproveRequests
       ? query(collection(db, "attendanceChangeRequests"), where("companyName", "==", company), where("status", "==", "pending"))
       : (user?.uid ? query(collection(db, "attendanceChangeRequests"), where("uid", "==", user.uid)) : null);
     if (!q) return;
@@ -187,7 +188,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       setChangeRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, () => {});
     return () => unsub();
-  }, [company, user?.uid, canEditAttendance]);
+  }, [company, user?.uid, canApproveRequests]);
 
   // ─── PC 알림 구독 ───────────────────────────────────────────
   useEffect(() => {
@@ -287,7 +288,11 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         status: "pending",
         createdAt: serverTimestamp(),
       });
-      const admins = employees.filter(e => e.role === "totalMaster" || e.role === "hrManager");
+      const admins = employees.filter(e =>
+        role === "hrManager"
+          ? e.role === "totalMaster"
+          : (e.role === "totalMaster" || e.role === "hrManager")
+      );
       for (const admin of admins) {
         await addDoc(collection(db, "notifications"), {
           toUid: admin.uid, type: "attendance_change_request",
@@ -436,14 +441,14 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 className={`px-3 py-1.5 rounded-lg border text-[13px] font-bold transition ${showEmpFilter ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B] hover:bg-gray-50"}`}>
                 직원 관리
               </button>
-              {isAdmin && canEditAttendance && checkInRequests.length > 0 && (
+              {isAdmin && canApproveRequests && checkInRequests.length > 0 && (
                 <button onClick={() => setShowRequestPanel(true)}
                   className="relative px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] hover:bg-gray-50 transition">
                   출근요청
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center">{checkInRequests.length}</span>
                 </button>
               )}
-              {canEditAttendance && changeRequests.filter(r => r.status === "pending").length > 0 && (
+              {canApproveRequests && changeRequests.filter(r => r.status === "pending").length > 0 && (
                 <button onClick={() => setShowChangeReqPanel(true)}
                   className="relative px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] hover:bg-gray-50 transition">
                   수정요청
@@ -561,7 +566,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       )}
 
       {/* 출근 요청 모달 */}
-      {showRequestPanel && isAdmin && (
+      {showRequestPanel && canApproveRequests && (
         <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4" onClick={() => setShowRequestPanel(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
@@ -578,7 +583,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       )}
 
       {/* 수정 요청 모달 (hrManager/totalMaster) */}
-      {showChangeReqPanel && canEditAttendance && (
+      {showChangeReqPanel && canApproveRequests && (
         <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4" onClick={() => setShowChangeReqPanel(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
@@ -679,7 +684,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             {label}
           </div>
         ))}
-        {!canEditAttendance && <span className="ml-auto text-gray-400">최고관리자·인사관리자만 직접 수정 가능합니다.</span>}
+        {!canEditAttendance && <span className="ml-auto text-gray-400">최고관리자만 직접 수정 가능합니다.</span>}
         {isAdmin && <span className="ml-auto text-gray-400">이름을 더블클릭하면 월간 요약을 볼 수 있습니다.</span>}
       </div>
 
@@ -795,7 +800,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               {pcNotifQueue.length > 1 && (
                 <div className="text-[11px] text-white/50">외 {pcNotifQueue.length - 1}건</div>
               )}
-              {isRequest && canEditAttendance && (
+              {isRequest && canApproveRequests && (
                 <div className="space-y-2 pt-1">
                   {!pcNotifShowReject ? (
                     <div className="flex gap-2">
@@ -938,7 +943,11 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                     companyName: company, status: "pending",
                     createdAt: serverTimestamp(),
                   });
-                  const admins = employees.filter(e => e.role === "totalMaster" || e.role === "hrManager");
+                  const admins = employees.filter(e =>
+                    role === "hrManager"
+                      ? e.role === "totalMaster"
+                      : (e.role === "totalMaster" || e.role === "hrManager")
+                  );
                   for (const admin of admins) {
                     await addDoc(collection(db, "notifications"), {
                       toUid: admin.uid, type: "attendance_check_in_request",
