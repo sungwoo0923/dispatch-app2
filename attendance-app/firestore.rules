@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Denormalized {companyId} doc per admin account, kept in its own
+    // collection (never `users`) so admin-permission checks never have to
+    // read the same collection/document a rule is currently gating for a
+    // `list` query — that self-referential pattern is unreliable (crashes
+    // the client SDK on some Firestore/emulator versions) and best avoided
+    // even in production.
+    function isAdminOf(companyId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+    }
+
+    match /admins/{uid} {
+      allow get: if isSelf(uid);
+      allow list: if false;
+      allow create: if isSelf(uid);
+      allow update, delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow get: if true; // invite-code lookup during employee signup, before auth exists
+      allow list: if false;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdminOf(companyId);
+    }
+
+    match /users/{uid} {
+      allow get: if isSelf(uid) || isAdminOf(resource.data.companyId);
+      allow list: if isAdminOf(resource.data.companyId);
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSelf(uid) || isAdminOf(resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
+    // Work site info (name/coords/radius) has no PII, so any signed-in
+    // company member may read it; only admins may write.
+    match /workSites/{siteId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOf(request.resource.data.companyId);
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow write: if isAdminOf(request.resource.data.companyId);
+    }
+
+    match /attendance/{docId} {
+      // docId is `${date}_${uid}`; a direct get() for "have I checked in
+      // today?" happens before the document necessarily exists, and
+      // `resource` is null for a not-yet-created doc — dereferencing
+      // resource.data in that case throws rather than cleanly denying, so
+      // the self-check-in `get` is authorized from the docId alone instead.
+      allow get: if isSignedIn() && docId.split('_')[1] == request.auth.uid;
+      allow list: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create, update: if isSignedIn() &&
+        (request.resource.data.uid == request.auth.uid || isAdminOf(request.resource.data.companyId));
+    }
+
+    match /leaves/{leaveId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn() &&
+        (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'pending'));
+    }
+
+    match /payrolls/{payrollId} {
+      // payrollId is `${month}_${uid}`; same not-yet-created-doc reasoning as attendance above.
+      allow get: if isSignedIn() && payrollId.split('_')[1] == request.auth.uid;
+      allow list: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow write: if isAdminOf(request.resource.data.companyId);
+    }
+  }
+}

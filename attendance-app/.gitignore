@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+.env
+.env.local
+*.local
+.firebase/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
