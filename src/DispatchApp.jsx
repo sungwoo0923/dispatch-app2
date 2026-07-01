@@ -13404,7 +13404,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
           )}
 
           {/* 신규 입력 폼 */}
-          <div className="space-y-3">
+          <div className="space-y-3" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit("new"); } }}>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">차량번호</label>
               <input
