@@ -38,6 +38,7 @@ import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { calcLeaveBalance } from "../leaveUtils";
+import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
 
 
 
@@ -1453,6 +1454,118 @@ useEffect(() => {
     setUserReadScheduleAt(0);
   });
 }, [currentUser]);
+
+// ─── 모바일 GPS 자동 출근/퇴근 ─────────────────────────────────
+// officeLocation 구독
+const [mobileOfficeLocation, setMobileOfficeLocation] = useState(null);
+const geoWatchIdRef = useRef(null);
+
+useEffect(() => {
+  const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+  if (!co) return;
+  const unsub = onSnapshot(doc(db, "companySettings", co), snap => {
+    const data = snap.data();
+    setMobileOfficeLocation(data?.officeLocation || null);
+  }, () => {});
+  return () => unsub();
+}, [userCompany]);
+
+// 거리 계산 (미터)
+function _calcDistM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// 오늘 날짜 문자열 (YYYY-MM-DD KST)
+function _todayKSTStr() {
+  const d = new Date(Date.now() + 9 * 3600000);
+  return d.toISOString().slice(0, 10);
+}
+
+// 자동 출근 처리
+async function _autoCheckIn(co, uid, name) {
+  const today = _todayKSTStr();
+  const attRef = doc(db, "attendance", `${today}_${uid}`);
+  const existing = await getDoc(attRef);
+  if (existing.exists()) return;
+
+  const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", uid)));
+  const mySchedules = schedSnap.docs.map(d => d.data());
+  const leaveLabel = findApprovedLeaveForDate(mySchedules, uid, today, name);
+  if (leaveLabel) {
+    await setDoc(attRef, { uid, name, date: today, month: today.slice(0, 7), status: leaveLabel, checkInTime: null, source: "leave", companyName: co }, { merge: true });
+    return;
+  }
+  const holSnap = await getDocs(query(collection(db, "holidays"), where("companyName", "==", co)));
+  const myHols = holSnap.docs.map(d => d.data());
+  if (isWeekend(today) || isHoliday(today, myHols)) return;
+
+  await setDoc(attRef, {
+    uid, name, date: today, month: today.slice(0, 7),
+    status: "출근", checkInTime: new Date().toISOString(),
+    source: "auto_mobile_location", companyName: co,
+  }, { merge: true });
+}
+
+// 자동 퇴근 처리
+async function _autoCheckOut(co, uid, name) {
+  const today = _todayKSTStr();
+  const attRef = doc(db, "attendance", `${today}_${uid}`);
+  const existing = await getDoc(attRef);
+  if (!existing.exists()) return;
+  const data = existing.data();
+  if (data.status !== "출근" || data.checkOutTime) return;
+  await setDoc(attRef, { checkOutTime: new Date().toISOString() }, { merge: true });
+}
+
+// officeLocation이 설정되면 GPS 감지 시작
+useEffect(() => {
+  if (!mobileOfficeLocation || !currentUser?.uid || !navigator.geolocation) return;
+  const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+  const uid = currentUser.uid;
+  const name = currentUser.displayName || currentUser.email?.split("@")[0] || "";
+  let checkedIn = false;
+
+  // 위치 변화 감지
+  const watchId = navigator.geolocation.watchPosition(pos => {
+    const dist = _calcDistM(
+      pos.coords.latitude, pos.coords.longitude,
+      mobileOfficeLocation.lat, mobileOfficeLocation.lng
+    );
+    if (dist <= 100 && !checkedIn) {
+      checkedIn = true;
+      _autoCheckIn(co, uid, name).catch(() => {});
+    }
+    if (dist > 300 && checkedIn) {
+      checkedIn = false;
+      _autoCheckOut(co, uid, name).catch(() => {});
+    }
+  }, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
+
+  geoWatchIdRef.current = watchId;
+  // 앱 시작 시 1회 즉시 위치 체크
+  navigator.geolocation.getCurrentPosition(pos => {
+    const dist = _calcDistM(
+      pos.coords.latitude, pos.coords.longitude,
+      mobileOfficeLocation.lat, mobileOfficeLocation.lng
+    );
+    if (dist <= 100) {
+      checkedIn = true;
+      _autoCheckIn(co, uid, name).catch(() => {});
+    }
+  }, () => {}, { enableHighAccuracy: true, timeout: 15000 });
+
+  return () => {
+    if (geoWatchIdRef.current != null) {
+      navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      geoWatchIdRef.current = null;
+    }
+  };
+}, [mobileOfficeLocation, currentUser?.uid, userCompany]);
+// ─────────────────────────────────────────────────────────────
 
 useEffect(() => {
   if (userReadNoticeAt === null) return;
