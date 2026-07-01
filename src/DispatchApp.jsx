@@ -1992,7 +1992,11 @@ useEffect(() => {
 
     (async () => {
       const existing = await getDoc(attDocRef);
-      if (existing.exists()) return; // 이미 오늘 기록됨
+      if (existing.exists()) {
+        const d = existing.data();
+        // companyName이 올바르게 설정된 유효 기록이면 건너뜀, 비어있으면 갱신
+        if (d.companyName && d.companyName === company) return;
+      }
 
       // 휴가/외근 결재 승인 여부 확인
       const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", user.uid)));
@@ -2021,6 +2025,7 @@ useEffect(() => {
         uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
         status: "출근", checkInTime: new Date().toISOString(), source: "auto", companyName: company,
       });
+      if (window.__sflowShowToast) window.__sflowShowToast(`출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`, "success");
     })();
   }, [user?.uid, userCompany, role]);
 
