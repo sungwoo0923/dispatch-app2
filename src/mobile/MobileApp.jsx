@@ -3804,7 +3804,7 @@ setOpenMemo={setOpenMemo}
         {page === "attendance" && (
           <MobileAttendanceBoard
             userCompany={localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || ""}
-            role={role}
+            role={role || localStorage.getItem("role") || "user"}
             currentUser={currentUser}
             cardVersionB={cardVersionB}
           />

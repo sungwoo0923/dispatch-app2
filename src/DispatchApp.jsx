@@ -1986,6 +1986,7 @@ useEffect(() => {
     const company = role === "totalMaster"
       ? (localStorage.getItem("loginCompany") || userCompany || "")
       : (userCompany || localStorage.getItem("userCompany") || "");
+    if (!company) return; // 회사 정보 로딩 전에는 실행하지 않음 (잘못된 companyName 저장 방지)
     const today = attendanceTodayStr();
     const attDocRef = doc(db, "attendance", `${today}_${user.uid}`);
 
