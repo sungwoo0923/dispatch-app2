@@ -29,6 +29,18 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
   const [requestingCheckIn, setRequestingCheckIn] = useState(false);
   const [showRequestPanel, setShowRequestPanel] = useState(false);
 
+  // 출근 요청 시간 모달
+  const [showCheckInRequestModal, setShowCheckInRequestModal] = useState(false);
+  const [requestCheckInTime, setRequestCheckInTime] = useState("");
+
+  // 모바일 날짜 셀 편집 (hrManager 권한용)
+  const [mobileEditCell, setMobileEditCell] = useState(null);
+  const [mobileEditStatus, setMobileEditStatus] = useState("출근");
+  const [mobileEditTime, setMobileEditTime] = useState("09:00");
+  const [mobileEditCheckOut, setMobileEditCheckOut] = useState("");
+  const [mobileEditLateReason, setMobileEditLateReason] = useState("");
+  const [savingMobileEdit, setSavingMobileEdit] = useState(false);
+
   // 출근지 설정
   const [officeLocation, setOfficeLocation] = useState(null);
   const [showOfficePanel, setShowOfficePanel] = useState(false);
@@ -39,6 +51,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
   const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const uid = currentUser?.uid;
   const myName = myUserDoc?.name || currentUser?.displayName || currentUser?.name || currentUser?.email?.split("@")[0] || "";
+
+  const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   useEffect(() => {
     if (!uid) return;
@@ -123,21 +137,6 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
     return () => unsub();
   }, [company, uid, isAdmin]);
 
-  const handleCheckInRequest = async () => {
-    if (!uid || !company) return;
-    setRequestingCheckIn(true);
-    try {
-      await addDoc(collection(db, "attendanceRequests"), {
-        uid, name: myName, date: todayDateStr,
-        requestedAt: new Date().toISOString(),
-        companyName: company, status: "pending",
-        createdAt: serverTimestamp(),
-      });
-    } finally {
-      setRequestingCheckIn(false);
-    }
-  };
-
   const handleApproveRequest = async (req) => {
     await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
       uid: req.uid, name: req.name, date: req.date,
@@ -159,7 +158,6 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
   }, [records]);
 
   const numDays = daysInMonth(year, month);
-  const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const todayRec = recordMap[todayDateStr];
 
   const firstWeekday = new Date(year, month - 1, 1).getDay();
@@ -198,6 +196,29 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       setCheckingOut(false);
     }
   };
+
+  const saveMobileEdit = async () => {
+    if (!mobileEditCell || !uid) return;
+    setSavingMobileEdit(true);
+    try {
+      const { date } = mobileEditCell;
+      const checkInIso = mobileEditStatus === "출근" && mobileEditTime ? `${date}T${mobileEditTime}:00` : null;
+      const checkOutIso = mobileEditStatus === "출근" && mobileEditCheckOut ? `${date}T${mobileEditCheckOut}:00` : null;
+      await setDoc(doc(db, "attendance", `${date}_${uid}`), {
+        uid, name: myName, date, month: date.slice(0, 7), companyName: company,
+        status: mobileEditStatus || null,
+        checkInTime: checkInIso,
+        checkOutTime: checkOutIso,
+        lateReason: mobileEditLateReason || null,
+        source: "manual_mobile",
+      }, { merge: true });
+      setMobileEditCell(null);
+    } finally {
+      setSavingMobileEdit(false);
+    }
+  };
+
+  const canEditAttendance = role === "totalMaster" || role === "hrManager";
 
   return (
     <div className="px-3 py-3 space-y-3 pb-24">
@@ -248,15 +269,14 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
 
       {/* 관리자: 출근 요청 처리 패널 */}
       {isAdmin && checkInRequests.length > 0 && (
-        <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-3">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3">
           <button onClick={() => setShowRequestPanel(v => !v)}
             className="w-full flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
               <span className="text-[13px] font-bold text-[#1B2B4B]">출근 요청</span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">{checkInRequests.length}건</span>
+              <span className="px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{checkInRequests.length}건</span>
             </div>
-            <span className="text-gray-400 text-[12px]">{showRequestPanel ? "닫기" : "확인"}</span>
+            <span className="text-gray-400 text-[12px]">{showRequestPanel ? "접기" : "펼치기"}</span>
           </button>
           {showRequestPanel && (
             <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
@@ -311,9 +331,13 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 (() => {
                   const myPendingReq = checkInRequests.find(r => r.uid === uid && r.date === todayDateStr);
                   return myPendingReq ? (
-                    <div className="text-[12px] text-amber-600 font-bold px-3 py-2 bg-amber-50 rounded-xl">요청 대기 중...</div>
+                    <div className="text-[12px] text-gray-600 font-bold px-3 py-2 bg-gray-100 rounded-xl">요청 대기 중...</div>
                   ) : (
-                    <button onClick={handleCheckInRequest} disabled={requestingCheckIn}
+                    <button onClick={() => {
+                      const n = new Date();
+                      setRequestCheckInTime(String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0"));
+                      setShowCheckInRequestModal(true);
+                    }} disabled={requestingCheckIn}
                       className="px-4 py-2.5 rounded-xl border-2 border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold disabled:opacity-50">
                       {requestingCheckIn ? "요청 중..." : "출근 요청"}
                     </button>
@@ -353,9 +377,18 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
               rec?.checkInTime ? `출근 ${fmtTime(rec.checkInTime)}` : "",
               rec?.checkOutTime ? `퇴근 ${fmtTime(rec.checkOutTime)}` : "",
             ].filter(Boolean).join(" · ");
+            const isPastOrToday = ds <= todayDateStr;
             return (
-              <div key={i} className={`rounded-lg flex flex-col items-center justify-center py-1.5 relative ${ds === todayDateStr ? "ring-2 ring-[#1B2B4B]" : ""}`}
-                title={tooltip}>
+              <div key={i} className={`rounded-lg flex flex-col items-center justify-center py-1.5 relative ${ds === todayDateStr ? "ring-2 ring-[#1B2B4B]" : ""} ${isPastOrToday && canEditAttendance ? "cursor-pointer active:bg-gray-50" : ""}`}
+                title={tooltip}
+                onClick={() => {
+                  if (!isPastOrToday || !canEditAttendance) return;
+                  setMobileEditCell({ date: ds, status, rec });
+                  setMobileEditStatus(status || "출근");
+                  setMobileEditTime(rec?.checkInTime ? fmtTime(rec.checkInTime) : "09:00");
+                  setMobileEditCheckOut(rec?.checkOutTime ? fmtTime(rec.checkOutTime) : "");
+                  setMobileEditLateReason(rec?.lateReason || "");
+                }}>
                 <div className="text-[11px] font-bold text-gray-500 mb-0.5">{d}</div>
                 <div className={`w-full mx-0.5 rounded text-[9px] font-bold py-1 text-center ${colorCls}`}>{label || "·"}</div>
                 {late && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" />}
@@ -378,6 +411,107 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
         ))}
         <span className="ml-auto text-[10px] text-gray-400">지각: 빨간 점</span>
       </div>
+
+      {/* 출근 요청 시간 입력 모달 */}
+      {showCheckInRequestModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+            <div className="text-[15px] font-bold text-[#1B2B4B] mb-1">출근 요청</div>
+            <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. 관리자 승인 후 출근 처리됩니다.</div>
+            <div className="mb-4">
+              <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
+              <input type="time" value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowCheckInRequestModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-bold text-gray-600">취소</button>
+              <button onClick={async () => {
+                if (!requestCheckInTime) return;
+                setRequestingCheckIn(true);
+                try {
+                  const [h, m] = requestCheckInTime.split(":").map(Number);
+                  const dt = new Date(todayDateStr + "T00:00:00");
+                  dt.setHours(h, m, 0, 0);
+                  await addDoc(collection(db, "attendanceRequests"), {
+                    uid, name: myName, date: todayDateStr,
+                    requestedAt: dt.toISOString(),
+                    companyName: company, status: "pending",
+                    createdAt: serverTimestamp(),
+                  });
+                  setShowCheckInRequestModal(false);
+                } finally {
+                  setRequestingCheckIn(false);
+                }
+              }} disabled={requestingCheckIn || !requestCheckInTime}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                {requestingCheckIn ? "요청 중..." : "요청"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모바일 날짜 편집 모달 (hrManager/totalMaster) */}
+      {mobileEditCell && (
+        <div className="fixed inset-0 z-[9999] bg-black/40 flex items-end justify-center">
+          <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[15px] font-bold text-[#1B2B4B]">{mobileEditCell.date}</div>
+                <div className="text-[12px] text-gray-500">출근 상태 및 시간을 수정합니다.</div>
+              </div>
+              <button onClick={() => setMobileEditCell(null)} className="text-gray-400 text-[20px] font-bold">×</button>
+            </div>
+            <div>
+              <div className="text-[12px] font-semibold text-gray-600 mb-2">상태</div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {["출근", "휴무", "연차", "오전반차", "오후반차", "외근", "병가", "경조사", "조퇴"].map(s => (
+                  <button key={s} onClick={() => setMobileEditStatus(s)}
+                    className={`py-2 rounded-xl text-[12px] font-bold transition ${mobileEditStatus === s ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mobileEditStatus === "출근" && (
+              <>
+                <div>
+                  <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
+                  <input type="time" value={mobileEditTime} onChange={e => setMobileEditTime(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                </div>
+                <div>
+                  <div className="text-[12px] font-semibold text-gray-600 mb-1">퇴근 시간 (선택)</div>
+                  <input type="time" value={mobileEditCheckOut} onChange={e => setMobileEditCheckOut(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                </div>
+                {(() => {
+                  const [sh, sm] = (myUserDoc?.workStartTime || "09:00").split(":").map(Number);
+                  const [ch, cm] = mobileEditTime.split(":").map(Number);
+                  const isLateCheck = ch * 60 + cm > sh * 60 + sm;
+                  return isLateCheck ? (
+                    <div>
+                      <div className="text-[12px] font-semibold text-gray-600 mb-1">지각 사유</div>
+                      <input type="text" placeholder="지각 사유를 입력하세요 (선택)"
+                        value={mobileEditLateReason} onChange={e => setMobileEditLateReason(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[13px] text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                    </div>
+                  ) : null;
+                })()}
+              </>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setMobileEditCell(null)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-[14px] font-bold text-gray-600">취소</button>
+              <button onClick={saveMobileEdit} disabled={savingMobileEdit}
+                className="flex-2 px-8 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-50">
+                {savingMobileEdit ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ function fmtTime(iso) {
 
 export default function AttendanceBoard({ userCompany, role, user }) {
   const isAdmin = ADMIN_ROLES.includes(role);
+  const canEditAttendance = role === "totalMaster" || role === "hrManager";
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -50,10 +51,24 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
   const [hiddenEmpUids, setHiddenEmpUids] = useState([]);
   const [showEmpFilter, setShowEmpFilter] = useState(false);
+  const [empFilterSearch, setEmpFilterSearch] = useState("");
   const [checkInRequests, setCheckInRequests] = useState([]);
   const [showRequestPanel, setShowRequestPanel] = useState(false);
   const [requestingCheckIn, setRequestingCheckIn] = useState(false);
 
+  // 출근 요청 시간 입력 모달
+  const [showCheckInRequestModal, setShowCheckInRequestModal] = useState(false);
+  const [requestCheckInTime, setRequestCheckInTime] = useState("");
+
+  // 수정 요청 상태
+  const [changeRequestCell, setChangeRequestCell] = useState(null);
+  const [changeReqStatus, setChangeReqStatus] = useState("출근");
+  const [changeReqTime, setChangeReqTime] = useState("09:00");
+  const [changeReqCheckOut, setChangeReqCheckOut] = useState("");
+  const [changeReqReason, setChangeReqReason] = useState("");
+  const [submittingChangeReq, setSubmittingChangeReq] = useState(false);
+  const [changeRequests, setChangeRequests] = useState([]);
+  const [showChangeReqPanel, setShowChangeReqPanel] = useState(false);
 
   const company = userCompany || localStorage.getItem("userCompany") || "";
   const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -155,21 +170,18 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     return () => unsub();
   }, [company, user?.uid, isAdmin]);
 
-  const handleCheckInRequest = async () => {
-    if (!user?.uid || !company) return;
-    const myName = employees.find(e => e.uid === user.uid)?.name || user.email || "";
-    setRequestingCheckIn(true);
-    try {
-      await addDoc(collection(db, "attendanceRequests"), {
-        uid: user.uid, name: myName, date: todayDateStr,
-        requestedAt: new Date().toISOString(),
-        companyName: company, status: "pending",
-        createdAt: serverTimestamp(),
-      });
-    } finally {
-      setRequestingCheckIn(false);
-    }
-  };
+  // ─── 수정 요청 구독 ──────────────────────────────────────────
+  useEffect(() => {
+    if (!company) return;
+    const q = canEditAttendance
+      ? query(collection(db, "attendanceChangeRequests"), where("companyName", "==", company), where("status", "==", "pending"))
+      : (user?.uid ? query(collection(db, "attendanceChangeRequests"), where("uid", "==", user.uid)) : null);
+    if (!q) return;
+    const unsub = onSnapshot(q, snap => {
+      setChangeRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [company, user?.uid, canEditAttendance]);
 
   const handleApproveRequest = async (req) => {
     await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
@@ -183,6 +195,46 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
   const handleRejectRequest = async (req) => {
     await deleteDoc(doc(db, "attendanceRequests", req.id));
+  };
+
+  const approveChangeRequest = async (req) => {
+    await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
+      uid: req.uid, name: req.name, date: req.date,
+      month: req.date.slice(0, 7), companyName: company,
+      status: req.requestedStatus,
+      checkInTime: req.requestedCheckIn || null,
+      checkOutTime: req.requestedCheckOut || null,
+      source: "change_request_approved",
+    }, { merge: true });
+    await setDoc(doc(db, "attendanceChangeRequests", req.id), { status: "approved" }, { merge: true });
+  };
+
+  const rejectChangeRequest = async (req, rejectionReason) => {
+    await setDoc(doc(db, "attendanceChangeRequests", req.id), { status: "rejected", rejectionReason }, { merge: true });
+  };
+
+  const submitChangeRequest = async () => {
+    if (!changeRequestCell || !user?.uid) return;
+    setSubmittingChangeReq(true);
+    try {
+      const checkInIso = changeReqStatus === "출근" && changeReqTime ? `${changeRequestCell.date}T${changeReqTime}:00` : null;
+      const checkOutIso = changeReqStatus === "출근" && changeReqCheckOut ? `${changeRequestCell.date}T${changeReqCheckOut}:00` : null;
+      await addDoc(collection(db, "attendanceChangeRequests"), {
+        uid: user.uid, name: changeRequestCell.emp.name || user.email,
+        date: changeRequestCell.date,
+        requestedStatus: changeReqStatus,
+        requestedCheckIn: checkInIso,
+        requestedCheckOut: checkOutIso,
+        reason: changeReqReason,
+        companyName: company,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      setChangeRequestCell(null);
+      setChangeReqReason("");
+    } finally {
+      setSubmittingChangeReq(false);
+    }
   };
 
   // ─── 오늘 퇴근 처리 ─────────────────────────────────────────
@@ -220,7 +272,6 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     if (isWeekend(ds)) return { status: "휴무", rec: null };
     const leave = findApprovedLeaveForDate(schedules, uid, ds, name);
     if (leave) return { status: leave, rec: null };
-    // 기록 없으면 미출근으로 표시 (과거 날짜만)
     return { status: null, rec: null };
   };
 
@@ -312,9 +363,18 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               </button>
               {checkInRequests.length > 0 && (
                 <button onClick={() => setShowRequestPanel(v => !v)}
-                  className="relative px-3 py-1.5 rounded-lg border border-amber-300 text-[13px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition">
+                  className="relative px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] hover:bg-gray-50 transition">
                   출근 요청
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{checkInRequests.length}</span>
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center">{checkInRequests.length}</span>
+                </button>
+              )}
+              {canEditAttendance && changeRequests.filter(r => r.status === "pending").length > 0 && (
+                <button onClick={() => setShowChangeReqPanel(v => !v)}
+                  className="relative px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] hover:bg-gray-50 transition">
+                  수정 요청
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center">
+                    {changeRequests.filter(r => r.status === "pending").length}
+                  </span>
                 </button>
               )}
               <button onClick={() => { setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
@@ -425,56 +485,65 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         </div>
       )}
 
-      {/* 직원 표시 관리 패널 */}
-      {showEmpFilter && isAdmin && (
-        <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">직원 표시 관리 — 체크 해제 시 목록에서 숨김</div>
-          <div className="space-y-2">
-            {employees.map(emp => (
-              <label key={emp.uid} className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox"
-                  checked={!hiddenEmpUids.includes(emp.uid)}
-                  onChange={() => toggleHideEmp(emp.uid)}
-                  className="w-4 h-4 rounded border-gray-300 accent-[#1B2B4B]"
-                />
-                <span className="text-[13px] text-gray-700 font-medium">{emp.name || emp.email}</span>
-                {emp.workStartTime && <span className="text-[11px] text-gray-400">{emp.workStartTime}~{emp.workEndTime}</span>}
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 관리자: 출근 요청 처리 패널 */}
       {isAdmin && checkInRequests.length > 0 && (
-        <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-4 mb-4">
-          <button onClick={() => setShowRequestPanel(v => !v)}
-            className="w-full flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-              <span className="text-[14px] font-bold text-[#1B2B4B]">출근 요청</span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[12px] font-bold">{checkInRequests.length}건</span>
+        <div className="border border-gray-200 rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[13px] font-bold text-[#1B2B4B]">
+              출근 요청 <span className="ml-1 px-1.5 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px]">{checkInRequests.length}</span>
             </div>
-            <span className="text-gray-400 text-[12px] font-semibold">{showRequestPanel ? "닫기" : "확인 ›"}</span>
-          </button>
+            <button onClick={() => setShowRequestPanel(v => !v)} className="text-[12px] text-gray-500 font-semibold">{showRequestPanel ? "접기" : "펼치기"}</button>
+          </div>
           {showRequestPanel && (
-            <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
+            <div className="space-y-1.5">
               {checkInRequests.map(req => (
-                <div key={req.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
+                <div key={req.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                   <div>
-                    <div className="text-[14px] font-bold text-[#1B2B4B]">{req.name}</div>
-                    <div className="text-[12px] text-gray-500">{req.date} 출근 요청 · 요청 시각 {fmtTime(req.requestedAt)}</div>
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">{req.name}</span>
+                    <span className="text-[12px] text-gray-500 ml-2">{req.date} · {fmtTime(req.requestedAt)} 출근 요청</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     <button onClick={() => handleApproveRequest(req)}
-                      className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">승인</button>
+                      className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
                     <button onClick={() => handleRejectRequest(req)}
-                      className="px-4 py-2 rounded-lg border border-gray-200 text-gray-500 text-[13px] font-bold hover:bg-gray-50 transition">거절</button>
+                      className="px-3 py-1 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
                   </div>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 수정 요청 패널 (hrManager/totalMaster) */}
+      {canEditAttendance && changeRequests.length > 0 && (
+        <div className="border border-gray-200 rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[13px] font-bold text-[#1B2B4B]">
+              수정 요청 <span className="ml-1 px-1.5 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px]">{changeRequests.length}</span>
+            </div>
+            <button onClick={() => setShowChangeReqPanel(v => !v)} className="text-[12px] text-gray-500 font-semibold">{showChangeReqPanel ? "접기" : "펼치기"}</button>
+          </div>
+          {showChangeReqPanel && (
+            <div className="space-y-2">
+              {changeRequests.filter(r => r.status === "pending").map(req => (
+                <ChangeReqRow key={req.id} req={req} onApprove={approveChangeRequest} onReject={rejectChangeRequest} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 직원: 거절된 수정 요청 표시 */}
+      {!canEditAttendance && changeRequests.filter(r => r.status === "rejected").length > 0 && (
+        <div className="border border-gray-200 rounded-xl p-3 mb-4">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">거절된 수정 요청</div>
+          {changeRequests.filter(r => r.status === "rejected").map(req => (
+            <div key={req.id} className="bg-gray-50 rounded-lg px-3 py-2 mb-1.5">
+              <div className="text-[12px] font-semibold text-gray-700">{req.date} · {req.requestedStatus}</div>
+              <div className="text-[12px] text-gray-500">거절 사유: {req.rejectionReason || "사유 없음"}</div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -504,9 +573,13 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             {!myTodayRec?.status && !isWeekend(todayDateStr) && !isHoliday(todayDateStr, holidays) && (() => {
               const myPendingReq = checkInRequests.find(r => r.uid === user?.uid && r.date === todayDateStr);
               return myPendingReq ? (
-                <div className="text-[12px] text-amber-600 font-bold px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200">요청 대기 중...</div>
+                <div className="text-[12px] text-gray-600 font-bold px-3 py-1.5 bg-gray-100 rounded-lg border border-gray-200">요청 대기 중...</div>
               ) : (
-                <button onClick={handleCheckInRequest} disabled={requestingCheckIn}
+                <button onClick={() => {
+                  const n = new Date();
+                  setRequestCheckInTime(String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0"));
+                  setShowCheckInRequestModal(true);
+                }} disabled={requestingCheckIn}
                   className="px-4 py-2 rounded-lg border-2 border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50">
                   {requestingCheckIn ? "요청 중..." : "출근 요청"}
                 </button>
@@ -528,7 +601,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           {!myTodayRec?.status && !isWeekend(todayDateStr) && !isHoliday(todayDateStr, holidays) && (() => {
             const myPendingReq = checkInRequests.find(r => r.uid === user?.uid && r.date === todayDateStr);
             return myPendingReq ? (
-              <div className="text-[12px] text-amber-600 font-bold px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200">출근 요청 대기 중...</div>
+              <div className="text-[12px] text-gray-600 font-bold px-3 py-1.5 bg-gray-100 rounded-lg border border-gray-200">출근 요청 대기 중...</div>
             ) : null;
           })()}
         </div>
@@ -546,7 +619,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             {label}
           </div>
         ))}
-        {!isAdmin && <span className="ml-auto text-gray-400">관리자만 출근 시간을 수정할 수 있습니다.</span>}
+        {!canEditAttendance && <span className="ml-auto text-gray-400">최고관리자·인사관리자만 직접 수정 가능합니다.</span>}
         {isAdmin && <span className="ml-auto text-gray-400">이름을 더블클릭하면 월간 요약을 볼 수 있습니다.</span>}
       </div>
 
@@ -596,12 +669,29 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                     late ? "지각" : "",
                     rec?.lateReason ? `사유: ${rec.lateReason}` : "",
                   ].filter(Boolean).join(" · ");
+
+                  const isOwnRecord = emp.uid === user?.uid;
+                  const clickable = canEditAttendance || isOwnRecord;
+
                   return (
                     <td key={d} className={`px-0.5 py-1.5 text-center border-b border-gray-50 ${ds === todayDateStr ? "bg-[#1B2B4B]/5" : ""}`}>
                       <button
-                        disabled={!isAdmin}
-                        onClick={() => isAdmin && setEditCell({ uid: emp.uid, name: emp.name || emp.email, date: ds, current: rec })}
-                        className={`w-9 h-7 mx-auto rounded text-[11px] font-bold flex flex-col items-center justify-center relative ${colorCls || "bg-gray-50 text-gray-300"} ${isAdmin ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
+                        disabled={!clickable}
+                        onClick={() => {
+                          if (!clickable) return;
+                          if (canEditAttendance) {
+                            setEditCell({ uid: emp.uid, name: emp.name || emp.email, date: ds, current: rec, workStartTime: emp.workStartTime });
+                          } else if (isOwnRecord) {
+                            const defaultTime = rec?.checkInTime ? fmtTime(rec.checkInTime) : "09:00";
+                            const defaultCheckOut = rec?.checkOutTime ? fmtTime(rec.checkOutTime) : "";
+                            setChangeReqStatus(effStatus || "출근");
+                            setChangeReqTime(defaultTime);
+                            setChangeReqCheckOut(defaultCheckOut);
+                            setChangeReqReason("");
+                            setChangeRequestCell({ emp, date: ds, status: effStatus, rec });
+                          }
+                        }}
+                        className={`w-9 h-7 mx-auto rounded text-[11px] font-bold flex flex-col items-center justify-center relative ${colorCls || "bg-gray-50 text-gray-300"} ${clickable ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
                         title={tooltipText}
                       >
                         <span>{label || "·"}</span>
@@ -627,7 +717,99 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         </div>
       )}
 
-      {/* 근무시간 편집 모달 - 월간요약 팝업보다 높은 z-index */}
+      {/* 수정 요청 모달 (비관리자 본인 레코드) */}
+      {changeRequestCell && (
+        <div className="fixed inset-0 z-[99999] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-4">
+            <div>
+              <div className="text-[15px] font-bold text-[#1B2B4B]">수정 요청</div>
+              <div className="text-[12px] text-gray-500">{changeRequestCell.date} · {changeRequestCell.emp.name}</div>
+            </div>
+            <div>
+              <div className="text-[12px] font-semibold text-gray-600 mb-2">상태</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {["출근", "휴무", "연차", "오전반차", "오후반차", "외근", "병가", "경조사", "조퇴"].map(s => (
+                  <button key={s} onClick={() => setChangeReqStatus(s)}
+                    className={`py-1.5 rounded-lg text-[12px] font-bold ${changeReqStatus === s ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {changeReqStatus === "출근" && (
+              <>
+                <div>
+                  <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
+                  <input type="time" value={changeReqTime} onChange={e => setChangeReqTime(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 text-[14px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                </div>
+                <div>
+                  <div className="text-[12px] font-semibold text-gray-600 mb-1">퇴근 시간 (선택)</div>
+                  <input type="time" value={changeReqCheckOut} onChange={e => setChangeReqCheckOut(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 text-[14px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                </div>
+              </>
+            )}
+            <div>
+              <div className="text-[12px] font-semibold text-gray-600 mb-1">요청 사유</div>
+              <input type="text" placeholder="변경 요청 사유를 입력하세요"
+                value={changeReqReason} onChange={e => setChangeReqReason(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 text-[13px] text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setChangeRequestCell(null)}
+                className="flex-1 py-2.5 rounded-lg border border-gray-200 text-[13px] font-bold text-gray-600">취소</button>
+              <button onClick={submitChangeRequest} disabled={submittingChangeReq}
+                className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                {submittingChangeReq ? "요청 중..." : "요청"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 출근 요청 시간 입력 모달 */}
+      {showCheckInRequestModal && (
+        <div className="fixed inset-0 z-[99999] bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+            <div className="text-[15px] font-bold text-[#1B2B4B] mb-1">출근 요청</div>
+            <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. 관리자 승인 후 출근 처리됩니다.</div>
+            <div className="mb-4">
+              <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
+              <input type="time" value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowCheckInRequestModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-bold text-gray-600">취소</button>
+              <button onClick={async () => {
+                if (!requestCheckInTime) return;
+                setRequestingCheckIn(true);
+                try {
+                  const [h, m] = requestCheckInTime.split(":").map(Number);
+                  const dt = new Date(todayDateStr + "T00:00:00");
+                  dt.setHours(h, m, 0, 0);
+                  const myName = employees.find(e => e.uid === user?.uid)?.name || user?.email || "";
+                  await addDoc(collection(db, "attendanceRequests"), {
+                    uid: user.uid, name: myName, date: todayDateStr,
+                    requestedAt: dt.toISOString(),
+                    companyName: company, status: "pending",
+                    createdAt: serverTimestamp(),
+                  });
+                  setShowCheckInRequestModal(false);
+                } finally {
+                  setRequestingCheckIn(false);
+                }
+              }} disabled={requestingCheckIn || !requestCheckInTime}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                {requestingCheckIn ? "요청 중..." : "요청"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 근무시간 편집 모달 */}
       {editScheduleEmp && (
         <div className="fixed inset-0 bg-black/50 z-[999999] flex items-center justify-center p-4" onClick={() => setEditScheduleEmp(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5" onClick={e => e.stopPropagation()}>
@@ -696,6 +878,70 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             </div>
             <button onClick={() => setSummaryEmp(null)} className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-bold hover:bg-gray-50">닫기</button>
           </div>
+        </div>
+      )}
+
+      {/* 직원 표시 관리 모달 */}
+      {showEmpFilter && isAdmin && (
+        <div className="fixed inset-0 z-[99999] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
+              <div className="text-white font-bold text-[15px]">직원 표시 관리</div>
+              <button onClick={() => setShowEmpFilter(false)} className="text-white/70 hover:text-white font-bold text-[18px]">×</button>
+            </div>
+            <div className="px-4 py-3 border-b border-gray-100">
+              <input type="text" placeholder="이름 검색..."
+                value={empFilterSearch} onChange={e => setEmpFilterSearch(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-[13px] outline-none focus:border-[#1B2B4B]" />
+            </div>
+            <div className="px-4 py-2 max-h-96 overflow-y-auto divide-y divide-gray-50">
+              {employees.filter(emp => !empFilterSearch || (emp.name || emp.email || "").includes(empFilterSearch)).map(emp => (
+                <label key={emp.uid} className="flex items-center gap-3 py-2.5 cursor-pointer">
+                  <input type="checkbox"
+                    checked={!hiddenEmpUids.includes(emp.uid)}
+                    onChange={() => toggleHideEmp(emp.uid)}
+                    className="w-4 h-4 accent-[#1B2B4B]" />
+                  <span className="flex-1 text-[14px] font-semibold text-gray-800">{emp.name || emp.email}</span>
+                  {emp.workStartTime && <span className="text-[11px] text-gray-400">{emp.workStartTime}~{emp.workEndTime || "-"}</span>}
+                </label>
+              ))}
+            </div>
+            <div className="px-4 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setShowEmpFilter(false)}
+                className="px-5 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold">확인</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChangeReqRow({ req, onApprove, onReject }) {
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  return (
+    <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-[13px] font-bold text-[#1B2B4B]">{req.name} · {req.date}</div>
+          <div className="text-[12px] text-gray-500">
+            {req.requestedStatus}{req.requestedCheckIn ? ` · ${req.requestedCheckIn.slice(11, 16)}` : ""}
+            {req.requestedCheckOut ? ` ~ ${req.requestedCheckOut.slice(11, 16)}` : ""}
+          </div>
+          {req.reason && <div className="text-[11px] text-gray-400 mt-0.5">사유: {req.reason}</div>}
+        </div>
+        <div className="flex gap-1.5 shrink-0">
+          <button onClick={() => onApprove(req)} className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
+          <button onClick={() => setShowRejectInput(v => !v)} className="px-3 py-1 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
+        </div>
+      </div>
+      {showRejectInput && (
+        <div className="mt-2 flex gap-1.5">
+          <input type="text" placeholder="거절 사유" value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+            className="flex-1 px-2 py-1 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[#1B2B4B]" />
+          <button onClick={() => onReject(req, rejectReason)}
+            className="px-3 py-1 rounded-lg bg-gray-800 text-white text-[12px] font-bold">확인</button>
         </div>
       )}
     </div>
