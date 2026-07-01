@@ -42104,6 +42104,20 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 
   const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid, myName || user?.displayName, []);
 
+  const yearsOfService = useMemo(() => {
+    if (!hireDate) return null;
+    const hire = new Date(hireDate);
+    const today = new Date();
+    const years = today.getFullYear() - hire.getFullYear();
+    const months = today.getMonth() - hire.getMonth();
+    const totalMonths = years * 12 + months + (today.getDate() >= hire.getDate() ? 0 : -1);
+    const y = Math.floor(totalMonths / 12);
+    const m = totalMonths % 12;
+    if (totalMonths < 0) return null;
+    if (y === 0) return `${m}개월 근속`;
+    return m > 0 ? `${y}년 ${m}개월 근속` : `${y}년 근속`;
+  }, [hireDate]);
+
   return (
     <div className="p-6 max-w-2xl">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -42136,6 +42150,12 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
                 {hireDateSaving && <span className="text-[11px] text-gray-400">저장 중...</span>}
               </div>
+              {yearsOfService && (
+                <div className="px-3 py-2 bg-[#1B2B4B] rounded-xl text-center">
+                  <div className="text-white text-[15px] font-extrabold">{yearsOfService}</div>
+                  <div className="text-white/50 text-[10px] mt-0.5">근속 기간</div>
+                </div>
+              )}
               {leave ? (
                 <div className="grid grid-cols-3 gap-2 pt-1">
                   <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
@@ -42150,7 +42170,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                     <div className="text-[10px] text-white/50 font-semibold mb-0.5">잔여</div>
                     <div className="text-[14px] font-black text-white">{leave.remaining}일</div>
                   </div>
-                  <div className="col-span-3 text-[10px] text-gray-400">
+                  <div className="col-span-3 text-[13px] text-gray-600">
                     총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계 · 휴가/외근 결재 승인 건 기준
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">

@@ -9,6 +9,12 @@ function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
 }
 
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
 export default function MobileAttendanceBoard({ userCompany, role, currentUser }) {
   const isAdmin = ADMIN_ROLES.includes(role);
   const now = new Date();
@@ -129,7 +135,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
 
   const isLate = (rec) => {
     if (!rec?.checkInTime || !myUserDoc?.workStartTime) return false;
-    const [ch, cm] = rec.checkInTime.slice(11, 16).split(":").map(Number);
+    const [ch, cm] = fmtTime(rec.checkInTime).split(":").map(Number);
     const [sh, sm] = myUserDoc.workStartTime.split(":").map(Number);
     return ch * 60 + cm > sh * 60 + sm;
   };
@@ -203,14 +209,14 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
             <div className="space-y-1">
               <div className="flex items-center gap-3 text-[13px]">
                 <span className="text-gray-500">출근</span>
-                <span className="font-bold text-[#1B2B4B]">{todayRec?.checkInTime ? todayRec.checkInTime.slice(11, 16) : "미출근"}</span>
+                <span className="font-bold text-[#1B2B4B]">{todayRec?.checkInTime ? fmtTime(todayRec.checkInTime) : "미출근"}</span>
                 {todayRec?.checkInTime && isLate(todayRec) && (
                   <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-500 text-[11px] font-bold">지각</span>
                 )}
               </div>
               <div className="flex items-center gap-3 text-[13px]">
                 <span className="text-gray-500">퇴근</span>
-                <span className="font-bold text-[#1B2B4B]">{todayRec?.checkOutTime ? todayRec.checkOutTime.slice(11, 16) : "-"}</span>
+                <span className="font-bold text-[#1B2B4B]">{todayRec?.checkOutTime ? fmtTime(todayRec.checkOutTime) : "-"}</span>
               </div>
               {myUserDoc?.workStartTime && (
                 <div className="text-[11px] text-gray-400">정규: {myUserDoc.workStartTime} ~ {myUserDoc.workEndTime || "-"}</div>
@@ -251,8 +257,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
             const late = status === "출근" && isLate(rec);
             const tooltip = [
               status || "",
-              rec?.checkInTime ? `출근 ${rec.checkInTime.slice(11, 16)}` : "",
-              rec?.checkOutTime ? `퇴근 ${rec.checkOutTime.slice(11, 16)}` : "",
+              rec?.checkInTime ? `출근 ${fmtTime(rec.checkInTime)}` : "",
+              rec?.checkOutTime ? `퇴근 ${fmtTime(rec.checkOutTime)}` : "",
             ].filter(Boolean).join(" · ");
             return (
               <div key={i} className={`rounded-lg flex flex-col items-center justify-center py-1.5 relative ${ds === todayDateStr ? "ring-2 ring-[#1B2B4B]" : ""}`}

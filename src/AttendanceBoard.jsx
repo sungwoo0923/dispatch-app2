@@ -15,6 +15,12 @@ function timeToMinutes(t) {
   return h * 60 + m;
 }
 
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
 export default function AttendanceBoard({ userCompany, role, user }) {
   const isAdmin = ADMIN_ROLES.includes(role);
   const now = new Date();
@@ -41,6 +47,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [editScheduleEmp, setEditScheduleEmp] = useState(null);
   const [editWorkStart, setEditWorkStart] = useState("09:00");
   const [editWorkEnd, setEditWorkEnd] = useState("18:00");
+
+  const [hiddenEmpUids, setHiddenEmpUids] = useState([]);
+  const [showEmpFilter, setShowEmpFilter] = useState(false);
 
 
   const company = userCompany || localStorage.getItem("userCompany") || "";
@@ -85,6 +94,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const unsub = onSnapshot(doc(db, "companySettings", company), snap => {
       const data = snap.data();
       setOfficeLocation(data?.officeLocation || null);
+      setHiddenEmpUids(data?.hiddenEmployees || []);
     }, () => {});
     return () => unsub();
   }, [company]);
@@ -121,6 +131,13 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     setEditScheduleEmp(null);
   };
 
+  const toggleHideEmp = async (uid) => {
+    const next = hiddenEmpUids.includes(uid)
+      ? hiddenEmpUids.filter(u => u !== uid)
+      : [...hiddenEmpUids, uid];
+    await setDoc(doc(db, "companySettings", company), { hiddenEmployees: next }, { merge: true });
+  };
+
 
   // ─── 오늘 퇴근 처리 ─────────────────────────────────────────
   const handleCheckOut = async () => {
@@ -145,9 +162,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   }, [records]);
 
   const visibleEmployees = useMemo(() => {
-    if (isAdmin) return employees;
-    return employees.filter(e => e.uid === user?.uid);
-  }, [employees, isAdmin, user]);
+    const base = isAdmin ? employees : employees.filter(e => e.uid === user?.uid);
+    return base.filter(e => !hiddenEmpUids.includes(e.uid));
+  }, [employees, isAdmin, user, hiddenEmpUids]);
 
   const resolveStatus = (uid, ds, name) => {
     const rec = recordMap[`${uid}_${ds}`];
@@ -163,7 +180,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
   const isLate = (rec, emp) => {
     if (!rec?.checkInTime || !emp?.workStartTime) return false;
-    const checkInMin = timeToMinutes(rec.checkInTime.slice(11, 16));
+    const checkInMin = timeToMinutes(fmtTime(rec.checkInTime));
     const startMin = timeToMinutes(emp.workStartTime);
     if (checkInMin == null || startMin == null) return false;
     return checkInMin > startMin;
@@ -174,7 +191,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const myEmp = employees.find(e => e.uid === user?.uid);
 
   // ─── 출근 수정 저장 ──────────────────────────────────────────
-  const saveEdit = async (status, checkInTime, checkOutTime) => {
+  const saveEdit = async (status, checkInTime, checkOutTime, lateReason) => {
     if (!editCell) return;
     const { uid, name, date } = editCell;
     const editorName = employees.find(e => e.uid === user?.uid)?.name || user?.email || "관리자";
@@ -199,6 +216,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     await setDoc(doc(db, "attendance", `${date}_${uid}`), {
       uid, name, date, month: date.slice(0, 7),
       status, checkInTime: checkInTime || null, checkOutTime: checkOutTime || null,
+      lateReason: (status === "출근" && lateReason) ? lateReason : null,
       source: "manual", editedBy: user?.uid || "", editedByName: editorName, editedAt: new Date().toISOString(),
       companyName: company,
       history: arrayUnion(historyEntry),
@@ -242,6 +260,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <div className="flex items-center gap-2">
           {isAdmin && (
             <>
+              <button onClick={() => setShowEmpFilter(v => !v)}
+                className={`px-3 py-1.5 rounded-lg border text-[13px] font-bold transition ${showEmpFilter ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B] hover:bg-gray-50"}`}>
+                직원 관리
+              </button>
               <button onClick={() => { setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
                 className={`px-3 py-1.5 rounded-lg border text-[13px] font-bold transition ${showOfficePanel ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B] hover:bg-gray-50"}`}>
                 출근지 설정
@@ -350,14 +372,34 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         </div>
       )}
 
+      {/* 직원 표시 관리 패널 */}
+      {showEmpFilter && isAdmin && (
+        <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">직원 표시 관리 — 체크 해제 시 목록에서 숨김</div>
+          <div className="space-y-2">
+            {employees.map(emp => (
+              <label key={emp.uid} className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox"
+                  checked={!hiddenEmpUids.includes(emp.uid)}
+                  onChange={() => toggleHideEmp(emp.uid)}
+                  className="w-4 h-4 rounded border-gray-300 accent-[#1B2B4B]"
+                />
+                <span className="text-[13px] text-gray-700 font-medium">{emp.name || emp.email}</span>
+                {emp.workStartTime && <span className="text-[11px] text-gray-400">{emp.workStartTime}~{emp.workEndTime}</span>}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 오늘 내 출퇴근 카드 (비관리자 / 당일만) */}
       {!isAdmin && myEmp && month === now.getMonth() + 1 && year === now.getFullYear() && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4 flex items-center gap-4">
           <div className="flex-1">
             <div className="text-[13px] font-bold text-[#1B2B4B] mb-1">오늘 출퇴근</div>
             <div className="flex items-center gap-3 text-[13px] text-gray-600">
-              <span>출근 : <span className="font-bold text-[#1B2B4B]">{myTodayRec?.checkInTime ? myTodayRec.checkInTime.slice(11, 16) : "미출근"}</span></span>
-              <span>퇴근 : <span className="font-bold text-[#1B2B4B]">{myTodayRec?.checkOutTime ? myTodayRec.checkOutTime.slice(11, 16) : "-"}</span></span>
+              <span>출근 : <span className="font-bold text-[#1B2B4B]">{myTodayRec?.checkInTime ? fmtTime(myTodayRec.checkInTime) : "미출근"}</span></span>
+              <span>퇴근 : <span className="font-bold text-[#1B2B4B]">{myTodayRec?.checkOutTime ? fmtTime(myTodayRec.checkOutTime) : "-"}</span></span>
               {myTodayRec?.checkInTime && myEmp?.workStartTime && isLate(myTodayRec, myEmp) && (
                 <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-500 text-[11px] font-bold">지각</span>
               )}
@@ -438,13 +480,14 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   const label = effStatus ? (effStatus.length > 2 ? effStatus.slice(0, 2) : effStatus) : "";
                   const colorCls = effStatus ? (ATTENDANCE_STATUS_COLOR[effStatus] || "bg-gray-100 text-gray-500") : "";
                   const late = effStatus === "출근" && isLate(rec, emp);
-                  const checkIn = rec?.checkInTime ? rec.checkInTime.slice(11, 16) : "";
-                  const checkOut = rec?.checkOutTime ? rec.checkOutTime.slice(11, 16) : "";
+                  const checkIn = rec?.checkInTime ? fmtTime(rec.checkInTime) : "";
+                  const checkOut = rec?.checkOutTime ? fmtTime(rec.checkOutTime) : "";
                   const tooltipText = [
                     effStatus ? `상태: ${effStatus}` : "",
                     checkIn ? `출근: ${checkIn}` : "",
                     checkOut ? `퇴근: ${checkOut}` : "",
                     late ? "지각" : "",
+                    rec?.lateReason ? `사유: ${rec.lateReason}` : "",
                   ].filter(Boolean).join(" · ");
                   return (
                     <td key={d} className={`px-0.5 py-1.5 text-center border-b border-gray-50 ${ds === todayDateStr ? "bg-[#1B2B4B]/5" : ""}`}>
@@ -554,8 +597,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
 function EditForm({ editCell, onSave, onCancel }) {
   const [status, setStatus] = useState(editCell.current?.status || "출근");
-  const [time, setTime] = useState(editCell.current?.checkInTime ? editCell.current.checkInTime.slice(11, 16) : "09:00");
-  const [checkOutTime, setCheckOutTime] = useState(editCell.current?.checkOutTime ? editCell.current.checkOutTime.slice(11, 16) : "");
+  const [time, setTime] = useState(editCell.current?.checkInTime ? fmtTime(editCell.current.checkInTime) : "09:00");
+  const [checkOutTime, setCheckOutTime] = useState(editCell.current?.checkOutTime ? fmtTime(editCell.current.checkOutTime) : "");
+  const [lateReason, setLateReason] = useState(editCell.current?.lateReason || "");
   const options = ["출근", "휴무", "연차", "오전반차", "오후반차", "외근", "병가", "경조사", "조퇴"];
   return (
     <div className="space-y-3">
@@ -582,6 +626,19 @@ function EditForm({ editCell, onSave, onCancel }) {
             <input type="time" value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-[14px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none" />
           </div>
+          {(() => {
+            const [sh, sm] = (editCell.workStartTime || "09:00").split(":").map(Number);
+            const [ch, cm] = time.split(":").map(Number);
+            const isLateCheck = ch * 60 + cm > sh * 60 + sm;
+            return isLateCheck ? (
+              <div>
+                <div className="text-[11px] text-gray-500 mb-1">지각 사유</div>
+                <input type="text" placeholder="지각 사유를 입력하세요 (선택)"
+                  value={lateReason} onChange={e => setLateReason(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[#1B2B4B]" />
+              </div>
+            ) : null;
+          })()}
         </>
       )}
       <div className="flex gap-2 pt-2">
@@ -590,7 +647,7 @@ function EditForm({ editCell, onSave, onCancel }) {
           <button onClick={() => onSave(null, null, null)}
             className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-500 text-[13px] font-bold hover:bg-gray-50">초기화</button>
         )}
-        <button onClick={() => onSave(status, status === "출근" ? `${editCell.date}T${time}:00` : null, status === "출근" && checkOutTime ? `${editCell.date}T${checkOutTime}:00` : null)}
+        <button onClick={() => onSave(status, status === "출근" ? `${editCell.date}T${time}:00` : null, status === "출근" && checkOutTime ? `${editCell.date}T${checkOutTime}:00` : null, lateReason)}
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60]">저장</button>
       </div>
       {editCell.current?.history?.length > 0 && (
@@ -600,7 +657,7 @@ function EditForm({ editCell, onSave, onCancel }) {
             {[...editCell.current.history].sort((a, b) => (b.editedAt || "").localeCompare(a.editedAt || "")).map((h, i) => (
               <div key={i} className="flex items-center justify-between text-[11px] text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1.5">
                 <span className="font-semibold text-gray-600">
-                  {h.status}{h.checkInTime ? ` · 출근${h.checkInTime.slice(11, 16)}` : ""}{h.checkOutTime ? ` · 퇴근${h.checkOutTime.slice(11, 16)}` : ""}
+                  {h.status}{h.checkInTime ? ` · 출근${fmtTime(h.checkInTime)}` : ""}{h.checkOutTime ? ` · 퇴근${fmtTime(h.checkOutTime)}` : ""}
                 </span>
                 <span>{h.editedByName || "관리자"} · {(h.editedAt || "").slice(0, 16).replace("T", " ")}</span>
               </div>
