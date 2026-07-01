@@ -1486,11 +1486,15 @@ function _todayKSTStr() {
 }
 
 // 자동 출근 처리
-async function _autoCheckIn(co, uid, name) {
+async function _autoCheckIn(co, uid, name, onSuccess) {
   const today = _todayKSTStr();
   const attRef = doc(db, "attendance", `${today}_${uid}`);
   const existing = await getDoc(attRef);
-  if (existing.exists()) return;
+  if (existing.exists()) {
+    const d = existing.data();
+    // companyName이 올바르게 설정된 유효 기록이면 건너뜀, 비어있으면 갱신
+    if (d.companyName && d.companyName === co) return;
+  }
 
   const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", uid)));
   const mySchedules = schedSnap.docs.map(d => d.data());
@@ -1508,10 +1512,11 @@ async function _autoCheckIn(co, uid, name) {
     status: "출근", checkInTime: new Date().toISOString(),
     source: "auto_mobile_location", companyName: co,
   }, { merge: true });
+  if (onSuccess) onSuccess(`출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
 }
 
 // 자동 퇴근 처리
-async function _autoCheckOut(co, uid, name) {
+async function _autoCheckOut(co, uid, name, onSuccess) {
   const today = _todayKSTStr();
   const attRef = doc(db, "attendance", `${today}_${uid}`);
   const existing = await getDoc(attRef);
@@ -1519,6 +1524,7 @@ async function _autoCheckOut(co, uid, name) {
   const data = existing.data();
   if (data.status !== "출근" || data.checkOutTime) return;
   await setDoc(attRef, { checkOutTime: new Date().toISOString() }, { merge: true });
+  if (onSuccess) onSuccess(`퇴근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
 }
 
 // officeLocation이 설정되면 GPS 감지 시작
@@ -1537,11 +1543,11 @@ useEffect(() => {
     );
     if (dist <= 100 && !checkedIn) {
       checkedIn = true;
-      _autoCheckIn(co, uid, name).catch(() => {});
+      _autoCheckIn(co, uid, name, showSuccess).catch(() => {});
     }
     if (dist > 300 && checkedIn) {
       checkedIn = false;
-      _autoCheckOut(co, uid, name).catch(() => {});
+      _autoCheckOut(co, uid, name, showSuccess).catch(() => {});
     }
   }, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
 
@@ -1554,7 +1560,7 @@ useEffect(() => {
     );
     if (dist <= 100) {
       checkedIn = true;
-      _autoCheckIn(co, uid, name).catch(() => {});
+      _autoCheckIn(co, uid, name, showSuccess).catch(() => {});
     }
   }, () => {}, { enableHighAccuracy: true, timeout: 15000 });
 
