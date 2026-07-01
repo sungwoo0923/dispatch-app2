@@ -4,6 +4,7 @@ import { db } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
+const APPROVE_ROLES = ["totalMaster", "hrManager"];
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -154,8 +155,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
   // 수정 요청 구독
   useEffect(() => {
     if (!company || !uid) return;
-    const canEdit = role === "totalMaster" || role === "hrManager";
-    const q = canEdit
+    const q = canApproveRequests
       ? query(collection(db, "attendanceChangeRequests"), where("companyName", "==", company), where("status", "==", "pending"))
       : query(collection(db, "attendanceChangeRequests"), where("uid", "==", uid));
     const unsub = onSnapshot(q, snap => {
@@ -313,7 +313,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
     }
   };
 
-  const canEditAttendance = role === "totalMaster" || role === "hrManager";
+  const canApproveRequests = role === "totalMaster" || role === "hrManager";
+  const canEditAttendance = role === "totalMaster";
 
   return (
     <div className="px-3 py-3 space-y-3 pb-24">
@@ -363,7 +364,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       )}
 
       {/* 관리자: 출근 요청 처리 패널 */}
-      {isAdmin && checkInRequests.length > 0 && (
+      {canApproveRequests && checkInRequests.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3">
           <button onClick={() => setShowRequestPanel(v => !v)}
             className="w-full flex items-center justify-between">
@@ -405,7 +406,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       )}
 
       {/* 관리자: 수정 요청 처리 패널 */}
-      {canEditAttendance && changeRequests.filter(r => r.status === "pending").length > 0 && (
+      {canApproveRequests && changeRequests.filter(r => r.status === "pending").length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3">
           <button onClick={() => setShowChangeReqPanel(v => !v)}
             className="w-full flex items-center justify-between">
@@ -536,7 +537,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 title={tooltip}
                 onClick={() => {
                   if (!isPastOrToday) return;
-                  if (canEditAttendance) {
+                  if (role === "totalMaster") {
                     setMobileEditCell({ date: ds, status, rec });
                     setMobileEditStatus(status || "출근");
                     setMobileEditTime(rec?.checkInTime ? fmtTime(rec.checkInTime) : "09:00");
@@ -577,7 +578,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       {/* 출근 요청 시간 입력 모달 */}
       {showCheckInRequestModal && (
         <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto">
             <div className="text-[15px] font-bold text-[#1B2B4B] mb-1">출근 요청</div>
             <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. 관리자 승인 후 출근 처리됩니다.</div>
             <div className="mb-4">
@@ -617,7 +618,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       {/* 수정 요청 모달 (비관리자) */}
       {mobileChangeReqCell && (
         <div className="fixed inset-0 z-[9999] bg-black/40 flex items-end justify-center" onClick={() => setMobileChangeReqCell(null)}>
-          <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[15px] font-bold text-[#1B2B4B]">수정 요청</div>
@@ -672,7 +673,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       {/* 모바일 날짜 편집 모달 (hrManager/totalMaster) */}
       {mobileEditCell && (
         <div className="fixed inset-0 z-[9999] bg-black/40 flex items-end justify-center">
-          <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4">
+          <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[15px] font-bold text-[#1B2B4B]">{mobileEditCell.date}</div>

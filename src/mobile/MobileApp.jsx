@@ -12106,6 +12106,19 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
   const leave = calcLeaveBalance(hireDate, mySchedules, currentUser?.uid, myName, []);
 
+  const hireParts = hireDate ? hireDate.split("-").map(Number) : [null, null, null];
+  const [hireY, hireM, hireD] = hireParts;
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({length: 50}, (_, i) => currentYear - i);
+  const monthOptions = Array.from({length: 12}, (_, i) => i + 1);
+  const dayOptions = Array.from({length: 31}, (_, i) => i + 1);
+
+  const handleHireDateChange = (y, m, d) => {
+    if (!y || !m || !d) return;
+    const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    saveHireDate(dateStr);
+  };
+
   const yearsOfService = useMemo(() => {
     if (!hireDate) return null;
     const hire = new Date(hireDate);
@@ -12125,18 +12138,28 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
       {/* 입사일 / 연차·월차 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">입사일 / 연차·월차</div>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-[12px] text-gray-500 font-semibold w-12 flex-shrink-0">입사일</span>
-          <input type="date" value={hireDate} onChange={e => saveHireDate(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[13px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
-          {hireDateSaving && <span className="text-[10px] text-gray-400 flex-shrink-0">저장중</span>}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-[12px] text-gray-500 font-semibold flex-shrink-0">입사일</span>
+          <select value={hireY || ""} onChange={e => handleHireDateChange(Number(e.target.value), hireM, hireD)}
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            <option value="">년</option>
+            {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
+          </select>
+          <select value={hireM || ""} onChange={e => handleHireDateChange(hireY, Number(e.target.value), hireD)}
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            <option value="">월</option>
+            {monthOptions.map(m => <option key={m} value={m}>{m}월</option>)}
+          </select>
+          <select value={hireD || ""} onChange={e => handleHireDateChange(hireY, hireM, Number(e.target.value))}
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            <option value="">일</option>
+            {dayOptions.map(d => <option key={d} value={d}>{d}일</option>)}
+          </select>
+          {hireDateSaving && <span className="text-[10px] text-gray-400">저장중</span>}
+          {yearsOfService && (
+            <span className="ml-auto text-[13px] font-bold text-[#1B2B4B]">{yearsOfService}</span>
+          )}
         </div>
-        {yearsOfService && (
-          <div className="px-3 py-2 bg-[#1B2B4B] rounded-xl text-center mb-3">
-            <div className="text-white text-[15px] font-extrabold">{yearsOfService}</div>
-            <div className="text-white/50 text-[10px] mt-0.5">근속 기간</div>
-          </div>
-        )}
         {leave ? (
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
@@ -12219,6 +12242,20 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
               <div className="text-[11px] text-gray-400 mt-0.5">{label}</div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* QR 코드 */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">앱 QR 코드</div>
+        <div className="flex flex-col items-center gap-3">
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin)}`}
+            alt="앱 QR코드"
+            className="w-48 h-48 rounded-xl border border-gray-100"
+          />
+          <div className="text-[11px] text-gray-400 text-center">QR코드를 스캔하면 앱으로 바로 접속합니다</div>
+          <div className="text-[11px] text-gray-500 font-semibold break-all text-center">{window.location.origin}</div>
         </div>
       </div>
 
