@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, setDoc, where, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 
@@ -25,6 +25,9 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
   const [holidays, setHolidays] = useState([]);
   const [myUserDoc, setMyUserDoc] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [checkInRequests, setCheckInRequests] = useState([]);
+  const [requestingCheckIn, setRequestingCheckIn] = useState(false);
+  const [showRequestPanel, setShowRequestPanel] = useState(false);
 
   // 출근지 설정
   const [officeLocation, setOfficeLocation] = useState(null);
@@ -107,6 +110,48 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
     );
   };
 
+  // 출근 요청 구독 (관리자: 회사 전체, 직원: 내 요청)
+  useEffect(() => {
+    if (!company) return;
+    const q = isAdmin
+      ? query(collection(db, "attendanceRequests"), where("companyName", "==", company), where("status", "==", "pending"))
+      : (uid ? query(collection(db, "attendanceRequests"), where("uid", "==", uid), where("status", "==", "pending")) : null);
+    if (!q) return;
+    const unsub = onSnapshot(q, snap => {
+      setCheckInRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [company, uid, isAdmin]);
+
+  const handleCheckInRequest = async () => {
+    if (!uid || !company) return;
+    setRequestingCheckIn(true);
+    try {
+      await addDoc(collection(db, "attendanceRequests"), {
+        uid, name: myName, date: todayDateStr,
+        requestedAt: new Date().toISOString(),
+        companyName: company, status: "pending",
+        createdAt: serverTimestamp(),
+      });
+    } finally {
+      setRequestingCheckIn(false);
+    }
+  };
+
+  const handleApproveRequest = async (req) => {
+    await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
+      uid: req.uid, name: req.name, date: req.date,
+      month: req.date.slice(0, 7), companyName: company,
+      status: "출근", checkInTime: req.requestedAt,
+      source: "request_approved",
+    }, { merge: true });
+    await deleteDoc(doc(db, "attendanceRequests", req.id));
+  };
+
+  const handleRejectRequest = async (req) => {
+    await deleteDoc(doc(db, "attendanceRequests", req.id));
+  };
+
   const recordMap = useMemo(() => {
     const m = {};
     records.forEach(r => { m[r.date] = r; });
@@ -180,13 +225,13 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 {gettingLoc ? "위치 가져오는 중..." : "현재 위치를 출근지로 설정"}
               </button>
               <div className="text-[11px] text-gray-400 text-center">또는 직접 입력</div>
-              <div className="flex gap-2">
-                <input type="number" step="0.000001" placeholder="위도 (예: 37.566826)"
+              <div className="flex gap-2 min-w-0">
+                <input type="number" step="0.000001" placeholder="위도"
                   value={officeInput.lat} onChange={e => setOfficeInput(p => ({ ...p, lat: e.target.value }))}
-                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
-                <input type="number" step="0.000001" placeholder="경도 (예: 126.9779)"
+                  className="min-w-0 flex-1 w-0 px-2 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                <input type="number" step="0.000001" placeholder="경도"
                   value={officeInput.lng} onChange={e => setOfficeInput(p => ({ ...p, lng: e.target.value }))}
-                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                  className="min-w-0 flex-1 w-0 px-2 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
               </div>
               <input type="text" placeholder="장소명 (예: 본사 사무실)"
                 value={officeInput.address} onChange={e => setOfficeInput(p => ({ ...p, address: e.target.value }))}
@@ -196,6 +241,39 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 className="w-full py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold disabled:opacity-40">
                 {savingOffice ? "저장 중..." : "저장"}
               </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 관리자: 출근 요청 처리 패널 */}
+      {isAdmin && checkInRequests.length > 0 && (
+        <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-3">
+          <button onClick={() => setShowRequestPanel(v => !v)}
+            className="w-full flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-[13px] font-bold text-[#1B2B4B]">출근 요청</span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">{checkInRequests.length}건</span>
+            </div>
+            <span className="text-gray-400 text-[12px]">{showRequestPanel ? "닫기" : "확인"}</span>
+          </button>
+          {showRequestPanel && (
+            <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
+              {checkInRequests.map(req => (
+                <div key={req.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
+                  <div>
+                    <div className="text-[13px] font-bold text-[#1B2B4B]">{req.name}</div>
+                    <div className="text-[11px] text-gray-500">{req.date} · 요청 {fmtTime(req.requestedAt)}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleApproveRequest(req)}
+                      className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
+                    <button onClick={() => handleRejectRequest(req)}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -222,12 +300,27 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 <div className="text-[11px] text-gray-400">정규: {myUserDoc.workStartTime} ~ {myUserDoc.workEndTime || "-"}</div>
               )}
             </div>
-            {todayRec?.status === "출근" && !todayRec?.checkOutTime && (
-              <button onClick={handleCheckOut} disabled={checkingOut}
-                className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
-                {checkingOut ? "처리 중..." : "퇴근"}
-              </button>
-            )}
+            <div className="flex flex-col gap-2 items-end">
+              {todayRec?.status === "출근" && !todayRec?.checkOutTime && (
+                <button onClick={handleCheckOut} disabled={checkingOut}
+                  className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                  {checkingOut ? "처리 중..." : "퇴근"}
+                </button>
+              )}
+              {!todayRec?.status && !isWeekend(todayDateStr) && !isHoliday(todayDateStr, holidays) && (
+                (() => {
+                  const myPendingReq = checkInRequests.find(r => r.uid === uid && r.date === todayDateStr);
+                  return myPendingReq ? (
+                    <div className="text-[12px] text-amber-600 font-bold px-3 py-2 bg-amber-50 rounded-xl">요청 대기 중...</div>
+                  ) : (
+                    <button onClick={handleCheckInRequest} disabled={requestingCheckIn}
+                      className="px-4 py-2.5 rounded-xl border-2 border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold disabled:opacity-50">
+                      {requestingCheckIn ? "요청 중..." : "출근 요청"}
+                    </button>
+                  );
+                })()
+              )}
+            </div>
           </div>
         </div>
       )}
