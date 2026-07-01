@@ -8,6 +8,7 @@ import AdminLayout from "./admin/AdminLayout";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
 import Dashboard from "./admin/Dashboard";
 import EmployeeList from "./admin/EmployeeList";
+import EmployeeStatus from "./admin/EmployeeStatus";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="employees" element={<EmployeeList />} />
+          <Route path="employees/status" element={<EmployeeStatus />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="attendance" element={<AttendanceBoard />} />
           <Route path="leaves" element={<LeaveApprovals />} />

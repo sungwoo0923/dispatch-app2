@@ -86,5 +86,19 @@ service cloud.firestore {
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
       allow write: if isAdminOf(request.resource.data.companyId);
     }
+
+    // Admin pre-registers a worker's profile here under a one-time personal
+    // join code (doc id); the worker looks it up (get, pre-auth) during
+    // signup to prefill their info, then the doc is deleted once claimed.
+    match /pendingEmployees/{code} {
+      allow get: if true;
+      allow list: if isAdminOf(resource.data.companyId);
+      allow create: if isAdminOf(request.resource.data.companyId);
+      allow update: if isAdminOf(resource.data.companyId);
+      // Deletable by any signed-in user because the worker who just claimed
+      // the code (via a fresh, not-yet-admin account) must be able to clear
+      // it too; the doc holds no sensitive data beyond name/phone/companyId.
+      allow delete: if isSignedIn();
+    }
   }
 }
