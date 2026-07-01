@@ -2405,7 +2405,7 @@ React.useEffect(() => {
 
   // 매출관리 비밀번호 - 회사별 Firestore 로드
   useEffect(() => {
-    const co = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
+    const co = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
     if (!co) return;
     const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
       const data = snap.data();
@@ -43115,7 +43115,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
 }
 
 function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
-  const companyName = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
+  const companyName = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
   const isAdmin = role === "admin" || role === "totalMaster";
 
