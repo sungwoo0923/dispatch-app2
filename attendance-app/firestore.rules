@@ -77,6 +77,14 @@ service cloud.firestore {
         (request.resource.data.uid == request.auth.uid || isAdminOf(request.resource.data.companyId));
     }
 
+    // Audit trail of admin corrections to a worker's recorded check-in/out
+    // time, shown under 출근현황 > 수정현황.
+    match /attendanceEdits/{editId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isAdminOf(request.resource.data.companyId);
+    }
+
     match /leaves/{leaveId} {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));

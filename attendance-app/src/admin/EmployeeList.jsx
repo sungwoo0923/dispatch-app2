@@ -19,7 +19,14 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
-import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, EMPLOYMENT_TYPE_OPTIONS } from "../constants/hr";
+import {
+  EMPLOYMENT_STATUS_OPTIONS,
+  NATIONALITY_OPTIONS,
+  EMPLOYMENT_TYPE_OPTIONS,
+  SHIFT_TYPE_OPTIONS,
+  PAY_TYPE_OPTIONS,
+  COUNTRY_OPTIONS,
+} from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
@@ -28,15 +35,21 @@ const EMPTY_REGISTER_FORM = {
   phone: "",
   gender: "남",
   nationality: "내국인",
+  country: "",
   visaStatus: "",
   employeeCode: "",
   workSiteId: "",
   vendorId: "",
   hireDate: toDateKey(),
   employmentType: "상용직",
+  shiftType: "주간",
+  payType: "월급",
   team: "",
   position: "",
   insuranceApplied: "Y",
+  residentNumberFront: "",
+  bankName: "",
+  bankAccount: "",
   note: "",
 };
 
@@ -571,15 +584,30 @@ export default function EmployeeList() {
                 </div>
               </div>
               {registerForm.nationality === "외국인" && (
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">체류자격</span>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                    value={registerForm.visaStatus}
-                    onChange={(e) => setRegisterForm((f) => ({ ...f, visaStatus: e.target.value }))}
-                    placeholder="예: E-9, H-2"
-                  />
-                </label>
+                <>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">체류자격</span>
+                    <input
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                      value={registerForm.visaStatus}
+                      onChange={(e) => setRegisterForm((f) => ({ ...f, visaStatus: e.target.value }))}
+                      placeholder="예: E-9, H-2"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">국가구분</span>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                      value={registerForm.country}
+                      onChange={(e) => setRegisterForm((f) => ({ ...f, country: e.target.value }))}
+                    >
+                      <option value="">선택</option>
+                      {COUNTRY_OPTIONS.map((c) => (
+                        <option key={c}>{c}</option>
+                      ))}
+                    </select>
+                  </label>
+                </>
               )}
               <div>
                 <span className="mb-1.5 block text-xs font-medium text-muted">성별</span>
@@ -701,6 +729,22 @@ export default function EmployeeList() {
                 </select>
               </label>
               <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">근무구분</span>
+                <div className="flex h-[42px] items-center gap-4 text-sm">
+                  {SHIFT_TYPE_OPTIONS.map((s) => (
+                    <label key={s} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="shiftType"
+                        checked={registerForm.shiftType === s}
+                        onChange={() => setRegisterForm((f) => ({ ...f, shiftType: s }))}
+                      />
+                      {s}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
                 <span className="mb-1.5 block text-xs font-medium text-muted">4대보험 적용여부</span>
                 <div className="flex h-[42px] items-center gap-4 text-sm">
                   {["Y", "N"].map((v) => (
@@ -716,6 +760,54 @@ export default function EmployeeList() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            <SectionHeader>급여정보</SectionHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">지급구분</span>
+                <div className="flex h-[42px] items-center gap-4 text-sm">
+                  {PAY_TYPE_OPTIONS.map((p) => (
+                    <label key={p} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="payType"
+                        checked={registerForm.payType === p}
+                        onChange={() => setRegisterForm((f) => ({ ...f, payType: p }))}
+                      />
+                      {p}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">주민/외국인번호 앞자리</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.residentNumberFront}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, residentNumberFront: e.target.value }))}
+                  placeholder="901010-1 (뒷자리는 저장하지 않습니다)"
+                  maxLength={9}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">급여계좌 - 은행</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.bankName}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, bankName: e.target.value }))}
+                  placeholder="예: 국민은행"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">급여계좌 - 계좌번호</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.bankAccount}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, bankAccount: e.target.value }))}
+                  placeholder="계좌번호"
+                />
+              </label>
               <label className="col-span-2 block">
                 <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
                 <textarea

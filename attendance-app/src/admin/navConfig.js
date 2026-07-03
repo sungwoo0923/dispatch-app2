@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   Users,
   CalendarDays,
-  ClipboardCheck,
   CalendarClock,
   Wallet,
   BarChart3,
@@ -25,8 +24,15 @@ export const NAV = [
       { to: "/employees/status", label: "입퇴사현황" },
     ],
   },
-  { to: "/schedule", label: "스케줄", icon: CalendarDays },
-  { to: "/attendance", label: "출근현황", icon: ClipboardCheck },
+  {
+    to: "/schedule",
+    label: "스케줄",
+    icon: CalendarDays,
+    children: [
+      { to: "/schedule", label: "스케줄등록" },
+      { to: "/attendance", label: "출근현황" },
+    ],
+  },
   { to: "/leaves", label: "휴가", icon: CalendarClock },
   {
     to: "/safety",

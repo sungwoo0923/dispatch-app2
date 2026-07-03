@@ -1,24 +1,32 @@
-import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { Plus, Trash2, Percent, Settings } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, getDoc, serverTimestamp } from "firebase/firestore";
+import { Plus, Trash2, Percent, Settings, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey } from "../utils/dateUtils";
+
+const SEARCH_FIELDS = ["템플릿명"];
 
 export default function SiteInsuranceRates() {
   const { profile } = useAuth();
+  const [companyName, setCompanyName] = useState("");
   const [workSites, setWorkSites] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ siteId: "", templateId: "", effectiveDate: toDateKey() });
+  const [filters, setFilters] = useState({ siteId: "", searchField: SEARCH_FIELDS[0], searchQuery: "" });
+  const [selected, setSelected] = useState(() => new Set());
+  const [showNewRow, setShowNewRow] = useState(false);
+  const [quickForm, setQuickForm] = useState({ templateId: "", effectiveDate: toDateKey() });
+  const [viewing, setViewing] = useState(null);
 
   useEffect(() => {
     if (!profile?.companyId) return;
+    getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
     const unsubSites = onSnapshot(
       query(collection(db, "workSites"), where("companyId", "==", profile.companyId)),
       (snap) => setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -38,12 +46,29 @@ export default function SiteInsuranceRates() {
     };
   }, [profile?.companyId]);
 
-  const sorted = [...assignments].sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""));
+  const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
 
-  const submit = async (e) => {
-    e.preventDefault();
-    const site = workSites.find((s) => s.id === form.siteId);
-    const template = templates.find((t) => t.id === form.templateId);
+  const filtered = useMemo(() => {
+    return assignments.filter((a) => {
+      if (filters.siteId && a.siteId !== filters.siteId) return false;
+      if (filters.searchQuery && !a.templateName?.includes(filters.searchQuery)) return false;
+      return true;
+    });
+  }, [assignments, filters]);
+
+  const sorted = [...filtered].sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""));
+
+  const toggleSelected = (id) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const submitQuickAdd = async () => {
+    const site = workSites.find((s) => s.id === filters.siteId);
+    const template = templates.find((t) => t.id === quickForm.templateId);
     if (!site || !template) return;
     await addDoc(collection(db, "siteInsuranceRates"), {
       companyId: profile.companyId,
@@ -52,70 +77,191 @@ export default function SiteInsuranceRates() {
       templateId: template.id,
       templateName: template.name,
       rates: template.rates,
-      effectiveDate: form.effectiveDate,
+      effectiveDate: quickForm.effectiveDate,
       createdAt: serverTimestamp(),
     });
-    setForm({ siteId: "", templateId: "", effectiveDate: toDateKey() });
-    setOpen(false);
+    setQuickForm({ templateId: "", effectiveDate: toDateKey() });
+    setShowNewRow(false);
   };
 
-  const remove = (id) => deleteDoc(doc(db, "siteInsuranceRates", id));
+  const removeSelected = async () => {
+    for (const id of selected) await deleteDoc(doc(db, "siteInsuranceRates", id));
+    setSelected(new Set());
+  };
+
+  const exportCsv = () => {
+    const headers = ["센터", "템플릿명", "국민연금", "건강보험", "장기요양", "고용보험", "설정일자"];
+    const rows = sorted.map((a) => [
+      a.siteName,
+      a.templateName,
+      (a.rates?.pension * 100).toFixed(2),
+      (a.rates?.health * 100).toFixed(2),
+      (a.rates?.longTermCare * 100).toFixed(2),
+      (a.rates?.employment * 100).toFixed(2),
+      a.effectiveDate,
+    ]);
+    downloadCsv("센터별정산설정", headers, rows);
+  };
 
   return (
     <div className="space-y-6">
-      <Panel
-        icon={Settings}
-        title={`센터별 정산설정 (${sorted.length}건)`}
-        actions={
-          <Button onClick={() => setOpen(true)} disabled={templates.length === 0}>
-            <Plus size={16} /> 신규
-          </Button>
-        }
-      >
+      <Panel icon={Settings} title="센터별 정산설정">
         <p className="mb-4 text-xs text-muted">센터에서 근로자에게 적용하는 보험 요율을 설정일자별로 관리합니다.</p>
 
-        {templates.length === 0 && (
-          <Card className="mb-4 p-4 text-xs text-warning">
-            먼저 템플릿 관리 메뉴에서 보험요율템플릿을 등록해주세요.
+        <Card className="mb-4 flex flex-wrap items-end gap-3 p-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
+            <select disabled className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-muted">
+              <option>{companyName || "-"}</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.siteId}
+              onChange={(e) => setFilters((f) => ({ ...f, siteId: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {workSites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">검색조건</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.searchField}
+              onChange={(e) => setFilters((f) => ({ ...f, searchField: e.target.value }))}
+            >
+              {SEARCH_FIELDS.map((f) => (
+                <option key={f}>{f}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block flex-1 min-w-[160px]">
+            <span className="mb-1.5 block text-xs font-medium text-muted">검색어</span>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.searchQuery}
+              onChange={(e) => setFilters((f) => ({ ...f, searchQuery: e.target.value }))}
+              placeholder="검색어를 입력하세요."
+            />
+          </label>
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-slate-200 p-2.5 text-muted hover:bg-slate-50"
+              title="새로고침"
+              onClick={() => setFilters({ siteId: "", searchField: SEARCH_FIELDS[0], searchQuery: "" })}
+            >
+              <RefreshCw size={16} />
+            </button>
+            <Button>검색</Button>
+          </div>
+        </Card>
+
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-medium text-muted">목록 {sorted.length}</p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setShowNewRow((v) => !v)}>
+              <Plus size={14} /> 신규
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportCsv}>
+              <FileSpreadsheet size={14} /> 엑셀
+            </Button>
+          </div>
+        </div>
+
+        {showNewRow && (
+          <Card className="mb-3 flex flex-wrap items-end gap-2 p-3">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-medium text-muted">보험요율템플릿 조회하기</span>
+              <select
+                className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                value={quickForm.templateId}
+                onChange={(e) => setQuickForm((f) => ({ ...f, templateId: e.target.value }))}
+              >
+                <option value="">조회하기</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-medium text-muted">설정일자</span>
+              <input
+                type="date"
+                className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                value={quickForm.effectiveDate}
+                onChange={(e) => setQuickForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+              />
+            </label>
+            <Button size="sm" onClick={submitQuickAdd} disabled={!filters.siteId || !quickForm.templateId}>
+              적용
+            </Button>
+            {!filters.siteId && <p className="text-[11px] text-warning">먼저 위 필터에서 센터를 선택해주세요.</p>}
           </Card>
+        )}
+
+        {templates.length === 0 && (
+          <Card className="mb-4 p-4 text-xs text-warning">먼저 템플릿&gt;보험요율 메뉴에서 보험요율템플릿을 등록해주세요.</Card>
+        )}
+
+        {selected.size > 0 && (
+          <div className="mb-2 flex justify-end">
+            <button className="flex items-center gap-1 text-xs text-danger hover:underline" onClick={removeSelected}>
+              <Trash2 size={13} /> 선택 삭제 ({selected.size})
+            </button>
+          </div>
         )}
 
         <div className="-mx-4 overflow-x-auto md:-mx-5">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium"></th>
                 <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium"></th>
+                <th className="px-4 py-3 font-medium">사업자</th>
                 <th className="px-4 py-3 font-medium">센터</th>
                 <th className="px-4 py-3 font-medium">템플릿명</th>
                 <th className="px-4 py-3 font-medium">보험요율항목</th>
                 <th className="px-4 py-3 font-medium">설정일자</th>
-                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {sorted.map((a, i) => (
                 <tr key={a.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelected(a.id)} />
+                  </td>
                   <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3">
+                    <button className="text-xs text-primary hover:underline" onClick={() => setViewing(a)}>
+                      상세
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-muted">{companyName}</td>
                   <td className="px-4 py-3 text-ink">{a.siteName}</td>
                   <td className="px-4 py-3 text-muted">{a.templateName}</td>
                   <td className="px-4 py-3 text-muted">
                     <span className="inline-flex items-center gap-1">
                       <Percent size={12} />
-                      국민연금 {(a.rates?.pension * 100).toFixed(2)} · 건강보험 {(a.rates?.health * 100).toFixed(2)} · 고용보험{" "}
-                      {(a.rates?.employment * 100).toFixed(2)}
+                      소득세: {(a.rates?.employment * 100).toFixed(1)} 국민건강보험료율: {(a.rates?.health * 100).toFixed(1)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-muted">{a.effectiveDate}</td>
-                  <td className="px-4 py-3">
-                    <button className="text-muted hover:text-danger" onClick={() => remove(a.id)} title="삭제">
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
                 </tr>
               ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={8} className="px-4 py-6 text-center text-xs text-muted">
                     설정된 보험요율이 없습니다.
                   </td>
                 </tr>
@@ -125,64 +271,31 @@ export default function SiteInsuranceRates() {
         </div>
       </Panel>
 
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title="센터별 보험요율 설정"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              취소
-            </Button>
-            <Button onClick={submit} disabled={!form.siteId || !form.templateId}>
-              적용
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={submit} className="space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
-            <select
-              required
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.siteId}
-              onChange={(e) => setForm((f) => ({ ...f, siteId: e.target.value }))}
-            >
-              <option value="">선택</option>
-              {workSites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">보험요율템플릿</span>
-            <select
-              required
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.templateId}
-              onChange={(e) => setForm((f) => ({ ...f, templateId: e.target.value }))}
-            >
-              <option value="">선택</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">설정일자</span>
-            <input
-              type="date"
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.effectiveDate}
-              onChange={(e) => setForm((f) => ({ ...f, effectiveDate: e.target.value }))}
-            />
-          </label>
-        </form>
+      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title={`${viewing?.siteName} · ${viewing?.templateName}`} footer={<Button onClick={() => setViewing(null)}>닫기</Button>}>
+        {viewing && (
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between border-b border-slate-100 py-1.5">
+              <span className="text-muted">국민연금</span>
+              <span className="text-ink">{(viewing.rates?.pension * 100).toFixed(2)}%</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 py-1.5">
+              <span className="text-muted">건강보험</span>
+              <span className="text-ink">{(viewing.rates?.health * 100).toFixed(2)}%</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 py-1.5">
+              <span className="text-muted">장기요양</span>
+              <span className="text-ink">{(viewing.rates?.longTermCare * 100).toFixed(2)}%</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 py-1.5">
+              <span className="text-muted">고용보험</span>
+              <span className="text-ink">{(viewing.rates?.employment * 100).toFixed(2)}%</span>
+            </div>
+            <div className="flex justify-between py-1.5">
+              <span className="text-muted">설정일자</span>
+              <span className="text-ink">{viewing.effectiveDate}</span>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
