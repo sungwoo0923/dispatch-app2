@@ -5279,11 +5279,11 @@ function makeAiExplain(ai) {
     // placeRows = [{업체명, 주소, 담당자, 담당자번호}]
     const filteredClients = React.useMemo(() => {
   const q = norm(clientQuery);
-  if (!q) return placeList;
+  if (!q) return mergedClients;
 
   const nq = normalizeKey(q);
 
-  return placeList
+  return mergedClients
     .map(p => {
       const name = p.업체명 || "";
       const nName = norm(name);
@@ -5308,7 +5308,7 @@ function makeAiExplain(ai) {
     })
     .filter(p => p.__score > 0)
     .sort((a, b) => b.__score - a.__score);
-}, [clientQuery, placeList]);
+}, [clientQuery, mergedClients]);
 const focusById = (id) => {
   if (!id) return false;
   const el = document.getElementById(id);
