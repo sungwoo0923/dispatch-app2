@@ -1,3 +1,6 @@
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
+
 // Simple, company-configurable payroll calculator.
 // Rates are placeholders — companies should tune them under Admin > 정산 설정
 // (a follow-up screen) rather than relying on exact government tables.
@@ -48,5 +51,28 @@ export function calcMonthlyPayroll({
     grossPay: Math.round(grossPay),
     deductions: { pension, health, longTermCare, employment, total: totalDeductions },
     netPay,
+  };
+}
+
+// Picks the insurance rate assignment in effect for a site as of a given
+// date (the most recent entry whose effectiveDate has already passed),
+// falling back to the company-wide placeholder rates when the site has no
+// assignment yet.
+export async function getSiteInsuranceRates(companyId, siteId, asOfDate) {
+  if (!companyId || !siteId) return DEFAULT_PAYROLL_RATES;
+  const snap = await getDocs(
+    query(collection(db, "siteInsuranceRates"), where("companyId", "==", companyId), where("siteId", "==", siteId))
+  );
+  const candidates = snap.docs
+    .map((d) => d.data())
+    .filter((a) => !asOfDate || a.effectiveDate <= asOfDate)
+    .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+  if (candidates.length === 0) return DEFAULT_PAYROLL_RATES;
+  return {
+    ...DEFAULT_PAYROLL_RATES,
+    nationalPension: candidates[0].rates.pension,
+    healthInsurance: candidates[0].rates.health,
+    longTermCare: candidates[0].rates.longTermCare,
+    employmentInsurance: candidates[0].rates.employment,
   };
 }

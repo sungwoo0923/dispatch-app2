@@ -21,6 +21,7 @@ import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
 import Payroll from "./admin/Payroll";
+import SiteInsuranceRates from "./admin/SiteInsuranceRates";
 import Stats from "./admin/Stats";
 import EmployeeLayout from "./employee/EmployeeLayout";
 import Home from "./employee/Home";
@@ -89,6 +90,7 @@ export default function App() {
           <Route path="safety" element={<SafetyTrainings />} />
           <Route path="safety/settings" element={<SafetySettings />} />
           <Route path="payroll" element={<Payroll />} />
+          <Route path="payroll/settings" element={<SiteInsuranceRates />} />
           <Route path="stats" element={<Stats />} />
           <Route path="board" element={<Board />} />
           <Route path="settings/admins" element={<AdminAccounts />} />

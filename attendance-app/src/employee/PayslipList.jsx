@@ -13,7 +13,11 @@ export default function PayslipList() {
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, "payrolls"), where("uid", "==", user.uid), orderBy("month", "desc"));
-    const unsub = onSnapshot(q, (snap) => setPayrolls(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    const unsub = onSnapshot(q, (snap) =>
+      setPayrolls(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.settlementStatus === "confirmed")
+      )
+    );
     return () => unsub();
   }, [user]);
 

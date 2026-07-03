@@ -26,6 +26,17 @@ export default function PayslipDetail() {
 
   if (!payroll) return <p className="px-4 pt-4 text-xs text-muted">불러오는 중...</p>;
 
+  if (payroll.settlementStatus !== "confirmed") {
+    return (
+      <div className="space-y-4 px-4 pt-4">
+        <Link to="/payslips" className="flex items-center gap-1 text-xs text-muted">
+          <ArrowLeft size={14} /> 급여명세서 목록
+        </Link>
+        <p className="text-xs text-muted">아직 정산 확정 전인 명세서입니다.</p>
+      </div>
+    );
+  }
+
   const d = payroll.deductions || {};
 
   return (
