@@ -8,6 +8,7 @@ import {
   CalendarClock,
   Wallet,
   BarChart3,
+  ShieldCheck,
   Menu,
   X,
   LogOut,
@@ -24,12 +25,15 @@ const NAV = [
     icon: Users,
     children: [
       { to: "/employees", label: "근로자 목록" },
+      { to: "/employees/contracts", label: "계약서" },
+      { to: "/employees/documents", label: "서류함" },
       { to: "/employees/status", label: "입퇴사현황" },
     ],
   },
   { to: "/schedule", label: "스케줄", icon: CalendarDays },
   { to: "/attendance", label: "출근현황", icon: ClipboardCheck },
   { to: "/leaves", label: "휴가", icon: CalendarClock },
+  { to: "/safety", label: "안전", icon: ShieldCheck },
   { to: "/payroll", label: "정산", icon: Wallet },
   { to: "/stats", label: "통계", icon: BarChart3 },
 ];

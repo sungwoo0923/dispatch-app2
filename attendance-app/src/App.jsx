@@ -9,6 +9,9 @@ import SignupSuccessPage from "./admin/SignupSuccessPage";
 import Dashboard from "./admin/Dashboard";
 import EmployeeList from "./admin/EmployeeList";
 import EmployeeStatus from "./admin/EmployeeStatus";
+import Contracts from "./admin/Contracts";
+import Documents from "./admin/Documents";
+import SafetyTrainings from "./admin/SafetyTrainings";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
@@ -21,6 +24,11 @@ import SchedulePage from "./employee/SchedulePage";
 import PayslipList from "./employee/PayslipList";
 import PayslipDetail from "./employee/PayslipDetail";
 import LeaveRequestPage from "./employee/LeaveRequestPage";
+import MorePage from "./employee/MorePage";
+import ContractsPage from "./employee/ContractsPage";
+import ContractDetail from "./employee/ContractDetail";
+import DocumentsPage from "./employee/DocumentsPage";
+import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
 import { PENDING_INVITE_KEY } from "./constants/session";
 
 function LoadingScreen() {
@@ -67,9 +75,12 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="employees" element={<EmployeeList />} />
           <Route path="employees/status" element={<EmployeeStatus />} />
+          <Route path="employees/contracts" element={<Contracts />} />
+          <Route path="employees/documents" element={<Documents />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="attendance" element={<AttendanceBoard />} />
           <Route path="leaves" element={<LeaveApprovals />} />
+          <Route path="safety" element={<SafetyTrainings />} />
           <Route path="payroll" element={<Payroll />} />
           <Route path="stats" element={<Stats />} />
         </Route>
@@ -91,6 +102,11 @@ export default function App() {
         <Route path="payslips" element={<PayslipList />} />
         <Route path="payslips/:payrollId" element={<PayslipDetail />} />
         <Route path="leave" element={<LeaveRequestPage />} />
+        <Route path="more" element={<MorePage />} />
+        <Route path="contracts" element={<ContractsPage />} />
+        <Route path="contracts/:contractId" element={<ContractDetail />} />
+        <Route path="documents" element={<DocumentsPage />} />
+        <Route path="safety" element={<SafetyTrainingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

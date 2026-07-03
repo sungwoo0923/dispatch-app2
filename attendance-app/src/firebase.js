@@ -6,6 +6,7 @@ import {
   connectFirestoreEmulator,
 } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getStorage, connectStorageEmulator } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -29,8 +30,10 @@ export const db = initializeFirestore(app, {
 });
 
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 if (useEmulator) {
   connectFirestoreEmulator(db, "localhost", 8081);
   connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
+  connectStorageEmulator(storage, "localhost", 9199);
 }

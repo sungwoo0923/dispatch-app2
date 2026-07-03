@@ -1,0 +1,24 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Employee documents live at companies/{companyId}/employees/{uid}/{fileName}.
+    // Cross-service read of the `admins` Firestore collection mirrors the
+    // isAdminOf() pattern used in firestore.rules — checked with exists()
+    // first since get() on a missing doc throws rather than denying cleanly.
+    match /companies/{companyId}/employees/{uid}/{fileName} {
+      function isSelfOrCompanyAdmin() {
+        return request.auth != null && (
+          request.auth.uid == uid ||
+          (
+            firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+            firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId
+          )
+        );
+      }
+
+      allow read: if isSelfOrCompanyAdmin();
+      allow write: if isSelfOrCompanyAdmin() && request.resource.size < 10 * 1024 * 1024;
+    }
+  }
+}

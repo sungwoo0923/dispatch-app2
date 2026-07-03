@@ -85,6 +85,37 @@ service cloud.firestore {
         (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'pending'));
     }
 
+    match /safetyTrainings/{trainingId} {
+      allow read: if isSignedIn(); // any company member may see scheduled/held trainings
+      allow write: if isAdminOf(request.resource.data.companyId);
+    }
+
+    match /trainingAttendance/{attendanceId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Metadata only; actual file bytes live in Storage under
+    // companies/{companyId}/employees/{uid}/, gated by storage.rules.
+    match /documents/{docId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() &&
+        (request.resource.data.uid == request.auth.uid || isAdminOf(request.resource.data.companyId));
+      allow delete: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+    }
+
+    match /contracts/{contractId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isAdminOf(request.resource.data.companyId);
+      allow update: if isSignedIn() &&
+        (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'sent'));
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     match /payrolls/{payrollId} {
       // payrollId is `${month}_${uid}`; same not-yet-created-doc reasoning as attendance above.
       allow get: if isSignedIn() && payrollId.split('_')[1] == request.auth.uid;
