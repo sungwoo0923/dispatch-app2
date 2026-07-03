@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, PenLine } from "lucide-react";
 import { db } from "../firebase";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
 import { toDateKey } from "../utils/dateUtils";
 
 export default function ContractDetail() {
   const { contractId } = useParams();
   const [contract, setContract] = useState(null);
+  const [signing, setSigning] = useState(false);
   const [saving, setSaving] = useState(false);
   const padRef = useRef(null);
 
@@ -31,6 +33,7 @@ export default function ContractDetail() {
     });
     setContract((c) => ({ ...c, status: "signed", signatureDataUrl, signedAt: toDateKey() }));
     setSaving(false);
+    setSigning(false);
   };
 
   if (!contract) return <p className="px-4 pt-4 text-xs text-muted">불러오는 중...</p>;
@@ -54,14 +57,31 @@ export default function ContractDetail() {
           <img src={contract.signatureDataUrl} alt="서명" className="h-24 rounded-xl border border-slate-200 bg-white" />
         </Card>
       ) : (
-        <Card className="p-5">
-          <p className="mb-2 text-sm font-semibold text-ink">서명하기</p>
-          <SignaturePad ref={padRef} />
-          <Button className="mt-3 w-full" size="lg" onClick={submitSignature} disabled={saving}>
-            {saving ? "제출 중..." : "서명하고 제출"}
-          </Button>
-        </Card>
+        <Button className="w-full" size="lg" onClick={() => setSigning(true)}>
+          <PenLine size={16} /> 서명하기
+        </Button>
       )}
+
+      <Modal
+        open={signing}
+        onClose={() => setSigning(false)}
+        title="서명"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setSigning(false)}>
+              취소
+            </Button>
+            <Button variant="outline" onClick={() => padRef.current?.clear()}>
+              다시그리기
+            </Button>
+            <Button onClick={submitSignature} disabled={saving}>
+              {saving ? "적용 중..." : "적용"}
+            </Button>
+          </>
+        }
+      >
+        <SignaturePad ref={padRef} />
+      </Modal>
     </div>
   );
 }

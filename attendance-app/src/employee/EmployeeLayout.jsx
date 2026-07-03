@@ -1,17 +1,19 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Home, History, CalendarDays, Menu } from "lucide-react";
+import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 const TABS = [
-  { to: "/", label: "홈", icon: Home, end: true },
-  { to: "/history", label: "출근기록", icon: History },
-  { to: "/schedule", label: "스케줄", icon: CalendarDays },
-  { to: "/more", label: "더보기", icon: Menu },
+  { to: "/work-info", label: "근무정보", icon: ClipboardList },
+  { to: "/history", label: "출근현황", icon: CalendarCheck },
+  { to: "/", label: "체크", icon: CheckCircle2, end: true, center: true },
+  { to: "/board", label: "공지사항", icon: MessageSquare },
+  { to: "/my-info", label: "내정보", icon: User },
 ];
 
-// Routes reachable only through the 더보기 menu still count as "더보기" active
-// for bottom-tab highlighting purposes.
-const MORE_ROUTES = ["/more", "/payslips", "/leave", "/contracts", "/documents", "/safety", "/board"];
+// Routes reachable only through a hub tab still count as that tab active for
+// bottom-nav highlighting purposes.
+const WORKINFO_ROUTES = ["/work-info", "/contracts", "/payslips", "/leave"];
+const MYINFO_ROUTES = ["/my-info", "/documents", "/safety"];
 
 export default function EmployeeLayout() {
   const { profile } = useAuth();
@@ -33,14 +35,28 @@ export default function EmployeeLayout() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-1/2 z-40 grid w-full max-w-md -translate-x-1/2 grid-cols-4 border-t border-slate-100 bg-white px-1 py-2 shadow-[0_-2px_10px_rgba(15,23,42,0.06)]">
-        {TABS.map(({ to, label, icon: Icon, end }) => {
-          const isMoreTab = to === "/more";
-          const isActive = isMoreTab
-            ? MORE_ROUTES.some((r) => location.pathname.startsWith(r))
-            : end
-              ? location.pathname === to
-              : location.pathname.startsWith(to);
+      <nav className="fixed bottom-0 left-1/2 z-40 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-100 bg-white px-1 py-2 shadow-[0_-2px_10px_rgba(15,23,42,0.06)]">
+        {TABS.map(({ to, label, icon: Icon, end, center }) => {
+          const isActive =
+            to === "/work-info"
+              ? WORKINFO_ROUTES.some((r) => location.pathname.startsWith(r))
+              : to === "/my-info"
+                ? MYINFO_ROUTES.some((r) => location.pathname.startsWith(r))
+                : end
+                  ? location.pathname === to
+                  : location.pathname.startsWith(to);
+
+          if (center) {
+            return (
+              <NavLink key={to} to={to} end={end} className="relative flex flex-col items-center gap-1 py-1.5">
+                <span className="-mt-6 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-white shadow-lg shadow-primary/30">
+                  <Icon size={22} />
+                </span>
+                <span className={`text-[11px] ${isActive ? "font-semibold text-primary" : "text-muted"}`}>{label}</span>
+              </NavLink>
+            );
+          }
+
           return (
             <NavLink
               key={to}

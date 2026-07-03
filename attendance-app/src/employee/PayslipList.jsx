@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
-import { ChevronRight, Wallet } from "lucide-react";
+import { ChevronRight, Wallet, Info } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -24,6 +24,10 @@ export default function PayslipList() {
   return (
     <div className="space-y-3 px-4 pt-4">
       <h2 className="text-sm font-semibold text-ink">급여명세서</h2>
+      <div className="flex items-center gap-2 rounded-xl bg-primary-light px-3.5 py-2.5 text-xs text-primary">
+        <Info size={14} className="shrink-0" />
+        현재일자 기준 3개월 전까지 조회됩니다.
+      </div>
       {payrolls.length === 0 && <p className="text-xs text-muted">발급된 명세서가 없습니다.</p>}
       {payrolls.map((p) => (
         <Link key={p.id} to={`/payslips/${p.id}`}>

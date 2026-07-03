@@ -6,6 +6,7 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
+import { formatDate } from "../utils/dateUtils";
 
 export default function ContractsPage() {
   const { user } = useAuth();
@@ -32,11 +33,11 @@ export default function ContractsPage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-ink">{c.title}</p>
-                <p className="text-xs text-muted">{c.startDate}</p>
+                <p className="text-xs text-muted">{c.startDate ? formatDate(c.startDate) : ""}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {c.status === "signed" ? <Badge tone="success">서명완료</Badge> : <Badge tone="warning">서명필요</Badge>}
+              {c.status === "signed" ? <Badge tone="success">다운로드</Badge> : <Badge tone="warning">작성필요</Badge>}
               <ChevronRight size={16} className="text-muted" />
             </div>
           </Card>

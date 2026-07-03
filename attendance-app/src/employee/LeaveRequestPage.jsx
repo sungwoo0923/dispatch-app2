@@ -10,7 +10,7 @@ import Modal from "../components/Modal";
 import { calcLeaveBalance, LEAVE_TYPES } from "../utils/leave";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
-const STATUS_LABEL = { pending: ["대기중", "warning"], approved: ["승인", "success"], rejected: ["반려", "danger"] };
+const STATUS_LABEL = { pending: ["승인대기", "warning"], approved: ["승인완료", "success"], rejected: ["반려", "danger"] };
 
 export default function LeaveRequestPage() {
   const { user, profile } = useAuth();
@@ -76,7 +76,7 @@ export default function LeaveRequestPage() {
 
       <div className="space-y-3">
         {leaves.map((lv) => {
-          const [label, tone] = STATUS_LABEL[lv.status] || ["대기중", "warning"];
+          const [label, tone] = STATUS_LABEL[lv.status] || ["승인대기", "warning"];
           return (
             <Card key={lv.id} className="flex items-center justify-between p-4">
               <div>

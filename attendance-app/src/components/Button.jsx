@@ -4,6 +4,7 @@ const VARIANTS = {
   success: "bg-success text-white hover:bg-primary disabled:bg-slate-300",
   ghost: "text-primary hover:bg-primary-light",
   danger: "bg-danger text-white hover:bg-red-700",
+  purple: "bg-purple-600 text-white hover:bg-purple-700 disabled:bg-slate-300",
 };
 
 export default function Button({

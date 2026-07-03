@@ -45,7 +45,8 @@ import SchedulePage from "./employee/SchedulePage";
 import PayslipList from "./employee/PayslipList";
 import PayslipDetail from "./employee/PayslipDetail";
 import LeaveRequestPage from "./employee/LeaveRequestPage";
-import MorePage from "./employee/MorePage";
+import WorkInfoPage from "./employee/WorkInfoPage";
+import MyInfoPage from "./employee/MyInfoPage";
 import ContractsPage from "./employee/ContractsPage";
 import ContractDetail from "./employee/ContractDetail";
 import DocumentsPage from "./employee/DocumentsPage";
@@ -147,7 +148,8 @@ export default function App() {
         <Route path="payslips" element={<PayslipList />} />
         <Route path="payslips/:payrollId" element={<PayslipDetail />} />
         <Route path="leave" element={<LeaveRequestPage />} />
-        <Route path="more" element={<MorePage />} />
+        <Route path="work-info" element={<WorkInfoPage />} />
+        <Route path="my-info" element={<MyInfoPage />} />
         <Route path="contracts" element={<ContractsPage />} />
         <Route path="contracts/:contractId" element={<ContractDetail />} />
         <Route path="documents" element={<DocumentsPage />} />
