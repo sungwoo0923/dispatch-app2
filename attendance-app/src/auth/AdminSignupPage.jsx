@@ -6,7 +6,7 @@ import { auth, db } from "../firebase";
 import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
 import { generateInviteCode } from "../utils/ids";
-import { phoneToAuthEmail } from "../utils/phoneAuth";
+import { phoneToAuthEmail, formatPhoneNumber } from "../utils/phoneAuth";
 import { DEFAULT_PAYROLL_RATES } from "../utils/payroll";
 import { PENDING_INVITE_KEY } from "../constants/session";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
@@ -36,6 +36,7 @@ export default function AdminSignupPage() {
   const [loading, setLoading] = useState(false);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const updatePhone = (e) => setForm((f) => ({ ...f, phone: formatPhoneNumber(e.target.value) }));
 
   const handleSubmitNew = async (e) => {
     e.preventDefault();
@@ -142,7 +143,7 @@ export default function AdminSignupPage() {
         <form onSubmit={handleSubmitNew}>
           <FormField label="회사명" required value={form.companyName} onChange={update("companyName")} placeholder="(주)케이피물류" />
           <FormField label="관리자 이름" required value={form.name} onChange={update("name")} placeholder="홍길동" />
-          <FormField label="연락처(회원ID)" required value={form.phone} onChange={update("phone")} placeholder="010-0000-0000" />
+          <FormField label="연락처(회원ID)" required value={form.phone} onChange={updatePhone} placeholder="010-0000-0000" maxLength={13} />
           <FormField label="비밀번호" type="password" required minLength={6} value={form.password} onChange={update("password")} placeholder="6자 이상" />
           {error && <p className="mb-3 text-xs text-danger">{error}</p>}
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
@@ -160,7 +161,7 @@ export default function AdminSignupPage() {
             style={{ textTransform: "uppercase" }}
           />
           <FormField label="이름" required value={form.name} onChange={update("name")} placeholder="홍길동" />
-          <FormField label="연락처(회원ID)" required value={form.phone} onChange={update("phone")} placeholder="010-0000-0000" />
+          <FormField label="연락처(회원ID)" required value={form.phone} onChange={updatePhone} placeholder="010-0000-0000" maxLength={13} />
           <FormField label="비밀번호" type="password" required minLength={6} value={form.password} onChange={update("password")} placeholder="6자 이상" />
           {error && <p className="mb-3 text-xs text-danger">{error}</p>}
           <Button type="submit" className="w-full" size="lg" disabled={loading}>

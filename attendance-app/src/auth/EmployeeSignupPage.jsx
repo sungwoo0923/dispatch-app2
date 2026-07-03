@@ -6,7 +6,7 @@ import { auth, db } from "../firebase";
 import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
 import { toDateKey } from "../utils/dateUtils";
-import { phoneToAuthEmail } from "../utils/phoneAuth";
+import { phoneToAuthEmail, formatPhoneNumber } from "../utils/phoneAuth";
 
 export default function EmployeeSignupPage() {
   const [step, setStep] = useState("code"); // 'code' | 'details'
@@ -18,6 +18,7 @@ export default function EmployeeSignupPage() {
   const [loading, setLoading] = useState(false);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const updatePhone = (e) => setForm((f) => ({ ...f, phone: formatPhoneNumber(e.target.value) }));
 
   const submitCode = async (e) => {
     e.preventDefault();
@@ -140,7 +141,7 @@ export default function EmployeeSignupPage() {
         ) : (
           <>
             <FormField label="이름" required value={form.name} onChange={update("name")} placeholder="홍길동" />
-            <FormField label="연락처(회원ID)" required value={form.phone} onChange={update("phone")} placeholder="010-0000-0000" />
+            <FormField label="연락처(회원ID)" required value={form.phone} onChange={updatePhone} placeholder="010-0000-0000" maxLength={13} />
           </>
         )}
         <FormField label="비밀번호" type="password" required minLength={6} value={form.password} onChange={update("password")} placeholder="6자 이상" />

@@ -28,6 +28,7 @@ import {
   COUNTRY_OPTIONS,
 } from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
+import { formatPhoneNumber } from "../utils/phoneAuth";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
 const EMPTY_REGISTER_FORM = {
@@ -828,7 +829,7 @@ export default function EmployeeList() {
         {issuedCode ? (
           <div>
             <p className="mb-2 text-sm text-muted">
-              아래 가입코드를 근로자에게 전달해주세요. 근로자가 앱 설치 후 이 코드로 로그인 정보(이메일/비밀번호)만 설정하면 바로 사용할 수 있습니다.
+              아래 가입코드를 근로자에게 전달해주세요. 근로자가 앱 설치 후 이 코드로 로그인 비밀번호만 설정하면 바로 사용할 수 있습니다.
             </p>
             <div className="flex items-center justify-between rounded-xl bg-primary-light px-4 py-3">
               <span className="text-2xl font-bold tracking-widest text-primary">{issuedCode}</span>
@@ -861,8 +862,9 @@ export default function EmployeeList() {
                   required
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                   value={registerForm.phone}
-                  onChange={(e) => setRegisterForm((f) => ({ ...f, phone: e.target.value }))}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, phone: formatPhoneNumber(e.target.value) }))}
                   placeholder="010-0000-0000"
+                  maxLength={13}
                 />
               </label>
               <div>
@@ -1210,7 +1212,8 @@ export default function EmployeeList() {
                   <input
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={quickForm.phone}
-                    onChange={(e) => setQuickForm((f) => ({ ...f, phone: e.target.value }))}
+                    onChange={(e) => setQuickForm((f) => ({ ...f, phone: formatPhoneNumber(e.target.value) }))}
+                    maxLength={13}
                   />
                 </label>
               </>

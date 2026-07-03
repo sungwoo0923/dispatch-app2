@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { CalendarCheck2 } from "lucide-react";
+import { CalendarCheck2, User, Lock } from "lucide-react";
 import { auth } from "../firebase";
 import Button from "../components/Button";
 import { phoneToAuthEmail, normalizePhone } from "../utils/phoneAuth";
@@ -43,25 +43,31 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <label className="mb-4 block">
             <span className="mb-1.5 block text-xs font-medium text-muted">회원ID(휴대전화번호)</span>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-light"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="대시(-) 없이 숫자만 입력"
-              inputMode="numeric"
-              required
-            />
+            <div className="relative">
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 pr-10 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-light"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="대시(-) 없이 숫자만 입력"
+                inputMode="numeric"
+                required
+              />
+              <User size={16} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
+            </div>
           </label>
           <label className="mb-3 block">
             <span className="mb-1.5 block text-xs font-medium text-muted">비밀번호</span>
-            <input
-              type="password"
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-light"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호"
-              required
-            />
+            <div className="relative">
+              <input
+                type="password"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 pr-10 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-light"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="비밀번호"
+                required
+              />
+              <Lock size={16} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
+            </div>
           </label>
 
           <label className="mb-5 flex items-center gap-2 text-xs text-muted">
@@ -75,13 +81,13 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 text-center text-xs text-muted">
+        <div className="mt-4 rounded-xl bg-slate-50 py-3.5 text-center text-xs text-muted">
           아직 회원이 아니신가요?{" "}
-          <Link to="/employee-signup" className="text-primary hover:underline">
+          <Link to="/employee-signup" className="font-medium text-primary hover:underline">
             직원 회원가입
           </Link>
           <span className="mx-1.5 text-slate-300">|</span>
-          <Link to="/admin-signup" className="text-primary hover:underline">
+          <Link to="/admin-signup" className="font-medium text-primary hover:underline">
             관리자 회원가입
           </Link>
         </div>
