@@ -132,6 +132,76 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    // 조직: 사업자 (business entity), parent of 센터/소속업체.
+    match /businessEntities/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
+    // 조직: 센터<->소속업체 link table.
+    match /siteVendors/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
+    // 조직: 센터-scoped 근무구분/근무형태/부서/직급/지정외휴일 (each row belongs to one workSite).
+    match /siteShiftCategories/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /siteShiftTypes/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /siteDepartments/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /sitePositions/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /siteHolidays/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
+    // 조직: 디바이스 (beacon/tablet registry, record-keeping only) + site assignment link.
+    match /devices/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /siteDevices/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
+    // 권한: 그룹등록/그룹소속/그룹별메뉴.
+    match /permissionGroups/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /permissionGroupMembers/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /permissionGroupMenus/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     // Single-use code an existing admin issues so a co-worker can join as a
     // second admin of the same company (mirrors pendingEmployees' pattern).
     match /adminInvites/{code} {

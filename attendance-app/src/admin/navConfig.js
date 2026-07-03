@@ -9,6 +9,8 @@ import {
   MessageSquare,
   Settings,
   LayoutTemplate,
+  Building2,
+  Lock,
 } from "lucide-react";
 
 export const NAV = [
@@ -54,6 +56,26 @@ export const NAV = [
   },
   { to: "/stats", label: "통계", icon: BarChart3 },
   { to: "/board", label: "게시판", icon: MessageSquare },
+  {
+    to: "/org/entities",
+    label: "조직",
+    icon: Building2,
+    children: [
+      { to: "/org/entities", label: "사업자" },
+      { to: "/org/vendors", label: "소속업체" },
+      { to: "/org/centers", label: "센터" },
+      { to: "/org/devices", label: "디바이스" },
+    ],
+  },
+  {
+    to: "/permissions/groups",
+    label: "권한",
+    icon: Lock,
+    children: [
+      { to: "/permissions/groups", label: "그룹등록" },
+      { to: "/permissions/menus", label: "그룹별메뉴" },
+    ],
+  },
   { to: "/templates", label: "템플릿", icon: LayoutTemplate },
   {
     to: "/settings/admins",

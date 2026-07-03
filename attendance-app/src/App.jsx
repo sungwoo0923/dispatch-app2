@@ -16,6 +16,12 @@ import SafetySettings from "./admin/SafetySettings";
 import Board from "./admin/Board";
 import AdminAccounts from "./admin/AdminAccounts";
 import OrgSettings from "./admin/OrgSettings";
+import BusinessEntities from "./admin/BusinessEntities";
+import Vendors from "./admin/Vendors";
+import Centers from "./admin/Centers";
+import Devices from "./admin/Devices";
+import PermissionGroups from "./admin/PermissionGroups";
+import PermissionGroupMenus from "./admin/PermissionGroupMenus";
 import Templates from "./admin/Templates";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
@@ -95,6 +101,12 @@ export default function App() {
           <Route path="board" element={<Board />} />
           <Route path="settings/admins" element={<AdminAccounts />} />
           <Route path="settings/org" element={<OrgSettings />} />
+          <Route path="org/entities" element={<BusinessEntities />} />
+          <Route path="org/vendors" element={<Vendors />} />
+          <Route path="org/centers" element={<Centers />} />
+          <Route path="org/devices" element={<Devices />} />
+          <Route path="permissions/groups" element={<PermissionGroups />} />
+          <Route path="permissions/menus" element={<PermissionGroupMenus />} />
           <Route path="templates" element={<Templates />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
