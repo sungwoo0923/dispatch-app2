@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   initializeFirestore,
   persistentLocalCache,
-  persistentSingleTabManager,
+  persistentMultipleTabManager,
   connectFirestoreEmulator,
 } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
@@ -40,8 +40,14 @@ export const app = initializeApp(
     : firebaseConfig
 );
 
+// persistentSingleTabManager requires exclusive ownership of the IndexedDB
+// persistence lease across tabs; a stale/backgrounded tab (very common on
+// mobile Safari, which keeps tabs alive rather than closing them) can hold
+// that lease forever and leave every other tab's Firestore calls hanging
+// indefinitely with no error. persistentMultipleTabManager shares the cache
+// across tabs instead, so a new tab's reads/writes never block on another.
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
 
 export const auth = getAuth(app);
