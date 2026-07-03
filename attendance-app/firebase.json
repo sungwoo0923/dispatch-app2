@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "kp-work-4ae99",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }]
