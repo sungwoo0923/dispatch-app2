@@ -29,6 +29,12 @@ import CenterReports from "./admin/CenterReports";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
+import LeaveTemplates from "./admin/LeaveTemplates";
+import LeaveTypes from "./admin/LeaveTypes";
+import SiteLeaveSettings from "./admin/SiteLeaveSettings";
+import LeaveManagement from "./admin/LeaveManagement";
+import LeaveUsageStatus from "./admin/LeaveUsageStatus";
+import { LeaveMonthlyStats, LeaveAnnualStats } from "./admin/LeavePeriodStats";
 import Payroll from "./admin/Payroll";
 import SiteInsuranceRates from "./admin/SiteInsuranceRates";
 import Stats from "./admin/Stats";
@@ -96,6 +102,13 @@ export default function App() {
           <Route path="schedule" element={<Schedule />} />
           <Route path="attendance" element={<AttendanceBoard />} />
           <Route path="leaves" element={<LeaveApprovals />} />
+          <Route path="leaves/templates" element={<LeaveTemplates />} />
+          <Route path="leaves/types" element={<LeaveTypes />} />
+          <Route path="leaves/site-settings" element={<SiteLeaveSettings />} />
+          <Route path="leaves/management" element={<LeaveManagement />} />
+          <Route path="leaves/usage" element={<LeaveUsageStatus />} />
+          <Route path="leaves/monthly" element={<LeaveMonthlyStats />} />
+          <Route path="leaves/annual" element={<LeaveAnnualStats />} />
           <Route path="safety" element={<SafetyTrainings />} />
           <Route path="safety/settings" element={<SafetySettings />} />
           <Route path="payroll" element={<Payroll />} />

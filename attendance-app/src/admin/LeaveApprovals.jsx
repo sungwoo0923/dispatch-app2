@@ -1,81 +1,271 @@
-import { useEffect, useState } from "react";
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { Check, X, CalendarClock, History } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { CalendarClock, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
-import { formatDate } from "../utils/dateUtils";
+import { downloadCsv } from "../utils/exportCsv";
+import { formatDate, toDateKey, addDays } from "../utils/dateUtils";
+import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
 
-const STATUS_LABEL = { pending: ["대기중", "warning"], approved: ["승인", "success"], rejected: ["반려", "danger"] };
+const STATUS_OPTIONS = ["승인대기", "승인완료", "반려"];
+const STATUS_MAP = { pending: "승인대기", approved: "승인완료", rejected: "반려" };
+const STATUS_MAP_REV = { 승인대기: "pending", 승인완료: "approved", 반려: "rejected" };
+const STATUS_TONE = { 승인대기: "warning", 승인완료: "success", 반려: "danger" };
+
+const EMPTY_FILTERS = {
+  siteId: "",
+  vendorId: "",
+  shiftType: "",
+  employmentType: "",
+  team: "",
+  position: "",
+  nationality: "",
+  country: "",
+  name: "",
+  phone: "",
+};
 
 export default function LeaveApprovals() {
   const { profile } = useAuth();
+  const [employees, setEmployees] = useState([]);
+  const [workSites, setWorkSites] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [leaves, setLeaves] = useState([]);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [range, setRange] = useState({ start: addDays(toDateKey(), -30), end: addDays(toDateKey(), 30) });
+  const [selected, setSelected] = useState(() => new Set());
+  const [statusAction, setStatusAction] = useState("승인완료");
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     if (!profile?.companyId) return;
-    const unsub = onSnapshot(
-      query(collection(db, "leaves"), where("companyId", "==", profile.companyId), orderBy("startDate", "desc")),
-      (snap) => setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-    return () => unsub();
+    const unsubs = [
+      onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (s) => setEmployees(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (s) => setWorkSites(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "vendors"), where("companyId", "==", profile.companyId)), (s) => setVendors(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "leaves"), where("companyId", "==", profile.companyId)), (s) => setLeaves(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
 
-  const setStatus = (id, status) => updateDoc(doc(db, "leaves", id), { status });
+  const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
+  const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
+  const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
 
-  const pending = leaves.filter((l) => l.status === "pending");
-  const rest = leaves.filter((l) => l.status !== "pending");
+  const rows = useMemo(() => {
+    return leaves
+      .map((lv) => ({ leave: lv, emp: employeeByUid.get(lv.uid) }))
+      .filter(({ emp }) => Boolean(emp))
+      .filter(({ leave, emp }) => {
+        if (range.start && leave.startDate < range.start) return false;
+        if (range.end && leave.startDate > range.end) return false;
+        if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
+        if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
+        if (filters.shiftType && emp.shiftType !== filters.shiftType) return false;
+        if (filters.employmentType && emp.employmentType !== filters.employmentType) return false;
+        if (filters.team && emp.team !== filters.team) return false;
+        if (filters.position && emp.position !== filters.position) return false;
+        if (filters.nationality && emp.nationality !== filters.nationality) return false;
+        if (filters.country && emp.country !== filters.country) return false;
+        if (filters.name && !emp.name?.includes(filters.name)) return false;
+        if (filters.phone && !emp.phone?.includes(filters.phone)) return false;
+        return true;
+      })
+      .sort((a, b) => b.leave.startDate.localeCompare(a.leave.startDate));
+  }, [leaves, employeeByUid, filters, range]);
+
+  const toggleSelected = (id) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleSelectAll = () => setSelected((s) => (s.size === rows.length ? new Set() : new Set(rows.map((r) => r.leave.id))));
+
+  const applyStatus = async () => {
+    for (const id of selected) {
+      await updateDoc(doc(db, "leaves", id), { status: STATUS_MAP_REV[statusAction], adminNote: note || null });
+    }
+    setSelected(new Set());
+    setNote("");
+  };
+
+  const exportCsv = () => {
+    const headers = ["사업자", "센터", "상태", "신청자", "휴가일자", "휴가유형", "휴가일수", "사유", "전화번호"];
+    downloadCsv(
+      "근로자휴가신청현황",
+      headers,
+      rows.map(({ leave: lv, emp }) => [profile.companyId, siteName_(emp.workSiteId), STATUS_MAP[lv.status] || "승인대기", lv.name, formatDate(lv.startDate), lv.type, lv.days || 1, lv.reason || "-", emp.phone || "-"])
+    );
+  };
 
   return (
     <div className="space-y-6">
-      <Panel icon={CalendarClock} title={`휴가 승인 대기 (${pending.length}건)`}>
-        <div className="space-y-3">
-          {pending.map((lv) => (
-            <Card key={lv.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div>
-                <p className="text-sm font-medium text-ink">
-                  {lv.name} · {lv.type}
-                </p>
-                <p className="text-xs text-muted">
-                  {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)} {lv.reason ? `· ${lv.reason}` : ""}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="success" onClick={() => setStatus(lv.id, "approved")}>
-                  <Check size={14} /> 승인
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => setStatus(lv.id, "rejected")}>
-                  <X size={14} /> 반려
-                </Button>
-              </div>
-            </Card>
-          ))}
-          {pending.length === 0 && <p className="text-xs text-muted">대기중인 신청이 없습니다.</p>}
-        </div>
-      </Panel>
+      <Panel icon={CalendarClock} title="근로자휴가신청현황">
+        <p className="mb-4 text-xs text-muted">근로자가 모바일을 통해 휴가 신청할 수 있으며 휴가 신청한 내용을 확인할 수 있습니다. 근로자들이 신청한 휴가를 승인 절차 프로세스를 진행 할 수 있습니다. 승인완료,반려,승인대기를 할 수 있습니다.</p>
 
-      <Panel icon={History} title={`처리 내역 (${rest.length}건)`}>
-        <div className="space-y-2">
-          {rest.map((lv) => {
-            const [label, tone] = STATUS_LABEL[lv.status] || ["대기중", "warning"];
-            return (
-              <Card key={lv.id} className="flex items-center justify-between p-4">
-                <div>
-                  <p className="text-sm text-ink">
-                    {lv.name} · {lv.type}
-                  </p>
-                  <p className="text-xs text-muted">
-                    {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
-                  </p>
+        <Card className="mb-4 space-y-3 p-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+              <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.siteId} onChange={(e) => setFilters((f) => ({ ...f, siteId: e.target.value }))}>
+                <option value="">전체</option>
+                {workSites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+              <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.vendorId} onChange={(e) => setFilters((f) => ({ ...f, vendorId: e.target.value }))}>
+                <option value="">전체</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">근무구분</span>
+              <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.shiftType} onChange={(e) => setFilters((f) => ({ ...f, shiftType: e.target.value }))}>
+                <option value="">전체</option>
+                {SHIFT_TYPE_OPTIONS.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">근무형태</span>
+              <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.employmentType} onChange={(e) => setFilters((f) => ({ ...f, employmentType: e.target.value }))}>
+                <option value="">전체</option>
+                {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">국적구분</span>
+              <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.nationality} onChange={(e) => setFilters((f) => ({ ...f, nationality: e.target.value }))}>
+                <option value="">선택</option>
+                {NATIONALITY_OPTIONS.map((n) => (
+                  <option key={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">국가구분</span>
+              <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.country} onChange={(e) => setFilters((f) => ({ ...f, country: e.target.value }))}>
+                <option value="">전체</option>
+                {COUNTRY_OPTIONS.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-end justify-between gap-3 border-t border-slate-100 pt-3">
+            <div className="flex flex-wrap gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">이름</span>
+                <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.name} onChange={(e) => setFilters((f) => ({ ...f, name: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">전화번호</span>
+                <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={filters.phone} onChange={(e) => setFilters((f) => ({ ...f, phone: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">휴가발생일</span>
+                <div className="flex items-center gap-1.5">
+                  <input type="date" className="rounded-lg border border-slate-200 px-2 py-2 text-sm" value={range.start} onChange={(e) => setRange((r) => ({ ...r, start: e.target.value }))} />
+                  <span className="text-muted">~</span>
+                  <input type="date" className="rounded-lg border border-slate-200 px-2 py-2 text-sm" value={range.end} onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))} />
                 </div>
-                <Badge tone={tone}>{label}</Badge>
-              </Card>
-            );
-          })}
-          {rest.length === 0 && <p className="text-xs text-muted">처리 내역이 없습니다.</p>}
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" className="rounded-xl border border-slate-200 p-2.5 text-muted hover:bg-slate-50" onClick={() => setFilters(EMPTY_FILTERS)}>
+                <RefreshCw size={16} />
+              </button>
+              <Button>검색</Button>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="mb-3 flex flex-nowrap items-end gap-2 overflow-x-auto p-3">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-muted">상태</span>
+            <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={statusAction} onChange={(e) => setStatusAction(e.target.value)}>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <input className="w-40 rounded-lg border border-slate-200 px-2.5 py-2 text-sm" placeholder="관리자비고" value={note} onChange={(e) => setNote(e.target.value)} />
+          <Button size="sm" onClick={applyStatus} disabled={selected.size === 0}>
+            적용
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportCsv}>
+            <FileSpreadsheet size={13} /> 엑셀
+          </Button>
+        </Card>
+
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">
+                  <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
+                </th>
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">사업자</th>
+                <th className="px-4 py-3 font-medium">센터</th>
+                <th className="px-4 py-3 font-medium">상태</th>
+                <th className="px-4 py-3 font-medium">신청자</th>
+                <th className="px-4 py-3 font-medium">휴가일자</th>
+                <th className="px-4 py-3 font-medium">휴가유형</th>
+                <th className="px-4 py-3 font-medium">휴가일수</th>
+                <th className="px-4 py-3 font-medium">사유</th>
+                <th className="px-4 py-3 font-medium">관리자비고</th>
+                <th className="px-4 py-3 font-medium">전화번호</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ leave: lv, emp }, i) => (
+                <tr key={lv.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.has(lv.id)} onChange={() => toggleSelected(lv.id)} />
+                  </td>
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-4 py-3">
+                    <Badge tone={STATUS_TONE[STATUS_MAP[lv.status] || "승인대기"]}>{STATUS_MAP[lv.status] || "승인대기"}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-ink">{lv.name}</td>
+                  <td className="px-4 py-3 text-muted">{formatDate(lv.startDate)}</td>
+                  <td className="px-4 py-3 text-muted">{lv.type}</td>
+                  <td className="px-4 py-3 text-muted">{lv.days || 1}</td>
+                  <td className="px-4 py-3 text-muted">{lv.reason || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{lv.adminNote || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{emp.phone || "-"}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-4 py-6 text-center text-xs text-muted">
+                    신청된 휴가가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </Panel>
     </div>

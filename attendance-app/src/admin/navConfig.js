@@ -35,7 +35,21 @@ export const NAV = [
       { to: "/attendance", label: "출근현황" },
     ],
   },
-  { to: "/leaves", label: "휴가", icon: CalendarClock },
+  {
+    to: "/leaves/templates",
+    label: "휴가",
+    icon: CalendarClock,
+    children: [
+      { to: "/leaves/templates", label: "휴가템플릿" },
+      { to: "/leaves/types", label: "휴가유형설정" },
+      { to: "/leaves/site-settings", label: "센터별휴가설정" },
+      { to: "/leaves/management", label: "근로자휴가관리" },
+      { to: "/leaves", label: "근로자휴가신청현황" },
+      { to: "/leaves/usage", label: "근로자휴가사용현황" },
+      { to: "/leaves/monthly", label: "근로자별월간집계" },
+      { to: "/leaves/annual", label: "근로자별연간집계" },
+    ],
+  },
   {
     to: "/safety",
     label: "안전",

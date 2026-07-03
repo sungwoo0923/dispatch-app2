@@ -93,6 +93,23 @@ service cloud.firestore {
         (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'pending'));
     }
 
+    // 휴가 > 휴가템플릿/휴가유형설정/센터별휴가설정: company-wide config docs.
+    match /leaveTemplates/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /leaveTypes/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+    match /siteLeaveSettings/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     match /shiftTemplates/{id} {
       allow read: if isSignedIn();
       allow create, update: if isAdminOf(request.resource.data.companyId);
