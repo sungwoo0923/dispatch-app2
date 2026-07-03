@@ -10,8 +10,11 @@ export default {
           light: "#DBEAFE",
         },
         surface: "#F8FAFC",
-        success: "#16A34A",
-        warning: "#F59E0B",
+        // Kept as semantic names for readability at call sites, but mapped to
+        // the blue/white/gray palette — only `danger` stays a true accent
+        // color, reserved for destructive actions and critical alerts.
+        success: "#1D4ED8",
+        warning: "#475569",
         danger: "#DC2626",
         ink: "#1E293B",
         muted: "#64748B",

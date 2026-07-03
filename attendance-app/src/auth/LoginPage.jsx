@@ -25,7 +25,7 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthShell subtitle="도급직원 출퇴근 · 급여관리">
+    <AuthShell subtitle="도급직원 출퇴근 · 급여관리" title="로그인">
       <form onSubmit={handleSubmit}>
         <FormField
           label="이메일"

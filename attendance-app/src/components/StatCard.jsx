@@ -3,8 +3,8 @@ import Card from "./Card";
 export default function StatCard({ icon: Icon, label, value, tone = "primary", suffix }) {
   const toneClass = {
     primary: "bg-primary-light text-primary",
-    success: "bg-green-50 text-success",
-    warning: "bg-amber-50 text-warning",
+    success: "bg-primary text-white",
+    warning: "bg-slate-100 text-warning",
     danger: "bg-red-50 text-danger",
   }[tone];
 

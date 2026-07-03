@@ -18,7 +18,7 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
-import { POSITION_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "../constants/hr";
+import { POSITION_OPTIONS, EMPLOYMENT_STATUS_OPTIONS, TEAM_OPTIONS } from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
@@ -26,12 +26,23 @@ const EMPTY_REGISTER_FORM = {
   name: "",
   phone: "",
   gender: "남",
+  employeeCode: "",
+  team: "",
   position: "",
   hireDate: toDateKey(),
   workSiteId: "",
   insuranceApplied: "Y",
   note: "",
 };
+
+function SectionHeader({ children }) {
+  return (
+    <div className="mb-3 mt-5 flex items-center gap-2 first:mt-0">
+      <span className="h-3.5 w-1 rounded-full bg-primary" />
+      <h4 className="text-sm font-semibold text-ink">{children}</h4>
+    </div>
+  );
+}
 
 export default function EmployeeList() {
   const { profile } = useAuth();
@@ -182,12 +193,13 @@ export default function EmployeeList() {
       </Card>
 
       <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[820px] text-left text-sm">
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
               <th className="px-4 py-3 font-medium">이름</th>
               <th className="px-4 py-3 font-medium">연락처</th>
               <th className="px-4 py-3 font-medium">성별</th>
+              <th className="px-4 py-3 font-medium">부서</th>
               <th className="px-4 py-3 font-medium">직급</th>
               <th className="px-4 py-3 font-medium">재직상태</th>
               <th className="px-4 py-3 font-medium">근무지</th>
@@ -201,6 +213,18 @@ export default function EmployeeList() {
                 <td className="px-4 py-3 text-ink">{emp.name}</td>
                 <td className="px-4 py-3 text-muted">{emp.phone}</td>
                 <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
+                <td className="px-4 py-3">
+                  <select
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                    value={emp.team || ""}
+                    onChange={(e) => updateField(emp.id, "team", e.target.value)}
+                  >
+                    <option value="">-</option>
+                    {TEAM_OPTIONS.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
+                </td>
                 <td className="px-4 py-3">
                   <select
                     className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
@@ -254,7 +278,7 @@ export default function EmployeeList() {
             ))}
             {filteredEmployees.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-xs text-muted">
+                <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
                   조회조건에 해당하는 근로자가 없습니다.
                 </td>
               </tr>
@@ -368,6 +392,7 @@ export default function EmployeeList() {
         open={registerOpen}
         onClose={closeRegisterModal}
         title={issuedCode ? "등록 완료" : "신규 근로자 등록"}
+        size="lg"
         footer={
           issuedCode ? (
             <Button onClick={closeRegisterModal}>확인</Button>
@@ -398,10 +423,11 @@ export default function EmployeeList() {
             </div>
           </div>
         ) : (
-          <form onSubmit={submitRegister} className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+          <form onSubmit={submitRegister}>
+            <SectionHeader>기본정보</SectionHeader>
+            <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">이름</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted">이름 *</span>
                 <input
                   required
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
@@ -411,7 +437,7 @@ export default function EmployeeList() {
                 />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">연락처</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted">전화번호 *</span>
                 <input
                   required
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
@@ -420,26 +446,48 @@ export default function EmployeeList() {
                   placeholder="010-0000-0000"
                 />
               </label>
-            </div>
-
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-muted">성별</span>
-              <div className="flex gap-4 text-sm">
-                {["남", "여"].map((g) => (
-                  <label key={g} className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="gender"
-                      checked={registerForm.gender === g}
-                      onChange={() => setRegisterForm((f) => ({ ...f, gender: g }))}
-                    />
-                    {g}
-                  </label>
-                ))}
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">사원코드</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.employeeCode}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, employeeCode: e.target.value }))}
+                  placeholder="사내 관리번호 (선택)"
+                />
+              </label>
+              <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">성별</span>
+                <div className="flex h-[42px] items-center gap-4 text-sm">
+                  {["남", "여"].map((g) => (
+                    <label key={g} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="gender"
+                        checked={registerForm.gender === g}
+                        onChange={() => setRegisterForm((f) => ({ ...f, gender: g }))}
+                      />
+                      {g}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <SectionHeader>입/퇴사정보</SectionHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">부서</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.team}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, team: e.target.value }))}
+                >
+                  <option value="">선택</option>
+                  {TEAM_OPTIONS.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-muted">직급</span>
                 <select
@@ -454,8 +502,9 @@ export default function EmployeeList() {
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">입사일자</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted">입사일자 *</span>
                 <input
+                  required
                   type="date"
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                   value={registerForm.hireDate}
@@ -464,48 +513,49 @@ export default function EmployeeList() {
               </label>
             </div>
 
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">근무지 배정</span>
-              <select
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={registerForm.workSiteId}
-                onChange={(e) => setRegisterForm((f) => ({ ...f, workSiteId: e.target.value }))}
-              >
-                <option value="">미배정</option>
-                {workSites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-muted">4대보험 적용여부</span>
-              <div className="flex gap-4 text-sm">
-                {["Y", "N"].map((v) => (
-                  <label key={v} className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="insuranceApplied"
-                      checked={registerForm.insuranceApplied === v}
-                      onChange={() => setRegisterForm((f) => ({ ...f, insuranceApplied: v }))}
-                    />
-                    {v}
-                  </label>
-                ))}
+            <SectionHeader>근무정보</SectionHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">근무지 배정</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.workSiteId}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, workSiteId: e.target.value }))}
+                >
+                  <option value="">미배정</option>
+                  {workSites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">4대보험 적용여부</span>
+                <div className="flex h-[42px] items-center gap-4 text-sm">
+                  {["Y", "N"].map((v) => (
+                    <label key={v} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="insuranceApplied"
+                        checked={registerForm.insuranceApplied === v}
+                        onChange={() => setRegisterForm((f) => ({ ...f, insuranceApplied: v }))}
+                      />
+                      {v}
+                    </label>
+                  ))}
+                </div>
               </div>
+              <label className="col-span-2 block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
+                <textarea
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  rows={2}
+                  value={registerForm.note}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, note: e.target.value }))}
+                />
+              </label>
             </div>
-
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
-              <textarea
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                rows={2}
-                value={registerForm.note}
-                onChange={(e) => setRegisterForm((f) => ({ ...f, note: e.target.value }))}
-              />
-            </label>
           </form>
         )}
       </Modal>

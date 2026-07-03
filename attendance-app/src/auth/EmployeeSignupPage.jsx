@@ -62,6 +62,8 @@ export default function EmployeeSignupPage() {
           name: pendingProfile.name,
           phone: pendingProfile.phone,
           gender: pendingProfile.gender || "",
+          employeeCode: pendingProfile.employeeCode || "",
+          team: pendingProfile.team || "",
           position: pendingProfile.position || "",
           hireDate: pendingProfile.hireDate || toDateKey(),
           workSiteId: pendingProfile.workSiteId || null,

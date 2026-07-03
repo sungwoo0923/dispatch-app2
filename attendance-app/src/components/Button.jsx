@@ -1,7 +1,7 @@
 const VARIANTS = {
   primary: "bg-primary text-white hover:bg-primary-dark disabled:bg-slate-300",
   outline: "border border-slate-200 text-ink bg-white hover:bg-slate-50",
-  success: "bg-success text-white hover:bg-green-700 disabled:bg-slate-300",
+  success: "bg-success text-white hover:bg-primary disabled:bg-slate-300",
   ghost: "text-primary hover:bg-primary-light",
   danger: "bg-danger text-white hover:bg-red-700",
 };
