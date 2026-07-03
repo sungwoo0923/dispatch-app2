@@ -365,7 +365,7 @@ export default function Schedule() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
           <p className="text-xs font-medium text-muted">스케줄 인원 현황 {rows.length}</p>
           <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
             <button

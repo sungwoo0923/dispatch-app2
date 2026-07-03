@@ -34,7 +34,7 @@ function EditableList({ title, collectionName, items }) {
           <Plus size={14} /> 추가
         </Button>
       </form>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-nowrap gap-2 overflow-x-auto">
         {items.map((item) => (
           <span key={item.id} className="flex items-center gap-1.5 rounded-full bg-slate-100 py-1.5 pl-3 pr-2 text-sm text-ink">
             {item.name}

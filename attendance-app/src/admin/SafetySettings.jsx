@@ -83,7 +83,7 @@ export default function SafetySettings() {
         <div className="space-y-3">
         {workSites.map((site) => (
           <Card key={site.id} className="p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-nowrap items-center justify-between gap-3 overflow-x-auto">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
                   <ShieldCheck size={18} />
@@ -116,7 +116,7 @@ export default function SafetySettings() {
                     <Plus size={13} /> 담당자 지정
                   </Button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-nowrap gap-2 overflow-x-auto">
                   {managersFor(site.id).map((m) => (
                     <Badge key={m.id} tone="primary" className="pr-1">
                       {m.role} · {m.adminName}

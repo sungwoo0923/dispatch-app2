@@ -106,7 +106,7 @@ export default function OnboardingWidget() {
 
   return (
     <>
-      <Card className="flex flex-wrap items-center gap-4 p-5">
+      <Card className="flex flex-nowrap items-center gap-4 overflow-x-auto p-5">
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light text-primary">
           <Rocket size={20} />
         </div>
@@ -191,7 +191,7 @@ export default function OnboardingWidget() {
                 <Plus size={15} /> 추가
               </Button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-nowrap gap-2 overflow-x-auto">
               {vendors.map((v) => (
                 <Badge key={v.id} tone="primary">
                   {v.name}
@@ -241,7 +241,7 @@ export default function OnboardingWidget() {
             {vendors.length > 0 && (
               <div>
                 <span className="mb-1.5 block text-xs font-medium text-muted">센터에 연결할 소속업체</span>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-nowrap gap-2 overflow-x-auto">
                   {vendors.map((v) => (
                     <button
                       type="button"

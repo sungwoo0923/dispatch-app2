@@ -472,7 +472,7 @@ function MonthlyGridTab({ profile, lookups }) {
         </label>
       </Card>
 
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
         <p className="text-xs font-medium text-muted">목록</p>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1 text-[11px] text-muted">
@@ -854,7 +854,7 @@ export default function Stats() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 text-sm w-fit">
+      <div className="flex flex-nowrap gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 text-sm w-fit">
         {TABS.map((t) => (
           <button
             key={t.key}

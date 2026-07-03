@@ -668,12 +668,12 @@ export default function Payroll() {
           </div>
         </Card>
 
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
           <p className="text-xs font-medium text-muted">
             목록 {filteredEmployees.length}
             <span className="ml-2 text-[11px] text-muted">✓ 팀근정보가 없음 | 휴무일 '123' 5시간 이상 연장</span>
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto">
             <Button size="sm" onClick={() => setSettleOpen(true)}>
               <CalculatorIcon size={13} /> 정산처리 요청
             </Button>

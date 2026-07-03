@@ -371,7 +371,7 @@ export default function AttendanceBoard() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
           <p className="text-xs font-medium text-muted">
             출근현황 {rows.length}
             <span className="ml-2 text-[11px] text-danger">'{lateCount}' 지각</span>

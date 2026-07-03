@@ -164,7 +164,7 @@ export default function SiteInsuranceRates() {
           </div>
         </Card>
 
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
           <p className="text-xs font-medium text-muted">목록 {sorted.length}</p>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setShowNewRow((v) => !v)}>

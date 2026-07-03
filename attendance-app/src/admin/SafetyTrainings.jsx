@@ -331,7 +331,7 @@ export default function SafetyTrainings() {
           </Card>
         )}
 
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
           <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => window.print()}>

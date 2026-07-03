@@ -11,11 +11,11 @@ export default function Panel({ icon: Icon, title, actions, children, defaultCol
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 md:px-5">
+      <div className="flex items-center justify-between gap-3 overflow-x-auto border-b border-slate-100 px-4 py-3 md:px-5">
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
-          className="flex items-center gap-2 text-sm font-semibold text-ink"
+          className="flex shrink-0 items-center gap-2 text-sm font-semibold text-ink"
         >
           {Icon && (
             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary-light text-primary">
@@ -25,7 +25,7 @@ export default function Panel({ icon: Icon, title, actions, children, defaultCol
           {title}
           {collapsed ? <ChevronDown size={15} className="text-muted" /> : <ChevronUp size={15} className="text-muted" />}
         </button>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
       {!collapsed && <div className="p-4 md:p-5">{children}</div>}
     </Card>
