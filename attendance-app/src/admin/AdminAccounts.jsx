@@ -49,7 +49,7 @@ export default function AdminAccounts() {
   };
 
   const issueInvite = async () => {
-    const code = generateInviteCode(8);
+    const code = generateInviteCode(7);
     await setDoc(doc(db, "adminInvites", code), {
       companyId: profile.companyId,
       createdAt: serverTimestamp(),

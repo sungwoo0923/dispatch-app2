@@ -6,13 +6,14 @@ import { auth, db } from "../firebase";
 import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
 import { toDateKey } from "../utils/dateUtils";
+import { phoneToAuthEmail } from "../utils/phoneAuth";
 
 export default function EmployeeSignupPage() {
   const [step, setStep] = useState("code"); // 'code' | 'details'
   const [code, setCode] = useState("");
   const [pendingProfile, setPendingProfile] = useState(null); // set if admin pre-registered this worker
   const [companyId, setCompanyId] = useState("");
-  const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", phone: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -53,7 +54,8 @@ export default function EmployeeSignupPage() {
     setError("");
     setLoading(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, form.email.trim(), form.password);
+      const loginPhone = pendingProfile ? pendingProfile.phone : form.phone;
+      const cred = await createUserWithEmailAndPassword(auth, phoneToAuthEmail(loginPhone), form.password);
 
       if (pendingProfile) {
         await setDoc(doc(db, "users", cred.user.uid), {
@@ -92,7 +94,7 @@ export default function EmployeeSignupPage() {
         });
       }
     } catch (err) {
-      setError(err.code === "auth/email-already-in-use" ? "이미 사용 중인 이메일입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");
+      setError(err.code === "auth/email-already-in-use" ? "이미 가입된 휴대전화번호입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");
       setLoading(false);
     }
   };
@@ -138,10 +140,9 @@ export default function EmployeeSignupPage() {
         ) : (
           <>
             <FormField label="이름" required value={form.name} onChange={update("name")} placeholder="홍길동" />
-            <FormField label="연락처" required value={form.phone} onChange={update("phone")} placeholder="010-0000-0000" />
+            <FormField label="연락처(회원ID)" required value={form.phone} onChange={update("phone")} placeholder="010-0000-0000" />
           </>
         )}
-        <FormField label="이메일" type="email" required value={form.email} onChange={update("email")} placeholder="you@company.com" />
         <FormField label="비밀번호" type="password" required minLength={6} value={form.password} onChange={update("password")} placeholder="6자 이상" />
         {error && <p className="mb-3 text-xs text-danger">{error}</p>}
         <Button type="submit" className="w-full" size="lg" disabled={loading}>

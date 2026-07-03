@@ -215,7 +215,7 @@ export default function EmployeeList() {
 
   const submitRegister = async (e) => {
     e.preventDefault();
-    const code = generateInviteCode(8);
+    const code = generateInviteCode(7);
     await setDoc(doc(db, "pendingEmployees", code), {
       companyId: profile.companyId,
       ...registerForm,
@@ -276,7 +276,7 @@ export default function EmployeeList() {
 
   const submitQuickCopy = async () => {
     if (!sourceEmployee || !quickForm.name.trim() || !quickForm.phone.trim()) return;
-    const code = generateInviteCode(8);
+    const code = generateInviteCode(7);
     await setDoc(doc(db, "pendingEmployees", code), {
       companyId: profile.companyId,
       ...EMPTY_REGISTER_FORM,
