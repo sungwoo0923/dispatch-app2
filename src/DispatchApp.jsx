@@ -4372,18 +4372,19 @@ const mergedClients = React.useMemo(() => {
     if (key) map.set(key, p);
   });
 
-  // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용
+  // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용 (clients 컬렉션은 거래처명 필드 사용)
   clients.forEach(c => {
-    const key = normalizeKey(c.업체명);
+    const name = c.업체명 || c.거래처명 || "";
+    const key = normalizeKey(name);
     if (!key) return;
 
     // placeList에 없을 때만 추가
     if (!map.has(key)) {
       map.set(key, {
-        업체명: c.업체명,
-        주소: "",
-        담당자: "",
-        담당자번호: "",
+        업체명: name,
+        주소: c.주소 || "",
+        담당자: c.담당자 || "",
+        담당자번호: c.연락처 || c.담당자번호 || "",
       });
     }
   });
