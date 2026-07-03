@@ -11,14 +11,20 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { Plus, MapPin, Check, Copy, Trash2, UserPlus } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
-import { POSITION_OPTIONS, EMPLOYMENT_STATUS_OPTIONS, TEAM_OPTIONS } from "../constants/hr";
+import {
+  POSITION_OPTIONS,
+  EMPLOYMENT_STATUS_OPTIONS,
+  TEAM_OPTIONS,
+  NATIONALITY_OPTIONS,
+  EMPLOYMENT_TYPE_OPTIONS,
+} from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
@@ -26,11 +32,15 @@ const EMPTY_REGISTER_FORM = {
   name: "",
   phone: "",
   gender: "남",
+  nationality: "내국인",
+  visaStatus: "",
   employeeCode: "",
+  workSiteId: "",
+  vendorId: "",
+  hireDate: toDateKey(),
+  employmentType: "상용직",
   team: "",
   position: "",
-  hireDate: toDateKey(),
-  workSiteId: "",
   insuranceApplied: "Y",
   note: "",
 };
@@ -48,16 +58,20 @@ export default function EmployeeList() {
   const { profile } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [pending, setPending] = useState([]);
 
   const [siteModalOpen, setSiteModalOpen] = useState(false);
   const [siteForm, setSiteForm] = useState({ name: "", lat: "", lng: "", radiusM: 100 });
 
+  const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [vendorName, setVendorName] = useState("");
+
   const [registerOpen, setRegisterOpen] = useState(false);
   const [registerForm, setRegisterForm] = useState(EMPTY_REGISTER_FORM);
   const [issuedCode, setIssuedCode] = useState("");
 
-  const [filters, setFilters] = useState({ siteId: "", status: "", search: "" });
+  const [filters, setFilters] = useState({ siteId: "", vendorId: "", status: "", search: "" });
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -69,6 +83,10 @@ export default function EmployeeList() {
       query(collection(db, "workSites"), where("companyId", "==", profile.companyId)),
       (snap) => setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubVendors = onSnapshot(
+      query(collection(db, "vendors"), where("companyId", "==", profile.companyId)),
+      (snap) => setVendors(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     const unsubPending = onSnapshot(
       query(collection(db, "pendingEmployees"), where("companyId", "==", profile.companyId)),
       (snap) => setPending(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -76,15 +94,17 @@ export default function EmployeeList() {
     return () => {
       unsubUsers();
       unsubSites();
+      unsubVendors();
       unsubPending();
     };
   }, [profile?.companyId]);
 
-  const siteName = (siteId) => workSites.find((s) => s.id === siteId)?.name || "미배정";
+  const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
       if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
+      if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
       if (filters.status && (emp.employmentStatus || "재직") !== filters.status) return false;
       if (filters.search && !`${emp.name}${emp.phone}`.includes(filters.search)) return false;
       return true;
@@ -107,6 +127,17 @@ export default function EmployeeList() {
     });
     setSiteForm({ name: "", lat: "", lng: "", radiusM: 100 });
     setSiteModalOpen(false);
+  };
+
+  const createVendor = async (e) => {
+    e.preventDefault();
+    await addDoc(collection(db, "vendors"), {
+      companyId: profile.companyId,
+      name: vendorName,
+      createdAt: serverTimestamp(),
+    });
+    setVendorName("");
+    setVendorModalOpen(false);
   };
 
   const closeRegisterModal = () => {
@@ -136,7 +167,10 @@ export default function EmployeeList() {
           <h1 className="text-lg font-bold text-ink">근로자 등록</h1>
           <p className="text-sm text-muted">전체 {employees.length}명 · 가입 대기 {pending.length}명</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setVendorModalOpen(true)}>
+            <Building2 size={16} /> 소속업체 추가
+          </Button>
           <Button variant="outline" onClick={() => setSiteModalOpen(true)}>
             <MapPin size={16} /> 근무지 추가
           </Button>
@@ -153,6 +187,21 @@ export default function EmployeeList() {
       )}
 
       <Card className="flex flex-wrap items-end gap-3 p-4">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+          <select
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={filters.vendorId}
+            onChange={(e) => setFilters((f) => ({ ...f, vendorId: e.target.value }))}
+          >
+            <option value="">전체</option>
+            {vendors.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-muted">근무지</span>
           <select
@@ -193,12 +242,14 @@ export default function EmployeeList() {
       </Card>
 
       <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[900px] text-left text-sm">
+        <table className="w-full min-w-[1080px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
               <th className="px-4 py-3 font-medium">이름</th>
               <th className="px-4 py-3 font-medium">연락처</th>
               <th className="px-4 py-3 font-medium">성별</th>
+              <th className="px-4 py-3 font-medium">소속업체</th>
+              <th className="px-4 py-3 font-medium">고용구분</th>
               <th className="px-4 py-3 font-medium">부서</th>
               <th className="px-4 py-3 font-medium">직급</th>
               <th className="px-4 py-3 font-medium">재직상태</th>
@@ -213,6 +264,19 @@ export default function EmployeeList() {
                 <td className="px-4 py-3 text-ink">{emp.name}</td>
                 <td className="px-4 py-3 text-muted">{emp.phone}</td>
                 <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
+                <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
+                <td className="px-4 py-3">
+                  <select
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                    value={emp.employmentType || ""}
+                    onChange={(e) => updateField(emp.id, "employmentType", e.target.value)}
+                  >
+                    <option value="">-</option>
+                    {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
+                </td>
                 <td className="px-4 py-3">
                   <select
                     className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
@@ -278,7 +342,7 @@ export default function EmployeeList() {
             ))}
             {filteredEmployees.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
+                <td colSpan={11} className="px-4 py-6 text-center text-xs text-muted">
                   조회조건에 해당하는 근로자가 없습니다.
                 </td>
               </tr>
@@ -389,6 +453,36 @@ export default function EmployeeList() {
       </Modal>
 
       <Modal
+        open={vendorModalOpen}
+        onClose={() => setVendorModalOpen(false)}
+        title="소속업체 추가"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setVendorModalOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={createVendor}>추가</Button>
+          </>
+        }
+      >
+        <form onSubmit={createVendor} className="space-y-3">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">소속업체명</span>
+            <input
+              required
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={vendorName}
+              onChange={(e) => setVendorName(e.target.value)}
+              placeholder="예: OO물류파트너스"
+            />
+          </label>
+          <p className="text-[11px] text-muted">
+            근로자가 실제로 소속된 협력/도급업체명입니다. 근로자 등록 시 배정할 수 있습니다.
+          </p>
+        </form>
+      </Modal>
+
+      <Modal
         open={registerOpen}
         onClose={closeRegisterModal}
         title={issuedCode ? "등록 완료" : "신규 근로자 등록"}
@@ -446,15 +540,33 @@ export default function EmployeeList() {
                   placeholder="010-0000-0000"
                 />
               </label>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">사원코드</span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                  value={registerForm.employeeCode}
-                  onChange={(e) => setRegisterForm((f) => ({ ...f, employeeCode: e.target.value }))}
-                  placeholder="사내 관리번호 (선택)"
-                />
-              </label>
+              <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">국적구분</span>
+                <div className="flex h-[42px] items-center gap-4 text-sm">
+                  {NATIONALITY_OPTIONS.map((n) => (
+                    <label key={n} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="nationality"
+                        checked={registerForm.nationality === n}
+                        onChange={() => setRegisterForm((f) => ({ ...f, nationality: n }))}
+                      />
+                      {n}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {registerForm.nationality === "외국인" && (
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">체류자격</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={registerForm.visaStatus}
+                    onChange={(e) => setRegisterForm((f) => ({ ...f, visaStatus: e.target.value }))}
+                    placeholder="예: E-9, H-2"
+                  />
+                </label>
+              )}
               <div>
                 <span className="mb-1.5 block text-xs font-medium text-muted">성별</span>
                 <div className="flex h-[42px] items-center gap-4 text-sm">
@@ -471,10 +583,79 @@ export default function EmployeeList() {
                   ))}
                 </div>
               </div>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">사원코드</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.employeeCode}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, employeeCode: e.target.value }))}
+                  placeholder="사내 관리번호 (선택)"
+                />
+              </label>
+            </div>
+
+            <SectionHeader>근무지정보</SectionHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">근무지(센터)</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.workSiteId}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, workSiteId: e.target.value }))}
+                >
+                  <option value="">미배정</option>
+                  {workSites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             <SectionHeader>입/퇴사정보</SectionHeader>
             <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.vendorId}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, vendorId: e.target.value }))}
+                >
+                  <option value="">미지정</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">입사일자 *</span>
+                <input
+                  required
+                  type="date"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.hireDate}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, hireDate: e.target.value }))}
+                />
+              </label>
+            </div>
+
+            <SectionHeader>근무정보</SectionHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">고용구분</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={registerForm.employmentType}
+                  onChange={(e) => setRegisterForm((f) => ({ ...f, employmentType: e.target.value }))}
+                >
+                  {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-muted">부서</span>
                 <select
@@ -498,35 +679,6 @@ export default function EmployeeList() {
                   <option value="">선택</option>
                   {POSITION_OPTIONS.map((p) => (
                     <option key={p}>{p}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">입사일자 *</span>
-                <input
-                  required
-                  type="date"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                  value={registerForm.hireDate}
-                  onChange={(e) => setRegisterForm((f) => ({ ...f, hireDate: e.target.value }))}
-                />
-              </label>
-            </div>
-
-            <SectionHeader>근무정보</SectionHeader>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">근무지 배정</span>
-                <select
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                  value={registerForm.workSiteId}
-                  onChange={(e) => setRegisterForm((f) => ({ ...f, workSiteId: e.target.value }))}
-                >
-                  <option value="">미배정</option>
-                  {workSites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
                   ))}
                 </select>
               </label>

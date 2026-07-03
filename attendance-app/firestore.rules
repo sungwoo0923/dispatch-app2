@@ -52,6 +52,12 @@ service cloud.firestore {
       allow write: if isAdminOf(request.resource.data.companyId);
     }
 
+    // 소속업체 (subcontracting vendor names) — same low-sensitivity pattern as workSites.
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOf(request.resource.data.companyId);
+    }
+
     match /schedules/{scheduleId} {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
