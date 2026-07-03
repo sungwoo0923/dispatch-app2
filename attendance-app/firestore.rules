@@ -111,6 +111,21 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    // Sub-rows of a 보험요율 master template (템플릿 > 보험요율 상세).
+    match /insuranceRateElements/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
+    // 템플릿 > 센터별리포트: electronic document format registry (계약서/사직서/
+    // 안전교육일지/재직증명서/퇴직증명서/급여명세서).
+    match /centerReports/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     // Which insurance rate template applies to a site as of a given
     // effectiveDate; payroll settlement reads the most recent entry <= the
     // settlement period to compute deductions.

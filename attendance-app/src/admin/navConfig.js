@@ -76,7 +76,17 @@ export const NAV = [
       { to: "/permissions/menus", label: "그룹별메뉴" },
     ],
   },
-  { to: "/templates", label: "템플릿", icon: LayoutTemplate },
+  {
+    to: "/templates/shift",
+    label: "템플릿",
+    icon: LayoutTemplate,
+    children: [
+      { to: "/templates/shift", label: "시간" },
+      { to: "/templates/allowance", label: "수당" },
+      { to: "/templates/insurance", label: "보험요율" },
+      { to: "/templates/reports", label: "센터별리포트" },
+    ],
+  },
   {
     to: "/settings/admins",
     label: "설정",

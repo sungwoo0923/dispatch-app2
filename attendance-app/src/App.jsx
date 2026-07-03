@@ -22,7 +22,10 @@ import Centers from "./admin/Centers";
 import Devices from "./admin/Devices";
 import PermissionGroups from "./admin/PermissionGroups";
 import PermissionGroupMenus from "./admin/PermissionGroupMenus";
-import Templates from "./admin/Templates";
+import ShiftTemplates from "./admin/ShiftTemplates";
+import AllowanceTemplates from "./admin/AllowanceTemplates";
+import InsuranceRateTemplates from "./admin/InsuranceRateTemplates";
+import CenterReports from "./admin/CenterReports";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
@@ -107,7 +110,11 @@ export default function App() {
           <Route path="org/devices" element={<Devices />} />
           <Route path="permissions/groups" element={<PermissionGroups />} />
           <Route path="permissions/menus" element={<PermissionGroupMenus />} />
-          <Route path="templates" element={<Templates />} />
+          <Route path="templates" element={<Navigate to="/templates/shift" replace />} />
+          <Route path="templates/shift" element={<ShiftTemplates />} />
+          <Route path="templates/allowance" element={<AllowanceTemplates />} />
+          <Route path="templates/insurance" element={<InsuranceRateTemplates />} />
+          <Route path="templates/reports" element={<CenterReports />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
