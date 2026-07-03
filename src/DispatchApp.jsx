@@ -21131,6 +21131,23 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
             placeholder="010-0000-0000"
             value={quickRegPhone}
             onChange={e => setQuickRegPhone(formatPhone(e.target.value))}
+            onKeyDown={async e => {
+              if (e.key === "Enter" && quickRegName.trim()) {
+                const formatted = formatPhone(quickRegPhone);
+                const raw = formatted.replace(/[^\d]/g, "");
+                await upsertDriver({ 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw });
+                if (driverPanelCallbackRef.current) {
+                  await driverPanelCallbackRef.current(quickRegName, formatted);
+                  driverPanelCallbackRef.current = null;
+                } else {
+                  await patchDispatch(driverConfirmRowId, { 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() });
+                  setRows(prev => prev.map(r => r._id === driverConfirmRowId ? { ...r, 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() } : r));
+                }
+                setQuickRegMode(false); setQuickRegName(""); setQuickRegPhone("");
+                setDriverConfirmOpen(false);
+                showAlert(`기사 "${quickRegName}" 등록 완료`);
+              }
+            }}
           />
         </div>
         <div className="flex gap-2 pt-1">
@@ -30322,6 +30339,20 @@ setCopyPlaceOptions(list);
                         placeholder="010-0000-0000"
                         value={quickRegPhone5}
                         onChange={e => setQuickRegPhone5(formatPhone(e.target.value))}
+                        onKeyDown={async e => {
+                          if (e.key === "Enter" && quickRegName5.trim()) {
+                            const formatted = formatPhone(quickRegPhone5);
+                            const raw = formatted.replace(/[^\d]/g, "");
+                            await upsertDriver({ 차량번호: driverConfirmInfo5.차량번호, 이름: quickRegName5, 전화번호: raw });
+                            if (driverPanelCallbackRef5.current) {
+                              await driverPanelCallbackRef5.current(quickRegName5, formatted);
+                              driverPanelCallbackRef5.current = null;
+                            }
+                            setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5("");
+                            setDriverConfirmOpen5(false);
+                            showAlert(`기사 "${quickRegName5}" 등록 완료`);
+                          }
+                        }}
                       />
                     </div>
                     <div className="flex gap-2 pt-1">
