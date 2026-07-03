@@ -1,17 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
-import { CheckCircle2, MapPin, Clock, Navigation } from "lucide-react";
+import { CheckCircle2, MapPin, Clock, Navigation, ShieldCheck } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useGeofenceCheckIn } from "../hooks/useGeofenceCheckIn";
 import Card from "../components/Card";
 import Button from "../components/Button";
-import { formatTime } from "../utils/dateUtils";
+import SignaturePad from "../components/SignaturePad";
+import { formatTime, attendanceDocId, toDateKey } from "../utils/dateUtils";
+import { signSafetyAttendance } from "../utils/safety";
 
 export default function Home() {
   const { profile, user } = useAuth();
   const [workSite, setWorkSite] = useState(null);
   const [loadingSite, setLoadingSite] = useState(true);
+  const [savingSignature, setSavingSignature] = useState(false);
+  const padRef = useRef(null);
 
   useEffect(() => {
     async function loadSite() {
@@ -26,16 +30,31 @@ export default function Home() {
     loadSite();
   }, [profile?.workSiteId]);
 
-  const { distance, todayAttendance, permissionError, manualCheckIn, manualCheckOut } = useGeofenceCheckIn({
-    uid: user?.uid,
-    name: profile?.name,
-    companyId: profile?.companyId,
-    workSite,
-    enabled: Boolean(workSite),
-  });
+  const { distance, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday } =
+    useGeofenceCheckIn({
+      uid: user?.uid,
+      name: profile?.name,
+      companyId: profile?.companyId,
+      workSite,
+      enabled: Boolean(workSite),
+    });
 
   const checkedIn = todayAttendance?.status === "출근" && todayAttendance?.checkInTime;
   const checkedOut = Boolean(todayAttendance?.checkOutTime);
+  const needsSafetySign = checkedIn && workSite?.safetyManaged && !todayAttendance?.safetySignature;
+
+  const submitSafetySignature = async () => {
+    if (!padRef.current || padRef.current.isEmpty()) return;
+    setSavingSignature(true);
+    await signSafetyAttendance({
+      attendanceDocId: attendanceDocId(user.uid, toDateKey()),
+      companyId: profile.companyId,
+      siteId: workSite.id,
+      signatureDataUrl: padRef.current.getDataUrl(),
+    });
+    setSavingSignature(false);
+    refreshToday();
+  };
 
   return (
     <div className="space-y-4 px-4 pt-4">
@@ -73,6 +92,20 @@ export default function Home() {
           )}
         </div>
       </Card>
+
+      {needsSafetySign && (
+        <Card className="p-5">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+            <ShieldCheck size={16} className="text-primary" />
+            안전교육 서명이 필요합니다
+          </div>
+          <p className="mb-3 text-xs text-muted">이 근무지는 안전관리가 적용됩니다. 출근 확인을 위해 서명해주세요.</p>
+          <SignaturePad ref={padRef} />
+          <Button className="mt-3 w-full" onClick={submitSafetySignature} disabled={savingSignature}>
+            {savingSignature ? "제출 중..." : "서명 제출"}
+          </Button>
+        </Card>
+      )}
 
       <Card className="p-5">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">

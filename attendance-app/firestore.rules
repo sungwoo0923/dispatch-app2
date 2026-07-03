@@ -124,15 +124,22 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
-    match /safetyTrainings/{trainingId} {
-      allow read: if isSignedIn(); // any company member may see scheduled/held trainings
-      allow write: if isAdminOf(request.resource.data.companyId);
+    // Admin's pre-registered e-signature image, used to auto-stamp safety
+    // education attendance records alongside the worker's own signature.
+    // Kept in its own collection (not `users`) so any signed-in company
+    // member can read it (needed client-side to render the stamp) without
+    // widening read access to admin profile data.
+    match /adminSignatures/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSelf(uid);
     }
 
-    match /trainingAttendance/{attendanceId} {
-      allow read: if isSignedIn() &&
-        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    // Per-site designated safety roles (총괄책임자/안전관리자/담당반장/관리감독자),
+    // each linked to an admin uid whose adminSignatures doc supplies the stamp.
+    match /safetyManagers/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     // Metadata only; actual file bytes live in Storage under

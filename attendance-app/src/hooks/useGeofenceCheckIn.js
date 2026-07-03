@@ -2,14 +2,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { distanceMeters } from "../utils/distance";
-import { toDateKey } from "../utils/dateUtils";
+import { toDateKey, attendanceDocId } from "../utils/dateUtils";
 
 const CHECK_IN_RADIUS_M = 100;
 const CHECK_OUT_RADIUS_M = 300;
-
-function attendanceDocId(uid, dateKey) {
-  return `${dateKey}_${uid}`;
-}
 
 async function writeAttendance({ uid, name, companyId, status, extra }) {
   const dateKey = toDateKey();
@@ -74,6 +70,8 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled }) 
             checkInTime: new Date().toISOString(),
             checkInLocation: { lat, lng, distanceM: Math.round(d) },
             source: "auto",
+            siteId: workSite.id,
+            siteName: workSite.name,
           },
         });
         refreshToday();
@@ -166,11 +164,13 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled }) 
         checkInTime: new Date().toISOString(),
         checkInLocation: distance != null ? { distanceM: Math.round(distance) } : null,
         source: "manual",
+        siteId: workSite?.id || null,
+        siteName: workSite?.name || "",
       },
     });
     autoCheckedInRef.current = true;
     refreshToday();
-  }, [uid, name, companyId, distance, refreshToday]);
+  }, [uid, name, companyId, distance, workSite, refreshToday]);
 
   const manualCheckOut = useCallback(async () => {
     await writeAttendance({
@@ -183,5 +183,5 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled }) 
     refreshToday();
   }, [uid, name, companyId, todayAttendance, refreshToday]);
 
-  return { distance, todayAttendance, permissionError, manualCheckIn, manualCheckOut };
+  return { distance, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday };
 }

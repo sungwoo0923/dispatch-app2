@@ -1,111 +1,101 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { ShieldCheck, Eye } from "lucide-react";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { Eye, ShieldCheck } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
-import Button from "../components/Button";
 import Modal from "../components/Modal";
-import { formatDate } from "../utils/dateUtils";
+import Button from "../components/Button";
+import { toDateKey, formatTime } from "../utils/dateUtils";
 
 export default function SafetyTrainings() {
   const { profile } = useAuth();
+  const [date, setDate] = useState(toDateKey());
   const [workSites, setWorkSites] = useState([]);
-  const [trainings, setTrainings] = useState([]);
-  const [attendance, setAttendance] = useState([]);
-
-  const [open, setOpen] = useState(false);
+  const [records, setRecords] = useState([]);
   const [viewing, setViewing] = useState(null);
-  const [form, setForm] = useState({ title: "", date: "", siteId: "", content: "" });
 
   useEffect(() => {
     if (!profile?.companyId) return;
-    const unsubSites = onSnapshot(
+    const unsub = onSnapshot(
       query(collection(db, "workSites"), where("companyId", "==", profile.companyId)),
       (snap) => setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
-    const unsubTrainings = onSnapshot(
-      query(collection(db, "safetyTrainings"), where("companyId", "==", profile.companyId)),
-      (snap) => setTrainings(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-    const unsubAttendance = onSnapshot(
-      query(collection(db, "trainingAttendance"), where("companyId", "==", profile.companyId)),
-      (snap) => setAttendance(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-    return () => {
-      unsubSites();
-      unsubTrainings();
-      unsubAttendance();
-    };
+    return () => unsub();
   }, [profile?.companyId]);
 
-  const sortedTrainings = useMemo(
-    () => [...trainings].sort((a, b) => (b.date || "").localeCompare(a.date || "")),
-    [trainings]
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(
+      query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("date", "==", date)),
+      (snap) => setRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [profile?.companyId, date]);
+
+  const managedSiteIds = useMemo(
+    () => new Set(workSites.filter((s) => s.safetyManaged).map((s) => s.id)),
+    [workSites]
   );
 
-  const attendeesFor = (trainingId) => attendance.filter((a) => a.trainingId === trainingId);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    const site = workSites.find((s) => s.id === form.siteId);
-    await addDoc(collection(db, "safetyTrainings"), {
-      companyId: profile.companyId,
-      title: form.title,
-      date: form.date,
-      siteId: form.siteId || null,
-      siteName: site?.name || "",
-      content: form.content,
-      createdAt: serverTimestamp(),
-    });
-    setForm({ title: "", date: "", siteId: "", content: "" });
-    setOpen(false);
-  };
+  const rows = useMemo(
+    () => records.filter((r) => r.status === "출근" && r.siteId && managedSiteIds.has(r.siteId)),
+    [records, managedSiteIds]
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-ink">안전교육 (TBM)</h1>
-          <p className="text-sm text-muted">교육 등록 및 참석 서명현황</p>
+          <h1 className="text-lg font-bold text-ink">안전교육현황</h1>
+          <p className="text-sm text-muted">안전관리 적용 근무지의 출근일자별 안전교육 서명 여부</p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <ShieldCheck size={16} /> 교육 등록
-        </Button>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+        />
       </div>
+
+      {managedSiteIds.size === 0 && (
+        <Card className="p-4 text-xs text-warning">
+          안전관리가 적용된 근무지가 없습니다. 센터별 안전관리 메뉴에서 먼저 설정해주세요.
+        </Card>
+      )}
 
       <Card className="overflow-x-auto p-0">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">제목</th>
-              <th className="px-4 py-3 font-medium">일시</th>
+              <th className="px-4 py-3 font-medium">이름</th>
               <th className="px-4 py-3 font-medium">근무지</th>
-              <th className="px-4 py-3 font-medium">참석 서명</th>
+              <th className="px-4 py-3 font-medium">출근시각</th>
+              <th className="px-4 py-3 font-medium">안전교육 서명</th>
               <th className="px-4 py-3 font-medium"></th>
             </tr>
           </thead>
           <tbody>
-            {sortedTrainings.map((t) => (
-              <tr key={t.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-ink">{t.title}</td>
-                <td className="px-4 py-3 text-muted">{formatDate(t.date)}</td>
-                <td className="px-4 py-3 text-muted">{t.siteName || "-"}</td>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                <td className="px-4 py-3 text-ink">{r.name}</td>
+                <td className="px-4 py-3 text-muted">{r.siteName || "-"}</td>
+                <td className="px-4 py-3 text-muted">{r.checkInTime ? formatTime(r.checkInTime) : "-"}</td>
                 <td className="px-4 py-3">
-                  <Badge tone="primary">{attendeesFor(t.id).length}명 서명</Badge>
+                  {r.safetySignature ? <Badge tone="success">완료</Badge> : <Badge tone="warning">미서명</Badge>}
                 </td>
                 <td className="px-4 py-3">
-                  <button className="text-muted hover:text-primary" title="보기" onClick={() => setViewing(t)}>
+                  <button className="text-muted hover:text-primary" title="보기" onClick={() => setViewing(r)}>
                     <Eye size={16} />
                   </button>
                 </td>
               </tr>
             ))}
-            {sortedTrainings.length === 0 && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-xs text-muted">
-                  등록된 안전교육이 없습니다.
+                  해당 일자에 안전관리 근무지 출근 기록이 없습니다.
                 </td>
               </tr>
             )}
@@ -114,90 +104,42 @@ export default function SafetyTrainings() {
       </Card>
 
       <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title="안전교육 등록"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              취소
-            </Button>
-            <Button onClick={submit} disabled={!form.title || !form.date}>
-              등록
-            </Button>
-          </>
-        }
+        open={Boolean(viewing)}
+        onClose={() => setViewing(null)}
+        title={`${viewing?.name} · ${viewing?.siteName || ""} 안전교육 서명`}
+        footer={<Button onClick={() => setViewing(null)}>닫기</Button>}
       >
-        <form onSubmit={submit} className="space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">제목</span>
-            <input
-              required
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="예: 물류센터 지게차 안전교육"
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">교육일자</span>
-              <input
-                required
-                type="date"
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.date}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">근무지</span>
-              <select
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.siteId}
-                onChange={(e) => setForm((f) => ({ ...f, siteId: e.target.value }))}
-              >
-                <option value="">전체</option>
-                {workSites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">교육 내용</span>
-            <textarea
-              rows={5}
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.content}
-              onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-              placeholder="교육 내용을 입력하세요"
-            />
-          </label>
-        </form>
-      </Modal>
-
-      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title={viewing?.title} size="lg" footer={<Button onClick={() => setViewing(null)}>닫기</Button>}>
         {viewing && (
-          <div>
-            <p className="mb-3 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-xs leading-relaxed">
-              {viewing.content || "등록된 내용이 없습니다."}
-            </p>
-            <p className="mb-2 text-sm font-semibold text-ink">참석 서명 ({attendeesFor(viewing.id).length}명)</p>
-            <div className="space-y-2">
-              {attendeesFor(viewing.id).map((a) => (
-                <div key={a.id} className="flex items-center justify-between rounded-xl border border-slate-100 p-3">
-                  <div>
-                    <p className="text-sm text-ink">{a.employeeName}</p>
-                    <p className="text-[11px] text-muted">{a.signedAt}</p>
-                  </div>
-                  <img src={a.signatureDataUrl} alt="서명" className="h-10 rounded border border-slate-200 bg-white" />
+          <div className="space-y-4">
+            {viewing.safetySignature ? (
+              <>
+                <div>
+                  <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+                    <ShieldCheck size={13} /> 근로자 서명
+                  </p>
+                  <img
+                    src={viewing.safetySignature}
+                    alt="근로자 서명"
+                    className="h-16 rounded-xl border border-slate-200 bg-white"
+                  />
+                  {viewing.safetySignedAt && (
+                    <p className="mt-1 text-[11px] text-muted">{formatTime(viewing.safetySignedAt)} 서명</p>
+                  )}
                 </div>
-              ))}
-              {attendeesFor(viewing.id).length === 0 && <p className="text-xs text-muted">아직 서명한 근로자가 없습니다.</p>}
-            </div>
+                {viewing.supervisorSignature && (
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted">안전담당자 확인 ({viewing.supervisorName})</p>
+                    <img
+                      src={viewing.supervisorSignature}
+                      alt="담당자 서명"
+                      className="h-16 rounded-xl border border-slate-200 bg-white"
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted">아직 서명하지 않았습니다.</p>
+            )}
           </div>
         )}
       </Modal>

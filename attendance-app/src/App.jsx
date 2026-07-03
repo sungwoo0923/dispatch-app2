@@ -12,6 +12,7 @@ import EmployeeStatus from "./admin/EmployeeStatus";
 import Contracts from "./admin/Contracts";
 import Documents from "./admin/Documents";
 import SafetyTrainings from "./admin/SafetyTrainings";
+import SafetySettings from "./admin/SafetySettings";
 import Board from "./admin/Board";
 import AdminAccounts from "./admin/AdminAccounts";
 import OrgSettings from "./admin/OrgSettings";
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="attendance" element={<AttendanceBoard />} />
           <Route path="leaves" element={<LeaveApprovals />} />
           <Route path="safety" element={<SafetyTrainings />} />
+          <Route path="safety/settings" element={<SafetySettings />} />
           <Route path="payroll" element={<Payroll />} />
           <Route path="stats" element={<Stats />} />
           <Route path="board" element={<Board />} />

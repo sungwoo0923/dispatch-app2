@@ -29,3 +29,7 @@ export function addDays(dateKey, days) {
   d.setDate(d.getDate() + days);
   return toDateKey(d);
 }
+
+export function attendanceDocId(uid, dateKey = toDateKey()) {
+  return `${dateKey}_${uid}`;
+}

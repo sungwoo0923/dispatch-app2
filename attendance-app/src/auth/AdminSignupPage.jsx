@@ -62,6 +62,13 @@ export default function AdminSignupPage() {
         createdAt: serverTimestamp(),
       });
 
+      // Seeded before the `users` doc write below, since that write is what
+      // flips onAuthStateChanged's profile listener and redirects the admin
+      // into the app — anything awaited after it races the redirect and, if
+      // the component has already unmounted by the time it settles, a
+      // failure here would silently vanish into the catch block below.
+      await seedOrgDefaults(code);
+
       await setDoc(doc(db, "users", cred.user.uid), {
         role: "admin",
         companyId: code,
@@ -71,8 +78,6 @@ export default function AdminSignupPage() {
         employmentStatus: "재직",
         createdAt: serverTimestamp(),
       });
-
-      await seedOrgDefaults(code);
     } catch (err) {
       sessionStorage.removeItem(PENDING_INVITE_KEY);
       setError(err.code === "auth/email-already-in-use" ? "이미 사용 중인 이메일입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");

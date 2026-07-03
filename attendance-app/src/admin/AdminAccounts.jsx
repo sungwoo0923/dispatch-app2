@@ -1,18 +1,22 @@
-import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { UserPlus, Copy, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { collection, query, where, onSnapshot, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { UserPlus, Copy, ShieldCheck, PenLine } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import SignaturePad from "../components/SignaturePad";
 import { generateInviteCode } from "../utils/ids";
 
 export default function AdminAccounts() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [admins, setAdmins] = useState([]);
   const [open, setOpen] = useState(false);
   const [issuedCode, setIssuedCode] = useState("");
+  const [mySignature, setMySignature] = useState(null);
+  const [savingSignature, setSavingSignature] = useState(false);
+  const padRef = useRef(null);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -22,6 +26,27 @@ export default function AdminAccounts() {
     );
     return () => unsub();
   }, [profile?.companyId]);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, "adminSignatures", user.uid)).then((snap) => {
+      if (snap.exists()) setMySignature(snap.data().signatureDataUrl);
+    });
+  }, [user]);
+
+  const saveSignature = async () => {
+    if (!padRef.current || padRef.current.isEmpty()) return;
+    setSavingSignature(true);
+    const dataUrl = padRef.current.getDataUrl();
+    await setDoc(doc(db, "adminSignatures", user.uid), {
+      companyId: profile.companyId,
+      name: profile.name,
+      signatureDataUrl: dataUrl,
+      updatedAt: serverTimestamp(),
+    });
+    setMySignature(dataUrl);
+    setSavingSignature(false);
+  };
 
   const issueInvite = async () => {
     const code = generateInviteCode(8);
@@ -68,6 +93,26 @@ export default function AdminAccounts() {
             ))}
           </tbody>
         </table>
+      </Card>
+
+      <Card className="p-5">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+          <PenLine size={16} className="text-primary" />
+          내 전자서명 등록
+        </div>
+        <p className="mb-3 text-xs text-muted">
+          안전담당자로 지정될 경우, 이 서명이 근로자의 안전교육 서명에 자동으로 함께 날인됩니다.
+        </p>
+        {mySignature && (
+          <div className="mb-3">
+            <p className="mb-1.5 text-[11px] text-muted">현재 등록된 서명</p>
+            <img src={mySignature} alt="내 서명" className="h-14 rounded-xl border border-slate-200 bg-white" />
+          </div>
+        )}
+        <SignaturePad ref={padRef} />
+        <Button className="mt-3" onClick={saveSignature} disabled={savingSignature}>
+          {savingSignature ? "저장 중..." : "서명 저장"}
+        </Button>
       </Card>
 
       <Modal open={open} onClose={() => setOpen(false)} title="관리자 초대코드 발급" footer={<Button onClick={() => setOpen(false)}>확인</Button>}>

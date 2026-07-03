@@ -36,7 +36,15 @@ const NAV = [
   { to: "/schedule", label: "스케줄", icon: CalendarDays },
   { to: "/attendance", label: "출근현황", icon: ClipboardCheck },
   { to: "/leaves", label: "휴가", icon: CalendarClock },
-  { to: "/safety", label: "안전", icon: ShieldCheck },
+  {
+    to: "/safety",
+    label: "안전",
+    icon: ShieldCheck,
+    children: [
+      { to: "/safety", label: "안전교육현황" },
+      { to: "/safety/settings", label: "센터별 안전관리" },
+    ],
+  },
   { to: "/payroll", label: "정산", icon: Wallet },
   { to: "/stats", label: "통계", icon: BarChart3 },
   { to: "/board", label: "게시판", icon: MessageSquare },
