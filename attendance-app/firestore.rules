@@ -52,6 +52,15 @@ service cloud.firestore {
       allow write: if isAdminOf(request.resource.data.companyId);
     }
 
+    // 근무정보 > 배정변경 요청: employee requests a different 근무지/소속업체;
+    // admin approves (writes the change to users) or rejects.
+    match /assignmentChangeRequests/{id} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAdminOf(resource.data.companyId);
+    }
+
     // 소속업체 (subcontracting vendor names) — same low-sensitivity pattern as workSites.
     match /vendors/{vendorId} {
       allow read: if isSignedIn();

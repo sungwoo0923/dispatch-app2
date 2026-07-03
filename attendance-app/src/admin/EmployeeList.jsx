@@ -11,7 +11,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -88,6 +88,7 @@ export default function EmployeeList() {
   const [shiftTemplates, setShiftTemplates] = useState([]);
   const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [changeLogs, setChangeLogs] = useState([]);
+  const [changeRequests, setChangeRequests] = useState([]);
 
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyMode, setCopyMode] = useState("근무복사");
@@ -134,6 +135,10 @@ export default function EmployeeList() {
       query(collection(db, "employeeChangeLogs"), where("companyId", "==", profile.companyId)),
       (snap) => setChangeLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubChangeReq = onSnapshot(
+      query(collection(db, "assignmentChangeRequests"), where("companyId", "==", profile.companyId)),
+      (snap) => setChangeRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     return () => {
       unsubUsers();
       unsubSites();
@@ -144,6 +149,7 @@ export default function EmployeeList() {
       unsubShiftT();
       unsubAllowT();
       unsubLogs();
+      unsubChangeReq();
     };
   }, [profile?.companyId]);
 
@@ -162,6 +168,19 @@ export default function EmployeeList() {
   const approve = (uid) => updateDoc(doc(db, "users", uid), { approved: true });
   const assignSite = (uid, workSiteId) => updateDoc(doc(db, "users", uid), { workSiteId: workSiteId || null });
   const updateField = (uid, field, value) => updateDoc(doc(db, "users", uid), { [field]: value });
+
+  const approveChangeRequest = async (req) => {
+    await updateDoc(doc(db, "users", req.uid), {
+      workSiteId: req.requestedSiteId || null,
+      vendorId: req.requestedVendorId || null,
+    });
+    await updateDoc(doc(db, "assignmentChangeRequests", req.id), {
+      status: "approved",
+      resolvedAt: serverTimestamp(),
+    });
+  };
+  const rejectChangeRequest = (req) =>
+    updateDoc(doc(db, "assignmentChangeRequests", req.id), { status: "rejected", resolvedAt: serverTimestamp() });
 
   const createSite = async (e) => {
     e.preventDefault();
@@ -545,6 +564,71 @@ export default function EmployeeList() {
                 <tr>
                   <td colSpan={13} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 근로자가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel
+        icon={ArrowLeftRight}
+        title={`배정변경 요청 (승인대기 ${changeRequests.filter((r) => r.status === "pending").length}건)`}
+      >
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">이름</th>
+                <th className="px-4 py-3 font-medium">현재 근무지</th>
+                <th className="px-4 py-3 font-medium">요청 근무지</th>
+                <th className="px-4 py-3 font-medium">요청 소속업체</th>
+                <th className="px-4 py-3 font-medium">사유</th>
+                <th className="px-4 py-3 font-medium">상태</th>
+                <th className="px-4 py-3 font-medium">처리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...changeRequests]
+                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                .slice(0, 20)
+                .map((req, i) => (
+                  <tr key={req.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{req.name}</td>
+                    <td className="px-4 py-3 text-muted">{req.currentSiteName || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{req.requestedSiteName || "-"}</td>
+                    <td className="px-4 py-3 text-muted">{req.requestedVendorName || "-"}</td>
+                    <td className="px-4 py-3 text-muted">{req.reason || "-"}</td>
+                    <td className="px-4 py-3">
+                      {req.status === "pending" ? (
+                        <Badge tone="warning">승인대기</Badge>
+                      ) : req.status === "approved" ? (
+                        <Badge tone="success">승인완료</Badge>
+                      ) : (
+                        <Badge tone="danger">반려</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {req.status === "pending" && (
+                        <div className="flex flex-nowrap gap-1.5">
+                          <Button size="sm" onClick={() => approveChangeRequest(req)}>
+                            <Check size={13} /> 승인
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => rejectChangeRequest(req)}>
+                            <X size={13} /> 반려
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              {changeRequests.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-xs text-muted">
+                    배정변경 요청이 없습니다.
                   </td>
                 </tr>
               )}

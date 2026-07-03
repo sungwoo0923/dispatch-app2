@@ -105,6 +105,9 @@ export default function Payroll() {
     overtimeHours: 0,
     weeklyEligibleWeeks: 4,
     allowances: 0,
+    mealAllowance: 0,
+    lateDeduction: 0,
+    earlyLeaveDeduction: 0,
   });
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -216,9 +219,22 @@ export default function Payroll() {
         overtimeHours: existing.overtimeHours || 0,
         weeklyEligibleWeeks: existing.weeklyEligibleWeeks || 4,
         allowances: existing.allowances || 0,
+        mealAllowance: existing.mealAllowance || 0,
+        lateDeduction: existing.lateDeduction || 0,
+        earlyLeaveDeduction: existing.earlyLeaveDeduction || 0,
       });
     } else {
-      setForm({ wageType: "hourly", baseWage: 12000, hoursWorked: 160, overtimeHours: 0, weeklyEligibleWeeks: 4, allowances: 0 });
+      setForm({
+        wageType: "hourly",
+        baseWage: 12000,
+        hoursWorked: 160,
+        overtimeHours: 0,
+        weeklyEligibleWeeks: 4,
+        allowances: 0,
+        mealAllowance: 0,
+        lateDeduction: 0,
+        earlyLeaveDeduction: 0,
+      });
     }
   };
 
@@ -233,6 +249,9 @@ export default function Payroll() {
       overtimeHours: Number(form.overtimeHours),
       weeklyEligibleWeeks: Number(form.weeklyEligibleWeeks),
       allowances: Number(form.allowances),
+      mealAllowance: Number(form.mealAllowance),
+      lateDeduction: Number(form.lateDeduction),
+      earlyLeaveDeduction: Number(form.earlyLeaveDeduction),
       rates,
     });
 
@@ -290,6 +309,9 @@ export default function Payroll() {
       const baseWage = existing?.baseWage || 12000;
       const wageType = existing?.wageType || "hourly";
       const allowances = existing?.allowances || 0;
+      const mealAllowance = existing?.mealAllowance || 0;
+      const lateDeduction = existing?.lateDeduction || 0;
+      const earlyLeaveDeduction = existing?.earlyLeaveDeduction || 0;
       const weeklyEligibleWeeks = existing?.weeklyEligibleWeeks || 0;
       const rates = await getSiteInsuranceRates(profile.companyId, emp.workSiteId, end);
       const result = calcMonthlyPayroll({
@@ -299,6 +321,9 @@ export default function Payroll() {
         overtimeHours: Math.round(overtimeHours),
         weeklyEligibleWeeks,
         allowances,
+        mealAllowance,
+        lateDeduction,
+        earlyLeaveDeduction,
         rates,
       });
 
@@ -363,6 +388,9 @@ export default function Payroll() {
         overtimeHours: p.overtimeHours,
         weeklyEligibleWeeks: p.weeklyEligibleWeeks,
         allowances,
+        mealAllowance: p.mealAllowance || 0,
+        lateDeduction: p.lateDeduction || 0,
+        earlyLeaveDeduction: p.earlyLeaveDeduction || 0,
         rates,
       });
       await setDoc(
@@ -996,6 +1024,35 @@ export default function Payroll() {
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                 value={form.allowances}
                 onChange={(e) => setForm((f) => ({ ...f, allowances: e.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">식대(원)</span>
+              <input
+                type="number"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={form.mealAllowance}
+                onChange={(e) => setForm((f) => ({ ...f, mealAllowance: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">지각공제(원)</span>
+              <input
+                type="number"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={form.lateDeduction}
+                onChange={(e) => setForm((f) => ({ ...f, lateDeduction: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">조퇴공제(원)</span>
+              <input
+                type="number"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={form.earlyLeaveDeduction}
+                onChange={(e) => setForm((f) => ({ ...f, earlyLeaveDeduction: e.target.value }))}
               />
             </label>
           </div>

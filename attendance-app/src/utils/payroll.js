@@ -11,7 +11,6 @@ export const DEFAULT_PAYROLL_RATES = {
   healthInsurance: 0.0709 / 2, // 건강보험 (근로자 부담분)
   longTermCare: 0.1281, // 장기요양 (건강보험료의 %)
   employmentInsurance: 0.009, // 고용보험
-  lateDeductionPerMinute: 0, // optional per-minute deduction, 0 = off
 };
 
 export function calcMonthlyPayroll({
@@ -21,8 +20,10 @@ export function calcMonthlyPayroll({
   overtimeHours = 0,
   weeklyEligibleWeeks = 0, // number of weeks that met 주휴수당 조건 (15h+ worked)
   weeklyHoursPerWeek = 40,
-  allowances = 0, // 식대 등 기타수당 합계
-  lateMinutes = 0,
+  allowances = 0, // 기타수당 합계
+  mealAllowance = 0, // 식대
+  lateDeduction = 0, // 지각공제 (직접 입력한 원 단위 공제액)
+  earlyLeaveDeduction = 0, // 조퇴공제 (직접 입력한 원 단위 공제액)
   rates = DEFAULT_PAYROLL_RATES,
 }) {
   const base = wageType === "monthly" ? baseWage : baseWage * hoursWorked;
@@ -30,9 +31,8 @@ export function calcMonthlyPayroll({
   const weeklyAllowance = rates.weeklyAllowanceEnabled
     ? (wageType === "hourly" ? baseWage * 8 : 0) * weeklyEligibleWeeks
     : 0;
-  const lateDeduction = lateMinutes * rates.lateDeductionPerMinute;
 
-  const grossPay = base + overtimePay + weeklyAllowance + allowances - lateDeduction;
+  const grossPay = base + overtimePay + weeklyAllowance + allowances + mealAllowance - lateDeduction - earlyLeaveDeduction;
 
   const pension = Math.round(grossPay * rates.nationalPension);
   const health = Math.round(grossPay * rates.healthInsurance);
@@ -47,7 +47,9 @@ export function calcMonthlyPayroll({
     overtimePay: Math.round(overtimePay),
     weeklyAllowance: Math.round(weeklyAllowance),
     allowances: Math.round(allowances),
+    mealAllowance: Math.round(mealAllowance),
     lateDeduction: Math.round(lateDeduction),
+    earlyLeaveDeduction: Math.round(earlyLeaveDeduction),
     grossPay: Math.round(grossPay),
     deductions: { pension, health, longTermCare, employment, total: totalDeductions },
     netPay,

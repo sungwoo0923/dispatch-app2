@@ -5,11 +5,13 @@ import { ArrowLeft } from "lucide-react";
 import { db } from "../firebase";
 import Card from "../components/Card";
 
-function Row({ label, value, strong }) {
+function Row({ label, value, strong, negative }) {
+  const display =
+    typeof value === "number" ? `${negative && value > 0 ? "-" : ""}${value.toLocaleString()}원` : value;
   return (
     <div className={`flex items-center justify-between py-1.5 text-sm ${strong ? "font-semibold text-ink" : "text-muted"}`}>
       <span>{label}</span>
-      <span className={strong ? "text-ink" : ""}>{typeof value === "number" ? `${value.toLocaleString()}원` : value}</span>
+      <span className={strong ? "text-ink" : ""}>{display}</span>
     </div>
   );
 }
@@ -57,6 +59,9 @@ export default function PayslipDetail() {
         <Row label="연장수당" value={payroll.overtimePay} />
         <Row label="주휴수당" value={payroll.weeklyAllowance} />
         <Row label="기타수당" value={payroll.allowances} />
+        <Row label="식대" value={payroll.mealAllowance || 0} />
+        <Row label="지각공제" value={payroll.lateDeduction || 0} negative />
+        <Row label="조퇴공제" value={payroll.earlyLeaveDeduction || 0} negative />
         <div className="my-2 border-t border-slate-100" />
         <Row label="지급합계" value={payroll.grossPay} strong />
       </Card>
