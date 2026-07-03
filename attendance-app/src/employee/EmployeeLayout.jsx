@@ -11,7 +11,7 @@ const TABS = [
 
 // Routes reachable only through the 더보기 menu still count as "더보기" active
 // for bottom-tab highlighting purposes.
-const MORE_ROUTES = ["/more", "/payslips", "/leave", "/contracts", "/documents", "/safety"];
+const MORE_ROUTES = ["/more", "/payslips", "/leave", "/contracts", "/documents", "/safety", "/board"];
 
 export default function EmployeeLayout() {
   const { profile } = useAuth();

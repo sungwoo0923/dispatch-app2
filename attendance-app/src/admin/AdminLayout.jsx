@@ -9,6 +9,8 @@ import {
   Wallet,
   BarChart3,
   ShieldCheck,
+  MessageSquare,
+  Settings,
   Menu,
   X,
   LogOut,
@@ -36,6 +38,16 @@ const NAV = [
   { to: "/safety", label: "안전", icon: ShieldCheck },
   { to: "/payroll", label: "정산", icon: Wallet },
   { to: "/stats", label: "통계", icon: BarChart3 },
+  { to: "/board", label: "게시판", icon: MessageSquare },
+  {
+    to: "/settings/admins",
+    label: "설정",
+    icon: Settings,
+    children: [
+      { to: "/settings/admins", label: "관리자 계정" },
+      { to: "/settings/org", label: "부서·직급" },
+    ],
+  },
 ];
 
 const itemClass = ({ isActive }) =>

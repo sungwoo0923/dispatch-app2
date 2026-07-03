@@ -12,6 +12,9 @@ import EmployeeStatus from "./admin/EmployeeStatus";
 import Contracts from "./admin/Contracts";
 import Documents from "./admin/Documents";
 import SafetyTrainings from "./admin/SafetyTrainings";
+import Board from "./admin/Board";
+import AdminAccounts from "./admin/AdminAccounts";
+import OrgSettings from "./admin/OrgSettings";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
@@ -29,6 +32,7 @@ import ContractsPage from "./employee/ContractsPage";
 import ContractDetail from "./employee/ContractDetail";
 import DocumentsPage from "./employee/DocumentsPage";
 import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
+import BoardPage from "./employee/BoardPage";
 import { PENDING_INVITE_KEY } from "./constants/session";
 
 function LoadingScreen() {
@@ -83,6 +87,9 @@ export default function App() {
           <Route path="safety" element={<SafetyTrainings />} />
           <Route path="payroll" element={<Payroll />} />
           <Route path="stats" element={<Stats />} />
+          <Route path="board" element={<Board />} />
+          <Route path="settings/admins" element={<AdminAccounts />} />
+          <Route path="settings/org" element={<OrgSettings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -107,6 +114,7 @@ export default function App() {
         <Route path="contracts/:contractId" element={<ContractDetail />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="safety" element={<SafetyTrainingsPage />} />
+        <Route path="board" element={<BoardPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

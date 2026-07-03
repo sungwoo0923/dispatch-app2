@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Wallet, CalendarClock, FileSignature, FolderOpen, ShieldCheck, ChevronRight } from "lucide-react";
+import { Wallet, CalendarClock, FileSignature, FolderOpen, ShieldCheck, MessageSquare, ChevronRight } from "lucide-react";
 import Card from "../components/Card";
 
 const ITEMS = [
@@ -8,6 +8,7 @@ const ITEMS = [
   { to: "/contracts", label: "계약서", icon: FileSignature },
   { to: "/documents", label: "서류함", icon: FolderOpen },
   { to: "/safety", label: "안전교육", icon: ShieldCheck },
+  { to: "/board", label: "게시판", icon: MessageSquare },
 ];
 
 export default function MorePage() {

@@ -18,13 +18,7 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
-import {
-  POSITION_OPTIONS,
-  EMPLOYMENT_STATUS_OPTIONS,
-  TEAM_OPTIONS,
-  NATIONALITY_OPTIONS,
-  EMPLOYMENT_TYPE_OPTIONS,
-} from "../constants/hr";
+import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, EMPLOYMENT_TYPE_OPTIONS } from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
@@ -59,6 +53,8 @@ export default function EmployeeList() {
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [positions, setPositions] = useState([]);
   const [pending, setPending] = useState([]);
 
   const [siteModalOpen, setSiteModalOpen] = useState(false);
@@ -91,11 +87,21 @@ export default function EmployeeList() {
       query(collection(db, "pendingEmployees"), where("companyId", "==", profile.companyId)),
       (snap) => setPending(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubDept = onSnapshot(
+      query(collection(db, "departments"), where("companyId", "==", profile.companyId)),
+      (snap) => setDepartments(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    const unsubPos = onSnapshot(
+      query(collection(db, "positions"), where("companyId", "==", profile.companyId)),
+      (snap) => setPositions(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     return () => {
       unsubUsers();
       unsubSites();
       unsubVendors();
       unsubPending();
+      unsubDept();
+      unsubPos();
     };
   }, [profile?.companyId]);
 
@@ -284,8 +290,10 @@ export default function EmployeeList() {
                     onChange={(e) => updateField(emp.id, "team", e.target.value)}
                   >
                     <option value="">-</option>
-                    {TEAM_OPTIONS.map((t) => (
-                      <option key={t}>{t}</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name}
+                      </option>
                     ))}
                   </select>
                 </td>
@@ -296,8 +304,10 @@ export default function EmployeeList() {
                     onChange={(e) => updateField(emp.id, "position", e.target.value)}
                   >
                     <option value="">-</option>
-                    {POSITION_OPTIONS.map((p) => (
-                      <option key={p}>{p}</option>
+                    {positions.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                      </option>
                     ))}
                   </select>
                 </td>
@@ -664,8 +674,10 @@ export default function EmployeeList() {
                   onChange={(e) => setRegisterForm((f) => ({ ...f, team: e.target.value }))}
                 >
                   <option value="">선택</option>
-                  {TEAM_OPTIONS.map((t) => (
-                    <option key={t}>{t}</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.name}>
+                      {d.name}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -677,8 +689,10 @@ export default function EmployeeList() {
                   onChange={(e) => setRegisterForm((f) => ({ ...f, position: e.target.value }))}
                 >
                   <option value="">선택</option>
-                  {POSITION_OPTIONS.map((p) => (
-                    <option key={p}>{p}</option>
+                  {positions.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
                   ))}
                 </select>
               </label>
