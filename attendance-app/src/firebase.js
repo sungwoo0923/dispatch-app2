@@ -17,12 +17,27 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const useEmulator = import.meta.env.VITE_USE_EMULATOR === "true";
+// Without a .env.local (gitignored, so absent on every fresh clone) these
+// import.meta.env values are all undefined; treat that as "no real project
+// configured yet" and default to the emulator rather than letting
+// getAuth() throw auth/invalid-api-key on an empty key.
+const useEmulator = import.meta.env.VITE_USE_EMULATOR === "true" || !import.meta.env.VITE_FIREBASE_API_KEY;
 
-// The Firestore/Auth emulators accept any non-empty projectId, so local dev
-// works even before a real Firebase project's keys are filled in.
+// The emulators don't validate these against a real project, so local dev
+// works even before a real Firebase project's keys are filled in (or before
+// .env.local exists at all — it's gitignored, so every fresh clone starts
+// without it). Only fall back when running against the emulator; a real
+// deploy must still fail loudly if the real keys are missing.
 export const app = initializeApp(
-  useEmulator ? { ...firebaseConfig, projectId: firebaseConfig.projectId || "kp-work-dev" } : firebaseConfig
+  useEmulator
+    ? {
+        ...firebaseConfig,
+        apiKey: firebaseConfig.apiKey || "demo-api-key",
+        authDomain: firebaseConfig.authDomain || "localhost",
+        projectId: firebaseConfig.projectId || "kp-work-dev",
+        appId: firebaseConfig.appId || "demo-app-id",
+      }
+    : firebaseConfig
 );
 
 export const db = initializeFirestore(app, {
