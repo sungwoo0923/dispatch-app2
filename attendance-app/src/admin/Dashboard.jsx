@@ -6,6 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import StatCard from "../components/StatCard";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
+import OnboardingWidget from "./OnboardingWidget";
 import { toDateKey, formatTime } from "../utils/dateUtils";
 
 export default function Dashboard() {
@@ -51,6 +52,8 @@ export default function Dashboard() {
         <h1 className="text-lg font-bold text-ink">오늘 근태 현황</h1>
         <p className="text-sm text-muted">{toDateKey()} 기준</p>
       </div>
+
+      <OnboardingWidget />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <StatCard icon={Users} label="전체 직원" value={approvedEmployees.length} suffix="명" tone="primary" />
