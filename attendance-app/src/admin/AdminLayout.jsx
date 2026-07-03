@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   MessageSquare,
   Settings,
+  LayoutTemplate,
   Menu,
   X,
   LogOut,
@@ -39,6 +40,7 @@ const NAV = [
   { to: "/payroll", label: "정산", icon: Wallet },
   { to: "/stats", label: "통계", icon: BarChart3 },
   { to: "/board", label: "게시판", icon: MessageSquare },
+  { to: "/templates", label: "템플릿", icon: LayoutTemplate },
   {
     to: "/settings/admins",
     label: "설정",

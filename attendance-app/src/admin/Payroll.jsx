@@ -14,6 +14,7 @@ export default function Payroll() {
   const [month, setMonth] = useState(toMonthKey());
   const [employees, setEmployees] = useState([]);
   const [payrolls, setPayrolls] = useState([]);
+  const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [target, setTarget] = useState(null);
   const [form, setForm] = useState({
     wageType: "hourly",
@@ -29,6 +30,15 @@ export default function Payroll() {
     const unsub = onSnapshot(
       query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")),
       (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [profile?.companyId]);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(
+      query(collection(db, "allowanceTemplates"), where("companyId", "==", profile.companyId)),
+      (snap) => setAllowanceTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
     return () => unsub();
   }, [profile?.companyId]);
@@ -212,6 +222,27 @@ export default function Payroll() {
               />
             </label>
           </div>
+          {allowanceTemplates.length > 0 && (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">수당템플릿 추가</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                defaultValue=""
+                onChange={(e) => {
+                  const t = allowanceTemplates.find((x) => x.id === e.target.value);
+                  if (t) setForm((f) => ({ ...f, allowances: Number(f.allowances || 0) + t.amount }));
+                  e.target.value = "";
+                }}
+              >
+                <option value="">선택 시 기타수당에 더해집니다</option>
+                {allowanceTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} (+{t.amount.toLocaleString()}원)
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </form>
       </Modal>
     </div>

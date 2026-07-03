@@ -15,6 +15,7 @@ import SafetyTrainings from "./admin/SafetyTrainings";
 import Board from "./admin/Board";
 import AdminAccounts from "./admin/AdminAccounts";
 import OrgSettings from "./admin/OrgSettings";
+import Templates from "./admin/Templates";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="board" element={<Board />} />
           <Route path="settings/admins" element={<AdminAccounts />} />
           <Route path="settings/org" element={<OrgSettings />} />
+          <Route path="templates" element={<Templates />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

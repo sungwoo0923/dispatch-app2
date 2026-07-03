@@ -12,6 +12,7 @@ export default function Schedule() {
   const { profile } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
+  const [shiftTemplates, setShiftTemplates] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ uid: "", date: toDateKey(), startTime: "09:00", endTime: "18:00", siteId: "" });
@@ -26,6 +27,10 @@ export default function Schedule() {
       query(collection(db, "workSites"), where("companyId", "==", profile.companyId)),
       (snap) => setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubTemplates = onSnapshot(
+      query(collection(db, "shiftTemplates"), where("companyId", "==", profile.companyId)),
+      (snap) => setShiftTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     const unsubSchedules = onSnapshot(
       query(
         collection(db, "schedules"),
@@ -38,6 +43,7 @@ export default function Schedule() {
     return () => {
       unsubUsers();
       unsubSites();
+      unsubTemplates();
       unsubSchedules();
     };
   }, [profile?.companyId]);
@@ -158,6 +164,26 @@ export default function Schedule() {
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
             />
           </label>
+          {shiftTemplates.length > 0 && (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">시간템플릿으로 채우기</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                defaultValue=""
+                onChange={(e) => {
+                  const t = shiftTemplates.find((x) => x.id === e.target.value);
+                  if (t) setForm((f) => ({ ...f, startTime: t.startTime, endTime: t.endTime }));
+                }}
+              >
+                <option value="">선택 안 함</option>
+                {shiftTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.startTime} ~ {t.endTime})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">시작시각</span>
