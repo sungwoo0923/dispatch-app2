@@ -68,11 +68,22 @@ export async function getSiteInsuranceRates(companyId, siteId, asOfDate) {
     .filter((a) => !asOfDate || a.effectiveDate <= asOfDate)
     .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
   if (candidates.length === 0) return DEFAULT_PAYROLL_RATES;
+
+  // Rate assignments store a variable-length `rateItems` list (see 템플릿 >
+  // 보험요율) rather than a fixed shape, so pull out the four rates this
+  // calculator understands by Korean rate-type label; anything else (e.g.
+  // 소득세) is ignored here. Percentages are stored as whole numbers (4.5 == 4.5%).
+  const items = candidates[0].rateItems || [];
+  const pct = (label) => {
+    const item = items.find((i) => i.rateType === label);
+    return item ? Number(item.ratePercent) / 100 : null;
+  };
+
   return {
     ...DEFAULT_PAYROLL_RATES,
-    nationalPension: candidates[0].rates.pension,
-    healthInsurance: candidates[0].rates.health,
-    longTermCare: candidates[0].rates.longTermCare,
-    employmentInsurance: candidates[0].rates.employment,
+    nationalPension: pct("국민연금요율") ?? DEFAULT_PAYROLL_RATES.nationalPension,
+    healthInsurance: pct("건강보험요율") ?? DEFAULT_PAYROLL_RATES.healthInsurance,
+    longTermCare: pct("요양보험요율") ?? DEFAULT_PAYROLL_RATES.longTermCare,
+    employmentInsurance: pct("고용보험요율") ?? DEFAULT_PAYROLL_RATES.employmentInsurance,
   };
 }

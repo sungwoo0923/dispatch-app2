@@ -17,6 +17,7 @@ export default function SiteInsuranceRates() {
   const [companyName, setCompanyName] = useState("");
   const [workSites, setWorkSites] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [elements, setElements] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [filters, setFilters] = useState({ siteId: "", searchField: SEARCH_FIELDS[0], searchQuery: "" });
   const [selected, setSelected] = useState(() => new Set());
@@ -35,6 +36,10 @@ export default function SiteInsuranceRates() {
       query(collection(db, "insuranceRateTemplates"), where("companyId", "==", profile.companyId)),
       (snap) => setTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubElements = onSnapshot(
+      query(collection(db, "insuranceRateElements"), where("companyId", "==", profile.companyId)),
+      (snap) => setElements(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     const unsubAssignments = onSnapshot(
       query(collection(db, "siteInsuranceRates"), where("companyId", "==", profile.companyId)),
       (snap) => setAssignments(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -42,6 +47,7 @@ export default function SiteInsuranceRates() {
     return () => {
       unsubSites();
       unsubTemplates();
+      unsubElements();
       unsubAssignments();
     };
   }, [profile?.companyId]);
@@ -70,13 +76,16 @@ export default function SiteInsuranceRates() {
     const site = workSites.find((s) => s.id === filters.siteId);
     const template = templates.find((t) => t.id === quickForm.templateId);
     if (!site || !template) return;
+    const rateItems = elements
+      .filter((el) => el.templateId === template.id)
+      .map((el) => ({ rateType: el.rateType, ratePercent: el.ratePercent, insuranceApplicable: el.insuranceApplicable }));
     await addDoc(collection(db, "siteInsuranceRates"), {
       companyId: profile.companyId,
       siteId: site.id,
       siteName: site.name,
       templateId: template.id,
       templateName: template.name,
-      rates: template.rates,
+      rateItems,
       effectiveDate: quickForm.effectiveDate,
       createdAt: serverTimestamp(),
     });
@@ -90,14 +99,11 @@ export default function SiteInsuranceRates() {
   };
 
   const exportCsv = () => {
-    const headers = ["센터", "템플릿명", "국민연금", "건강보험", "장기요양", "고용보험", "설정일자"];
+    const headers = ["센터", "템플릿명", "보험요율항목", "설정일자"];
     const rows = sorted.map((a) => [
       a.siteName,
       a.templateName,
-      (a.rates?.pension * 100).toFixed(2),
-      (a.rates?.health * 100).toFixed(2),
-      (a.rates?.longTermCare * 100).toFixed(2),
-      (a.rates?.employment * 100).toFixed(2),
+      (a.rateItems || []).map((r) => `${r.rateType} ${r.ratePercent}%`).join(" / "),
       a.effectiveDate,
     ]);
     downloadCsv("센터별정산설정", headers, rows);
@@ -253,7 +259,9 @@ export default function SiteInsuranceRates() {
                   <td className="px-4 py-3 text-muted">
                     <span className="inline-flex items-center gap-1">
                       <Percent size={12} />
-                      소득세: {(a.rates?.employment * 100).toFixed(1)} 국민건강보험료율: {(a.rates?.health * 100).toFixed(1)}
+                      {(a.rateItems || []).length > 0
+                        ? a.rateItems.map((r) => `${r.rateType} ${r.ratePercent}%`).join(" · ")
+                        : "-"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-muted">{a.effectiveDate}</td>
@@ -274,22 +282,15 @@ export default function SiteInsuranceRates() {
       <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title={`${viewing?.siteName} · ${viewing?.templateName}`} footer={<Button onClick={() => setViewing(null)}>닫기</Button>}>
         {viewing && (
           <div className="space-y-1.5 text-sm">
-            <div className="flex justify-between border-b border-slate-100 py-1.5">
-              <span className="text-muted">국민연금</span>
-              <span className="text-ink">{(viewing.rates?.pension * 100).toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between border-b border-slate-100 py-1.5">
-              <span className="text-muted">건강보험</span>
-              <span className="text-ink">{(viewing.rates?.health * 100).toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between border-b border-slate-100 py-1.5">
-              <span className="text-muted">장기요양</span>
-              <span className="text-ink">{(viewing.rates?.longTermCare * 100).toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between border-b border-slate-100 py-1.5">
-              <span className="text-muted">고용보험</span>
-              <span className="text-ink">{(viewing.rates?.employment * 100).toFixed(2)}%</span>
-            </div>
+            {(viewing.rateItems || []).map((r, i) => (
+              <div key={i} className="flex justify-between border-b border-slate-100 py-1.5">
+                <span className="text-muted">
+                  {r.rateType} {r.insuranceApplicable === "미대상" ? "(4대보험 미대상)" : ""}
+                </span>
+                <span className="text-ink">{Number(r.ratePercent).toFixed(2)}%</span>
+              </div>
+            ))}
+            {(!viewing.rateItems || viewing.rateItems.length === 0) && <p className="text-xs text-muted">등록된 보험요율 항목이 없습니다.</p>}
             <div className="flex justify-between py-1.5">
               <span className="text-muted">설정일자</span>
               <span className="text-ink">{viewing.effectiveDate}</span>

@@ -11,7 +11,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -82,6 +82,19 @@ export default function EmployeeList() {
   const [issuedCode, setIssuedCode] = useState("");
 
   const [filters, setFilters] = useState({ siteId: "", vendorId: "", status: "", search: "" });
+  const [selected, setSelected] = useState(() => new Set());
+  const [listAction, setListAction] = useState("선택");
+
+  const [shiftTemplates, setShiftTemplates] = useState([]);
+  const [allowanceTemplates, setAllowanceTemplates] = useState([]);
+  const [changeLogs, setChangeLogs] = useState([]);
+
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyMode, setCopyMode] = useState("근무복사");
+  const [copyTargets, setCopyTargets] = useState(() => new Set());
+  const [quickForm, setQuickForm] = useState({ name: "", phone: "" });
+
+  const [templateForm, setTemplateForm] = useState({ kind: "시간템플릿", templateId: "", effectiveDate: toDateKey(), deleteMode: false, bulkMode: false });
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -109,6 +122,18 @@ export default function EmployeeList() {
       query(collection(db, "positions"), where("companyId", "==", profile.companyId)),
       (snap) => setPositions(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubShiftT = onSnapshot(
+      query(collection(db, "shiftTemplates"), where("companyId", "==", profile.companyId)),
+      (snap) => setShiftTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    const unsubAllowT = onSnapshot(
+      query(collection(db, "allowanceTemplates"), where("companyId", "==", profile.companyId)),
+      (snap) => setAllowanceTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    const unsubLogs = onSnapshot(
+      query(collection(db, "employeeChangeLogs"), where("companyId", "==", profile.companyId)),
+      (snap) => setChangeLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     return () => {
       unsubUsers();
       unsubSites();
@@ -116,6 +141,9 @@ export default function EmployeeList() {
       unsubPending();
       unsubDept();
       unsubPos();
+      unsubShiftT();
+      unsubAllowT();
+      unsubLogs();
     };
   }, [profile?.companyId]);
 
@@ -179,6 +207,94 @@ export default function EmployeeList() {
   };
 
   const removePending = (code) => deleteDoc(doc(db, "pendingEmployees", code));
+
+  const toggleSelected = (id) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleSelectAll = () =>
+    setSelected((s) => (s.size === filteredEmployees.length ? new Set() : new Set(filteredEmployees.map((e) => e.id))));
+
+  const sourceEmployee = employees.find((e) => selected.has(e.id));
+
+  const logChange = (uid, kind, detail) =>
+    addDoc(collection(db, "employeeChangeLogs"), {
+      companyId: profile.companyId,
+      uid,
+      kind,
+      detail,
+      status: "완료",
+      createdAt: serverTimestamp(),
+      createdByName: profile.name || "관리자",
+    });
+
+  const runListAction = () => {
+    if (selected.size === 0) return;
+    if (listAction === "신규복사" || listAction === "근무복사") {
+      setCopyMode(listAction);
+      setCopyTargets(new Set());
+      setQuickForm({ name: "", phone: "" });
+      setCopyOpen(true);
+    } else if (listAction === "SMS발송") {
+      window.alert(`${selected.size}명에게 가입코드 SMS를 발송했습니다. (테스트 환경에서는 실제 발송되지 않습니다)`);
+    }
+  };
+
+  const applyWorkCopy = async () => {
+    if (!sourceEmployee || copyTargets.size === 0) return;
+    const fields = ["workSiteId", "vendorId", "employmentType", "team", "position", "shiftType", "payType", "insuranceApplied"];
+    const payload = Object.fromEntries(fields.map((f) => [f, sourceEmployee[f] ?? null]));
+    for (const uid of copyTargets) {
+      await updateDoc(doc(db, "users", uid), payload);
+      await logChange(uid, "근무복사", `${sourceEmployee.name}의 근무정보를 복사`);
+    }
+    setCopyOpen(false);
+    setSelected(new Set());
+  };
+
+  const submitQuickCopy = async () => {
+    if (!sourceEmployee || !quickForm.name.trim() || !quickForm.phone.trim()) return;
+    const code = generateInviteCode(8);
+    await setDoc(doc(db, "pendingEmployees", code), {
+      companyId: profile.companyId,
+      ...EMPTY_REGISTER_FORM,
+      name: quickForm.name,
+      phone: quickForm.phone,
+      workSiteId: sourceEmployee.workSiteId || "",
+      vendorId: sourceEmployee.vendorId || "",
+      employmentType: sourceEmployee.employmentType || "상용직",
+      team: sourceEmployee.team || "",
+      position: sourceEmployee.position || "",
+      shiftType: sourceEmployee.shiftType || "주간",
+      payType: sourceEmployee.payType || "월급",
+      employmentStatus: "재직",
+      createdAt: serverTimestamp(),
+    });
+    setCopyOpen(false);
+    setSelected(new Set());
+  };
+
+  const templateSourceList = templateForm.kind === "시간템플릿" ? shiftTemplates : allowanceTemplates;
+
+  const applyTemplateBulk = async () => {
+    const targets = templateForm.bulkMode ? filteredEmployees.map((e) => e.id) : [...selected];
+    if (targets.length === 0) return;
+    const field = templateForm.kind === "시간템플릿" ? "shiftTemplateId" : "allowanceTemplateId";
+    const templateName = templateSourceList.find((t) => t.id === templateForm.templateId)?.name || "";
+    for (const uid of targets) {
+      if (templateForm.deleteMode) {
+        await updateDoc(doc(db, "users", uid), { [field]: null });
+        await logChange(uid, "템플릿삭제", `${templateForm.kind} 삭제`);
+      } else {
+        if (!templateForm.templateId) continue;
+        await updateDoc(doc(db, "users", uid), { [field]: templateForm.templateId, [`${field}EffectiveDate`]: templateForm.effectiveDate });
+        await logChange(uid, "템플릿적용", `${templateForm.kind}: ${templateName} (적용시점 ${templateForm.effectiveDate})`);
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -260,11 +376,67 @@ export default function EmployeeList() {
           </label>
         </Card>
 
-        <p className="mb-2 text-xs font-medium text-muted">목록 {filteredEmployees.length}건</p>
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+          <p className="text-xs font-medium text-muted">목록 {filteredEmployees.length}건</p>
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+            <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={listAction} onChange={(e) => setListAction(e.target.value)}>
+              <option>선택</option>
+              <option>신규복사</option>
+              <option>근무복사</option>
+              <option>SMS발송</option>
+            </select>
+            <Button size="sm" variant="outline" onClick={runListAction} disabled={selected.size === 0 || listAction === "선택"}>
+              실행
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => window.alert(`${selected.size || 0}명에게 SMS를 발송했습니다.`)} disabled={selected.size === 0}>
+              <Send size={13} /> SMS발송
+            </Button>
+          </div>
+        </div>
+
+        <Card className="mb-3 flex flex-nowrap items-end gap-2 overflow-x-auto p-3">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-muted">템플릿구분</span>
+            <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={templateForm.kind} onChange={(e) => setTemplateForm((f) => ({ ...f, kind: e.target.value, templateId: "" }))}>
+              <option>시간템플릿</option>
+              <option>수당템플릿</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-muted">템플릿명</span>
+            <select className="w-40 rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={templateForm.templateId} onChange={(e) => setTemplateForm((f) => ({ ...f, templateId: e.target.value }))}>
+              <option value="">선택</option>
+              {templateSourceList.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-muted">적용시점</span>
+            <input type="date" className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={templateForm.effectiveDate} onChange={(e) => setTemplateForm((f) => ({ ...f, effectiveDate: e.target.value }))} />
+          </label>
+          <label className="flex items-center gap-1.5 pb-2 text-xs text-muted">
+            <input type="checkbox" checked={templateForm.deleteMode} onChange={(e) => setTemplateForm((f) => ({ ...f, deleteMode: e.target.checked }))} />
+            템플릿삭제
+          </label>
+          <label className="flex items-center gap-1.5 pb-2 text-xs text-muted">
+            <input type="checkbox" checked={templateForm.bulkMode} onChange={(e) => setTemplateForm((f) => ({ ...f, bulkMode: e.target.checked }))} />
+            일괄처리
+          </label>
+          <Button size="sm" onClick={applyTemplateBulk} disabled={!templateForm.bulkMode && selected.size === 0}>
+            적용
+          </Button>
+        </Card>
+
         <div className="-mx-4 overflow-x-auto md:-mx-5">
           <table className="w-full min-w-[1120px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">
+                  <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
+                </th>
                 <th className="px-4 py-3 font-medium">순번</th>
                 <th className="px-4 py-3 font-medium">이름</th>
                 <th className="px-4 py-3 font-medium">연락처</th>
@@ -282,6 +454,9 @@ export default function EmployeeList() {
             <tbody>
               {filteredEmployees.map((emp, i) => (
                 <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
+                  </td>
                   <td className="px-4 py-3 text-muted">{i + 1}</td>
                   <td className="px-4 py-3 text-ink">{emp.name}</td>
                   <td className="px-4 py-3 text-muted">{emp.phone}</td>
@@ -368,8 +543,47 @@ export default function EmployeeList() {
               ))}
               {filteredEmployees.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={13} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 근로자가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel icon={History} title={`변경이력 (${changeLogs.length}건)`}>
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">변경구분</th>
+                <th className="px-4 py-3 font-medium">내용</th>
+                <th className="px-4 py-3 font-medium">처리상태</th>
+                <th className="px-4 py-3 font-medium">변경자</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...changeLogs]
+                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                .slice(0, 20)
+                .map((log, i) => (
+                  <tr key={log.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{log.kind}</td>
+                    <td className="px-4 py-3 text-muted">{log.detail}</td>
+                    <td className="px-4 py-3">
+                      <Badge tone="success">{log.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-muted">{log.createdByName}</td>
+                  </tr>
+                ))}
+              {changeLogs.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-xs text-muted">
+                    변경이력이 없습니다.
                   </td>
                 </tr>
               )}
@@ -819,6 +1033,105 @@ export default function EmployeeList() {
               </label>
             </div>
           </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={copyOpen}
+        onClose={() => setCopyOpen(false)}
+        title={copyMode === "근무복사" ? "근무복사등록" : "신규복사"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setCopyOpen(false)}>
+              취소
+            </Button>
+            {copyMode === "근무복사" ? (
+              <Button onClick={applyWorkCopy} disabled={copyTargets.size === 0}>
+                근무정보등록
+              </Button>
+            ) : (
+              <Button onClick={submitQuickCopy} disabled={!quickForm.name.trim() || !quickForm.phone.trim()}>
+                등록
+              </Button>
+            )}
+          </>
+        }
+      >
+        {sourceEmployee && (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-primary-light/40 px-3.5 py-2.5 text-xs leading-relaxed text-primary">
+              복사조건: #소속업체 {vendorName_(sourceEmployee.vendorId)} #근무구분/근무형태 {sourceEmployee.shiftType || "-"}/{sourceEmployee.employmentType || "-"}
+            </div>
+
+            {copyMode === "근무복사" ? (
+              <>
+                <p className="text-xs text-muted">
+                  기존 근로자 <b className="text-ink">'{sourceEmployee.name}'</b>의 근무정보를 복사해 이미 등록된 다른 근로자에게 추가 등록할 때 사용합니다.
+                </p>
+                <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-100">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="border-b border-slate-100 text-xs text-muted">
+                        <th className="w-8 px-3 py-2"></th>
+                        <th className="px-3 py-2 font-medium">이름</th>
+                        <th className="px-3 py-2 font-medium">전화번호</th>
+                        <th className="px-3 py-2 font-medium">소속업체</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employees
+                        .filter((e) => e.id !== sourceEmployee.id)
+                        .map((e) => (
+                          <tr key={e.id} className="border-b border-slate-50 last:border-0">
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={copyTargets.has(e.id)}
+                                onChange={() =>
+                                  setCopyTargets((s) => {
+                                    const next = new Set(s);
+                                    if (next.has(e.id)) next.delete(e.id);
+                                    else next.add(e.id);
+                                    return next;
+                                  })
+                                }
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-ink">{e.name}</td>
+                            <td className="px-3 py-2 text-muted">{e.phone}</td>
+                            <td className="px-3 py-2 text-muted">{vendorName_(e.vendorId)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-muted">근무형태가 여러 개인 경우, 근무별 시작일에 따라 휴가 산정 기준이 달라질 수 있습니다. 복사한 근무정보를 적용할 근로자를 선택해주세요.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted">
+                  기존 근로자 정보를 복사해 신규 근로자를 등록할 때 사용합니다. 센터, 소속업체, 근무조건, 템플릿까지 복사되며, 이름과 전화번호만 입력하면 간편 등록 완료!
+                </p>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">이름 *</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={quickForm.name}
+                    onChange={(e) => setQuickForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">전화번호 *</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={quickForm.phone}
+                    onChange={(e) => setQuickForm((f) => ({ ...f, phone: e.target.value }))}
+                  />
+                </label>
+              </>
+            )}
+          </div>
         )}
       </Modal>
     </div>
