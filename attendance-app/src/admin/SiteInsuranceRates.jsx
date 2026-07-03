@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { Plus, Trash2, Percent } from "lucide-react";
+import { Plus, Trash2, Percent, Settings } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { toDateKey } from "../utils/dateUtils";
 
 export default function SiteInsuranceRates() {
@@ -62,63 +63,67 @@ export default function SiteInsuranceRates() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-ink">센터별 정산설정</h1>
-          <p className="text-sm text-muted">센터에서 근로자에게 적용하는 보험 요율을 설정일자별로 관리합니다.</p>
+      <Panel
+        icon={Settings}
+        title={`센터별 정산설정 (${sorted.length}건)`}
+        actions={
+          <Button onClick={() => setOpen(true)} disabled={templates.length === 0}>
+            <Plus size={16} /> 신규
+          </Button>
+        }
+      >
+        <p className="mb-4 text-xs text-muted">센터에서 근로자에게 적용하는 보험 요율을 설정일자별로 관리합니다.</p>
+
+        {templates.length === 0 && (
+          <Card className="mb-4 p-4 text-xs text-warning">
+            먼저 템플릿 관리 메뉴에서 보험요율템플릿을 등록해주세요.
+          </Card>
+        )}
+
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">센터</th>
+                <th className="px-4 py-3 font-medium">템플릿명</th>
+                <th className="px-4 py-3 font-medium">보험요율항목</th>
+                <th className="px-4 py-3 font-medium">설정일자</th>
+                <th className="px-4 py-3 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((a, i) => (
+                <tr key={a.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{a.siteName}</td>
+                  <td className="px-4 py-3 text-muted">{a.templateName}</td>
+                  <td className="px-4 py-3 text-muted">
+                    <span className="inline-flex items-center gap-1">
+                      <Percent size={12} />
+                      국민연금 {(a.rates?.pension * 100).toFixed(2)} · 건강보험 {(a.rates?.health * 100).toFixed(2)} · 고용보험{" "}
+                      {(a.rates?.employment * 100).toFixed(2)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted">{a.effectiveDate}</td>
+                  <td className="px-4 py-3">
+                    <button className="text-muted hover:text-danger" onClick={() => remove(a.id)} title="삭제">
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {sorted.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted">
+                    설정된 보험요율이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        <Button onClick={() => setOpen(true)} disabled={templates.length === 0}>
-          <Plus size={16} /> 신규
-        </Button>
-      </div>
-
-      {templates.length === 0 && (
-        <Card className="p-4 text-xs text-warning">
-          먼저 템플릿 관리 메뉴에서 보험요율템플릿을 등록해주세요.
-        </Card>
-      )}
-
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[820px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">센터</th>
-              <th className="px-4 py-3 font-medium">템플릿명</th>
-              <th className="px-4 py-3 font-medium">보험요율항목</th>
-              <th className="px-4 py-3 font-medium">설정일자</th>
-              <th className="px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((a) => (
-              <tr key={a.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-ink">{a.siteName}</td>
-                <td className="px-4 py-3 text-muted">{a.templateName}</td>
-                <td className="px-4 py-3 text-muted">
-                  <span className="inline-flex items-center gap-1">
-                    <Percent size={12} />
-                    국민연금 {(a.rates?.pension * 100).toFixed(2)} · 건강보험 {(a.rates?.health * 100).toFixed(2)} · 고용보험{" "}
-                    {(a.rates?.employment * 100).toFixed(2)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-muted">{a.effectiveDate}</td>
-                <td className="px-4 py-3">
-                  <button className="text-muted hover:text-danger" onClick={() => remove(a.id)} title="삭제">
-                    <Trash2 size={15} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {sorted.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-xs text-muted">
-                  설정된 보험요율이 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      </Panel>
 
       <Modal
         open={open}

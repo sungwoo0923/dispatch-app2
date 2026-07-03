@@ -13,10 +13,10 @@ import {
 import { FileSignature, Trash2, Eye } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
-import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { formatDate } from "../utils/dateUtils";
 
@@ -103,64 +103,66 @@ export default function Contracts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-ink">계약서</h1>
-          <p className="text-sm text-muted">전자근로계약서 발송 및 서명현황</p>
-        </div>
-        <Button onClick={openNew}>
-          <FileSignature size={16} /> 계약서 발송
-        </Button>
-      </div>
-
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">근로자</th>
-              <th className="px-4 py-3 font-medium">제목</th>
-              <th className="px-4 py-3 font-medium">계약기간</th>
-              <th className="px-4 py-3 font-medium">상태</th>
-              <th className="px-4 py-3 font-medium">서명일</th>
-              <th className="px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedContracts.map((c) => (
-              <tr key={c.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-ink">{c.employeeName}</td>
-                <td className="px-4 py-3 text-muted">{c.title}</td>
-                <td className="px-4 py-3 text-muted">
-                  {formatDate(c.startDate)} {c.endDate ? `~ ${formatDate(c.endDate)}` : "(기간 무기한)"}
-                </td>
-                <td className="px-4 py-3">
-                  {c.status === "signed" ? <Badge tone="success">서명완료</Badge> : <Badge tone="warning">서명대기</Badge>}
-                </td>
-                <td className="px-4 py-3 text-muted">{c.signedAt ? formatDate(c.signedAt) : "-"}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <button className="text-muted hover:text-primary" title="보기" onClick={() => setViewing(c)}>
-                      <Eye size={16} />
-                    </button>
-                    {c.status !== "signed" && (
-                      <button className="text-muted hover:text-danger" title="삭제" onClick={() => remove(c.id)}>
-                        <Trash2 size={16} />
+      <Panel
+        icon={FileSignature}
+        title={`계약서 (${sortedContracts.length}건)`}
+        actions={
+          <Button onClick={openNew}>
+            <FileSignature size={16} /> 계약서 발송
+          </Button>
+        }
+      >
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">근로자</th>
+                <th className="px-4 py-3 font-medium">제목</th>
+                <th className="px-4 py-3 font-medium">계약기간</th>
+                <th className="px-4 py-3 font-medium">상태</th>
+                <th className="px-4 py-3 font-medium">서명일</th>
+                <th className="px-4 py-3 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedContracts.map((c, i) => (
+                <tr key={c.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{c.employeeName}</td>
+                  <td className="px-4 py-3 text-muted">{c.title}</td>
+                  <td className="px-4 py-3 text-muted">
+                    {formatDate(c.startDate)} {c.endDate ? `~ ${formatDate(c.endDate)}` : "(기간 무기한)"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {c.status === "signed" ? <Badge tone="success">서명완료</Badge> : <Badge tone="warning">서명대기</Badge>}
+                  </td>
+                  <td className="px-4 py-3 text-muted">{c.signedAt ? formatDate(c.signedAt) : "-"}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <button className="text-muted hover:text-primary" title="보기" onClick={() => setViewing(c)}>
+                        <Eye size={16} />
                       </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {sortedContracts.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted">
-                  발송된 계약서가 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+                      {c.status !== "signed" && (
+                        <button className="text-muted hover:text-danger" title="삭제" onClick={() => remove(c.id)}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {sortedContracts.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
+                    발송된 계약서가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
 
       <Modal
         open={open}

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { Pin, Trash2, ChevronDown, Plus } from "lucide-react";
+import { Pin, Trash2, ChevronDown, Plus, MessageSquare } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { formatDate } from "../utils/dateUtils";
 
 export default function Board() {
@@ -51,16 +52,15 @@ export default function Board() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-ink">게시판</h1>
-          <p className="text-sm text-muted">공지사항 및 안내</p>
-        </div>
-        <Button onClick={() => setModalOpen(true)}>
-          <Plus size={16} /> 공지 작성
-        </Button>
-      </div>
-
+      <Panel
+        icon={MessageSquare}
+        title={`게시판 (${sorted.length}건)`}
+        actions={
+          <Button onClick={() => setModalOpen(true)}>
+            <Plus size={16} /> 공지 작성
+          </Button>
+        }
+      >
       <div className="space-y-2">
         {sorted.map((p) => {
           const isOpen = openId === p.id;
@@ -100,6 +100,7 @@ export default function Board() {
           <Card className="p-6 text-center text-xs text-muted">등록된 게시글이 없습니다.</Card>
         )}
       </div>
+      </Panel>
 
       <Modal
         open={modalOpen}

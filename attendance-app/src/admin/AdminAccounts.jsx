@@ -3,9 +3,9 @@ import { collection, query, where, onSnapshot, doc, getDoc, setDoc, serverTimest
 import { UserPlus, Copy, ShieldCheck, PenLine } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
-import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import SignaturePad from "../components/SignaturePad";
 import { generateInviteCode } from "../utils/ids";
 
@@ -60,46 +60,44 @@ export default function AdminAccounts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-ink">관리자 계정</h1>
-          <p className="text-sm text-muted">회사 관리자 목록 및 추가 관리자 초대</p>
-        </div>
-        <Button onClick={issueInvite}>
-          <UserPlus size={16} /> 관리자 초대
-        </Button>
-      </div>
-
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[480px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">이름</th>
-              <th className="px-4 py-3 font-medium">연락처</th>
-              <th className="px-4 py-3 font-medium">역할</th>
-            </tr>
-          </thead>
-          <tbody>
-            {admins.map((a) => (
-              <tr key={a.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-ink">{a.name}</td>
-                <td className="px-4 py-3 text-muted">{a.phone}</td>
-                <td className="px-4 py-3">
-                  <span className="flex items-center gap-1.5 text-xs text-primary">
-                    <ShieldCheck size={13} /> 관리자
-                  </span>
-                </td>
+      <Panel
+        icon={ShieldCheck}
+        title={`관리자 계정 (${admins.length}명)`}
+        actions={
+          <Button onClick={issueInvite}>
+            <UserPlus size={16} /> 관리자 초대
+          </Button>
+        }
+      >
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[480px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">이름</th>
+                <th className="px-4 py-3 font-medium">연락처</th>
+                <th className="px-4 py-3 font-medium">역할</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-
-      <Card className="p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-          <PenLine size={16} className="text-primary" />
-          내 전자서명 등록
+            </thead>
+            <tbody>
+              {admins.map((a, i) => (
+                <tr key={a.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{a.name}</td>
+                  <td className="px-4 py-3 text-muted">{a.phone}</td>
+                  <td className="px-4 py-3">
+                    <span className="flex items-center gap-1.5 text-xs text-primary">
+                      <ShieldCheck size={13} /> 관리자
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </Panel>
+
+      <Panel icon={PenLine} title="내 전자서명 등록">
         <p className="mb-3 text-xs text-muted">
           안전담당자로 지정될 경우, 이 서명이 근로자의 안전교육 서명에 자동으로 함께 날인됩니다.
         </p>
@@ -113,7 +111,7 @@ export default function AdminAccounts() {
         <Button className="mt-3" onClick={saveSignature} disabled={savingSignature}>
           {savingSignature ? "저장 중..." : "서명 저장"}
         </Button>
-      </Card>
+      </Panel>
 
       <Modal open={open} onClose={() => setOpen(false)} title="관리자 초대코드 발급" footer={<Button onClick={() => setOpen(false)}>확인</Button>}>
         <p className="mb-2 text-sm text-muted">

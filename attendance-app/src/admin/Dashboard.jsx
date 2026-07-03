@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Users, CheckCircle2, AlarmClock, LogOut as LogOutIcon, UserX } from "lucide-react";
+import { Users, CheckCircle2, AlarmClock, LogOut as LogOutIcon, UserX, ClipboardCheck } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import StatCard from "../components/StatCard";
-import Card from "../components/Card";
 import Badge from "../components/Badge";
+import Panel from "../components/Panel";
 import OnboardingWidget from "./OnboardingWidget";
 import { toDateKey, formatTime } from "../utils/dateUtils";
 
@@ -63,8 +63,7 @@ export default function Dashboard() {
         <StatCard icon={UserX} label="미출근" value={stats.absent} suffix="명" tone="danger" />
       </div>
 
-      <Card className="p-5">
-        <p className="mb-3 text-sm font-semibold text-ink">최근 출근</p>
+      <Panel icon={ClipboardCheck} title={`최근 출근 (${recent.length}건)`}>
         <div className="divide-y divide-slate-100">
           {recent.length === 0 && <p className="py-3 text-xs text-muted">아직 출근 기록이 없습니다.</p>}
           {recent.map((r) => (
@@ -75,7 +74,7 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
-      </Card>
+      </Panel>
     </div>
   );
 }

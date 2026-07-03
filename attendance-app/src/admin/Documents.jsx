@@ -6,6 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { DOCUMENT_TYPE_OPTIONS, uploadEmployeeDocument, deleteEmployeeDocument } from "../utils/documents";
 import { formatDate } from "../utils/dateUtils";
 
@@ -59,75 +60,77 @@ export default function Documents() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-ink">서류함</h1>
-          <p className="text-sm text-muted">근로자별 첨부서류 관리</p>
+      <Panel
+        icon={FileText}
+        title={`서류함 (${sorted.length}건)`}
+        actions={
+          <Button onClick={() => setOpen(true)}>
+            <Upload size={16} /> 서류 업로드
+          </Button>
+        }
+      >
+        <Card className="mb-4 flex flex-wrap items-end gap-3 p-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">근로자</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filterUid}
+              onChange={(e) => setFilterUid(e.target.value)}
+            >
+              <option value="">전체</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </Card>
+
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">근로자</th>
+                <th className="px-4 py-3 font-medium">문서종류</th>
+                <th className="px-4 py-3 font-medium">파일명</th>
+                <th className="px-4 py-3 font-medium">업로드일</th>
+                <th className="px-4 py-3 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((d, i) => (
+                <tr key={d.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{d.employeeName}</td>
+                  <td className="px-4 py-3 text-muted">{d.docType}</td>
+                  <td className="px-4 py-3">
+                    <a href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
+                      <FileText size={14} /> {d.fileName}
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 text-muted">
+                    {d.uploadedAt?.toDate ? formatDate(d.uploadedAt.toDate().toISOString().slice(0, 10)) : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button className="text-muted hover:text-danger" title="삭제" onClick={() => deleteEmployeeDocument(d)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {sorted.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted">
+                    업로드된 서류가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Upload size={16} /> 서류 업로드
-        </Button>
-      </div>
-
-      <Card className="flex flex-wrap items-end gap-3 p-4">
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">근로자</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filterUid}
-            onChange={(e) => setFilterUid(e.target.value)}
-          >
-            <option value="">전체</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </Card>
-
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">근로자</th>
-              <th className="px-4 py-3 font-medium">문서종류</th>
-              <th className="px-4 py-3 font-medium">파일명</th>
-              <th className="px-4 py-3 font-medium">업로드일</th>
-              <th className="px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((d) => (
-              <tr key={d.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-ink">{d.employeeName}</td>
-                <td className="px-4 py-3 text-muted">{d.docType}</td>
-                <td className="px-4 py-3">
-                  <a href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
-                    <FileText size={14} /> {d.fileName}
-                  </a>
-                </td>
-                <td className="px-4 py-3 text-muted">
-                  {d.uploadedAt?.toDate ? formatDate(d.uploadedAt.toDate().toISOString().slice(0, 10)) : "-"}
-                </td>
-                <td className="px-4 py-3">
-                  <button className="text-muted hover:text-danger" title="삭제" onClick={() => deleteEmployeeDocument(d)}>
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {sorted.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-xs text-muted">
-                  업로드된 서류가 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      </Panel>
 
       <Modal
         open={open}

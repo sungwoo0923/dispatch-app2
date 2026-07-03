@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { Plus } from "lucide-react";
+import { Plus, CalendarDays } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
-import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
 export default function Schedule() {
@@ -68,47 +68,49 @@ export default function Schedule() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-ink">스케줄 관리</h1>
-          <p className="text-sm text-muted">예정된 근무 {schedules.length}건</p>
+      <Panel
+        icon={CalendarDays}
+        title={`스케줄 관리 (${schedules.length}건)`}
+        actions={
+          <Button onClick={() => setOpen(true)}>
+            <Plus size={16} /> 스케줄 등록
+          </Button>
+        }
+      >
+        <div className="-m-4 overflow-x-auto md:-m-5">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">이름</th>
+                <th className="px-4 py-3 font-medium">근무일자</th>
+                <th className="px-4 py-3 font-medium">근무시각</th>
+                <th className="px-4 py-3 font-medium">근무지</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedules.map((s, i) => (
+                <tr key={s.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{s.name}</td>
+                  <td className="px-4 py-3 text-muted">{formatDate(s.date)}</td>
+                  <td className="px-4 py-3 text-muted">
+                    {s.startTime} ~ {s.endTime}
+                  </td>
+                  <td className="px-4 py-3 text-muted">{s.siteName || "-"}</td>
+                </tr>
+              ))}
+              {schedules.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-xs text-muted">
+                    등록된 스케줄이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus size={16} /> 스케줄 등록
-        </Button>
-      </div>
-
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">이름</th>
-              <th className="px-4 py-3 font-medium">근무일자</th>
-              <th className="px-4 py-3 font-medium">근무시각</th>
-              <th className="px-4 py-3 font-medium">근무지</th>
-            </tr>
-          </thead>
-          <tbody>
-            {schedules.map((s) => (
-              <tr key={s.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-ink">{s.name}</td>
-                <td className="px-4 py-3 text-muted">{formatDate(s.date)}</td>
-                <td className="px-4 py-3 text-muted">
-                  {s.startTime} ~ {s.endTime}
-                </td>
-                <td className="px-4 py-3 text-muted">{s.siteName || "-"}</td>
-              </tr>
-            ))}
-            {schedules.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-xs text-muted">
-                  등록된 스케줄이 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      </Panel>
 
       <Modal
         open={open}

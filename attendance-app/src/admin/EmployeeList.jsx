@@ -11,13 +11,14 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2 } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, EMPLOYMENT_TYPE_OPTIONS } from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
 import { toDateKey, formatDate } from "../utils/dateUtils";
@@ -168,233 +169,236 @@ export default function EmployeeList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-ink">근로자 등록</h1>
-          <p className="text-sm text-muted">전체 {employees.length}명 · 가입 대기 {pending.length}명</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setVendorModalOpen(true)}>
-            <Building2 size={16} /> 소속업체 추가
-          </Button>
-          <Button variant="outline" onClick={() => setSiteModalOpen(true)}>
-            <MapPin size={16} /> 근무지 추가
-          </Button>
-          <Button onClick={() => setRegisterOpen(true)}>
-            <UserPlus size={16} /> 신규 근로자 등록
-          </Button>
-        </div>
-      </div>
+      <Panel
+        icon={Users}
+        title={`근로자 등록 (전체 ${employees.length}명 · 가입 대기 ${pending.length}명)`}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setVendorModalOpen(true)}>
+              <Building2 size={16} /> 소속업체 추가
+            </Button>
+            <Button variant="outline" onClick={() => setSiteModalOpen(true)}>
+              <MapPin size={16} /> 근무지 추가
+            </Button>
+            <Button onClick={() => setRegisterOpen(true)}>
+              <UserPlus size={16} /> 신규 근로자 등록
+            </Button>
+          </>
+        }
+      >
+        {workSites.length === 0 && (
+          <Card className="mb-4 p-4 text-xs text-warning">
+            아직 등록된 근무지가 없습니다. 근무지를 먼저 추가해야 직원에게 배정하고 자동출근을 사용할 수 있습니다.
+          </Card>
+        )}
 
-      {workSites.length === 0 && (
-        <Card className="p-4 text-xs text-warning">
-          아직 등록된 근무지가 없습니다. 근무지를 먼저 추가해야 직원에게 배정하고 자동출근을 사용할 수 있습니다.
+        <Card className="mb-4 flex flex-wrap items-end gap-3 p-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.vendorId}
+              onChange={(e) => setFilters((f) => ({ ...f, vendorId: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">근무지</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.siteId}
+              onChange={(e) => setFilters((f) => ({ ...f, siteId: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {workSites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">재직상태</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.status}
+              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block flex-1 min-w-[160px]">
+            <span className="mb-1.5 block text-xs font-medium text-muted">이름/연락처 검색</span>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.search}
+              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+              placeholder="검색어 입력"
+            />
+          </label>
         </Card>
-      )}
 
-      <Card className="flex flex-wrap items-end gap-3 p-4">
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.vendorId}
-            onChange={(e) => setFilters((f) => ({ ...f, vendorId: e.target.value }))}
-          >
-            <option value="">전체</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">근무지</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.siteId}
-            onChange={(e) => setFilters((f) => ({ ...f, siteId: e.target.value }))}
-          >
-            <option value="">전체</option>
-            {workSites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">재직상태</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.status}
-            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-          >
-            <option value="">전체</option>
-            {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block flex-1 min-w-[160px]">
-          <span className="mb-1.5 block text-xs font-medium text-muted">이름/연락처 검색</span>
-          <input
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.search}
-            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-            placeholder="검색어 입력"
-          />
-        </label>
-      </Card>
-
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[1080px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">이름</th>
-              <th className="px-4 py-3 font-medium">연락처</th>
-              <th className="px-4 py-3 font-medium">성별</th>
-              <th className="px-4 py-3 font-medium">소속업체</th>
-              <th className="px-4 py-3 font-medium">고용구분</th>
-              <th className="px-4 py-3 font-medium">부서</th>
-              <th className="px-4 py-3 font-medium">직급</th>
-              <th className="px-4 py-3 font-medium">재직상태</th>
-              <th className="px-4 py-3 font-medium">근무지</th>
-              <th className="px-4 py-3 font-medium">입사일</th>
-              <th className="px-4 py-3 font-medium">승인</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredEmployees.map((emp) => (
-              <tr key={emp.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-ink">{emp.name}</td>
-                <td className="px-4 py-3 text-muted">{emp.phone}</td>
-                <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
-                <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                <td className="px-4 py-3">
-                  <select
-                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                    value={emp.employmentType || ""}
-                    onChange={(e) => updateField(emp.id, "employmentType", e.target.value)}
-                  >
-                    <option value="">-</option>
-                    {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
-                      <option key={t}>{t}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                    value={emp.team || ""}
-                    onChange={(e) => updateField(emp.id, "team", e.target.value)}
-                  >
-                    <option value="">-</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                    value={emp.position || ""}
-                    onChange={(e) => updateField(emp.id, "position", e.target.value)}
-                  >
-                    <option value="">-</option>
-                    {positions.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                    value={emp.employmentStatus || "재직"}
-                    onChange={(e) => updateField(emp.id, "employmentStatus", e.target.value)}
-                  >
-                    {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                    value={emp.workSiteId || ""}
-                    onChange={(e) => assignSite(emp.id, e.target.value)}
-                  >
-                    <option value="">미배정</option>
-                    {workSites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3 text-muted">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
-                <td className="px-4 py-3">
-                  {emp.approved ? (
-                    <Badge tone="success">
-                      <Check size={12} /> 승인됨
-                    </Badge>
-                  ) : (
-                    <Button size="sm" onClick={() => approve(emp.id)}>
-                      승인
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {filteredEmployees.length === 0 && (
-              <tr>
-                <td colSpan={11} className="px-4 py-6 text-center text-xs text-muted">
-                  조회조건에 해당하는 근로자가 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
-
-      {pending.length > 0 && (
-        <Card className="overflow-x-auto p-0">
-          <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-ink">
-            가입 대기 중 (아직 앱에서 가입코드 입력 전)
-          </div>
-          <table className="w-full min-w-[560px] text-left text-sm">
+        <p className="mb-2 text-xs font-medium text-muted">목록 {filteredEmployees.length}건</p>
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[1120px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
                 <th className="px-4 py-3 font-medium">이름</th>
                 <th className="px-4 py-3 font-medium">연락처</th>
-                <th className="px-4 py-3 font-medium">가입코드</th>
-                <th className="px-4 py-3 font-medium"></th>
+                <th className="px-4 py-3 font-medium">성별</th>
+                <th className="px-4 py-3 font-medium">소속업체</th>
+                <th className="px-4 py-3 font-medium">고용구분</th>
+                <th className="px-4 py-3 font-medium">부서</th>
+                <th className="px-4 py-3 font-medium">직급</th>
+                <th className="px-4 py-3 font-medium">재직상태</th>
+                <th className="px-4 py-3 font-medium">근무지</th>
+                <th className="px-4 py-3 font-medium">입사일</th>
+                <th className="px-4 py-3 font-medium">승인</th>
               </tr>
             </thead>
             <tbody>
-              {pending.map((p) => (
-                <tr key={p.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 text-ink">{p.name}</td>
-                  <td className="px-4 py-3 text-muted">{p.phone}</td>
-                  <td className="px-4 py-3 font-mono text-primary">{p.id}</td>
+              {filteredEmployees.map((emp, i) => (
+                <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{emp.name}</td>
+                  <td className="px-4 py-3 text-muted">{emp.phone}</td>
+                  <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
                   <td className="px-4 py-3">
-                    <button
-                      className="text-muted hover:text-danger"
-                      onClick={() => removePending(p.id)}
-                      title="삭제"
+                    <select
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      value={emp.employmentType || ""}
+                      onChange={(e) => updateField(emp.id, "employmentType", e.target.value)}
                     >
-                      <Trash2 size={16} />
-                    </button>
+                      <option value="">-</option>
+                      {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                        <option key={t}>{t}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      value={emp.team || ""}
+                      onChange={(e) => updateField(emp.id, "team", e.target.value)}
+                    >
+                      <option value="">-</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      value={emp.position || ""}
+                      onChange={(e) => updateField(emp.id, "position", e.target.value)}
+                    >
+                      <option value="">-</option>
+                      {positions.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      value={emp.employmentStatus || "재직"}
+                      onChange={(e) => updateField(emp.id, "employmentStatus", e.target.value)}
+                    >
+                      {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      value={emp.workSiteId || ""}
+                      onChange={(e) => assignSite(emp.id, e.target.value)}
+                    >
+                      <option value="">미배정</option>
+                      {workSites.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3 text-muted">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
+                  <td className="px-4 py-3">
+                    {emp.approved ? (
+                      <Badge tone="success">
+                        <Check size={12} /> 승인됨
+                      </Badge>
+                    ) : (
+                      <Button size="sm" onClick={() => approve(emp.id)}>
+                        승인
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
+              {filteredEmployees.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-4 py-6 text-center text-xs text-muted">
+                    조회조건에 해당하는 근로자가 없습니다.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
-        </Card>
+        </div>
+      </Panel>
+
+      {pending.length > 0 && (
+        <Panel icon={UserPlus} title={`가입 대기 중 (${pending.length}건)`}>
+          <p className="mb-2 text-xs text-muted">아직 앱에서 가입코드 입력 전인 근로자입니다.</p>
+          <div className="-mx-4 overflow-x-auto md:-mx-5">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs text-muted">
+                  <th className="px-4 py-3 font-medium">이름</th>
+                  <th className="px-4 py-3 font-medium">연락처</th>
+                  <th className="px-4 py-3 font-medium">가입코드</th>
+                  <th className="px-4 py-3 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((p) => (
+                  <tr key={p.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-4 py-3 text-ink">{p.name}</td>
+                    <td className="px-4 py-3 text-muted">{p.phone}</td>
+                    <td className="px-4 py-3 font-mono text-primary">{p.id}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        className="text-muted hover:text-danger"
+                        onClick={() => removePending(p.id)}
+                        title="삭제"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
       )}
 
       <Modal

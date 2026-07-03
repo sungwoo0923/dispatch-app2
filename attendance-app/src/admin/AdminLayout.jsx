@@ -1,72 +1,9 @@
 import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import {
-  LayoutDashboard,
-  Users,
-  CalendarDays,
-  ClipboardCheck,
-  CalendarClock,
-  Wallet,
-  BarChart3,
-  ShieldCheck,
-  MessageSquare,
-  Settings,
-  LayoutTemplate,
-  Menu,
-  X,
-  LogOut,
-  CalendarCheck2,
-  ChevronDown,
-} from "lucide-react";
+import { Menu, X, LogOut, CalendarCheck2, ChevronDown } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-
-const NAV = [
-  { to: "/", label: "홈", icon: LayoutDashboard, end: true },
-  {
-    to: "/employees",
-    label: "근로자",
-    icon: Users,
-    children: [
-      { to: "/employees", label: "근로자 목록" },
-      { to: "/employees/contracts", label: "계약서" },
-      { to: "/employees/documents", label: "서류함" },
-      { to: "/employees/status", label: "입퇴사현황" },
-    ],
-  },
-  { to: "/schedule", label: "스케줄", icon: CalendarDays },
-  { to: "/attendance", label: "출근현황", icon: ClipboardCheck },
-  { to: "/leaves", label: "휴가", icon: CalendarClock },
-  {
-    to: "/safety",
-    label: "안전",
-    icon: ShieldCheck,
-    children: [
-      { to: "/safety", label: "안전교육현황" },
-      { to: "/safety/settings", label: "센터별 안전관리" },
-    ],
-  },
-  {
-    to: "/payroll",
-    label: "정산",
-    icon: Wallet,
-    children: [
-      { to: "/payroll", label: "급여" },
-      { to: "/payroll/settings", label: "센터별 정산설정" },
-    ],
-  },
-  { to: "/stats", label: "통계", icon: BarChart3 },
-  { to: "/board", label: "게시판", icon: MessageSquare },
-  { to: "/templates", label: "템플릿", icon: LayoutTemplate },
-  {
-    to: "/settings/admins",
-    label: "설정",
-    icon: Settings,
-    children: [
-      { to: "/settings/admins", label: "관리자 계정" },
-      { to: "/settings/org", label: "부서·직급" },
-    ],
-  },
-];
+import Breadcrumb from "../components/Breadcrumb";
+import { NAV } from "./navConfig";
 
 const itemClass = ({ isActive }) =>
   `flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -188,7 +125,8 @@ export default function AdminLayout() {
             {profile?.name?.[0] || "K"}
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <Breadcrumb />
+        <main className="flex-1 overflow-y-auto px-4 pb-4 md:px-8 md:pb-8">
           <Outlet />
         </main>
       </div>

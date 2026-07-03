@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, BarChart3, Users, CalendarDays } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
+import Panel from "../components/Panel";
 import { toMonthKey, toDateKey } from "../utils/dateUtils";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_TYPE_OPTIONS } from "../constants/hr";
@@ -189,7 +190,7 @@ function AttendanceCountTab({ profile, lookups }) {
   };
 
   return (
-    <div className="space-y-4">
+    <Panel icon={Users} title={`근로자별출근집계 (${rows.length}명)`}>
       <FilterBar filters={filters} setFilters={setFilters} workSites={lookups.workSites} vendors={lookups.vendors}>
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-muted">기간</span>
@@ -212,10 +213,12 @@ function AttendanceCountTab({ profile, lookups }) {
         <Button_ onClick={exportCsv} />
       </FilterBar>
 
-      <Card className="overflow-x-auto p-0">
+      <p className="my-2 text-xs font-medium text-muted">목록 {rows.length}건</p>
+      <div className="-mx-4 overflow-x-auto md:-mx-5">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
+              <th className="px-4 py-3 font-medium">순번</th>
               <th className="px-4 py-3 font-medium">센터</th>
               <th className="px-4 py-3 font-medium">소속업체</th>
               <th className="px-4 py-3 font-medium">근무형태</th>
@@ -228,8 +231,9 @@ function AttendanceCountTab({ profile, lookups }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ emp, present, late }) => (
+            {rows.map(({ emp, present, late }, i) => (
               <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                <td className="px-4 py-3 text-muted">{i + 1}</td>
                 <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
                 <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
                 <td className="px-4 py-3 text-muted">{emp.employmentType || "-"}</td>
@@ -243,15 +247,15 @@ function AttendanceCountTab({ profile, lookups }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
+                <td colSpan={10} className="px-4 py-6 text-center text-xs text-muted">
                   조건에 맞는 근로자가 없습니다.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </Card>
-    </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -294,7 +298,7 @@ function MonthlyGridTab({ profile, lookups }) {
   };
 
   return (
-    <div className="space-y-4">
+    <Panel icon={CalendarDays} title={`근로자별월별출근집계 (${rows.length}명)`}>
       <FilterBar filters={filters} setFilters={setFilters} workSites={lookups.workSites} vendors={lookups.vendors}>
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-muted">출근월</span>
@@ -307,9 +311,9 @@ function MonthlyGridTab({ profile, lookups }) {
         </label>
         <Button_ onClick={exportCsv} />
       </FilterBar>
-      <p className="text-[11px] text-muted">출근 시 1, 미출근 시 0으로 표시됩니다.</p>
+      <p className="my-2 text-[11px] text-muted">출근 시 1, 미출근 시 0으로 표시됩니다.</p>
 
-      <Card className="overflow-x-auto p-0">
+      <div className="-mx-4 overflow-x-auto md:-mx-5">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-slate-100 text-muted">
@@ -347,8 +351,8 @@ function MonthlyGridTab({ profile, lookups }) {
             )}
           </tbody>
         </table>
-      </Card>
-    </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -405,45 +409,49 @@ function SummaryTab({ profile }) {
   }, [leaves]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
+    <Panel
+      icon={BarChart3}
+      title="통계 요약"
+      actions={
         <input
           type="month"
           value={month}
           onChange={(e) => setMonth(e.target.value)}
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
         />
+      }
+    >
+      <div className="space-y-6">
+        <Card className="p-5">
+          <p className="mb-4 text-sm font-semibold text-ink">일별 출근 인원 ({month})</p>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dailyData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="자동" stackId="a" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="수동" stackId="a" fill="#93C5FD" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <p className="mb-3 text-sm font-semibold text-ink">휴가 유형별 사용 현황 (누적)</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {Object.entries(leaveTypeCounts).length === 0 && <p className="text-xs text-muted">데이터가 없습니다.</p>}
+            {Object.entries(leaveTypeCounts).map(([type, count]) => (
+              <div key={type} className="rounded-xl bg-slate-50 p-3 text-center">
+                <p className="text-lg font-bold text-ink">{count}</p>
+                <p className="text-[11px] text-muted">{type}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
-
-      <Card className="p-5">
-        <p className="mb-4 text-sm font-semibold text-ink">일별 출근 인원 ({month})</p>
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dailyData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="자동" stackId="a" fill="#2563EB" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="수동" stackId="a" fill="#93C5FD" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <p className="mb-3 text-sm font-semibold text-ink">휴가 유형별 사용 현황 (누적)</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {Object.entries(leaveTypeCounts).length === 0 && <p className="text-xs text-muted">데이터가 없습니다.</p>}
-          {Object.entries(leaveTypeCounts).map(([type, count]) => (
-            <div key={type} className="rounded-xl bg-slate-50 p-3 text-center">
-              <p className="text-lg font-bold text-ink">{count}</p>
-              <p className="text-[11px] text-muted">{type}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
+    </Panel>
   );
 }
 
@@ -453,12 +461,7 @@ export default function Stats() {
   const lookups = useCompanyLookups(profile?.companyId);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-bold text-ink">통계</h1>
-        <p className="text-sm text-muted">근태 통계 및 근로자별 출근 집계</p>
-      </div>
-
+    <div className="space-y-4">
       <div className="flex gap-1 rounded-xl bg-slate-100 p-1 text-sm w-fit">
         {TABS.map((t) => (
           <button

@@ -17,6 +17,7 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { SAFETY_MANAGER_ROLES } from "../utils/safety";
 
 export default function SafetySettings() {
@@ -77,12 +78,9 @@ export default function SafetySettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-bold text-ink">센터별 안전관리</h1>
-        <p className="text-sm text-muted">근무지별 안전교육 적용 여부와 안전담당자를 설정합니다</p>
-      </div>
-
-      <div className="space-y-3">
+      <Panel icon={ShieldCheck} title="센터별 안전관리">
+        <p className="mb-4 text-xs text-muted">근무지별 안전교육 적용 여부와 안전담당자를 설정합니다.</p>
+        <div className="space-y-3">
         {workSites.map((site) => (
           <Card key={site.id} className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -138,7 +136,8 @@ export default function SafetySettings() {
         {workSites.length === 0 && (
           <Card className="p-6 text-center text-xs text-muted">등록된 근무지가 없습니다. 근로자 메뉴에서 근무지를 먼저 등록해주세요.</Card>
         )}
-      </div>
+        </div>
+      </Panel>
 
       <Modal
         open={Boolean(assignFor)}

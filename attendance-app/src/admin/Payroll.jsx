@@ -16,6 +16,7 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import Panel from "../components/Panel";
 import { calcMonthlyPayroll, DEFAULT_PAYROLL_RATES, getSiteInsuranceRates } from "../utils/payroll";
 import { toMonthKey, toDateKey } from "../utils/dateUtils";
 import { downloadCsv } from "../utils/exportCsv";
@@ -266,157 +267,160 @@ export default function Payroll() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-ink">급여 정산</h1>
-          <p className="text-sm text-muted">월별 급여명세서 생성/조회</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-          />
-          <Button variant="outline" onClick={exportCsv}>
-            <FileSpreadsheet size={16} /> 엑셀
-          </Button>
-          <Button onClick={() => setSettleOpen(true)}>
-            <CalculatorIcon size={16} /> 정산처리 요청
-          </Button>
-        </div>
-      </div>
+      <Panel
+        icon={Wallet}
+        title={`급여 정산 (${filteredEmployees.length}명)`}
+        actions={
+          <>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+            <Button variant="outline" onClick={exportCsv}>
+              <FileSpreadsheet size={16} /> 엑셀
+            </Button>
+            <Button onClick={() => setSettleOpen(true)}>
+              <CalculatorIcon size={16} /> 정산처리 요청
+            </Button>
+          </>
+        }
+      >
+        <Card className="mb-4 flex flex-wrap items-end gap-3 p-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.siteId}
+              onChange={(e) => setFilters((f) => ({ ...f, siteId: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {workSites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.vendorId}
+              onChange={(e) => setFilters((f) => ({ ...f, vendorId: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">근무형태</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.employmentType}
+              onChange={(e) => setFilters((f) => ({ ...f, employmentType: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">부서</span>
+            <select
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.team}
+              onChange={(e) => setFilters((f) => ({ ...f, team: e.target.value }))}
+            >
+              <option value="">전체</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.name}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block flex-1 min-w-[160px]">
+            <span className="mb-1.5 block text-xs font-medium text-muted">이름 검색</span>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={filters.search}
+              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+              placeholder="검색어 입력"
+            />
+          </label>
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setConfirmedFor("confirmed")}>
+              <Lock size={13} /> 정산확정
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setConfirmedFor("draft")}>
+              <LockOpen size={13} /> 정산확정취소
+            </Button>
+          </div>
+        </Card>
 
-      <Card className="flex flex-wrap items-end gap-3 p-4">
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.siteId}
-            onChange={(e) => setFilters((f) => ({ ...f, siteId: e.target.value }))}
-          >
-            <option value="">전체</option>
-            {workSites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.vendorId}
-            onChange={(e) => setFilters((f) => ({ ...f, vendorId: e.target.value }))}
-          >
-            <option value="">전체</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">근무형태</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.employmentType}
-            onChange={(e) => setFilters((f) => ({ ...f, employmentType: e.target.value }))}
-          >
-            <option value="">전체</option>
-            {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">부서</span>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.team}
-            onChange={(e) => setFilters((f) => ({ ...f, team: e.target.value }))}
-          >
-            <option value="">전체</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block flex-1 min-w-[160px]">
-          <span className="mb-1.5 block text-xs font-medium text-muted">이름 검색</span>
-          <input
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={filters.search}
-            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-            placeholder="검색어 입력"
-          />
-        </label>
-        <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setConfirmedFor("confirmed")}>
-            <Lock size={13} /> 정산확정
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setConfirmedFor("draft")}>
-            <LockOpen size={13} /> 정산확정취소
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[820px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">이름</th>
-              <th className="px-4 py-3 font-medium">센터</th>
-              <th className="px-4 py-3 font-medium">지급합계</th>
-              <th className="px-4 py-3 font-medium">공제합계</th>
-              <th className="px-4 py-3 font-medium">실수령액</th>
-              <th className="px-4 py-3 font-medium">정산상태</th>
-              <th className="px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredEmployees.map((emp) => {
-              const p = payrollFor(emp.id);
-              return (
-                <tr key={emp.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 text-ink">{emp.name}</td>
-                  <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-4 py-3 text-muted">{p ? p.grossPay.toLocaleString() + "원" : "-"}</td>
-                  <td className="px-4 py-3 text-muted">{p ? p.deductions.total.toLocaleString() + "원" : "-"}</td>
-                  <td className="px-4 py-3 font-medium text-ink">{p ? p.netPay.toLocaleString() + "원" : "-"}</td>
-                  <td className="px-4 py-3">
-                    {p ? (
-                      p.settlementStatus === "confirmed" ? (
-                        <Badge tone="success">정산확정</Badge>
+        <p className="mb-2 text-xs font-medium text-muted">목록 {filteredEmployees.length}건</p>
+        <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-medium">순번</th>
+                <th className="px-4 py-3 font-medium">이름</th>
+                <th className="px-4 py-3 font-medium">센터</th>
+                <th className="px-4 py-3 font-medium">지급합계</th>
+                <th className="px-4 py-3 font-medium">공제합계</th>
+                <th className="px-4 py-3 font-medium">실수령액</th>
+                <th className="px-4 py-3 font-medium">정산상태</th>
+                <th className="px-4 py-3 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEmployees.map((emp, i) => {
+                const p = payrollFor(emp.id);
+                return (
+                  <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{emp.name}</td>
+                    <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
+                    <td className="px-4 py-3 text-muted">{p ? p.grossPay.toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3 text-muted">{p ? p.deductions.total.toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3 font-medium text-ink">{p ? p.netPay.toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3">
+                      {p ? (
+                        p.settlementStatus === "confirmed" ? (
+                          <Badge tone="success">정산확정</Badge>
+                        ) : (
+                          <Badge tone="warning">정산처리</Badge>
+                        )
                       ) : (
-                        <Badge tone="warning">정산처리</Badge>
-                      )
-                    ) : (
-                      <Badge tone="muted">미처리</Badge>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Button size="sm" variant="outline" onClick={() => openFor(emp)}>
-                      <Wallet size={14} /> {p ? "수정" : "생성"}
-                    </Button>
+                        <Badge tone="muted">미처리</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button size="sm" variant="outline" onClick={() => openFor(emp)}>
+                        <Wallet size={14} /> {p ? "수정" : "생성"}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredEmployees.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-xs text-muted">
+                    조건에 맞는 근로자가 없습니다.
                   </td>
                 </tr>
-              );
-            })}
-            {filteredEmployees.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
-                  조건에 맞는 근로자가 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
 
       <Modal
         open={settleOpen}

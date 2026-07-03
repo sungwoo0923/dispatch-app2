@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Building } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import Panel from "../components/Panel";
 
 function EditableList({ title, collectionName, items }) {
   const { profile } = useAuth();
@@ -69,12 +70,13 @@ export default function OrgSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-bold text-ink">부서 · 직급 관리</h1>
-        <p className="text-sm text-muted">근로자 등록 시 사용할 부서와 직급 목록입니다.</p>
-      </div>
-      <EditableList title="부서" collectionName="departments" items={departments} />
-      <EditableList title="직급" collectionName="positions" items={positions} />
+      <Panel icon={Building} title="부서 · 직급 관리">
+        <p className="mb-4 text-xs text-muted">근로자 등록 시 사용할 부서와 직급 목록입니다.</p>
+        <div className="space-y-4">
+          <EditableList title="부서" collectionName="departments" items={departments} />
+          <EditableList title="직급" collectionName="positions" items={positions} />
+        </div>
+      </Panel>
     </div>
   );
 }
