@@ -1,0 +1,39 @@
+name: Deploy KP-work (attendance-app)
+
+on:
+  push:
+    branches:
+      - claude/attendance-management-app-s7jvv6
+    paths:
+      - "attendance-app/**"
+      - ".github/workflows/deploy-kp-work.yml"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: attendance-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Write Firebase service account key
+        run: echo "$FIREBASE_SERVICE_ACCOUNT_KP_WORK" > "$RUNNER_TEMP/firebase-sa.json"
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KP_WORK: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KP_WORK }}
+
+      - name: Deploy to Firebase (hosting, firestore rules, storage rules)
+        run: npx firebase deploy --only hosting,firestore:rules,storage --project kp-work-4ae99 --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
