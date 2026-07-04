@@ -21,7 +21,7 @@ const firebaseConfig = {
 // import.meta.env values are all undefined; treat that as "no real project
 // configured yet" and default to the emulator rather than letting
 // getAuth() throw auth/invalid-api-key on an empty key.
-const useEmulator = import.meta.env.VITE_USE_EMULATOR === "true" || !import.meta.env.VITE_FIREBASE_API_KEY;
+export const useEmulator = import.meta.env.VITE_USE_EMULATOR === "true" || !import.meta.env.VITE_FIREBASE_API_KEY;
 
 // The emulators don't validate these against a real project, so local dev
 // works even before a real Firebase project's keys are filled in (or before

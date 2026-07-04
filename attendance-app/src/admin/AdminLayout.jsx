@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Menu, X, LogOut, CalendarCheck2, ChevronDown } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import Breadcrumb from "../components/Breadcrumb";
+import BuildInfo from "../components/BuildInfo";
 import { NAV } from "./navConfig";
 
 const itemClass = ({ isActive }) =>
@@ -88,10 +89,11 @@ export default function AdminLayout() {
         </div>
         <button
           onClick={logout}
-          className="mx-3 mb-4 flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-muted hover:bg-slate-50"
+          className="mx-3 mb-2 flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-muted hover:bg-slate-50"
         >
           <LogOut size={18} /> 로그아웃
         </button>
+        <BuildInfo className="mb-3" />
       </aside>
 
       {mobileOpen && (

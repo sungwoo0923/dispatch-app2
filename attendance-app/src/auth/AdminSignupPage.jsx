@@ -6,7 +6,8 @@ import { auth, db } from "../firebase";
 import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
 import { generateInviteCode } from "../utils/ids";
-import { phoneToAuthEmail, formatPhoneNumber } from "../utils/phoneAuth";
+import { formatPhoneNumber } from "../utils/phoneAuth";
+import BuildInfo from "../components/BuildInfo";
 import { DEFAULT_PAYROLL_RATES } from "../utils/payroll";
 import { PENDING_INVITE_KEY } from "../constants/session";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
@@ -31,7 +32,7 @@ async function seedOrgDefaults(companyId) {
 
 export default function AdminSignupPage() {
   const [mode, setMode] = useState("new"); // 'new' | 'join'
-  const [form, setForm] = useState({ companyName: "", adminCode: "", name: "", phone: "", password: "" });
+  const [form, setForm] = useState({ companyName: "", adminCode: "", name: "", phone: "", email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -50,7 +51,7 @@ export default function AdminSignupPage() {
       // (App.jsx reads this to show the invite-code screen once).
       sessionStorage.setItem(PENDING_INVITE_KEY, JSON.stringify({ code, companyName: form.companyName }));
 
-      const cred = await createUserWithEmailAndPassword(auth, phoneToAuthEmail(form.phone), form.password);
+      const cred = await createUserWithEmailAndPassword(auth, form.email.trim(), form.password);
 
       await setDoc(doc(db, "companies", code), {
         name: form.companyName,
@@ -82,7 +83,7 @@ export default function AdminSignupPage() {
       });
     } catch (err) {
       sessionStorage.removeItem(PENDING_INVITE_KEY);
-      setError(err.code === "auth/email-already-in-use" ? "이미 가입된 휴대전화번호입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");
+      setError(err.code === "auth/email-already-in-use" ? "이미 사용 중인 이메일입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");
       setLoading(false);
     }
   };
@@ -101,7 +102,7 @@ export default function AdminSignupPage() {
       }
       const { companyId } = inviteSnap.data();
 
-      const cred = await createUserWithEmailAndPassword(auth, phoneToAuthEmail(form.phone), form.password);
+      const cred = await createUserWithEmailAndPassword(auth, form.email.trim(), form.password);
 
       await setDoc(doc(db, "admins", cred.user.uid), { companyId, createdAt: serverTimestamp() });
       await setDoc(doc(db, "users", cred.user.uid), {
@@ -115,7 +116,7 @@ export default function AdminSignupPage() {
       });
       await deleteDoc(doc(db, "adminInvites", code));
     } catch (err) {
-      setError(err.code === "auth/email-already-in-use" ? "이미 가입된 휴대전화번호입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");
+      setError(err.code === "auth/email-already-in-use" ? "이미 사용 중인 이메일입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");
       setLoading(false);
     }
   };
@@ -143,7 +144,8 @@ export default function AdminSignupPage() {
         <form onSubmit={handleSubmitNew}>
           <FormField label="회사명" required value={form.companyName} onChange={update("companyName")} placeholder="(주)케이피물류" />
           <FormField label="관리자 이름" required value={form.name} onChange={update("name")} placeholder="홍길동" />
-          <FormField label="연락처(회원ID)" required value={form.phone} onChange={updatePhone} placeholder="010-0000-0000" maxLength={13} />
+          <FormField label="연락처" required value={form.phone} onChange={updatePhone} placeholder="010-0000-0000" maxLength={13} />
+          <FormField label="이메일(회원ID)" type="email" required value={form.email} onChange={update("email")} placeholder="admin@company.com" />
           <FormField label="비밀번호" type="password" required minLength={6} value={form.password} onChange={update("password")} placeholder="6자 이상" />
           {error && <p className="mb-3 text-xs text-danger">{error}</p>}
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
@@ -161,7 +163,8 @@ export default function AdminSignupPage() {
             style={{ textTransform: "uppercase" }}
           />
           <FormField label="이름" required value={form.name} onChange={update("name")} placeholder="홍길동" />
-          <FormField label="연락처(회원ID)" required value={form.phone} onChange={updatePhone} placeholder="010-0000-0000" maxLength={13} />
+          <FormField label="연락처" required value={form.phone} onChange={updatePhone} placeholder="010-0000-0000" maxLength={13} />
+          <FormField label="이메일(회원ID)" type="email" required value={form.email} onChange={update("email")} placeholder="admin@company.com" />
           <FormField label="비밀번호" type="password" required minLength={6} value={form.password} onChange={update("password")} placeholder="6자 이상" />
           {error && <p className="mb-3 text-xs text-danger">{error}</p>}
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
@@ -172,10 +175,11 @@ export default function AdminSignupPage() {
 
       <div className="mt-5 text-center text-xs text-muted">
         이미 계정이 있으신가요?{" "}
-        <Link to="/login" className="text-primary hover:underline">
-          로그인
+        <Link to="/admin-login" className="text-primary hover:underline">
+          관리자 로그인
         </Link>
       </div>
+      <BuildInfo className="mt-6" />
     </AuthShell>
   );
 }

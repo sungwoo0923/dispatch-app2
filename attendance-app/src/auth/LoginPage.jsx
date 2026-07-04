@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { CalendarCheck2, User, Lock } from "lucide-react";
 import { auth } from "../firebase";
 import Button from "../components/Button";
+import BuildInfo from "../components/BuildInfo";
 import { phoneToAuthEmail, normalizePhone } from "../utils/phoneAuth";
 
 const SAVED_PHONE_KEY = "kpwork_saved_phone";
@@ -86,11 +87,14 @@ export default function LoginPage() {
           <Link to="/employee-signup" className="font-medium text-primary hover:underline">
             직원 회원가입
           </Link>
-          <span className="mx-1.5 text-slate-300">|</span>
-          <Link to="/admin-signup" className="font-medium text-primary hover:underline">
-            관리자 회원가입
+        </div>
+        <div className="mt-3 text-center text-xs text-muted">
+          관리자이신가요?{" "}
+          <Link to="/admin-login" className="text-primary hover:underline">
+            관리자 로그인
           </Link>
         </div>
+        <BuildInfo className="mt-6" />
       </div>
     </div>
   );

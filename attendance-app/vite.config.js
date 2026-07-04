@@ -3,6 +3,12 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Stamped into the bundle at build time so the running app can show which
+  // build is live (Login footer, admin sidebar, employee 내정보) — the only
+  // reliable way to tell "did my deploy actually go out" apart from guessing.
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     VitePWA({

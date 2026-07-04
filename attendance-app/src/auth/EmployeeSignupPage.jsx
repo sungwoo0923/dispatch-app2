@@ -7,6 +7,7 @@ import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
 import { toDateKey } from "../utils/dateUtils";
 import { phoneToAuthEmail, formatPhoneNumber } from "../utils/phoneAuth";
+import BuildInfo from "../components/BuildInfo";
 
 export default function EmployeeSignupPage() {
   const [step, setStep] = useState("code"); // 'code' | 'details'
@@ -126,6 +127,7 @@ export default function EmployeeSignupPage() {
             로그인
           </Link>
         </div>
+        <BuildInfo className="mt-6" />
       </AuthShell>
     );
   }
@@ -156,6 +158,7 @@ export default function EmployeeSignupPage() {
           로그인
         </Link>
       </div>
+      <BuildInfo className="mt-6" />
     </AuthShell>
   );
 }

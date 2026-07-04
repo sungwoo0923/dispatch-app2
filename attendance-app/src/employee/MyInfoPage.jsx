@@ -3,6 +3,7 @@ import { FolderOpen, ShieldCheck, ChevronRight, LogOut } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import BuildInfo from "../components/BuildInfo";
 
 const ITEMS = [
   { to: "/documents", label: "서류함", icon: FolderOpen },
@@ -45,6 +46,7 @@ export default function MyInfoPage() {
       <Button variant="outline" className="w-full" onClick={logout}>
         <LogOut size={16} /> 로그아웃
       </Button>
+      <BuildInfo className="pt-2" />
     </div>
   );
 }
