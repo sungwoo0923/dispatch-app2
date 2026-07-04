@@ -4,22 +4,22 @@ import { Menu, X, LogOut, CalendarCheck2, ChevronDown } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import Breadcrumb from "../components/Breadcrumb";
 import BuildInfo from "../components/BuildInfo";
-import { NAV } from "./navConfig";
+import { NAV, SUPER_ADMIN_NAV_ITEM } from "./navConfig";
 
 const itemClass = ({ isActive }) =>
   `flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
     isActive ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"
   }`;
 
-function NavItems({ onClick }) {
+function NavItems({ items, onClick }) {
   const location = useLocation();
   const [openMenu, setOpenMenu] = useState(
-    () => NAV.find((n) => n.children?.some((c) => location.pathname.startsWith(c.to)))?.to ?? null
+    () => items.find((n) => n.children?.some((c) => location.pathname.startsWith(c.to)))?.to ?? null
   );
 
   return (
     <nav className="space-y-1 px-3">
-      {NAV.map(({ to, label, icon: Icon, end, children }) => {
+      {items.map(({ to, label, icon: Icon, end, children }) => {
         if (!children) {
           return (
             <NavLink key={to} to={to} end={end} onClick={onClick} className={itemClass}>
@@ -72,8 +72,9 @@ function NavItems({ onClick }) {
 }
 
 export default function AdminLayout() {
-  const { profile, logout } = useAuth();
+  const { profile, company, logout, isSuperAdmin } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
 
   return (
     <div className="flex min-h-screen bg-surface">
@@ -84,8 +85,14 @@ export default function AdminLayout() {
           </div>
           <span className="text-base font-bold text-ink">KP-work</span>
         </div>
+        {company && (
+          <div className="mx-3 mb-2 rounded-xl bg-slate-50 px-3 py-2">
+            <p className="truncate text-xs font-semibold text-ink">{company.name}</p>
+            <p className="font-mono text-[11px] text-muted">회사코드 {company.id}</p>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto py-2">
-          <NavItems />
+          <NavItems items={navItems} />
         </div>
         <button
           onClick={logout}
@@ -105,7 +112,7 @@ export default function AdminLayout() {
                 <X size={20} />
               </button>
             </div>
-            <NavItems onClick={() => setMobileOpen(false)} />
+            <NavItems items={navItems} onClick={() => setMobileOpen(false)} />
             <button
               onClick={logout}
               className="mx-3 mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-muted hover:bg-slate-50"

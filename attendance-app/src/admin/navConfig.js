@@ -11,6 +11,7 @@ import {
   LayoutTemplate,
   Building2,
   Lock,
+  KeyRound,
 } from "lucide-react";
 
 export const NAV = [
@@ -112,9 +113,13 @@ export const NAV = [
   },
 ];
 
+// 최고관리자(super admin)에게만 노출되는 항목. NAV에 포함시키지 않고 따로 두어
+// AdminLayout/Breadcrumb에서 isSuperAdmin일 때만 붙이도록 한다.
+export const SUPER_ADMIN_NAV_ITEM = { to: "/platform/companies", label: "가입자관리", icon: KeyRound };
+
 // Flattened path -> { section, label } lookup for the breadcrumb bar.
-export function resolveBreadcrumb(pathname) {
-  for (const item of NAV) {
+export function resolveBreadcrumb(pathname, navItems = NAV) {
+  for (const item of navItems) {
     if (item.children) {
       const child = item.children.find((c) => pathname === c.to);
       if (child) return { section: item.label, label: child.label };

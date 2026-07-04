@@ -11,6 +11,7 @@ import BuildInfo from "../components/BuildInfo";
 import { DEFAULT_PAYROLL_RATES } from "../utils/payroll";
 import { PENDING_INVITE_KEY } from "../constants/session";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
+import { SUPER_ADMIN_EMAIL } from "../constants/superAdmin";
 
 async function createUniqueCompanyCode() {
   for (let i = 0; i < 5; i++) {
@@ -45,11 +46,15 @@ export default function AdminSignupPage() {
     setLoading(true);
     try {
       const code = await createUniqueCompanyCode();
+      const isSuperAdminSignup = form.email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
 
       // Written before sign-in so it's already present the instant
       // onAuthStateChanged flips the top-level router to the admin tree
       // (App.jsx reads this to show the invite-code screen once).
-      sessionStorage.setItem(PENDING_INVITE_KEY, JSON.stringify({ code, companyName: form.companyName }));
+      sessionStorage.setItem(
+        PENDING_INVITE_KEY,
+        JSON.stringify({ code, companyName: form.companyName, pending: !isSuperAdminSignup })
+      );
 
       const cred = await createUserWithEmailAndPassword(auth, form.email.trim(), form.password);
 
@@ -57,6 +62,11 @@ export default function AdminSignupPage() {
         name: form.companyName,
         inviteCode: code,
         payrollRates: DEFAULT_PAYROLL_RATES,
+        // New companies wait for the platform super-admin's approval before
+        // the admin can use the app; the super-admin's own company (the
+        // very first one, with no one above it to approve it) is exempt.
+        status: isSuperAdminSignup ? "approved" : "pending",
+        applicant: { name: form.name, phone: form.phone, email: form.email.trim() },
         createdAt: serverTimestamp(),
       });
 

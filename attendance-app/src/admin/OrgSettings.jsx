@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
-import { Plus, X, Building } from "lucide-react";
+import { Plus, X, Building, KeyRound, Copy } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -50,9 +50,17 @@ function EditableList({ title, collectionName, items }) {
 }
 
 export default function OrgSettings() {
-  const { profile } = useAuth();
+  const { profile, company } = useAuth();
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [copied, setCopied] = useState(false);
+
+  const copyCode = () => {
+    if (!company?.id) return;
+    navigator.clipboard?.writeText(company.id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -70,6 +78,18 @@ export default function OrgSettings() {
 
   return (
     <div className="space-y-6">
+      <Panel icon={KeyRound} title="회사 정보">
+        <p className="mb-1 text-sm text-ink">{company?.name}</p>
+        <p className="mb-3 text-xs text-muted">관리자 로그인 시 이메일·비밀번호와 함께 아래 회사코드를 입력해야 합니다.</p>
+        <button
+          onClick={copyCode}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary-light px-4 py-2.5 font-mono text-sm font-bold text-primary hover:bg-primary/10"
+        >
+          {company?.id} <Copy size={14} />
+        </button>
+        {copied && <span className="ml-2 text-xs text-primary">복사됨</span>}
+      </Panel>
+
       <Panel icon={Building} title="부서 · 직급 관리">
         <p className="mb-4 text-xs text-muted">근로자 등록 시 사용할 부서와 직급 목록입니다.</p>
         <div className="space-y-4">

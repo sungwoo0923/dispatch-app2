@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Home, ChevronRight, Star } from "lucide-react";
-import { resolveBreadcrumb } from "../admin/navConfig";
+import { NAV, SUPER_ADMIN_NAV_ITEM, resolveBreadcrumb } from "../admin/navConfig";
+import { useAuth } from "../hooks/useAuth";
 
 // Mirrors the reference guide's "홈 > 섹션 > 현재 화면" bar with a per-route
 // favorite star, stored per-browser since it's a personal shortcut, not
 // company data.
 export default function Breadcrumb() {
   const location = useLocation();
-  const { section, label } = resolveBreadcrumb(location.pathname);
+  const { isSuperAdmin } = useAuth();
+  const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
+  const { section, label } = resolveBreadcrumb(location.pathname, navItems);
   const [starred, setStarred] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("kpwork_starred_pages") || "[]").includes(location.pathname);

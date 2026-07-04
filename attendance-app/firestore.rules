@@ -11,6 +11,15 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // Platform owner: reviews new-company applications regardless of which
+    // company (if any) their own admin account belongs to. Identity is the
+    // Auth email itself (mirrors src/constants/superAdmin.js) rather than a
+    // Firestore-stored flag, so no data migration is needed for the account
+    // that already existed before this role was introduced.
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email.lower() == 'sungwoo0923@nate.com';
+    }
+
     // Denormalized {companyId} doc per admin account, kept in its own
     // collection (never `users`) so admin-permission checks never have to
     // read the same collection/document a rule is currently gating for a
@@ -18,9 +27,13 @@ service cloud.firestore {
     // the client SDK on some Firestore/emulator versions) and best avoided
     // even in production.
     function isAdminOf(companyId) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.companyId == companyId
+        )
+      );
     }
 
     match /admins/{uid} {
@@ -32,9 +45,10 @@ service cloud.firestore {
 
     match /companies/{companyId} {
       allow get: if true; // invite-code lookup during employee signup, before auth exists
-      allow list: if false;
+      allow list: if isSuperAdmin(); // 플랫폼 관리 > 회사 개설 신청 목록
       allow create: if isSignedIn();
-      allow update, delete: if isAdminOf(companyId);
+      allow update: if isAdminOf(companyId) || isSuperAdmin();
+      allow delete: if isAdminOf(companyId);
     }
 
     match /users/{uid} {

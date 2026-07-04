@@ -5,6 +5,7 @@ import AdminLoginPage from "./auth/AdminLoginPage";
 import AdminSignupPage from "./auth/AdminSignupPage";
 import EmployeeSignupPage from "./auth/EmployeeSignupPage";
 import PendingApprovalPage from "./auth/PendingApprovalPage";
+import CompanyApprovalPendingPage from "./auth/CompanyApprovalPendingPage";
 import AdminLayout from "./admin/AdminLayout";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
 import Dashboard from "./admin/Dashboard";
@@ -23,6 +24,7 @@ import Centers from "./admin/Centers";
 import Devices from "./admin/Devices";
 import PermissionGroups from "./admin/PermissionGroups";
 import PermissionGroupMenus from "./admin/PermissionGroupMenus";
+import PlatformCompanies from "./admin/PlatformCompanies";
 import ShiftTemplates from "./admin/ShiftTemplates";
 import AllowanceTemplates from "./admin/AllowanceTemplates";
 import InsuranceRateTemplates from "./admin/InsuranceRateTemplates";
@@ -64,7 +66,7 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, company, companyLoading, isSuperAdmin } = useAuth();
 
   if (loading) return <LoadingScreen />;
 
@@ -94,10 +96,19 @@ export default function App() {
         />
       );
     }
+
+    if (companyLoading) return <LoadingScreen />;
+    // The platform super-admin's own account is never blocked by this gate,
+    // even if their company doc somehow ends up pending/rejected.
+    if (!isSuperAdmin && company && company.status && company.status !== "approved") {
+      return <CompanyApprovalPendingPage status={company.status} />;
+    }
+
     return (
       <Routes>
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
+          {isSuperAdmin && <Route path="platform/companies" element={<PlatformCompanies />} />}
           <Route path="employees" element={<EmployeeList />} />
           <Route path="employees/status" element={<EmployeeStatus />} />
           <Route path="employees/contracts" element={<Contracts />} />
