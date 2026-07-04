@@ -60,23 +60,14 @@ export default function EmployeeSignupPage() {
       const cred = await createUserWithEmailAndPassword(auth, phoneToAuthEmail(loginPhone), form.password);
 
       if (pendingProfile) {
+        // Spread every field the admin entered at 근로자등록 time (사업자,
+        // 근무정보, 급여계좌, 템플릿 선택 등) rather than cherry-picking a fixed
+        // subset, so nothing collected there silently gets dropped here.
         await setDoc(doc(db, "users", cred.user.uid), {
+          ...pendingProfile,
           role: "employee",
           companyId,
-          name: pendingProfile.name,
-          phone: pendingProfile.phone,
-          gender: pendingProfile.gender || "",
-          nationality: pendingProfile.nationality || "",
-          visaStatus: pendingProfile.visaStatus || "",
-          employeeCode: pendingProfile.employeeCode || "",
-          vendorId: pendingProfile.vendorId || null,
-          employmentType: pendingProfile.employmentType || "",
-          team: pendingProfile.team || "",
-          position: pendingProfile.position || "",
           hireDate: pendingProfile.hireDate || toDateKey(),
-          workSiteId: pendingProfile.workSiteId || null,
-          insuranceApplied: pendingProfile.insuranceApplied || "N",
-          note: pendingProfile.note || "",
           approved: true, // pre-vetted by admin at registration time
           employmentStatus: "재직",
           createdAt: serverTimestamp(),

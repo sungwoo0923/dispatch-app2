@@ -9,3 +9,5 @@ export const SHIFT_TYPE_OPTIONS = ["주간", "야간"];
 // 지급구분: settlement cadence, drives which 급여형태 tab a payroll defaults into.
 export const PAY_TYPE_OPTIONS = ["일급", "주급", "월급"];
 export const COUNTRY_OPTIONS = ["베트남", "캄보디아", "네팔", "필리핀", "태국", "중국", "기타"];
+// 체류자격코드: common Korean visa/residency status codes for foreign workers.
+export const VISA_STATUS_OPTIONS = ["E-9", "E-7", "H-2", "F-4", "F-5", "F-6", "D-2", "D-4", "기타"];

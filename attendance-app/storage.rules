@@ -20,5 +20,18 @@ service firebase.storage {
       allow read: if isSelfOrCompanyAdmin();
       allow write: if isSelfOrCompanyAdmin() && request.resource.size < 10 * 1024 * 1024;
     }
+
+    // 근로자등록(첨부서류 탭)에서 아직 uid가 없는 근로자에게 첨부한 서류.
+    // 가입코드(pendingCode) 기준 경로이므로 회사 관리자만 접근 가능.
+    match /companies/{companyId}/pending/{pendingCode}/{fileName} {
+      function isCompanyAdmin() {
+        return request.auth != null &&
+          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+      }
+
+      allow read: if isCompanyAdmin();
+      allow write: if isCompanyAdmin() && request.resource.size < 10 * 1024 * 1024;
+    }
   }
 }

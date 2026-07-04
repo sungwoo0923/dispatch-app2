@@ -18,6 +18,9 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 import { downloadCsv } from "../utils/exportCsv";
+import { openAddressSearch } from "../utils/daumPostcode";
+
+const MAX_SITES = 10;
 
 const TABS = [
   { key: "info", label: "센터정보" },
@@ -71,9 +74,25 @@ export default function Centers() {
   const selectedSite = workSites.find((s) => s.id === selectedId) || null;
 
   const startNew = () => {
+    if (workSites.length >= MAX_SITES) {
+      window.alert(`근무지는 최대 ${MAX_SITES}개까지 등록할 수 있습니다. 먼저 사용하지 않는 센터를 삭제해주세요.`);
+      return;
+    }
     setSelectedId(null);
     setInfo(EMPTY_INFO);
     setTab("info");
+  };
+
+  const searchAddress = async () => {
+    const result = await openAddressSearch();
+    if (result) setInfo((f) => ({ ...f, address: result.address }));
+  };
+
+  const removeSite = async () => {
+    if (!selectedId) return;
+    if (!window.confirm(`'${selectedSite?.name}' 센터를 삭제하시겠습니까?`)) return;
+    await deleteDoc(doc(db, "workSites", selectedId));
+    startNew();
   };
 
   const select = (s) => {
@@ -149,7 +168,7 @@ export default function Centers() {
 
         <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
           <p className="text-xs font-medium text-muted">
-            목록 {rows.length}
+            목록 {rows.length} / 최대 {MAX_SITES}
             <span className="ml-2 text-[11px] text-muted">
               * 센터정보, 근무구분&형태, 부서&직급, 지정외 휴일추가 등을 수정할 수 있습니다.
             </span>
@@ -283,11 +302,17 @@ export default function Centers() {
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-muted">주소</span>
-                      <input
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        value={info.address}
-                        onChange={(e) => setInfo((f) => ({ ...f, address: e.target.value }))}
-                      />
+                      <div className="flex flex-nowrap gap-2">
+                        <input
+                          readOnly
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                          value={info.address}
+                          placeholder="주소검색 버튼으로 입력하세요"
+                        />
+                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={searchAddress}>
+                          <Search size={13} /> 주소검색
+                        </Button>
+                      </div>
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
@@ -298,7 +323,12 @@ export default function Centers() {
                       />
                     </label>
                   </div>
-                  <div className="flex justify-end border-t border-slate-100 pt-3">
+                  <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                    {selectedId && (
+                      <Button variant="danger" onClick={removeSite}>
+                        <Trash2 size={14} /> 삭제
+                      </Button>
+                    )}
                     <Button onClick={saveInfo}>저장</Button>
                   </div>
                   <p className="text-[11px] text-muted">

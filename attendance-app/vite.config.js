@@ -1,13 +1,22 @@
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { major, minor } = JSON.parse(readFileSync(join(__dirname, "version.json"), "utf8"));
 
 export default defineConfig({
   // Stamped into the bundle at build time so the running app can show which
   // build is live (Login footer, admin sidebar, employee 내정보) — the only
   // reliable way to tell "did my deploy actually go out" apart from guessing.
+  // __APP_VERSION__ comes from version.json, bumped by the "prebuild" npm
+  // hook (scripts/bump-version.cjs) on every `npm run build`.
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __APP_VERSION__: JSON.stringify(`v${major}.${minor}`),
   },
   plugins: [
     react(),

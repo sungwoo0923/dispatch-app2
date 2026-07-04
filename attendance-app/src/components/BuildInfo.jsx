@@ -6,17 +6,19 @@ import { useEmulator } from "../firebase";
 // that was compiled without real Firebase keys in .env.local, which silently
 // points the app at a local emulator that doesn't exist for real visitors.
 export default function BuildInfo({ className = "" }) {
+  const version = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
   const buildTime = typeof __BUILD_TIME__ !== "undefined" ? __BUILD_TIME__ : null;
   const buildLabel = buildTime
     ? new Date(buildTime).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })
-    : "dev";
+    : null;
   const isLocalHost =
     typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
   const showEmulatorWarning = useEmulator && !isLocalHost;
 
   return (
     <div className={`text-center text-[10px] text-slate-300 ${className}`}>
-      <p>버전 {buildLabel}</p>
+      <p className="font-medium">버전 {version}</p>
+      {buildLabel && <p>{buildLabel}</p>}
       {showEmulatorWarning && (
         <p className="mt-1 font-semibold text-danger">
           ⚠ 에뮬레이터 모드로 빌드됨 — .env.local에 실제 Firebase 키가 없습니다

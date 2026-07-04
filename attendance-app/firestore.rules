@@ -49,7 +49,8 @@ service cloud.firestore {
     // company member may read it; only admins may write.
     match /workSites/{siteId} {
       allow read: if isSignedIn();
-      allow write: if isAdminOf(request.resource.data.companyId);
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     // 근무정보 > 배정변경 요청: employee requests a different 근무지/소속업체;
@@ -64,13 +65,15 @@ service cloud.firestore {
     // 소속업체 (subcontracting vendor names) — same low-sensitivity pattern as workSites.
     match /vendors/{vendorId} {
       allow read: if isSignedIn();
-      allow write: if isAdminOf(request.resource.data.companyId);
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     match /schedules/{scheduleId} {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
-      allow write: if isAdminOf(request.resource.data.companyId);
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     match /attendance/{docId} {
@@ -307,7 +310,8 @@ service cloud.firestore {
       allow get: if isSignedIn() && payrollId.split('_')[1] == request.auth.uid;
       allow list: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
-      allow write: if isAdminOf(request.resource.data.companyId);
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     // Admin pre-registers a worker's profile here under a one-time personal

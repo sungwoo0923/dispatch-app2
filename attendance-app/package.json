@@ -6,6 +6,7 @@
   "description": "KP-work: 도급직원 출퇴근 및 급여관리 앱 (배차앱과 완전 독립된 별도 프로젝트)",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/bump-version.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "emulators": "firebase emulators:start --only auth,firestore"
