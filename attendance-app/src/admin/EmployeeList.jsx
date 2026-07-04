@@ -31,7 +31,7 @@ import {
   VISA_STATUS_OPTIONS,
 } from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
-import { formatPhoneNumber } from "../utils/phoneAuth";
+import { formatPhoneNumber, formatResidentNumberFront } from "../utils/phoneAuth";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 import { DOCUMENT_TYPE_OPTIONS, uploadPendingEmployeeDocument } from "../utils/documents";
 
@@ -105,6 +105,7 @@ export default function EmployeeList() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [registerForm, setRegisterForm] = useState(EMPTY_REGISTER_FORM);
   const [issuedCode, setIssuedCode] = useState("");
+  const [manualCode, setManualCode] = useState("");
 
   const [filters, setFilters] = useState({ siteId: "", vendorId: "", status: "", search: "" });
   const [selected, setSelected] = useState(() => new Set());
@@ -257,15 +258,25 @@ export default function EmployeeList() {
   const closeRegisterModal = () => {
     setRegisterOpen(false);
     setIssuedCode("");
+    setManualCode("");
     setRegisterForm(EMPTY_REGISTER_FORM);
     setRegTab("시간템플릿");
     setStagedDocs([]);
     setLoadFromId("");
   };
 
+  // 신규 등록 시작 시 사원코드를 자동으로 채워둔다 (연도 + 현재 인원수 기준 일련번호).
+  const openNewRegister = () => {
+    const seq = String(employees.length + pending.length + 1).padStart(4, "0");
+    setRegisterForm({ ...EMPTY_REGISTER_FORM, employeeCode: `EMP${new Date().getFullYear()}${seq}` });
+    setRegisterOpen(true);
+  };
+
+  const generateManualCode = () => setManualCode(generateInviteCode(7));
+
   const submitRegister = async (e) => {
     e.preventDefault();
-    const code = generateInviteCode(7);
+    const code = manualCode || generateInviteCode(7);
     await setDoc(doc(db, "pendingEmployees", code), {
       companyId: profile.companyId,
       ...registerForm,
@@ -420,7 +431,7 @@ export default function EmployeeList() {
             <Button variant="outline" onClick={() => setSiteModalOpen(true)}>
               <MapPin size={16} /> 근무지 추가
             </Button>
-            <Button onClick={() => setRegisterOpen(true)}>
+            <Button onClick={openNewRegister}>
               <UserPlus size={16} /> 신규 근로자 등록
             </Button>
           </>
@@ -1046,11 +1057,17 @@ export default function EmployeeList() {
 
                 <label className="col-span-2 block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">가입코드</span>
-                  <input
-                    disabled
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted"
-                    placeholder="신규시 자동생성"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      disabled
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted"
+                      value={manualCode}
+                      placeholder="생성 버튼을 눌러 미리 발급하거나, 등록시 자동생성"
+                    />
+                    <Button type="button" variant="outline" onClick={generateManualCode}>
+                      생성
+                    </Button>
+                  </div>
                 </label>
                 <p className="col-span-2 flex items-center text-[11px] text-muted">
                   근로자에게 가입코드를 알려주어야 모바일앱에서 회원가입 및 개인정보 등록이 가능합니다.
@@ -1058,7 +1075,7 @@ export default function EmployeeList() {
               </div>
 
               <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                <p className="mb-3 text-xs font-semibold text-primary">● 오늘도 출근앱에 가입을 하지 않은 지원자만 입력합니다</p>
+                <p className="mb-3 text-xs font-semibold text-primary">● KP-Work 앱에 가입을 하지 않은 지원자만 입력합니다</p>
                 <div className="grid grid-cols-4 gap-3">
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-medium text-muted">출근조직</span>
@@ -1081,9 +1098,11 @@ export default function EmployeeList() {
                     <input
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
                       value={registerForm.residentNumberFront}
-                      onChange={(e) => setRegisterForm((f) => ({ ...f, residentNumberFront: e.target.value }))}
+                      onChange={(e) =>
+                        setRegisterForm((f) => ({ ...f, residentNumberFront: formatResidentNumberFront(e.target.value) }))
+                      }
                       placeholder="901010-1 (뒷자리 미저장)"
-                      maxLength={9}
+                      maxLength={8}
                     />
                   </label>
                   <label className="block">
