@@ -149,9 +149,9 @@ export default function ShiftTemplates() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
-          <div className="flex flex-nowrap gap-2 overflow-x-auto">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
             <Button size="sm" onClick={startNew}>
               <Plus size={13} /> 신규
             </Button>
@@ -160,7 +160,7 @@ export default function ShiftTemplates() {
             </Button>
           </div>
         </div>
-        <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
           <table className="w-full min-w-[640px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -206,7 +206,7 @@ export default function ShiftTemplates() {
               <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">
                 {selected ? selected.name : "신규 템플릿"}
               </div>
-              <div className="flex flex-row gap-1 overflow-x-auto lg:flex-col">
+              <div className="flex flex-row gap-1 overflow-x-auto overscroll-x-contain lg:flex-col">
                 {TABS.map((t) => (
                   <button
                     key={t.key}
@@ -250,7 +250,7 @@ export default function ShiftTemplates() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <span className="mb-1.5 block text-xs font-medium text-muted">근무시간유형</span>
-                      <div className="flex flex-nowrap gap-4 overflow-x-auto text-sm">
+                      <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
                         {["공수", "실근무"].map((v) => (
                           <label key={v} className="flex items-center gap-1.5">
                             <input type="radio" checked={form.workTimeType === v} onChange={() => setForm((f) => ({ ...f, workTimeType: v }))} />
@@ -261,7 +261,7 @@ export default function ShiftTemplates() {
                     </div>
                     <div>
                       <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
-                      <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-sm">
+                      <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
                         {["숨김", "보임"].map((v) => (
                           <label key={v} className="flex items-center gap-1.5">
                             <input type="radio" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
@@ -281,7 +281,7 @@ export default function ShiftTemplates() {
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-muted">기본근무종료시간 *</span>
-                      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+                      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
                         <input type="time" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.baseEndTime} onChange={(e) => setForm((f) => ({ ...f, baseEndTime: e.target.value }))} />
                         <Button size="sm" variant="outline" onClick={applyBaseTime}>
                           기본시간적용
@@ -290,7 +290,7 @@ export default function ShiftTemplates() {
                     </label>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-slate-100">
+                  <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
                     <table className="w-full min-w-[480px] text-center text-sm">
                       <thead>
                         <tr className="border-b border-slate-100 text-xs text-muted">
@@ -348,7 +348,7 @@ export default function ShiftTemplates() {
                     </table>
                   </div>
 
-                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                     <Button variant="outline" onClick={remove} disabled={!selectedId}>
                       삭제
                     </Button>
@@ -425,7 +425,7 @@ function RangeListTab({ form, setForm, field, title, onSave }) {
   return (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-ink">{title}</p>
-      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
         <span className="text-xs text-muted">{title} 설정</span>
         <input type="time" className="rounded-lg border border-slate-200 px-2 py-2 text-sm" value={from} onChange={(e) => setFrom(e.target.value)} />
         <span className="text-xs text-muted">부터</span>
@@ -435,7 +435,7 @@ function RangeListTab({ form, setForm, field, title, onSave }) {
           추가
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-100">
+      <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
         <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
@@ -492,7 +492,7 @@ function ThresholdListTab({ form, setForm, field, fromLabel, toLabel, onSave }) 
   return (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-ink">{fromLabel.includes("지각") ? "지각설정" : "연장시간"}</p>
-      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
         <select className="rounded-lg border border-slate-200 px-2 py-2 text-sm" value={from} onChange={(e) => setFrom(Number(e.target.value))}>
           {options.map((o) => (
             <option key={o} value={o}>
@@ -513,7 +513,7 @@ function ThresholdListTab({ form, setForm, field, fromLabel, toLabel, onSave }) 
           추가
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-100">
+      <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
         <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">

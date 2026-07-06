@@ -341,6 +341,16 @@ export default function EmployeeList() {
     setRegisterOpen(true);
   };
 
+  // 등록 팝업을 companyName/businessEntities가 아직 로딩되기 전(onSnapshot이 붙기
+  // 전)에 열면 openNewRegister가 계산한 기본값이 빈 값으로 굳어버린다 — 데이터가
+  // 늦게 도착해도 신규 등록(아직 아무 값도 고르지 않은 상태)이라면 뒤늦게 채워준다.
+  useEffect(() => {
+    if (!registerOpen || editingUid) return;
+    if (registerForm.businessEntityId) return;
+    const defaultEntity = businessEntities.find((b) => b.name === companyName);
+    if (defaultEntity) setRegisterForm((f) => ({ ...f, businessEntityId: defaultEntity.id }));
+  }, [registerOpen, editingUid, businessEntities, companyName]);
+
   // 근로자 목록 행 더블클릭 시 이미 계정이 있는 근로자(users/{uid})를 같은
   // SidePanel/폼으로 불러와 수정할 수 있게 한다 — 가입코드 발급 단계는 건너뛴다.
   const openEditEmployee = (emp) => {
@@ -615,9 +625,9 @@ export default function EmployeeList() {
           </label>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">목록 {filteredEmployees.length}건</p>
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
             <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={listAction} onChange={(e) => setListAction(e.target.value)}>
               <option>선택</option>
               <option>신규복사</option>
@@ -633,7 +643,7 @@ export default function EmployeeList() {
           </div>
         </div>
 
-        <Card className="mb-3 flex flex-nowrap items-end gap-2 overflow-x-auto p-3">
+        <Card className="mb-3 flex flex-nowrap items-end gap-2 overflow-x-auto overscroll-x-contain p-3">
           <label className="block">
             <span className="mb-1 block text-[11px] font-medium text-muted">템플릿구분</span>
             <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={templateForm.kind} onChange={(e) => setTemplateForm((f) => ({ ...f, kind: e.target.value, templateId: "" }))}>
@@ -669,7 +679,7 @@ export default function EmployeeList() {
           </Button>
         </Card>
 
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[2400px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -876,7 +886,7 @@ export default function EmployeeList() {
         icon={ArrowLeftRight}
         title={`배정변경 요청 (승인대기 ${changeRequests.filter((r) => r.status === "pending").length}건)`}
       >
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -938,7 +948,7 @@ export default function EmployeeList() {
       </Panel>
 
       <Panel icon={History} title={`변경이력 (${changeLogs.length}건)`}>
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -979,7 +989,7 @@ export default function EmployeeList() {
       {pending.length > 0 && (
         <Panel icon={UserPlus} title={`가입 대기 중 (${pending.length}건)`}>
           <p className="mb-2 text-xs text-muted">아직 앱에서 가입코드 입력 전인 근로자입니다.</p>
-          <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
             <table className="w-full min-w-[560px] text-center text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-muted">
@@ -1562,7 +1572,7 @@ export default function EmployeeList() {
             </Card>
 
             <Card className="p-0">
-              <div className="flex flex-nowrap overflow-x-auto border-b border-slate-100">
+              <div className="flex flex-nowrap overflow-x-auto overscroll-x-contain border-b border-slate-100">
                 {REG_TABS.map((t) => (
                   <button
                     key={t}
@@ -1839,7 +1849,7 @@ export default function EmployeeList() {
                 <p className="text-xs text-muted">
                   기존 근로자 <b className="text-ink">'{sourceEmployee.name}'</b>의 근무정보를 복사해 이미 등록된 다른 근로자에게 추가 등록할 때 사용합니다.
                 </p>
-                <div className="max-h-64 overflow-x-auto overflow-y-auto rounded-xl border border-slate-100">
+                <div className="max-h-64 overflow-x-auto overscroll-x-contain overflow-y-auto rounded-xl border border-slate-100">
                   <table className="w-full text-center text-sm">
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b border-slate-100 text-xs text-muted">

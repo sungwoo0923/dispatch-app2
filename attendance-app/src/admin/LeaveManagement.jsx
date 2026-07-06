@@ -153,9 +153,9 @@ export default function LeaveManagement() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">근로자 휴가 현황 요약 {eligibleRows.length}</p>
-          <div className="flex flex-nowrap gap-2 overflow-x-auto">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
             <Button size="sm" onClick={() => setRegisterOpen(true)}>
               <UserPlus size={13} /> 휴가 대상자 등록
             </Button>
@@ -167,7 +167,7 @@ export default function LeaveManagement() {
             </Button>
           </div>
         </div>
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[860px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

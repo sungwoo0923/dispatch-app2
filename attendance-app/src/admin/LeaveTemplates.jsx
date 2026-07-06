@@ -104,9 +104,9 @@ export default function LeaveTemplates() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
-          <div className="flex flex-nowrap gap-2 overflow-x-auto">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
             <Button size="sm" onClick={startNew}>
               <Plus size={13} /> 신규
             </Button>
@@ -115,7 +115,7 @@ export default function LeaveTemplates() {
             </Button>
           </div>
         </div>
-        <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
           <table className="w-full min-w-[520px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -149,7 +149,7 @@ export default function LeaveTemplates() {
           <div className="flex flex-col lg:flex-row">
             <div className="border-b border-slate-100 p-4 lg:w-40 lg:border-b-0 lg:border-r">
               <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">{form.name || "신규 템플릿"}</div>
-              <div className="flex flex-row gap-1 overflow-x-auto lg:flex-col">
+              <div className="flex flex-row gap-1 overflow-x-auto overscroll-x-contain lg:flex-col">
                 {TABS.map((t) => (
                   <button key={t.key} onClick={() => setTab(t.key)} className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}>
                     {t.label}
@@ -179,7 +179,7 @@ export default function LeaveTemplates() {
                   </div>
                   <div>
                     <span className="mb-1.5 block text-xs font-medium text-muted">집계시작일 *</span>
-                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
                       <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.cycleStartMonth} onChange={(e) => setForm((f) => ({ ...f, cycleStartMonth: e.target.value }))}>
                         {MONTHS.map((m) => (
                           <option key={m}>{m}</option>
@@ -198,7 +198,7 @@ export default function LeaveTemplates() {
                   </label>
                   <div>
                     <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
-                    <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-sm">
+                    <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
                       {["숨김", "보임"].map((v) => (
                         <label key={v} className="flex items-center gap-1.5">
                           <input type="radio" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
@@ -210,7 +210,7 @@ export default function LeaveTemplates() {
                       </Button>
                     </div>
                   </div>
-                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                     <Button variant="outline" onClick={remove} disabled={!selectedId}>
                       삭제
                     </Button>
@@ -253,9 +253,9 @@ function RuleTab({ title, unitLabel, list, setForm, field, addRule, onSave }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+      <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
         <p className="text-sm font-semibold text-ink">{title}</p>
-        <div className="flex flex-nowrap gap-2 overflow-x-auto">
+        <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
           <Button size="sm" variant="outline" onClick={removeChecked} disabled={checked.size === 0}>
             삭제
           </Button>
@@ -264,7 +264,7 @@ function RuleTab({ title, unitLabel, list, setForm, field, addRule, onSave }) {
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-100">
+      <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
         <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">

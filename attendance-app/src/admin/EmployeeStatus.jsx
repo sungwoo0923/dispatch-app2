@@ -178,7 +178,7 @@ export default function EmployeeStatus() {
     <div className="space-y-6">
       <Panel icon={UserCog} title="입퇴사현황">
         <div className="space-y-3">
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
             <FilterDropdown
               label="1선택 · 사업자"
               options={businessEntities.map((b) => ({ value: b.id, label: b.name }))}
@@ -211,7 +211,7 @@ export default function EmployeeStatus() {
             />
           </div>
 
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
             <span className="shrink-0 text-xs font-medium text-muted">통합검색</span>
             <select
               className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
@@ -224,13 +224,22 @@ export default function EmployeeStatus() {
                 </option>
               ))}
             </select>
-            <input
-              className="w-48 shrink-0 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              placeholder="검색어 입력"
-              value={draft.searchText}
-              onChange={(e) => setDraft((f) => ({ ...f, searchText: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && runSearch()}
-            />
+            <div className="flex shrink-0 flex-nowrap overflow-hidden rounded-xl border border-slate-200">
+              <input
+                className="w-28 border-0 px-3 py-2 text-sm focus:outline-none"
+                placeholder="검색어"
+                value={draft.searchText}
+                onChange={(e) => setDraft((f) => ({ ...f, searchText: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              />
+              <button
+                type="button"
+                onClick={runSearch}
+                className="flex items-center gap-1 border-l border-slate-200 bg-slate-50 px-2.5 text-xs text-muted hover:bg-slate-100"
+              >
+                <Search size={13} /> 조회
+              </button>
+            </div>
 
             <span className="ml-2 shrink-0 text-xs font-medium text-muted">기간구분</span>
             <select
@@ -260,9 +269,6 @@ export default function EmployeeStatus() {
           </div>
 
           <div className="flex flex-nowrap items-center gap-2">
-            <Button onClick={runSearch}>
-              <Search size={16} /> 검색
-            </Button>
             <Button variant="outline" onClick={resetSearch}>
               초기화
             </Button>
@@ -272,7 +278,9 @@ export default function EmployeeStatus() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-xl bg-slate-50 p-3">
+        <p className="mt-4 text-xs font-medium text-muted">목록 {total}건</p>
+
+        <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain rounded-xl bg-slate-50 p-3">
           <span className="shrink-0 text-xs font-medium text-muted">퇴사일지정</span>
           <select
             className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
@@ -303,7 +311,7 @@ export default function EmployeeStatus() {
           <span className="shrink-0 text-xs text-muted">선택 {selected.size}명</span>
         </div>
 
-        <div className="-mx-4 mt-3 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 mt-3 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[960px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

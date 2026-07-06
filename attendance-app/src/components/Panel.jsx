@@ -11,7 +11,7 @@ export default function Panel({ icon: Icon, title, actions, children, defaultCol
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex items-center justify-between gap-3 overflow-x-auto border-b border-slate-100 px-4 py-3 md:px-5">
+      <div className="flex items-center justify-between gap-3 overflow-x-auto overscroll-x-contain border-b border-slate-100 px-4 py-3 md:px-5">
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}

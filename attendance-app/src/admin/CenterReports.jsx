@@ -124,9 +124,9 @@ export default function CenterReports() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
-          <div className="flex flex-nowrap gap-2 overflow-x-auto">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
             <Button size="sm" onClick={startNew}>
               <Plus size={13} /> 신규
             </Button>
@@ -135,7 +135,7 @@ export default function CenterReports() {
             </Button>
           </div>
         </div>
-        <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
           <table className="w-full min-w-[760px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -218,7 +218,7 @@ export default function CenterReports() {
             </div>
             <div>
               <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
-              <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-sm">
+              <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
                 {["숨김", "보임"].map((v) => (
                   <label key={v} className="flex items-center gap-1.5">
                     <input type="radio" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
@@ -232,7 +232,7 @@ export default function CenterReports() {
             </div>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">리포트양식명 *</span>
-              <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+              <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
                 <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.reportFormat} onChange={(e) => setForm((f) => ({ ...f, reportFormat: e.target.value }))}>
                   <option value="">선택</option>
                   {(FORM_NAMES[form.docType] || []).map((n) => (
@@ -245,7 +245,7 @@ export default function CenterReports() {
               </div>
             </label>
             <p className="text-[11px] text-muted">문서의 유형과 양식을 선택하여 리포트 템플릿을 생성합니다. 문서 견본은 [보기] 버튼으로 확인할 수 있습니다.</p>
-            <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+            <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
               <Button variant="outline" onClick={remove} disabled={!selectedId}>
                 삭제
               </Button>

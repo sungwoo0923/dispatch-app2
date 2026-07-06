@@ -94,7 +94,7 @@ export default function SiteLeaveSettings() {
         </Card>
 
         <p className="mb-2 text-xs font-medium text-muted">목록 {rows.length}</p>
-        <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
           <table className="w-full min-w-[640px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -131,7 +131,7 @@ export default function SiteLeaveSettings() {
         {selectedSiteId && (
           <Card className="space-y-3 p-4">
             <p className="text-sm font-semibold text-ink">{siteName(selectedSiteId)} &gt; 휴가설정</p>
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
               <table className="w-full text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
@@ -187,7 +187,7 @@ export default function SiteLeaveSettings() {
               </label>
               <div>
                 <span className="mb-1.5 block text-xs font-medium text-muted">조회기준설정 *</span>
-                <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-sm">
+                <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
                   {["입사일 기준", "회계연도 기준"].map((v) => (
                     <label key={v} className="flex items-center gap-1.5">
                       <input type="radio" checked={form.criteriaType === v} onChange={() => setForm((f) => ({ ...f, criteriaType: v }))} />

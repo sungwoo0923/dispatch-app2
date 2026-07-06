@@ -371,7 +371,7 @@ export default function AttendanceBoard() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">
             출근현황 {rows.length}
             <span className="ml-2 text-[11px] text-danger">'{lateCount}' 지각</span>
@@ -444,7 +444,7 @@ export default function AttendanceBoard() {
               </div>
             </Card>
 
-            <div className="-mx-4 overflow-x-auto md:-mx-5">
+            <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
               <table className="w-full min-w-[980px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
@@ -499,7 +499,7 @@ export default function AttendanceBoard() {
         )}
 
         {view === "휴무현황" && (
-          <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
             <table className="w-full min-w-[720px] text-center text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-muted">
@@ -537,7 +537,7 @@ export default function AttendanceBoard() {
         )}
 
         {view === "수정현황" && (
-          <div className="-mx-4 overflow-x-auto md:-mx-5">
+          <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
             <table className="w-full min-w-[820px] text-center text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-muted">

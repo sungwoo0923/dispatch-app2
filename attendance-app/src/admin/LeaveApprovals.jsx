@@ -198,7 +198,7 @@ export default function LeaveApprovals() {
           </div>
         </Card>
 
-        <Card className="mb-3 flex flex-nowrap items-end gap-2 overflow-x-auto p-3">
+        <Card className="mb-3 flex flex-nowrap items-end gap-2 overflow-x-auto overscroll-x-contain p-3">
           <label className="block">
             <span className="mb-1 block text-[11px] font-medium text-muted">상태</span>
             <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={statusAction} onChange={(e) => setStatusAction(e.target.value)}>
@@ -216,7 +216,7 @@ export default function LeaveApprovals() {
           </Button>
         </Card>
 
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[980px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

@@ -175,13 +175,13 @@ export default function PermissionGroups() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.2fr]">
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">그룹목록 {rows.length}</p>
               <Button size="sm" variant="outline" onClick={exportCsv}>
                 <FileSpreadsheet size={13} /> 엑셀
               </Button>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
               <table className="w-full text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
@@ -212,7 +212,7 @@ export default function PermissionGroups() {
             </div>
 
             <Card className="mt-3 space-y-3 p-4">
-              <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+              <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
                 <p className="text-sm font-semibold text-ink">상세</p>
                 <Button size="sm" variant="outline" onClick={startNew}>
                   <Plus size={13} /> 신규
@@ -222,7 +222,7 @@ export default function PermissionGroups() {
                 <span className="mb-1.5 block text-xs font-medium text-muted">그룹명</span>
                 <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} />
               </label>
-              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                 <Button variant="outline" onClick={remove} disabled={!selectedId}>
                   삭제
                 </Button>
@@ -232,7 +232,7 @@ export default function PermissionGroups() {
           </div>
 
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">
                 그룹소속 목록 {checked.size}
                 <span className="ml-2 text-[11px]">* 조직&gt;센터에서 소속업체까지 등록해야 하위 데이터가 조회됩니다.</span>

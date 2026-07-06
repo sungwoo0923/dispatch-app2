@@ -126,13 +126,13 @@ export default function LeaveUsageStatus() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">근로자 휴가 사용 현황 {rows.length}</p>
           <Button size="sm" variant="outline" onClick={exportCsv}>
             <FileSpreadsheet size={13} /> 엑셀
           </Button>
         </div>
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[860px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

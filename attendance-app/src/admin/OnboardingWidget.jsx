@@ -407,7 +407,7 @@ function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessE
 
         <div>
           <span className="mb-1.5 block text-xs font-medium text-muted">근무요일</span>
-          <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-sm">
+          <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
             {WEEKDAYS.map((w) => (
               <label key={w} className="flex shrink-0 items-center gap-1.5">
                 <input type="checkbox" checked={!!form.workDays[w]} onChange={() => toggleDay(w)} />

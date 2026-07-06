@@ -61,12 +61,12 @@ export function LeaveMonthlyStats() {
     <div className="space-y-6">
       <Panel icon={CalendarDays} title="근로자별월간집계">
         <p className="mb-4 text-xs text-muted">사업자의 검색 조건 별로 월 단위로 휴가 사용한 일 수를 전체적으로 볼수 있으며 유급 휴가에 대해서 통계 집계를 조회 할 수 있습니다. 유급,무급 휴가에 대해서는 색깔별로 나타납니다.</p>
-        <Card className="mb-4 flex flex-nowrap items-end justify-between gap-3 overflow-x-auto p-4">
+        <Card className="mb-4 flex flex-nowrap items-end justify-between gap-3 overflow-x-auto overscroll-x-contain p-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">출길년월</span>
             <input type="month" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} />
           </label>
-          <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-xs text-muted">
+          <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-xs text-muted">
             <span className="flex items-center gap-1">
               <span className="h-2.5 w-2.5 rounded-full bg-primary" /> 유급중무
             </span>
@@ -79,7 +79,7 @@ export function LeaveMonthlyStats() {
           </div>
         </Card>
         <p className="mb-2 text-xs font-medium text-muted">목록 {rows.length}</p>
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[1100px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -163,7 +163,7 @@ export function LeaveAnnualStats() {
     <div className="space-y-6">
       <Panel icon={BarChart2} title="근로자별연간집계">
         <p className="mb-4 text-xs text-muted">사업자의 검색 조건 별로 연 단위로 휴가 사용한 일 수를 전체적으로 볼수 있으며 유급 일수로 통계 집계를 조회할 수 있습니다.</p>
-        <Card className="mb-4 flex flex-nowrap items-end justify-between gap-3 overflow-x-auto p-4">
+        <Card className="mb-4 flex flex-nowrap items-end justify-between gap-3 overflow-x-auto overscroll-x-contain p-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">출근년도</span>
             <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={year} onChange={(e) => setYear(e.target.value)}>
@@ -177,7 +177,7 @@ export function LeaveAnnualStats() {
           </Button>
         </Card>
         <p className="mb-2 text-xs font-medium text-muted">목록 {rows.length}</p>
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[900px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

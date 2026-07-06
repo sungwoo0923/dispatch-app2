@@ -126,7 +126,7 @@ export default function InsuranceRateTemplates() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">보험요율 {masters.length}</p>
               <Button size="sm" variant="outline" onClick={exportMasters}>
                 <FileSpreadsheet size={13} /> 엑셀
@@ -167,7 +167,7 @@ export default function InsuranceRateTemplates() {
             </div>
 
             <Card className="space-y-3 p-4">
-              <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+              <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
                 <p className="text-sm font-semibold text-ink">보험요율 상세</p>
                 <Button size="sm" variant="outline" onClick={startNewMaster}>
                   <Plus size={13} /> 신규
@@ -192,7 +192,7 @@ export default function InsuranceRateTemplates() {
               </div>
               <div>
                 <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
-                <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-sm">
+                <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
                   {["숨김", "보임"].map((v) => (
                     <label key={v} className="flex items-center gap-1.5">
                       <input type="radio" checked={masterForm.visibility === v} onChange={() => setMasterForm((f) => ({ ...f, visibility: v }))} />
@@ -208,7 +208,7 @@ export default function InsuranceRateTemplates() {
                 <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
                 <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={masterForm.memo} onChange={(e) => setMasterForm((f) => ({ ...f, memo: e.target.value }))} />
               </label>
-              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                 <Button variant="outline" onClick={removeMaster} disabled={!selectedMasterId}>
                   삭제
                 </Button>
@@ -221,7 +221,7 @@ export default function InsuranceRateTemplates() {
           </div>
 
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">보험요율요소 {masterElements.length}</p>
               <Button size="sm" variant="outline" onClick={exportElements}>
                 <FileSpreadsheet size={13} /> 엑셀
@@ -270,7 +270,7 @@ export default function InsuranceRateTemplates() {
             </div>
 
             <Card className="space-y-3 p-4">
-              <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+              <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
                 <p className="text-sm font-semibold text-ink">보험요율요소 상세</p>
                 <Button size="sm" variant="outline" onClick={startNewElement} disabled={!selectedMasterId}>
                   <Plus size={13} /> 신규
@@ -310,7 +310,7 @@ export default function InsuranceRateTemplates() {
               </div>
               <div>
                 <span className="mb-1.5 block text-xs font-medium text-muted">4대보험여부</span>
-                <div className="flex flex-nowrap gap-4 overflow-x-auto text-sm">
+                <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
                   {["대상", "미대상"].map((v) => (
                     <label key={v} className="flex items-center gap-1.5">
                       <input type="radio" checked={elementForm.insuranceApplicable === v} onChange={() => setElementForm((f) => ({ ...f, insuranceApplicable: v }))} />
@@ -319,7 +319,7 @@ export default function InsuranceRateTemplates() {
                   ))}
                 </div>
               </div>
-              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                 <Button variant="outline" onClick={removeElement} disabled={!selectedElementId}>
                   삭제
                 </Button>

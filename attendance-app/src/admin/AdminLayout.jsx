@@ -124,7 +124,7 @@ export default function AdminLayout() {
         </div>
       )}
 
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3.5 md:px-8">
           <button className="md:hidden" onClick={() => setMobileOpen(true)}>
             <Menu size={22} />
@@ -135,7 +135,7 @@ export default function AdminLayout() {
           </div>
         </header>
         <Breadcrumb />
-        <main className="flex-1 overflow-y-auto px-4 pb-4 md:px-8 md:pb-8">
+        <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-4 md:px-8 md:pb-8">
           <Outlet />
         </main>
       </div>

@@ -514,7 +514,7 @@ export default function Schedule() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">스케줄 인원 현황 {rows.length}</p>
           <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
             <button
@@ -570,7 +570,7 @@ export default function Schedule() {
               </Button>
             </Card>
 
-            <div className="-mx-4 overflow-x-auto md:-mx-5">
+            <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
               <table className="w-full min-w-[980px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
@@ -762,7 +762,7 @@ export default function Schedule() {
           </label>
           <div>
             <span className="mb-1.5 block text-xs font-medium text-muted">복사적용일자</span>
-            <div className="mb-2 flex flex-nowrap gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 text-sm w-fit">
+            <div className="mb-2 flex flex-nowrap gap-1 overflow-x-auto overscroll-x-contain rounded-lg bg-slate-100 p-1 text-sm w-fit">
               <button
                 type="button"
                 onClick={() => setCopyForm((f) => ({ ...f, mode: "dates" }))}
@@ -780,7 +780,7 @@ export default function Schedule() {
             </div>
             {copyForm.mode === "dates" ? (
               <div className="space-y-2">
-                <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+                <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
                   <input
                     type="date"
                     className="rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
@@ -839,7 +839,7 @@ export default function Schedule() {
       >
         <div className="space-y-3">
           <div className="rounded-xl bg-primary-light px-3.5 py-2.5 text-xs text-primary">선택인원 {selected.size}명</div>
-          <div className="flex flex-nowrap gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 text-sm w-fit">
+          <div className="flex flex-nowrap gap-1 overflow-x-auto overscroll-x-contain rounded-lg bg-slate-100 p-1 text-sm w-fit">
             <button
               type="button"
               onClick={() => setTemplateForm((f) => ({ ...f, mode: "bulk" }))}
@@ -875,7 +875,7 @@ export default function Schedule() {
           ) : (
             <div className="max-h-64 space-y-2 overflow-y-auto">
               {selectedSchedules.map(({ schedule: s }) => (
-                <div key={s.id} className="flex flex-nowrap items-center gap-2 overflow-x-auto rounded-lg border border-slate-100 p-2">
+                <div key={s.id} className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain rounded-lg border border-slate-100 p-2">
                   <span className="w-20 shrink-0 truncate text-sm text-ink">{s.name}</span>
                   <select
                     className="flex-1 rounded-lg border border-slate-200 px-2.5 py-2 text-sm"

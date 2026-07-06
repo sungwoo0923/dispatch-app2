@@ -261,7 +261,7 @@ function AttendanceCountTab({ profile, lookups }) {
         <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
         <ExcelButton onClick={exportCsv} />
       </div>
-      <div className="-mx-4 overflow-x-auto md:-mx-5">
+      <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
         <table className="w-full min-w-[980px] text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
@@ -472,7 +472,7 @@ function MonthlyGridTab({ profile, lookups }) {
         </label>
       </Card>
 
-      <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+      <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
         <p className="text-xs font-medium text-muted">목록</p>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1 text-[11px] text-muted">
@@ -483,7 +483,7 @@ function MonthlyGridTab({ profile, lookups }) {
         </div>
       </div>
 
-      <div className="-mx-4 overflow-x-auto md:-mx-5">
+      <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-slate-100 text-muted">
@@ -697,7 +697,7 @@ function SiteAggregateTab({ profile, lookups }) {
         <p className="text-xs font-medium text-muted">목록 {groups.length}</p>
         <ExcelButton onClick={exportCsv} />
       </div>
-      <div className="-mx-4 overflow-x-auto md:-mx-5">
+      <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-slate-100 text-muted">
@@ -854,7 +854,7 @@ export default function Stats() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-nowrap gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 text-sm w-fit">
+      <div className="flex flex-nowrap gap-1 overflow-x-auto overscroll-x-contain rounded-xl bg-slate-100 p-1 text-sm w-fit">
         {TABS.map((t) => (
           <button
             key={t.key}

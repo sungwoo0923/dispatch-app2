@@ -69,7 +69,7 @@ export default function AdminAccounts() {
           </Button>
         }
       >
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[480px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

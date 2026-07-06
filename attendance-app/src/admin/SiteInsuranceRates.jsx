@@ -170,7 +170,7 @@ export default function SiteInsuranceRates() {
           </div>
         </Card>
 
-        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">목록 {sorted.length}</p>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setShowNewRow((v) => !v)}>
@@ -227,7 +227,7 @@ export default function SiteInsuranceRates() {
           </div>
         )}
 
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[860px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

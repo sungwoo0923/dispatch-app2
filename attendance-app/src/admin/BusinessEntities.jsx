@@ -126,13 +126,13 @@ export default function BusinessEntities() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_1fr]">
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
               <Button size="sm" variant="outline" onClick={exportCsv}>
                 <FileSpreadsheet size={13} /> 엑셀
               </Button>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
               <table className="w-full min-w-[560px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
@@ -170,7 +170,7 @@ export default function BusinessEntities() {
           </div>
 
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">상세</p>
               <Button size="sm" variant="outline" onClick={startNew}>
                 <Plus size={13} /> 신규
@@ -215,7 +215,7 @@ export default function BusinessEntities() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <span className="mb-1.5 block text-xs font-medium text-muted">회원상세정보등록여부</span>
-                  <div className="flex flex-nowrap gap-4 overflow-x-auto text-sm">
+                  <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
                     {["등록", "미등록"].map((v) => (
                       <label key={v} className="flex items-center gap-1.5">
                         <input
@@ -230,7 +230,7 @@ export default function BusinessEntities() {
                 </div>
                 <div>
                   <span className="mb-1.5 block text-xs font-medium text-muted">사용여부</span>
-                  <div className="flex flex-nowrap gap-4 overflow-x-auto text-sm">
+                  <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
                     {["사용", "미사용"].map((v) => (
                       <label key={v} className="flex items-center gap-1.5">
                         <input type="radio" checked={form.active === v} onChange={() => setForm((f) => ({ ...f, active: v }))} />
@@ -240,7 +240,7 @@ export default function BusinessEntities() {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                 <Button
                   variant="outline"
                   onClick={remove}

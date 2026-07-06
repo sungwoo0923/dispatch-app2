@@ -72,13 +72,13 @@ export default function LeaveTypes() {
       <Panel icon={Tags} title="휴가유형설정">
         <p className="mb-4 text-xs text-muted">휴가 유형별로 휴가 일수에 대해 1(연차), 0.5(반차), 0.25(반반차) 설정 및 유급, 무급을 설정할 수 있습니다.</p>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">휴가유형 목록 {rows.length}</p>
           <Button size="sm" variant="outline" onClick={removeChecked} disabled={checked.size === 0}>
             <Trash2 size={13} /> 삭제
           </Button>
         </div>
-        <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
           <table className="w-full min-w-[560px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -155,7 +155,7 @@ export default function LeaveTypes() {
             </label>
             <div>
               <span className="mb-1.5 block text-xs font-medium text-muted">유급여부</span>
-              <div className="flex flex-nowrap items-center gap-3 overflow-x-auto text-sm">
+              <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
                 {["유급", "무급"].map((v) => (
                   <label key={v} className="flex items-center gap-1.5">
                     <input type="radio" checked={form.paid === v} onChange={() => setForm((f) => ({ ...f, paid: v }))} />

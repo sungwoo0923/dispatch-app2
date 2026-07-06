@@ -115,7 +115,7 @@ export default function PermissionGroupMenus() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.4fr]">
           <div>
             <p className="mb-2 text-xs font-medium text-muted">그룹목록 {rows.length}</p>
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
               <table className="w-full text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
@@ -149,9 +149,9 @@ export default function PermissionGroupMenus() {
           </div>
 
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">메뉴목록 {MENU_ITEMS.length}</p>
-              <div className="flex flex-nowrap gap-2 overflow-x-auto">
+              <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
                 <Button size="sm" variant="outline" onClick={exportCsv}>
                   <FileSpreadsheet size={13} /> 엑셀
                 </Button>

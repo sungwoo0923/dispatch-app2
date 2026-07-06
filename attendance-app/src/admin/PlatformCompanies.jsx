@@ -88,7 +88,7 @@ export default function PlatformCompanies() {
         ))}
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overscroll-x-contain">
         <table className="w-full min-w-[860px] text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">

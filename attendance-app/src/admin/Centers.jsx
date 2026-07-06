@@ -169,14 +169,14 @@ export default function Centers() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">
             목록 {rows.length} / 최대 {MAX_SITES}
             <span className="ml-2 text-[11px] text-muted">
               * 센터정보, 근무구분&형태, 부서&직급, 지정외 휴일추가 등을 수정할 수 있습니다.
             </span>
           </p>
-          <div className="flex flex-nowrap gap-2 overflow-x-auto">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
             <Button size="sm" onClick={startNew}>
               <Plus size={13} /> 신규
             </Button>
@@ -185,7 +185,7 @@ export default function Centers() {
             </Button>
           </div>
         </div>
-        <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
           <table className="w-full min-w-[640px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -233,7 +233,7 @@ export default function Centers() {
               <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">
                 {selectedSite ? selectedSite.name : "신규 센터"}
               </div>
-              <div className="flex flex-row gap-1 overflow-x-auto lg:flex-col">
+              <div className="flex flex-row gap-1 overflow-x-auto overscroll-x-contain lg:flex-col">
                 {TABS.map((t) => (
                   <button
                     key={t.key}
@@ -281,7 +281,7 @@ export default function Centers() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <span className="mb-1.5 block text-xs font-medium text-muted">근로계약서</span>
-                      <div className="flex flex-nowrap gap-4 overflow-x-auto text-sm">
+                      <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
                         {["사용", "미사용"].map((v) => (
                           <label key={v} className="flex items-center gap-1.5">
                             <input type="radio" checked={info.contractYN === v} onChange={() => setInfo((f) => ({ ...f, contractYN: v }))} />
@@ -292,7 +292,7 @@ export default function Centers() {
                     </div>
                     <div>
                       <span className="mb-1.5 block text-xs font-medium text-muted">얼굴촬영</span>
-                      <div className="flex flex-nowrap gap-4 overflow-x-auto text-sm">
+                      <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
                         {["사용", "미사용"].map((v) => (
                           <label key={v} className="flex items-center gap-1.5">
                             <input type="radio" checked={info.faceYN === v} onChange={() => setInfo((f) => ({ ...f, faceYN: v }))} />
@@ -419,10 +419,10 @@ function VendorsTab({ companyId, site, entityName }) {
     <div className="space-y-4">
       <p className="text-sm font-semibold text-ink">소속업체</p>
       <div>
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <span className="text-xs font-medium text-muted">등록가능 소속업체</span>
         </div>
-        <div className="mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
           <input
             className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
             value={vendorSearch}
@@ -470,7 +470,7 @@ function VendorsTab({ companyId, site, entityName }) {
       </div>
 
       <div>
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <span className="text-xs font-medium text-muted">등록된 소속업체</span>
           <Button size="sm" variant="outline" onClick={unregister} disabled={checkedLinked.size === 0}>
             <Trash2 size={13} /> 삭제
@@ -562,15 +562,15 @@ function OrderedList({ companyId, siteId, collectionName, title, fieldLabel }) {
 
   return (
     <div>
-      <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+      <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
         <p className="text-sm font-semibold text-ink">{title}</p>
-        <div className="flex flex-nowrap gap-2 overflow-x-auto">
+        <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
           <Button size="sm" variant="outline" onClick={remove} disabled={checked.size === 0}>
             삭제
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-100">
+      <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
         <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
@@ -620,7 +620,7 @@ function OrderedList({ companyId, siteId, collectionName, title, fieldLabel }) {
           </tbody>
         </table>
       </div>
-      <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto">
+      <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
         <input
           className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
           value={name}
@@ -659,13 +659,13 @@ function HolidaysTab({ companyId, siteId }) {
   return (
     <div>
       <p className="mb-3 text-sm font-semibold text-ink">지정외 휴일 추가</p>
-      <div className="mb-3 flex flex-nowrap items-center gap-2 overflow-x-auto">
+      <div className="mb-3 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
         <input type="date" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
         <Button size="sm" onClick={add}>
           추가
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-100">
+      <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
         <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">

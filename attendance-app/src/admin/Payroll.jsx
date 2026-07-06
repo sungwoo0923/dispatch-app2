@@ -696,12 +696,12 @@ export default function Payroll() {
           </div>
         </Card>
 
-        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">
             목록 {filteredEmployees.length}
             <span className="ml-2 text-[11px] text-muted">✓ 팀근정보가 없음 | 휴무일 '123' 5시간 이상 연장</span>
           </p>
-          <div className="flex flex-nowrap gap-2 overflow-x-auto">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
             <Button size="sm" onClick={() => setSettleOpen(true)}>
               <CalculatorIcon size={13} /> 정산처리 요청
             </Button>
@@ -773,7 +773,7 @@ export default function Payroll() {
           </Button>
         </Card>
 
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[1080px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">

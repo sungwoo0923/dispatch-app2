@@ -145,9 +145,9 @@ export default function Devices() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_1fr]">
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto">
+            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">장치 {rows.length}</p>
-              <div className="flex flex-nowrap gap-2 overflow-x-auto">
+              <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
                 <Button size="sm" onClick={startNew}>
                   <Plus size={13} /> 신규
                 </Button>
@@ -156,7 +156,7 @@ export default function Devices() {
                 </Button>
               </div>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
               <table className="w-full min-w-[520px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
@@ -251,7 +251,7 @@ export default function Devices() {
                   onChange={(e) => setForm((f) => ({ ...f, deviceId: e.target.value }))}
                 />
               </label>
-              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                 <Button variant="outline" onClick={remove} disabled={!selectedId}>
                   삭제
                 </Button>
@@ -304,7 +304,7 @@ export default function Devices() {
                       </select>
                     </label>
                   </div>
-                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
                     <Button variant="outline" onClick={removeAssign}>
                       삭제
                     </Button>

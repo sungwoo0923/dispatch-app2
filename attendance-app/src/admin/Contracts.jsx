@@ -65,6 +65,7 @@ export default function Contracts() {
   const [signTarget, setSignTarget] = useState(null); // { emp, contract, content }
   const [docView, setDocView] = useState(null); // { emp, contract }
   const [saving, setSaving] = useState(false);
+  const [signError, setSignError] = useState("");
   const padRef = useRef(null);
 
   useEffect(() => {
@@ -223,56 +224,63 @@ export default function Contracts() {
         shiftType: emp.shiftType,
         employmentType: emp.employmentType,
       });
+    setSignError("");
     setSignTarget({ emp, contract, content });
   };
 
   const applySignature = async () => {
     if (!signTarget || !padRef.current || padRef.current.isEmpty()) return;
     setSaving(true);
+    setSignError("");
     const signatureDataUrl = padRef.current.getDataUrl();
     const signedAt = new Date().toISOString().slice(0, 10);
-    let savedContract;
-    if (signTarget.contract) {
-      await updateDoc(doc(db, "contracts", signTarget.contract.id), { status: "signed", signatureDataUrl, signedAt });
-      savedContract = { ...signTarget.contract, status: "signed", signatureDataUrl, signedAt };
-    } else {
-      const ref = await addDoc(collection(db, "contracts"), {
-        companyId: profile.companyId,
-        uid: signTarget.emp.id,
-        employeeName: signTarget.emp.name,
-        title: "표준근로계약서",
-        cycle: "1년",
-        startDate: signedAt,
-        endDate: null,
-        content: signTarget.content,
-        status: "signed",
-        signatureDataUrl,
-        signedAt,
-        createdAt: serverTimestamp(),
-      });
-      savedContract = {
-        id: ref.id,
-        companyId: profile.companyId,
-        uid: signTarget.emp.id,
-        title: "표준근로계약서",
-        cycle: "1년",
-        startDate: signedAt,
-        content: signTarget.content,
-        status: "signed",
-        signatureDataUrl,
-        signedAt,
-      };
+    try {
+      let savedContract;
+      if (signTarget.contract) {
+        await updateDoc(doc(db, "contracts", signTarget.contract.id), { status: "signed", signatureDataUrl, signedAt });
+        savedContract = { ...signTarget.contract, status: "signed", signatureDataUrl, signedAt };
+      } else {
+        const ref = await addDoc(collection(db, "contracts"), {
+          companyId: profile.companyId,
+          uid: signTarget.emp.id,
+          employeeName: signTarget.emp.name,
+          title: "표준근로계약서",
+          cycle: "1년",
+          startDate: signedAt,
+          endDate: null,
+          content: signTarget.content,
+          status: "signed",
+          signatureDataUrl,
+          signedAt,
+          createdAt: serverTimestamp(),
+        });
+        savedContract = {
+          id: ref.id,
+          companyId: profile.companyId,
+          uid: signTarget.emp.id,
+          title: "표준근로계약서",
+          cycle: "1년",
+          startDate: signedAt,
+          content: signTarget.content,
+          status: "signed",
+          signatureDataUrl,
+          signedAt,
+        };
+      }
+      setSignTarget(null);
+      setDocView({ emp: signTarget.emp, contract: savedContract });
+    } catch (err) {
+      setSignError(`서명 적용에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setSignTarget(null);
-    setDocView({ emp: signTarget.emp, contract: savedContract });
   };
 
   return (
     <div className="space-y-6">
       <Panel icon={FileSignature} title="서명계약조회">
         <div className="space-y-3">
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
             <FilterDropdown
               label="1선택 · 사업자"
               options={businessEntities.map((b) => ({ value: b.id, label: b.name }))}
@@ -323,85 +331,94 @@ export default function Contracts() {
             />
           </div>
 
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
             <span className="shrink-0 text-xs font-medium text-muted">통합검색</span>
             <select
-              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+              className="shrink-0 rounded-xl border border-slate-200 px-2.5 py-2 text-sm"
               value={draft.searchField}
               onChange={(e) => setDraft((f) => ({ ...f, searchField: e.target.value }))}
             >
               <option value="name">이름</option>
               <option value="phone">전화번호</option>
             </select>
-            <input
-              className="w-48 shrink-0 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              placeholder="검색어 입력"
-              value={draft.searchText}
-              onChange={(e) => setDraft((f) => ({ ...f, searchText: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && runSearch()}
-            />
-            <Button onClick={runSearch}>
-              <Search size={16} /> 검색
-            </Button>
+            <div className="flex shrink-0 flex-nowrap overflow-hidden rounded-xl border border-slate-200">
+              <input
+                className="w-28 border-0 px-3 py-2 text-sm focus:outline-none"
+                placeholder="검색어"
+                value={draft.searchText}
+                onChange={(e) => setDraft((f) => ({ ...f, searchText: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              />
+              <button
+                type="button"
+                onClick={runSearch}
+                className="flex items-center gap-1 border-l border-slate-200 bg-slate-50 px-2.5 text-xs text-muted hover:bg-slate-100"
+              >
+                <Search size={13} /> 조회
+              </button>
+            </div>
             <Button variant="outline" onClick={resetSearch}>
               초기화
             </Button>
           </div>
+        </div>
 
+        <div className="mt-4 flex flex-nowrap items-center justify-between gap-2">
+          <p className="text-xs font-medium text-muted">목록 {total}건</p>
           <div className="flex flex-nowrap items-center gap-2">
-            <Button variant="danger" onClick={removeSelected}>
-              <Trash2 size={16} /> 삭제
+            <Button variant="danger" size="sm" onClick={removeSelected}>
+              <Trash2 size={14} /> 삭제
             </Button>
-            <Button variant="outline" onClick={downloadSelected}>
-              <Download size={16} /> 다운로드
+            <Button variant="outline" size="sm" onClick={downloadSelected}>
+              <Download size={14} /> 다운로드
             </Button>
-            <Button variant="outline" onClick={printSelected}>
-              <Printer size={16} /> 출력
+            <Button variant="outline" size="sm" onClick={printSelected}>
+              <Printer size={14} /> 출력
             </Button>
-            <Button variant="outline" onClick={exportExcel}>
-              <Download size={16} /> 엑셀
+            <Button variant="outline" size="sm" onClick={exportExcel}>
+              <Download size={14} /> 엑셀
             </Button>
           </div>
         </div>
 
-        <div className="-mx-4 mt-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[2200px] text-center text-sm">
+        <div className="-mx-4 mt-2 overflow-x-auto overscroll-x-contain md:-mx-5">
+          <table className="w-full min-w-[1700px] text-center text-xs">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-3 font-semibold">순번</th>
-                <th className="px-3 py-3 font-semibold">
+                <th className="px-2 py-2 font-semibold">순번</th>
+                <th className="px-2 py-2 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="px-3 py-3 font-semibold">계약서</th>
-                <th className="px-3 py-3 font-semibold">이름</th>
-                <th className="px-3 py-3 font-semibold">사업자</th>
-                <th className="px-3 py-3 font-semibold">센터</th>
-                <th className="px-3 py-3 font-semibold">전화번호</th>
-                <th className="px-3 py-3 font-semibold">외/내국인</th>
-                <th className="px-3 py-3 font-semibold">성별</th>
-                <th className="px-3 py-3 font-semibold">나이</th>
-                <th className="px-3 py-3 font-semibold">계약주기</th>
-                <th className="px-3 py-3 font-semibold">계약일자</th>
-                <th className="px-3 py-3 font-semibold">소속업체</th>
-                <th className="px-3 py-3 font-semibold">근무구분</th>
-                <th className="px-3 py-3 font-semibold">근무형태</th>
-                <th className="px-3 py-3 font-semibold">부서</th>
-                <th className="px-3 py-3 font-semibold">직급</th>
-                <th className="px-3 py-3 font-semibold">계약/사직서</th>
-                <th className="px-3 py-3 font-semibold">계약서유형</th>
-                <th className="px-3 py-3 font-semibold">계약</th>
-                <th className="px-3 py-3 font-semibold">시간템플릿</th>
-                <th className="px-3 py-3 font-semibold">수당템플릿</th>
+                <th className="px-2 py-2 font-semibold">계약서</th>
+                <th className="px-2 py-2 font-semibold">이름</th>
+                <th className="px-2 py-2 font-semibold">사업자</th>
+                <th className="px-2 py-2 font-semibold">센터</th>
+                <th className="px-2 py-2 font-semibold">전화번호</th>
+                <th className="px-2 py-2 font-semibold">외/내국인</th>
+                <th className="px-2 py-2 font-semibold">성별</th>
+                <th className="px-2 py-2 font-semibold">나이</th>
+                <th className="px-2 py-2 font-semibold">계약주기</th>
+                <th className="px-2 py-2 font-semibold">계약일자</th>
+                <th className="px-2 py-2 font-semibold">소속업체</th>
+                <th className="px-2 py-2 font-semibold">근무구분</th>
+                <th className="px-2 py-2 font-semibold">근무형태</th>
+                <th className="px-2 py-2 font-semibold">부서</th>
+                <th className="px-2 py-2 font-semibold">직급</th>
+                <th className="px-2 py-2 font-semibold">계약/사직서</th>
+                <th className="px-2 py-2 font-semibold">계약서유형</th>
+                <th className="px-2 py-2 font-semibold">계약</th>
+                <th className="px-2 py-2 font-semibold">시간템플릿</th>
+                <th className="px-2 py-2 font-semibold">수당템플릿</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map(({ emp, contract }, i) => (
                 <tr key={emp.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="px-3 py-3 text-muted">{(page - 1) * pageSize + i + 1}</td>
-                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-2 py-2 text-muted">{(page - 1) * pageSize + i + 1}</td>
+                  <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-2 py-2">
                     <button
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                       onClick={() => openView(emp, contract)}
@@ -409,23 +426,23 @@ export default function Contracts() {
                       <Eye size={14} /> 보기
                     </button>
                   </td>
-                  <td className="px-3 py-3 text-ink">{emp.name}</td>
-                  <td className="px-3 py-3 text-muted">{entityName_(emp.businessEntityId)}</td>
-                  <td className="px-3 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-3 py-3 text-muted">{emp.phone || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{emp.nationality || "내국인"}</td>
-                  <td className="px-3 py-3 text-muted">{emp.gender || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
-                  <td className="px-3 py-3 text-muted">{contract?.cycle || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
-                  <td className="px-3 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-3 py-3 text-muted">{emp.shiftType || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{emp.employmentType || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{emp.team || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{emp.position || "-"}</td>
-                  <td className="px-3 py-3 text-muted">계약 / {emp.resignTemplateName || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
-                  <td className="px-3 py-3">
+                  <td className="px-2 py-2 text-ink">{emp.name}</td>
+                  <td className="px-2 py-2 text-muted">{entityName_(emp.businessEntityId)}</td>
+                  <td className="px-2 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-2 py-2 text-muted">{emp.phone || "-"}</td>
+                  <td className="px-2 py-2 text-muted">{emp.nationality || "내국인"}</td>
+                  <td className="px-2 py-2 text-muted">{emp.gender || "-"}</td>
+                  <td className="px-2 py-2 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
+                  <td className="px-2 py-2 text-muted">{contract?.cycle || "-"}</td>
+                  <td className="px-2 py-2 text-muted">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
+                  <td className="px-2 py-2 text-muted">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-2 py-2 text-muted">{emp.shiftType || "-"}</td>
+                  <td className="px-2 py-2 text-muted">{emp.employmentType || "-"}</td>
+                  <td className="px-2 py-2 text-muted">{emp.team || "-"}</td>
+                  <td className="px-2 py-2 text-muted">{emp.position || "-"}</td>
+                  <td className="px-2 py-2 text-muted">계약 / {emp.resignTemplateName || "-"}</td>
+                  <td className="px-2 py-2 text-muted">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
+                  <td className="px-2 py-2">
                     {contract?.status === "signed" ? (
                       <Badge tone="success">서명완료</Badge>
                     ) : contract ? (
@@ -434,8 +451,8 @@ export default function Contracts() {
                       <Badge tone="muted">미발송</Badge>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
-                  <td className="px-3 py-3 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
+                  <td className="px-2 py-2 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
+                  <td className="px-2 py-2 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
                 </tr>
               ))}
               {pageRows.length === 0 && (
@@ -481,6 +498,7 @@ export default function Contracts() {
           <p className="text-sm text-ink">{signTarget?.emp?.name}님의 근로계약서에 서명해주세요.</p>
           <p className="mb-1 text-xs text-muted">여기에 서명을 그려주세요</p>
           <SignaturePad ref={padRef} />
+          {signError && <p className="text-xs text-danger">{signError}</p>}
         </div>
       </Modal>
 
