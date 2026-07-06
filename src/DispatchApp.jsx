@@ -17331,7 +17331,7 @@ const head = isDark
   );
 
  return (
-<div className="px-3 pt-1 w-full" style={{overflowX: "hidden", overflowY: "unset"}}>
+<div className="px-3 pt-1 w-full" style={{overflowX: "visible", overflowY: "unset"}}>
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer
@@ -17519,7 +17519,7 @@ const head = isDark
 </div>
 
 {/* ======================== 검색+필터+버튼 한 줄 ======================== */}
-<div className="flex items-center gap-1 flex-nowrap mb-2 pb-0.5">
+<div className="flex items-center gap-1 flex-wrap mb-2 pb-0.5">
   {/* 검색창 */}
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
     <input
@@ -17554,7 +17554,7 @@ const head = isDark
     {statusSummary.업체미전달>0 && <option value="UNDELIVERED">미전달 {statusSummary.업체미전달}</option>}
   </select>
 
-  <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+  <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
     <button onClick={async(e)=>{
   e.preventDefault();
   e.stopPropagation();
@@ -25617,7 +25617,7 @@ const save = {
   if (!loaded) return null;
 
 return (
-    <div className="p-3" style={{overflowX: "hidden"}}>
+    <div className="p-3">
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer
@@ -25837,7 +25837,7 @@ return (
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
-      <div className="flex items-center gap-1 flex-nowrap mb-2 w-full pb-0.5">
+      <div className="flex items-center gap-1 flex-wrap mb-2 w-full pb-0.5">
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
@@ -25880,7 +25880,7 @@ return (
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
 
         {/* 우측 버튼들 */}
-        <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+        <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
           <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
