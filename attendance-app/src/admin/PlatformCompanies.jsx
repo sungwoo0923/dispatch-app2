@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { KeyRound, Check, X, UserX, RotateCcw, Copy } from "lucide-react";
+import { KeyRound, Check, X, UserX, RotateCcw, Copy, LogIn } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Panel from "../components/Panel";
@@ -32,7 +32,8 @@ function formatDate(ts) {
 // 일반 관리자는 화면은 렌더링되지만 목록 쿼리 자체가 비어 온다 — 아래 Navigate 가드는
 // 그 전에 UI 노출 자체를 막기 위한 추가 방어선이다.
 export default function PlatformCompanies() {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, setActiveCompanyId } = useAuth();
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [filter, setFilter] = useState("pending");
   const [copiedId, setCopiedId] = useState(null);
@@ -62,6 +63,11 @@ export default function PlatformCompanies() {
     navigator.clipboard?.writeText(code);
     setCopiedId(code);
     setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  const switchTo = (companyId) => {
+    setActiveCompanyId(companyId);
+    navigate("/");
   };
 
   return (
@@ -128,13 +134,18 @@ export default function PlatformCompanies() {
                       </>
                     )}
                     {c.status === "approved" && (
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => setStatus(c.id, "suspended", `'${c.name}'을(를) 탈퇴(이용정지) 처리하시겠습니까? 소속 관리자는 즉시 로그인이 제한됩니다.`)}
-                      >
-                        <UserX size={14} /> 탈퇴
-                      </Button>
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => switchTo(c.id)}>
+                          <LogIn size={14} /> 전환
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => setStatus(c.id, "suspended", `'${c.name}'을(를) 탈퇴(이용정지) 처리하시겠습니까? 소속 관리자는 즉시 로그인이 제한됩니다.`)}
+                        >
+                          <UserX size={14} /> 탈퇴
+                        </Button>
+                      </>
                     )}
                     {(c.status === "suspended" || c.status === "rejected") && (
                       <Button size="sm" variant="outline" onClick={() => setStatus(c.id, "approved")}>

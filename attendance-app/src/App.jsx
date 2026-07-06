@@ -8,6 +8,7 @@ import PendingApprovalPage from "./auth/PendingApprovalPage";
 import CompanyApprovalPendingPage from "./auth/CompanyApprovalPendingPage";
 import AdminLayout from "./admin/AdminLayout";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
+import SuperAdminCompanyPicker from "./admin/SuperAdminCompanyPicker";
 import Dashboard from "./admin/Dashboard";
 import EmployeeList from "./admin/EmployeeList";
 import EmployeeStatus from "./admin/EmployeeStatus";
@@ -55,7 +56,7 @@ import ContractDetail from "./employee/ContractDetail";
 import DocumentsPage from "./employee/DocumentsPage";
 import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
 import BoardPage from "./employee/BoardPage";
-import { PENDING_INVITE_KEY } from "./constants/session";
+import { PENDING_INVITE_KEY, SUPER_ADMIN_PICK_COMPANY_KEY } from "./constants/session";
 
 function LoadingScreen() {
   return (
@@ -95,6 +96,10 @@ export default function App() {
           }}
         />
       );
+    }
+
+    if (isSuperAdmin && sessionStorage.getItem(SUPER_ADMIN_PICK_COMPANY_KEY)) {
+      return <SuperAdminCompanyPicker />;
     }
 
     if (companyLoading) return <LoadingScreen />;
