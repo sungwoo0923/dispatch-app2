@@ -2471,7 +2471,7 @@ return (
       )}
       <div className="w-full overflow-x-hidden">
       {/* ===== 통합 헤더 네비 ===== */}
-      <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6" style={{width:"100vw",left:0}}>
+      <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6 w-full">
 
         {/* 상단바: 로고 + 메뉴 + 유저 */}
         <div className="flex items-center px-6 h-14">
@@ -17656,8 +17656,8 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`} style={{width: "100%"}}>
-  <table className="w-full min-w-max table-auto">
+      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+  <table className="min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
               {[
@@ -25919,9 +25919,9 @@ return (
       )}
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="w-full rounded-xl shadow border border-gray-200 overflow-x-auto">
+      <div className="rounded-xl shadow border border-gray-200 overflow-x-auto">
 
-  <table className="w-full min-w-max table-auto">
+  <table className="min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
             <tr>
               {[
