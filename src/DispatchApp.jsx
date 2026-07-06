@@ -2469,7 +2469,7 @@ return (
           </div>
         </div>
       )}
-      <div className="min-w-max">
+      <div className="w-full overflow-x-hidden">
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6" style={{width:"100vw",left:0}}>
 
@@ -17331,7 +17331,7 @@ const head = isDark
   );
 
  return (
-<div className="px-3 pt-1 w-full" style={{overflowX: "visible", overflowY: "unset"}}>
+<div className="px-3 pt-1 w-full" style={{overflowY: "unset"}}>
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer
@@ -25617,7 +25617,7 @@ const save = {
   if (!loaded) return null;
 
 return (
-    <div className="p-3">
+    <div className="p-3 w-full">
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer

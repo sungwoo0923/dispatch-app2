@@ -38,7 +38,6 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   overscroll-behavior: none;
-  overflow-x: hidden;
 }
 
 /* 모바일 스크롤 관성 (iOS momentum scroll) */
