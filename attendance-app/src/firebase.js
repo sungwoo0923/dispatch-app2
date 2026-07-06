@@ -1,10 +1,5 @@
 import { initializeApp } from "firebase/app";
-import {
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-  connectFirestoreEmulator,
-} from "firebase/firestore";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 
@@ -40,15 +35,14 @@ export const app = initializeApp(
     : firebaseConfig
 );
 
-// persistentSingleTabManager requires exclusive ownership of the IndexedDB
-// persistence lease across tabs; a stale/backgrounded tab (very common on
-// mobile Safari, which keeps tabs alive rather than closing them) can hold
-// that lease forever and leave every other tab's Firestore calls hanging
-// indefinitely with no error. persistentMultipleTabManager shares the cache
-// across tabs instead, so a new tab's reads/writes never block on another.
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-});
+// Previously used initializeFirestore() with a persistent (IndexedDB)
+// multi-tab cache to avoid a single-tab-manager lease hang on mobile
+// Safari. In practice that persistent cache itself intermittently throws
+// "FIRESTORE INTERNAL ASSERTION FAILED: Unexpected state" after backgrounding
+// a tab and returning to it (a known firebase-js-sdk issue) — worse than the
+// hang it was meant to prevent, and this app has no offline requirement to
+// justify the tradeoff. Plain in-memory cache avoids both failure modes.
+export const db = getFirestore(app);
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);
