@@ -17331,7 +17331,7 @@ const head = isDark
   );
 
  return (
-<div className="px-3 pt-1 w-full" style={{overflowX: "visible", overflowY: "unset"}}>
+<div className="px-3 pt-1 w-full" style={{overflowX: "hidden", overflowY: "unset"}}>
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer
@@ -17519,7 +17519,7 @@ const head = isDark
 </div>
 
 {/* ======================== 검색+필터+버튼 한 줄 ======================== */}
-<div className="flex items-center gap-1 flex-nowrap overflow-x-auto mb-2 pb-0.5">
+<div className="flex items-center gap-1 flex-nowrap mb-2 pb-0.5">
   {/* 검색창 */}
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
     <input
@@ -17656,7 +17656,7 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`} style={{width: "100%"}}>
   <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
@@ -25617,7 +25617,7 @@ const save = {
   if (!loaded) return null;
 
 return (
-    <div className="p-3">
+    <div className="p-3" style={{overflowX: "hidden"}}>
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer
@@ -25837,7 +25837,7 @@ return (
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
-      <div className="flex items-center gap-1 flex-nowrap overflow-x-auto mb-2 w-full pb-0.5">
+      <div className="flex items-center gap-1 flex-nowrap mb-2 w-full pb-0.5">
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
@@ -25919,7 +25919,7 @@ return (
       )}
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="w-full rounded-xl shadow border border-gray-200">
+      <div className="w-full rounded-xl shadow border border-gray-200 overflow-x-auto">
 
   <table className="w-full min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
