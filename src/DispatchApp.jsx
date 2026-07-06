@@ -13769,6 +13769,60 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
   );
 }
 
+// 가로로 긴 테이블 하단에, 세로 스크롤 중에도 화면 하단에 붙어 있는 가로 스크롤바.
+// 테이블이 몇 화면씩 길어져도 맨 아래까지 내려가지 않고 바로 좌우 이동할 수 있게 해준다.
+function StickyHScrollbar({ targetRef }) {
+  const barRef = React.useRef(null);
+  const syncingRef = React.useRef(false);
+  const [sizes, setSizes] = React.useState({ scrollWidth: 0, clientWidth: 0 });
+
+  React.useEffect(() => {
+    const el = targetRef.current;
+    if (!el) return;
+    const update = () => setSizes({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    const mo = new MutationObserver(update);
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    window.addEventListener("resize", update);
+
+    const onTableScroll = () => {
+      if (syncingRef.current) { syncingRef.current = false; return; }
+      if (barRef.current) { syncingRef.current = true; barRef.current.scrollLeft = el.scrollLeft; }
+    };
+    el.addEventListener("scroll", onTableScroll);
+
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", update);
+      el.removeEventListener("scroll", onTableScroll);
+    };
+  }, [targetRef]);
+
+  const onBarScroll = () => {
+    if (syncingRef.current) { syncingRef.current = false; return; }
+    if (targetRef.current && barRef.current) {
+      syncingRef.current = true;
+      targetRef.current.scrollLeft = barRef.current.scrollLeft;
+    }
+  };
+
+  if (sizes.scrollWidth <= sizes.clientWidth + 1) return null;
+
+  return (
+    <div
+      ref={barRef}
+      onScroll={onBarScroll}
+      className="sticky bottom-0 z-20 overflow-x-auto overflow-y-hidden"
+      style={{ height: 14 }}
+    >
+      <div style={{ width: sizes.scrollWidth, height: 1 }} />
+    </div>
+  );
+}
+
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -13788,6 +13842,7 @@ function RealtimeStatus({
   isViewer = false,
   setCargoAddPopup = () => {},
 }) {
+const rtTableWrapRef = React.useRef(null);
 const mergedClients = React.useMemo(() => {
   const map = new Map();
   (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
@@ -17656,8 +17711,9 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-  <table className="min-w-max table-auto">
+      <div>
+      <div ref={rtTableWrapRef} className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+  <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
               {[
@@ -17699,6 +17755,13 @@ const head = isDark
           </thead>
 
           <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={29} className="py-16 text-center text-[13px] text-gray-400">
+                  조회된 결과가 없습니다.
+                </td>
+              </tr>
+            )}
             {filtered.map((r, idx) => {
               const sale = toInt(edited[r._id]?.청구운임 ?? r.청구운임);
               const drv = toInt(edited[r._id]?.기사운임 ?? r.기사운임);
@@ -18021,6 +18084,8 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
             })}
           </tbody>
         </table>
+      </div>
+      <StickyHScrollbar targetRef={rtTableWrapRef} />
       </div>
 {/* ================= 임박 미배차 팝업 ================= */}
 {menu === "실시간배차현황" && urgentPopup.length > 0 && (
@@ -22801,6 +22866,7 @@ function DispatchStatus({
   isViewer = false,
   setCargoAddPopup = () => {},
 }) {
+const dsTableWrapRef = React.useRef(null);
 const [companyBankData, setCompanyBankData] = React.useState(null);
 React.useEffect(() => {
   const cname = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
@@ -25919,9 +25985,10 @@ return (
       )}
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="rounded-xl shadow border border-gray-200 overflow-x-auto">
+      <div>
+      <div ref={dsTableWrapRef} className="rounded-xl shadow border border-gray-200 overflow-x-auto">
 
-  <table className="min-w-max table-auto">
+  <table className="w-full min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
             <tr>
               {[
@@ -25945,6 +26012,13 @@ return (
           </thead>
 
           <tbody>
+            {pageRows.length === 0 && (
+              <tr>
+                <td colSpan={29} className="py-16 text-center text-[13px] text-gray-400">
+                  조회된 결과가 없습니다.
+                </td>
+              </tr>
+            )}
             {pageRows.map((r, i) => {
   const id = getId(r);
   const row = edited[id] ? { ...r, ...edited[id] } : r;
@@ -26324,6 +26398,8 @@ return (
             })}
           </tbody>
         </table>
+      </div>
+      <StickyHScrollbar targetRef={dsTableWrapRef} />
       </div>
 
       {/* ---------------------------------------------------------
