@@ -327,29 +327,40 @@ function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessE
 
   const toggleDay = (day) => setForm((f) => ({ ...f, workDays: { ...f.workDays, [day]: !f.workDays[day] } }));
 
+  // 여러 근무조(예: "주간조, 야간조" 또는 줄바꿈으로 구분)를 같은 근무조건으로
+  // 한 번에 등록할 수 있게 이름만 쉼표/줄바꿈으로 나눠 템플릿마다 별도 문서로 저장한다.
+  const names = form.name
+    .split(/[,\n]/)
+    .map((n) => n.trim())
+    .filter(Boolean);
+
   const save = async () => {
-    if (!form.name.trim()) return;
-    if (!(await confirm("저장하시겠습니까?", "save"))) return;
+    if (names.length === 0) return;
+    if (!(await confirm(names.length > 1 ? `${names.length}개의 템플릿을 저장하시겠습니까?` : "저장하시겠습니까?", "save"))) return;
     setError("");
     try {
       const weekdays = Object.fromEntries(
         WEEKDAYS.map((w) => [w, { holiday: !form.workDays[w], work: !!form.workDays[w], start: form.baseStartTime, end: form.baseEndTime }])
       );
-      await addDoc(collection(db, "shiftTemplates"), {
-        companyId,
-        businessEntityId,
-        name: form.name.trim(),
-        memo: "",
-        workTimeType: form.workTimeType,
-        visibility: "보임",
-        baseStartTime: form.baseStartTime,
-        baseEndTime: form.baseEndTime,
-        weekdays,
-        breaks: [{ from: form.breakFrom, to: form.breakTo }],
-        overtimeRules: [{ from: Number(form.overtimeFrom) || 0, to: Number(form.overtimeTo) || 0 }],
-        lateRules: form.lateFrom && form.lateTo ? [{ from: Number(form.lateFrom), to: Number(form.lateTo) }] : [],
-        createdAt: serverTimestamp(),
-      });
+      await Promise.all(
+        names.map((name) =>
+          addDoc(collection(db, "shiftTemplates"), {
+            companyId,
+            businessEntityId,
+            name,
+            memo: "",
+            workTimeType: form.workTimeType,
+            visibility: "보임",
+            baseStartTime: form.baseStartTime,
+            baseEndTime: form.baseEndTime,
+            weekdays,
+            breaks: [{ from: form.breakFrom, to: form.breakTo }],
+            overtimeRules: [{ from: Number(form.overtimeFrom) || 0, to: Number(form.overtimeTo) || 0 }],
+            lateRules: form.lateFrom && form.lateTo ? [{ from: Number(form.lateFrom), to: Number(form.lateTo) }] : [],
+            createdAt: serverTimestamp(),
+          })
+        )
+      );
       onClose();
     } catch (err) {
       setError(`저장에 실패했습니다: ${err.code || err.message}`);
@@ -373,13 +384,17 @@ function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessE
     >
       <div className="space-y-3.5">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명 *</span>
-          <input
+          <span className="mb-1.5 block text-xs font-medium text-muted">
+            템플릿명 * <span className="font-normal text-muted">(쉼표 또는 줄바꿈으로 구분하면 여러 개를 한 번에 등록합니다)</span>
+          </span>
+          <textarea
+            rows={2}
             className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            placeholder="예: 주간성형실"
+            placeholder="예: 주간조, 야간조"
           />
+          {names.length > 1 && <p className="mt-1 text-xs text-primary">{names.length}개 템플릿이 같은 조건으로 등록됩니다: {names.join(", ")}</p>}
         </label>
 
         <div>
