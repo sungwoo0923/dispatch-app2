@@ -1,6 +1,6 @@
 // 신규 회사 개설 시 seedOrgDefaults()로 자동 생성되는 기본 부서/직급 — 관리자가
 // 조직 > 부서관리/직급관리에서 자유롭게 추가/삭제할 수 있는 시작점일 뿐이다.
-export const POSITION_OPTIONS = ["사원", "주임", "대리", "과장", "차장", "부장", "이사", "팀장", "반장", "조장", "인턴"];
+export const POSITION_OPTIONS = ["대표", "사원", "주임", "대리", "과장", "차장", "부장", "이사", "팀장", "반장", "조장", "인턴"];
 export const EMPLOYMENT_STATUS_OPTIONS = ["재직", "휴직", "퇴사"];
 export const TEAM_OPTIONS = ["운영팀", "물류팀", "현장관리팀", "총무/인사팀", "안전팀", "품질관리팀", "구매팀", "생산팀"];
 export const NATIONALITY_OPTIONS = ["내국인", "외국인"];

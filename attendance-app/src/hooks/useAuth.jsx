@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { SUPER_ADMIN_EMAIL } from "../constants/superAdmin";
 import { SUPER_ADMIN_ACTIVE_COMPANY_KEY } from "../constants/session";
@@ -31,6 +31,10 @@ export function AuthProvider({ children }) {
       if (!u) {
         setProfile(null);
         setLoading(false);
+      } else {
+        // 관리자 목록의 "최종접속일시" 표시용 — 실패해도(문서가 아직 없는 가입
+        // 직후 등) 로그인 자체를 막을 이유가 없으니 fire-and-forget으로 둔다.
+        updateDoc(doc(db, "users", u.uid), { lastLoginAt: serverTimestamp() }).catch(() => {});
       }
     });
     return () => unsubAuth();
