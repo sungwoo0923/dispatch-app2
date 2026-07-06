@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   query,
@@ -12,7 +12,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -28,22 +28,31 @@ import {
   SHIFT_TYPE_OPTIONS,
   PAY_TYPE_OPTIONS,
   COUNTRY_OPTIONS,
-  VISA_STATUS_OPTIONS,
+  VISA_STATUS_GROUPS,
+  BANK_OPTIONS,
 } from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
-import { formatPhoneNumber, formatResidentNumberFront } from "../utils/phoneAuth";
+import { formatPhoneNumber, formatResidentNumber } from "../utils/phoneAuth";
 import { toDateKey, formatDate } from "../utils/dateUtils";
-import { DOCUMENT_TYPE_OPTIONS, uploadPendingEmployeeDocument } from "../utils/documents";
+import {
+  DOCUMENT_TYPE_OPTIONS,
+  uploadPendingEmployeeDocument,
+  uploadPendingEmployeePhoto,
+  uploadEmployeeDocument,
+  uploadEmployeePhoto,
+} from "../utils/documents";
+import { openAddressSearch } from "../utils/daumPostcode";
 
 const REG_TABS = ["시간템플릿", "수당템플릿", "계약", "계약종료", "첨부서류", "기본 불러오기"];
 
 const EMPTY_REGISTER_FORM = {
   businessEntityId: "",
+  photoUrl: "",
   name: "",
   phone: "",
   gender: "남",
   nationality: "내국인",
-  country: "",
+  country: "대한민국",
   visaStatus: "",
   employeeCode: "",
   workSiteId: "",
@@ -78,6 +87,11 @@ const EMPTY_REGISTER_FORM = {
   note: "",
 };
 
+// 편집 모드에서 users/{uid}로 저장할 필드만 골라내는 데 쓰는 화이트리스트 —
+// approved/role/companyId/employmentStatus 등 이 폼이 다루지 않는 필드는
+// registerForm에 잔류하더라도 절대 덮어쓰지 않기 위함이다.
+const REGISTER_FIELD_KEYS = Object.keys(EMPTY_REGISTER_FORM);
+
 function SectionHeader({ children }) {
   return (
     <div className="mb-3 mt-5 flex items-center gap-2 first:mt-0">
@@ -106,6 +120,15 @@ export default function EmployeeList() {
   const [registerForm, setRegisterForm] = useState(EMPTY_REGISTER_FORM);
   const [issuedCode, setIssuedCode] = useState("");
   const [manualCode, setManualCode] = useState("");
+  const [editingUid, setEditingUid] = useState(null);
+
+  // 등록화면의 사진: 아직 uid가 없는 신규 등록 단계라 다른 첨부서류와 마찬가지로
+  // 로컬에만 들고 있다가 최종 등록 시점에 업로드한다. photoSaved는 "등록" 버튼(파일
+  // 선택)과 "저장" 버튼(선택 확정) 두 단계를 오가는 표시용 플래그일 뿐, 실제 파일
+  // 업로드는 submitRegister에서 한 번에 처리된다.
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
+  const [photoSaved, setPhotoSaved] = useState(false);
 
   const [filters, setFilters] = useState({ siteId: "", vendorId: "", status: "", search: "" });
   const [selected, setSelected] = useState(() => new Set());
@@ -263,6 +286,10 @@ export default function EmployeeList() {
     setRegTab("시간템플릿");
     setStagedDocs([]);
     setLoadFromId("");
+    setEditingUid(null);
+    setPhotoFile(null);
+    setPhotoPreviewUrl("");
+    setPhotoSaved(false);
   };
 
   // 신규 등록 시작 시 사원코드를 자동으로 채워둔다 (연도 + 현재 인원수 기준 일련번호).
@@ -272,14 +299,62 @@ export default function EmployeeList() {
     setRegisterOpen(true);
   };
 
+  // 근로자 목록 행 더블클릭 시 이미 계정이 있는 근로자(users/{uid})를 같은
+  // SidePanel/폼으로 불러와 수정할 수 있게 한다 — 가입코드 발급 단계는 건너뛴다.
+  const openEditEmployee = (emp) => {
+    setEditingUid(emp.id);
+    setRegisterForm({ ...EMPTY_REGISTER_FORM, ...emp });
+    setPhotoPreviewUrl(emp.photoUrl || "");
+    setPhotoSaved(!!emp.photoUrl);
+    setRegisterOpen(true);
+  };
+
   const generateManualCode = () => setManualCode(generateInviteCode(7));
+
+  const photoInputRef = useRef(null);
+  const handlePhotoFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+    setPhotoSaved(false);
+    e.target.value = "";
+  };
+  const handlePhotoButtonClick = () => {
+    if (photoFile && !photoSaved) setPhotoSaved(true);
+    else photoInputRef.current?.click();
+  };
+
+  const searchRegisterAddress = async () => {
+    const result = await openAddressSearch();
+    if (result) setRegisterForm((f) => ({ ...f, address: result.address }));
+  };
 
   const submitRegister = async (e) => {
     e.preventDefault();
+
+    if (editingUid) {
+      const payload = Object.fromEntries(REGISTER_FIELD_KEYS.map((k) => [k, registerForm[k]]));
+      if (photoFile) {
+        payload.photoUrl = await uploadEmployeePhoto({ companyId: profile.companyId, uid: editingUid, file: photoFile });
+      }
+      await updateDoc(doc(db, "users", editingUid), payload);
+      for (const { docType, file } of stagedDocs) {
+        await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
+      }
+      closeRegisterModal();
+      return;
+    }
+
     const code = manualCode || generateInviteCode(7);
+    let photoUrl = "";
+    if (photoFile) {
+      photoUrl = await uploadPendingEmployeePhoto({ companyId: profile.companyId, pendingCode: code, file: photoFile });
+    }
     await setDoc(doc(db, "pendingEmployees", code), {
       companyId: profile.companyId,
       ...registerForm,
+      photoUrl,
       employmentStatus: "재직",
       createdAt: serverTimestamp(),
     });
@@ -575,8 +650,13 @@ export default function EmployeeList() {
             </thead>
             <tbody>
               {filteredEmployees.map((emp, i) => (
-                <tr key={emp.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3">
+                <tr
+                  key={emp.id}
+                  onDoubleClick={() => openEditEmployee(emp)}
+                  title="더블클릭하여 수정"
+                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
+                >
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
                   </td>
                   <td className="px-4 py-3 text-muted">{i + 1}</td>
@@ -584,7 +664,7 @@ export default function EmployeeList() {
                   <td className="px-4 py-3 text-muted">{emp.phone}</td>
                   <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
                   <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
                       value={emp.employmentType || ""}
@@ -596,7 +676,7 @@ export default function EmployeeList() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
                       value={emp.team || ""}
@@ -610,7 +690,7 @@ export default function EmployeeList() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
                       value={emp.position || ""}
@@ -624,7 +704,7 @@ export default function EmployeeList() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
                       value={emp.employmentStatus || "재직"}
@@ -635,7 +715,7 @@ export default function EmployeeList() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
                       value={emp.workSiteId || ""}
@@ -650,7 +730,7 @@ export default function EmployeeList() {
                     </select>
                   </td>
                   <td className="px-4 py-3 text-muted">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     {emp.approved ? (
                       <Badge tone="success">
                         <Check size={12} /> 승인됨
@@ -913,7 +993,7 @@ export default function EmployeeList() {
       <SidePanel
         open={registerOpen}
         onClose={closeRegisterModal}
-        title={`${companyName || "회사"} · 근로자등록 > 상세`}
+        title={`${companyName || "회사"} · 근로자등록 > ${editingUid ? "수정" : "상세"}`}
         footer={
           issuedCode ? (
             <Button onClick={closeRegisterModal}>확인</Button>
@@ -922,7 +1002,7 @@ export default function EmployeeList() {
               <Button variant="outline" onClick={closeRegisterModal}>
                 취소
               </Button>
-              <Button onClick={submitRegister}>근로자등록</Button>
+              <Button onClick={submitRegister}>{editingUid ? "저장" : "근로자등록"}</Button>
             </>
           )
         }
@@ -947,6 +1027,22 @@ export default function EmployeeList() {
           <form onSubmit={submitRegister} className="space-y-5">
             <Card className="p-5">
               <SectionHeader>기본정보</SectionHeader>
+
+              <div className="mb-4 flex items-center gap-3">
+                <span className="w-14 shrink-0 text-xs font-medium text-muted">사진</span>
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                  {photoPreviewUrl ? (
+                    <img src={photoPreviewUrl} alt="사진" className="h-full w-full object-cover" />
+                  ) : (
+                    <Camera size={22} className="text-muted" />
+                  )}
+                </div>
+                <input type="file" accept="image/*" ref={photoInputRef} className="hidden" onChange={handlePhotoFileChange} />
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={handlePhotoButtonClick}>
+                  {photoFile && !photoSaved ? "저장" : "등록"}
+                </Button>
+              </div>
+
               <div className="grid grid-cols-4 gap-3">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
@@ -1003,7 +1099,14 @@ export default function EmployeeList() {
                           type="radio"
                           name="nationality"
                           checked={registerForm.nationality === n}
-                          onChange={() => setRegisterForm((f) => ({ ...f, nationality: n }))}
+                          onChange={() =>
+                            setRegisterForm((f) => ({
+                              ...f,
+                              nationality: n,
+                              country: n === "내국인" ? "대한민국" : "",
+                              visaStatus: n === "내국인" ? "" : f.visaStatus,
+                            }))
+                          }
                         />
                         {n}
                       </label>
@@ -1033,8 +1136,14 @@ export default function EmployeeList() {
                     onChange={(e) => setRegisterForm((f) => ({ ...f, visaStatus: e.target.value }))}
                   >
                     <option value="">체류자격을 선택하세요.</option>
-                    {VISA_STATUS_OPTIONS.map((v) => (
-                      <option key={v}>{v}</option>
+                    {VISA_STATUS_GROUPS.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.options.map((o) => (
+                          <option key={o.code} value={o.code}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </label>
@@ -1055,23 +1164,27 @@ export default function EmployeeList() {
                   </div>
                 </div>
 
-                <label className="col-span-2 block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">가입코드</span>
-                  <div className="flex gap-2">
-                    <input
-                      disabled
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted"
-                      value={manualCode}
-                      placeholder="생성 버튼을 눌러 미리 발급하거나, 등록시 자동생성"
-                    />
-                    <Button type="button" variant="outline" onClick={generateManualCode}>
-                      생성
-                    </Button>
-                  </div>
-                </label>
-                <p className="col-span-2 flex items-center text-[11px] text-muted">
-                  근로자에게 가입코드를 알려주어야 모바일앱에서 회원가입 및 개인정보 등록이 가능합니다.
-                </p>
+                {!editingUid && (
+                  <>
+                    <label className="col-span-4 block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">가입코드</span>
+                      <div className="flex flex-nowrap gap-2">
+                        <input
+                          disabled
+                          className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted"
+                          value={manualCode}
+                          placeholder="생성 버튼을 눌러 미리 발급하거나, 등록시 자동생성"
+                        />
+                        <Button type="button" variant="outline" className="shrink-0" onClick={generateManualCode}>
+                          생성
+                        </Button>
+                      </div>
+                    </label>
+                    <p className="col-span-4 flex items-center text-[11px] text-muted">
+                      근로자에게 가입코드를 알려주어야 모바일앱에서 회원가입 및 개인정보 등록이 가능합니다.
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="mt-4 rounded-xl bg-slate-50 p-4">
@@ -1099,28 +1212,34 @@ export default function EmployeeList() {
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
                       value={registerForm.residentNumberFront}
                       onChange={(e) =>
-                        setRegisterForm((f) => ({ ...f, residentNumberFront: formatResidentNumberFront(e.target.value) }))
+                        setRegisterForm((f) => ({ ...f, residentNumberFront: formatResidentNumber(e.target.value) }))
                       }
-                      placeholder="901010-1 (뒷자리 미저장)"
-                      maxLength={8}
+                      placeholder="주민등록번호 또는 외국인등록번호"
+                      maxLength={14}
                     />
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-medium text-muted">주소</span>
                     <input
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
+                      readOnly
+                      onClick={searchRegisterAddress}
+                      className="w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
                       value={registerForm.address}
-                      onChange={(e) => setRegisterForm((f) => ({ ...f, address: e.target.value }))}
+                      placeholder="클릭해서 주소 검색"
                     />
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-medium text-muted">급여은행</span>
-                    <input
+                    <select
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
                       value={registerForm.bankName}
                       onChange={(e) => setRegisterForm((f) => ({ ...f, bankName: e.target.value }))}
-                      placeholder="예: 국민은행"
-                    />
+                    >
+                      <option value="">선택</option>
+                      {BANK_OPTIONS.map((b) => (
+                        <option key={b}>{b}</option>
+                      ))}
+                    </select>
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-medium text-muted">급여계좌</span>

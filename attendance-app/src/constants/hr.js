@@ -1,6 +1,8 @@
-export const POSITION_OPTIONS = ["사원", "주임", "대리", "과장", "차장", "부장", "팀장", "인턴"];
+// 신규 회사 개설 시 seedOrgDefaults()로 자동 생성되는 기본 부서/직급 — 관리자가
+// 조직 > 부서관리/직급관리에서 자유롭게 추가/삭제할 수 있는 시작점일 뿐이다.
+export const POSITION_OPTIONS = ["사원", "주임", "대리", "과장", "차장", "부장", "이사", "팀장", "반장", "조장", "인턴"];
 export const EMPLOYMENT_STATUS_OPTIONS = ["재직", "휴직", "퇴사"];
-export const TEAM_OPTIONS = ["운영팀", "물류팀", "현장관리팀", "총무/인사팀", "안전팀"];
+export const TEAM_OPTIONS = ["운영팀", "물류팀", "현장관리팀", "총무/인사팀", "안전팀", "품질관리팀", "구매팀", "생산팀"];
 export const NATIONALITY_OPTIONS = ["내국인", "외국인"];
 // 고용구분: distinguishes pay/scheduling treatment, common in staffing/dispatch HR.
 export const EMPLOYMENT_TYPE_OPTIONS = ["상용직", "일용직", "단기직", "파트타임"];
@@ -8,8 +10,11 @@ export const EMPLOYMENT_TYPE_OPTIONS = ["상용직", "일용직", "단기직", "
 export const SHIFT_TYPE_OPTIONS = ["주간", "야간"];
 // 지급구분: settlement cadence, drives which 급여형태 tab a payroll defaults into.
 export const PAY_TYPE_OPTIONS = ["일급", "주급", "월급"];
-// 국가구분: 고용허가제(EPS) 송출 16개국을 상단에 두고, 그 외 국가는 가나다순으로 배치.
+// 국가구분: 내국인 선택 시 자동으로 "대한민국"이 지정되므로 항상 옵션에 포함해야
+// select 값이 빈 문자열로 표시되지 않는다. 이어서 고용허가제(EPS) 송출 16개국을
+// 상단에 두고, 그 외 국가는 가나다순으로 배치.
 export const COUNTRY_OPTIONS = [
+  "대한민국",
   "필리핀", "몽골", "스리랑카", "베트남", "태국", "인도네시아", "미얀마", "캄보디아",
   "중국", "우즈베키스탄", "파키스탄", "방글라데시", "키르기스스탄", "네팔", "동티모르", "라오스",
   "가나", "가봉", "가이아나", "감비아", "그레나다", "그리스", "기니", "기니비사우",
@@ -31,15 +36,91 @@ export const COUNTRY_OPTIONS = [
   "기타",
 ];
 
-// 체류자격코드: 법무부(출입국관리법 시행령)상 체류자격 구분 전체.
-export const VISA_STATUS_OPTIONS = [
-  "A-1", "A-2", "A-3",
-  "B-1", "B-2",
-  "C-1", "C-3", "C-4",
-  "D-1", "D-2", "D-3", "D-4", "D-5", "D-6", "D-7", "D-8", "D-9", "D-10",
-  "E-1", "E-2", "E-3", "E-4", "E-5", "E-6", "E-7", "E-8", "E-9", "E-10",
-  "F-1", "F-2", "F-3", "F-4", "F-5", "F-6",
-  "G-1",
-  "H-1", "H-2",
-  "기타",
+// 체류자격코드: 법무부(출입국관리법 시행령)상 체류자격 구분 전체, 화면에서는
+// 카테고리별 <optgroup>으로 묶어서 보여준다.
+export const VISA_STATUS_GROUPS = [
+  {
+    label: "외교·공무",
+    options: [
+      { code: "A-1", label: "A-1 외교" },
+      { code: "A-2", label: "A-2 공무" },
+      { code: "A-3", label: "A-3 협정" },
+    ],
+  },
+  {
+    label: "사증면제·통과",
+    options: [
+      { code: "B-1", label: "B-1 사증면제" },
+      { code: "B-2", label: "B-2 관광통과" },
+    ],
+  },
+  {
+    label: "방문·단기",
+    options: [
+      { code: "C-1", label: "C-1 일시취재" },
+      { code: "C-3", label: "C-3 단기방문" },
+      { code: "C-4", label: "C-4 단기취업" },
+    ],
+  },
+  {
+    label: "유학·연수·투자",
+    options: [
+      { code: "D-1", label: "D-1 문화예술" },
+      { code: "D-2", label: "D-2 유학" },
+      { code: "D-3", label: "D-3 기술연수" },
+      { code: "D-4", label: "D-4 일반연수" },
+      { code: "D-5", label: "D-5 취재" },
+      { code: "D-6", label: "D-6 종교" },
+      { code: "D-7", label: "D-7 주재" },
+      { code: "D-8", label: "D-8 기업투자" },
+      { code: "D-9", label: "D-9 무역경영" },
+      { code: "D-10", label: "D-10 구직" },
+    ],
+  },
+  {
+    label: "취업·전문인력",
+    options: [
+      { code: "E-1", label: "E-1 교수" },
+      { code: "E-2", label: "E-2 회화지도" },
+      { code: "E-3", label: "E-3 연구" },
+      { code: "E-4", label: "E-4 기술지도" },
+      { code: "E-5", label: "E-5 전문직업" },
+      { code: "E-6", label: "E-6 예술흥행" },
+      { code: "E-7", label: "E-7 특정활동" },
+      { code: "E-8", label: "E-8 계절근로" },
+      { code: "E-9", label: "E-9 비전문취업" },
+      { code: "E-10", label: "E-10 선원취업" },
+    ],
+  },
+  {
+    label: "거주·동포·가족",
+    options: [
+      { code: "F-1", label: "F-1 방문동거" },
+      { code: "F-2", label: "F-2 거주" },
+      { code: "F-3", label: "F-3 동반" },
+      { code: "F-4", label: "F-4 재외동포" },
+      { code: "F-5", label: "F-5 영주" },
+      { code: "F-6", label: "F-6 결혼이민" },
+    ],
+  },
+  {
+    label: "기타·관광취업",
+    options: [
+      { code: "G-1", label: "G-1 기타" },
+      { code: "H-1", label: "H-1 관광취업" },
+      { code: "H-2", label: "H-2 방문취업" },
+      { code: "기타", label: "기타" },
+    ],
+  },
+];
+// 필터/테이블 등 그룹 없이 코드만 나열해야 하는 곳에서 쓰는 평탄화 목록.
+export const VISA_STATUS_OPTIONS = VISA_STATUS_GROUPS.flatMap((g) => g.options.map((o) => o.code));
+
+// 급여은행: 국내 시중·지방·특수은행 + 우체국/새마을금고/신협 등 급여계좌로 흔히 쓰이는 금융기관.
+export const BANK_OPTIONS = [
+  "KB국민은행", "신한은행", "우리은행", "하나은행", "SC제일은행", "한국씨티은행",
+  "NH농협은행", "수협은행", "아이엠뱅크(대구은행)", "부산은행", "광주은행", "전북은행", "경남은행", "제주은행",
+  "IBK기업은행", "KDB산업은행", "한국수출입은행",
+  "케이뱅크", "카카오뱅크", "토스뱅크",
+  "우체국", "새마을금고", "신협", "저축은행",
 ];

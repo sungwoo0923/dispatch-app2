@@ -48,3 +48,22 @@ export async function deleteEmployeeDocument(document) {
   await deleteObject(ref(storage, document.path)).catch(() => {});
   await deleteDoc(doc(db, "documents", document.id));
 }
+
+// 근로자등록 사진: 문서함(documents 컬렉션)과 별개로, 프로필 사진 URL 하나만 필요하므로
+// 업로드 후 다운로드 URL을 그대로 반환한다 (호출부가 pendingEmployees 문서의 photoUrl
+// 필드에 저장). uid가 아직 없는 등록 단계이므로 pendingCode 기준 경로를 쓴다.
+export async function uploadPendingEmployeePhoto({ companyId, pendingCode, file }) {
+  const path = `companies/${companyId}/pending/${pendingCode}/photo_${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}
+
+// Same as above but for an existing employee (already has a uid), used when
+// editing a previously-registered worker's 근로자등록 profile.
+export async function uploadEmployeePhoto({ companyId, uid, file }) {
+  const path = `companies/${companyId}/employees/${uid}/photo_${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}

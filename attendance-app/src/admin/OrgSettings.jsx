@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
-import { Plus, X, Building, KeyRound, Copy } from "lucide-react";
+import { Plus, X, Building, KeyRound, Copy, ChevronLeft, Users } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 
-function EditableList({ title, collectionName, items }) {
+function ManageList({ title, collectionName, items, onBack }) {
   const { profile } = useAuth();
   const [value, setValue] = useState("");
 
@@ -18,34 +18,39 @@ function EditableList({ title, collectionName, items }) {
     setValue("");
   };
 
-  const remove = (id) => deleteDoc(doc(db, collectionName, id));
+  const remove = (id) => {
+    if (!window.confirm("삭제하시겠습니까? 이미 근로자에게 배정된 값이라면 표시가 '-'로 바뀝니다.")) return;
+    deleteDoc(doc(db, collectionName, id));
+  };
 
   return (
-    <Card className="p-5">
-      <p className="mb-3 text-sm font-semibold text-ink">{title}</p>
-      <form onSubmit={add} className="mb-3 flex gap-2">
+    <div>
+      <button onClick={onBack} className="mb-4 flex items-center gap-1 text-xs text-muted hover:text-primary">
+        <ChevronLeft size={14} /> 목록으로
+      </button>
+      <form onSubmit={add} className="mb-4 flex flex-nowrap gap-2">
         <input
-          className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+          className="w-full min-w-0 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="이름 입력 후 추가"
+          placeholder={`${title} 이름 입력 후 추가`}
         />
-        <Button size="sm" type="submit">
+        <Button size="sm" type="submit" className="shrink-0">
           <Plus size={14} /> 추가
         </Button>
       </form>
-      <div className="flex flex-nowrap gap-2 overflow-x-auto">
+      <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
         {items.map((item) => (
-          <span key={item.id} className="flex items-center gap-1.5 rounded-full bg-slate-100 py-1.5 pl-3 pr-2 text-sm text-ink">
+          <div key={item.id} className="flex items-center justify-between px-4 py-2.5 text-sm text-ink">
             {item.name}
             <button onClick={() => remove(item.id)} className="text-muted hover:text-danger">
-              <X size={13} />
+              <X size={14} />
             </button>
-          </span>
+          </div>
         ))}
-        {items.length === 0 && <p className="text-xs text-muted">등록된 항목이 없습니다.</p>}
+        {items.length === 0 && <p className="px-4 py-6 text-center text-xs text-muted">등록된 {title}이(가) 없습니다.</p>}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -54,6 +59,7 @@ export default function OrgSettings() {
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
   const [copied, setCopied] = useState(false);
+  const [mode, setMode] = useState(null); // null | 'dept' | 'pos'
 
   const copyCode = () => {
     if (!company?.id) return;
@@ -80,7 +86,7 @@ export default function OrgSettings() {
     <div className="space-y-6">
       <Panel icon={KeyRound} title="회사 정보">
         <p className="mb-1 text-sm text-ink">{company?.name}</p>
-        <p className="mb-3 text-xs text-muted">관리자 로그인 시 이메일·비밀번호와 함께 아래 회사코드를 입력해야 합니다.</p>
+        <p className="mb-3 text-xs text-muted">최고관리자가 이 회사로 접속할 때 필요한 고유 코드입니다.</p>
         <button
           onClick={copyCode}
           className="inline-flex items-center gap-2 rounded-xl bg-primary-light px-4 py-2.5 font-mono text-sm font-bold text-primary hover:bg-primary/10"
@@ -91,11 +97,20 @@ export default function OrgSettings() {
       </Panel>
 
       <Panel icon={Building} title="부서 · 직급 관리">
-        <p className="mb-4 text-xs text-muted">근로자 등록 시 사용할 부서와 직급 목록입니다.</p>
-        <div className="space-y-4">
-          <EditableList title="부서" collectionName="departments" items={departments} />
-          <EditableList title="직급" collectionName="positions" items={positions} />
-        </div>
+        {!mode ? (
+          <div className="flex flex-nowrap gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => setMode("dept")}>
+              <Building size={16} /> 부서관리 ({departments.length})
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={() => setMode("pos")}>
+              <Users size={16} /> 직급관리 ({positions.length})
+            </Button>
+          </div>
+        ) : mode === "dept" ? (
+          <ManageList title="부서" collectionName="departments" items={departments} onBack={() => setMode(null)} />
+        ) : (
+          <ManageList title="직급" collectionName="positions" items={positions} onBack={() => setMode(null)} />
+        )}
       </Panel>
     </div>
   );

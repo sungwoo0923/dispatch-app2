@@ -20,11 +20,11 @@ export function formatPhoneNumber(value) {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
-// 주민/외국인등록번호 앞자리 입력: 뒷자리는 성별을 나타내는 첫 숫자 한 자리만 저장하고
-// 나머지는 저장하지 않는 정책이므로(개인정보 최소수집), 총 7자리(앞 6 + 뒤 1) 이후는
-// 잘라내고 6자리 뒤에 자동으로 하이픈만 삽입한다.
-export function formatResidentNumberFront(value) {
-  const digits = normalizePhone(value).slice(0, 7);
+// 주민등록번호/외국인등록번호는 둘 다 앞 6자리(생년월일) + 뒤 7자리(성별/등록지 등)
+// 형식이 동일하므로(외국인은 뒷자리 첫 숫자만 5~8로 다름) 하나의 포맷터로 처리한다.
+// 6자리 뒤에 자동으로 하이픈을 삽입하고, 총 13자리에서 자른다.
+export function formatResidentNumber(value) {
+  const digits = normalizePhone(value).slice(0, 13);
   if (digits.length <= 6) return digits;
   return `${digits.slice(0, 6)}-${digits.slice(6)}`;
 }
