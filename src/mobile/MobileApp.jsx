@@ -676,6 +676,36 @@ const getStatus = (o = {}) => {
   const car = String(o.차량번호 || "").trim();
   return car ? "배차완료" : "배차중";
 };
+
+// PC(숫자 ms)와 모바일(Firestore Timestamp) 양쪽에서 기록되는 시각 필드를 모두 ms 숫자로 정규화
+const toMillis = (v) => {
+  if (!v) return 0;
+  if (typeof v === "number") return v;
+  if (typeof v?.toMillis === "function") return v.toMillis();
+  if (typeof v?.seconds === "number") return v.seconds * 1000 + (v.nanoseconds || 0) / 1e6;
+  return 0;
+};
+
+// 등록내역 정렬 기준 시각: 배차완료 건은 "배차완료된 시각", 배차중 건은 "등록된 시각".
+// 이렇게 이벤트 발생 시각을 기준으로 삼아야, 이후 다른 항목을 수정해도(=updatedAt만 바뀜)
+// 목록 순서가 뒤섞이지 않는다.
+const getOrderSortTime = (o = {}) => {
+  if (getStatus(o) === "배차완료") {
+    return (
+      toMillis(o.배차완료일시) ||
+      toMillis(o.updatedAt) ||
+      o._lastModified ||
+      toMillis(o.createdAt) ||
+      0
+    );
+  }
+  return (
+    toMillis(o.createdAt) ||
+    o._lastModified ||
+    toMillis(o.updatedAt) ||
+    0
+  );
+};
 // 긴급 오더 판단 (PC/모바일 공통)
 const isUrgentOrder = (o = {}) => {
   return o.긴급 === true;
@@ -1850,24 +1880,18 @@ if (searchType === "메모")
     // 7) 정렬
     // 🟢 After
 if (statusTab === "전체") {
-  // 전체 = 배차중 그룹 먼저, 그룹 내 updatedAt/createdAt 최신순
+  // 전체 = 배차중 그룹 먼저(등록순), 배차완료 그룹 나중(배차완료된 순)
   base.sort((a, b) => {
     const aEmpty = !String(a.차량번호 || "").trim();
     const bEmpty = !String(b.차량번호 || "").trim();
     if (aEmpty && !bEmpty) return -1;
     if (!aEmpty && bEmpty) return 1;
-     // 같은 그룹 내: 수정/등록 최신순
-    const ta = a._lastModified || (a.updatedAt?.seconds || 0) * 1000 || 0;
-    const tb = b._lastModified || (b.updatedAt?.seconds || 0) * 1000 || 0;
-    return tb - ta;
+    // 같은 그룹 내: 배차중=등록시각, 배차완료=배차완료시각 기준 최신순
+    return getOrderSortTime(b) - getOrderSortTime(a);
   });
 } else {
-  // 배차중/배차완료 탭: 수정/등록 최신 상단 (수정하면 바로 상단)
-  base.sort((a, b) => {
-    const ta = a._lastModified || (a.updatedAt?.seconds || 0) * 1000 || 0;
-    const tb = b._lastModified || (b.updatedAt?.seconds || 0) * 1000 || 0;
-    return tb - ta;
-  });
+  // 배차중 탭: 등록순(최신 등록 상단) / 배차완료 탭: 배차완료된 순(최근 완료 상단)
+  base.sort((a, b) => getOrderSortTime(b) - getOrderSortTime(a));
 }
 
     return base;

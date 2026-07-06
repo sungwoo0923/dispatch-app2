@@ -513,6 +513,8 @@ const addDispatch = async (record) => {
     ...record,
     _id,
     작성자: auth.currentUser?.email || "",
+    // 등록과 동시에 차량번호까지 포함되어 생성되는 경우(기사 정보 포함 등록 등)에도 완료시각을 남긴다
+    ...(String(record?.차량번호 || "").trim() && !record?.배차완료일시 ? { 배차완료일시: Date.now() } : {}),
   });
 
   await setDoc(
@@ -636,6 +638,20 @@ const patchDispatch = async (_id, patch) => {
       ? safeStops(patch.경유하차목록)
       : safeStops(prev.경유하차목록 || prev.경유지_하차),
   });
+
+  // 🕒 배차중 → 배차완료로 실제 전환되는 순간에만 완료시각 기록
+  // (차량번호 유무로 상태를 판단 — 모바일 등록내역 상태 판정과 동일 기준)
+  // 이미 배차완료 상태에서 다른 항목만 수정될 때는 찍지 않아야
+  // 모바일 등록내역의 "배차완료된 순" 정렬이 편집으로 뒤섞이지 않는다
+  {
+    const prevPlate = String(prev.차량번호 || "").trim();
+    const nextPlate = String(cleanPatch.차량번호 ?? prev.차량번호 ?? "").trim();
+    if (nextPlate && !prevPlate) {
+      cleanPatch.배차완료일시 = Date.now();
+    } else if (!nextPlate && prevPlate) {
+      cleanPatch.배차완료일시 = null;
+    }
+  }
 
   const histories = [];
   Object.keys(cleanPatch).forEach((key) => {
