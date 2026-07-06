@@ -262,21 +262,21 @@ function AttendanceCountTab({ profile, lookups }) {
         <ExcelButton onClick={exportCsv} />
       </div>
       <div className="-mx-4 overflow-x-auto md:-mx-5">
-        <table className="w-full min-w-[980px] text-left text-sm">
+        <table className="w-full min-w-[980px] text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-4 py-3 font-medium">순번</th>
-              <th className="px-4 py-3 font-medium">사업자</th>
-              <th className="px-4 py-3 font-medium">센터</th>
-              <th className="px-4 py-3 font-medium">소속업체</th>
-              <th className="px-4 py-3 font-medium">근무구분</th>
-              <th className="px-4 py-3 font-medium">근무형태</th>
-              <th className="px-4 py-3 font-medium">이름</th>
-              <th className="px-4 py-3 font-medium">전화번호</th>
-              <th className="px-4 py-3 font-medium">부서</th>
-              <th className="px-4 py-3 font-medium">직급</th>
-              <th className="px-4 py-3 font-medium">출근</th>
-              <th className="px-4 py-3 font-medium">지각</th>
+              <th className="px-4 py-3 font-semibold">순번</th>
+              <th className="px-4 py-3 font-semibold">사업자</th>
+              <th className="px-4 py-3 font-semibold">센터</th>
+              <th className="px-4 py-3 font-semibold">소속업체</th>
+              <th className="px-4 py-3 font-semibold">근무구분</th>
+              <th className="px-4 py-3 font-semibold">근무형태</th>
+              <th className="px-4 py-3 font-semibold">이름</th>
+              <th className="px-4 py-3 font-semibold">전화번호</th>
+              <th className="px-4 py-3 font-semibold">부서</th>
+              <th className="px-4 py-3 font-semibold">직급</th>
+              <th className="px-4 py-3 font-semibold">출근</th>
+              <th className="px-4 py-3 font-semibold">지각</th>
             </tr>
           </thead>
           <tbody>

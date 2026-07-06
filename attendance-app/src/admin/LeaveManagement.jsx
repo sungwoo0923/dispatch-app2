@@ -168,18 +168,18 @@ export default function LeaveManagement() {
           </div>
         </div>
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium"></th>
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">이름</th>
-                <th className="px-4 py-3 font-medium">사업자</th>
-                <th className="px-4 py-3 font-medium">센터</th>
-                <th className="px-4 py-3 font-medium">근무시작일자</th>
-                <th className="px-4 py-3 font-medium">휴가발생일수</th>
-                <th className="px-4 py-3 font-medium">휴가사용일수</th>
-                <th className="px-4 py-3 font-medium">휴가잔여일수</th>
+                <th className="px-4 py-3 font-semibold"></th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">이름</th>
+                <th className="px-4 py-3 font-semibold">사업자</th>
+                <th className="px-4 py-3 font-semibold">센터</th>
+                <th className="px-4 py-3 font-semibold">근무시작일자</th>
+                <th className="px-4 py-3 font-semibold">휴가발생일수</th>
+                <th className="px-4 py-3 font-semibold">휴가사용일수</th>
+                <th className="px-4 py-3 font-semibold">휴가잔여일수</th>
               </tr>
             </thead>
             <tbody>
@@ -243,16 +243,16 @@ export default function LeaveManagement() {
           </div>
           <p className="text-xs font-medium text-muted">휴가 대상자 목록 {registerCandidates.length}</p>
           <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-100">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-center text-sm">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-slate-100 text-xs text-muted">
                   <th className="w-8 px-3 py-2"></th>
-                  <th className="px-3 py-2 font-medium">이름</th>
-                  <th className="px-3 py-2 font-medium">전화번호</th>
-                  <th className="px-3 py-2 font-medium">센터</th>
-                  <th className="px-3 py-2 font-medium">소속업체</th>
-                  <th className="px-3 py-2 font-medium">근무구분</th>
-                  <th className="px-3 py-2 font-medium">근무형태</th>
+                  <th className="px-3 py-2 font-semibold">이름</th>
+                  <th className="px-3 py-2 font-semibold">전화번호</th>
+                  <th className="px-3 py-2 font-semibold">센터</th>
+                  <th className="px-3 py-2 font-semibold">소속업체</th>
+                  <th className="px-3 py-2 font-semibold">근무구분</th>
+                  <th className="px-3 py-2 font-semibold">근무형태</th>
                 </tr>
               </thead>
               <tbody>

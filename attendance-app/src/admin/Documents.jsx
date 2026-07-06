@@ -88,15 +88,15 @@ export default function Documents() {
         </Card>
 
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[680px] text-left text-sm">
+          <table className="w-full min-w-[680px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">근로자</th>
-                <th className="px-4 py-3 font-medium">문서종류</th>
-                <th className="px-4 py-3 font-medium">파일명</th>
-                <th className="px-4 py-3 font-medium">업로드일</th>
-                <th className="px-4 py-3 font-medium"></th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">근로자</th>
+                <th className="px-4 py-3 font-semibold">문서종류</th>
+                <th className="px-4 py-3 font-semibold">파일명</th>
+                <th className="px-4 py-3 font-semibold">업로드일</th>
+                <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>

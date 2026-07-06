@@ -182,11 +182,11 @@ export default function PermissionGroups() {
               </Button>
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-100">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2.5 font-medium">순번</th>
-                    <th className="px-3 py-2.5 font-medium">그룹명</th>
+                    <th className="px-3 py-2.5 font-semibold">순번</th>
+                    <th className="px-3 py-2.5 font-semibold">그룹명</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -242,14 +242,14 @@ export default function PermissionGroups() {
               </Button>
             </div>
             <div className="max-h-[420px] overflow-y-auto rounded-xl border border-slate-100">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-center text-sm">
                 <thead className="sticky top-0 bg-white">
                   <tr className="border-b border-slate-100 text-xs text-muted">
                     <th className="w-8 px-3 py-2.5"></th>
-                    <th className="px-3 py-2.5 font-medium">그룹명</th>
-                    <th className="px-3 py-2.5 font-medium">사업자</th>
-                    <th className="px-3 py-2.5 font-medium">센터</th>
-                    <th className="px-3 py-2.5 font-medium">소속업체</th>
+                    <th className="px-3 py-2.5 font-semibold">그룹명</th>
+                    <th className="px-3 py-2.5 font-semibold">사업자</th>
+                    <th className="px-3 py-2.5 font-semibold">센터</th>
+                    <th className="px-3 py-2.5 font-semibold">소속업체</th>
                   </tr>
                 </thead>
                 <tbody>

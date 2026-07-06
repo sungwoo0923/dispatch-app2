@@ -166,17 +166,17 @@ export default function AllowanceTemplates() {
           </div>
         </div>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[820px] text-left text-sm">
+          <table className="w-full min-w-[820px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">템플릿명</th>
-                <th className="px-3 py-2.5 font-medium">급여종류</th>
-                <th className="px-3 py-2.5 font-medium">시급[원]</th>
-                <th className="px-3 py-2.5 font-medium">연장수당[원]</th>
-                <th className="px-3 py-2.5 font-medium">휴일수당[원]</th>
-                <th className="px-3 py-2.5 font-medium">휴일연장수당[원]</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">템플릿명</th>
+                <th className="px-3 py-2.5 font-semibold">급여종류</th>
+                <th className="px-3 py-2.5 font-semibold">시급[원]</th>
+                <th className="px-3 py-2.5 font-semibold">연장수당[원]</th>
+                <th className="px-3 py-2.5 font-semibold">휴일수당[원]</th>
+                <th className="px-3 py-2.5 font-semibold">휴일연장수당[원]</th>
               </tr>
             </thead>
             <tbody>

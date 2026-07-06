@@ -161,16 +161,16 @@ export default function ShiftTemplates() {
           </div>
         </div>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[640px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">템플릿명</th>
-                <th className="px-3 py-2.5 font-medium">근무시간유형</th>
-                <th className="px-3 py-2.5 font-medium">근무시작시간</th>
-                <th className="px-3 py-2.5 font-medium">근무종료시간</th>
-                <th className="px-3 py-2.5 font-medium">숨김여부</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">템플릿명</th>
+                <th className="px-3 py-2.5 font-semibold">근무시간유형</th>
+                <th className="px-3 py-2.5 font-semibold">근무시작시간</th>
+                <th className="px-3 py-2.5 font-semibold">근무종료시간</th>
+                <th className="px-3 py-2.5 font-semibold">숨김여부</th>
               </tr>
             </thead>
             <tbody>
@@ -211,7 +211,7 @@ export default function ShiftTemplates() {
                   <button
                     key={t.key}
                     onClick={() => setTab(t.key)}
-                    className={`shrink-0 rounded-lg px-3 py-2 text-left text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}
+                    className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}
                   >
                     {t.label}
                   </button>
@@ -291,13 +291,13 @@ export default function ShiftTemplates() {
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-100">
-                    <table className="w-full min-w-[480px] text-left text-sm">
+                    <table className="w-full min-w-[480px] text-center text-sm">
                       <thead>
                         <tr className="border-b border-slate-100 text-xs text-muted">
-                          <th className="px-3 py-2 font-medium">휴일여부</th>
-                          <th className="px-3 py-2 font-medium">근무여부</th>
-                          <th className="px-3 py-2 font-medium">근무시작시간</th>
-                          <th className="px-3 py-2 font-medium">근무종료시간</th>
+                          <th className="px-3 py-2 font-semibold">휴일여부</th>
+                          <th className="px-3 py-2 font-semibold">근무여부</th>
+                          <th className="px-3 py-2 font-semibold">근무시작시간</th>
+                          <th className="px-3 py-2 font-semibold">근무종료시간</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -436,12 +436,12 @@ function RangeListTab({ form, setForm, field, title, onSave }) {
         </Button>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-100">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-3 py-2 font-medium">No.</th>
-              <th className="px-3 py-2 font-medium">{title}</th>
-              <th className="px-3 py-2 font-medium">삭제</th>
+              <th className="px-3 py-2 font-semibold">No.</th>
+              <th className="px-3 py-2 font-semibold">{title}</th>
+              <th className="px-3 py-2 font-semibold">삭제</th>
             </tr>
           </thead>
           <tbody>
@@ -514,12 +514,12 @@ function ThresholdListTab({ form, setForm, field, fromLabel, toLabel, onSave }) 
         </Button>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-100">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-3 py-2 font-medium">No.</th>
-              <th className="px-3 py-2 font-medium">설정</th>
-              <th className="px-3 py-2 font-medium">삭제</th>
+              <th className="px-3 py-2 font-semibold">No.</th>
+              <th className="px-3 py-2 font-semibold">설정</th>
+              <th className="px-3 py-2 font-semibold">삭제</th>
             </tr>
           </thead>
           <tbody>

@@ -571,22 +571,22 @@ export default function Schedule() {
             </Card>
 
             <div className="-mx-4 overflow-x-auto md:-mx-5">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-4 py-3 font-medium">
+                    <th className="px-4 py-3 font-semibold">
                       <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
                     </th>
-                    <th className="px-4 py-3 font-medium">순번</th>
-                    <th className="px-4 py-3 font-medium">이름</th>
-                    <th className="px-4 py-3 font-medium">사업자</th>
-                    <th className="px-4 py-3 font-medium">센터</th>
-                    <th className="px-4 py-3 font-medium">확정</th>
-                    <th className="px-4 py-3 font-medium">근무일자</th>
-                    <th className="px-4 py-3 font-medium">근무시각</th>
-                    <th className="px-4 py-3 font-medium">전화번호</th>
-                    <th className="px-4 py-3 font-medium">성별</th>
-                    <th className="px-4 py-3 font-medium">소속업체</th>
+                    <th className="px-4 py-3 font-semibold">순번</th>
+                    <th className="px-4 py-3 font-semibold">이름</th>
+                    <th className="px-4 py-3 font-semibold">사업자</th>
+                    <th className="px-4 py-3 font-semibold">센터</th>
+                    <th className="px-4 py-3 font-semibold">확정</th>
+                    <th className="px-4 py-3 font-semibold">근무일자</th>
+                    <th className="px-4 py-3 font-semibold">근무시각</th>
+                    <th className="px-4 py-3 font-semibold">전화번호</th>
+                    <th className="px-4 py-3 font-semibold">성별</th>
+                    <th className="px-4 py-3 font-semibold">소속업체</th>
                   </tr>
                 </thead>
                 <tbody>

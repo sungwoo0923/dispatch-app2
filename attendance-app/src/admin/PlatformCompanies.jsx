@@ -89,7 +89,7 @@ export default function PlatformCompanies() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="w-full min-w-[860px] text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
               <th className="py-2 pr-3 font-medium">회사명</th>

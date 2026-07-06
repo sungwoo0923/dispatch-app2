@@ -217,23 +217,23 @@ export default function LeaveApprovals() {
         </Card>
 
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">
+                <th className="px-4 py-3 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">사업자</th>
-                <th className="px-4 py-3 font-medium">센터</th>
-                <th className="px-4 py-3 font-medium">상태</th>
-                <th className="px-4 py-3 font-medium">신청자</th>
-                <th className="px-4 py-3 font-medium">휴가일자</th>
-                <th className="px-4 py-3 font-medium">휴가유형</th>
-                <th className="px-4 py-3 font-medium">휴가일수</th>
-                <th className="px-4 py-3 font-medium">사유</th>
-                <th className="px-4 py-3 font-medium">관리자비고</th>
-                <th className="px-4 py-3 font-medium">전화번호</th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">사업자</th>
+                <th className="px-4 py-3 font-semibold">센터</th>
+                <th className="px-4 py-3 font-semibold">상태</th>
+                <th className="px-4 py-3 font-semibold">신청자</th>
+                <th className="px-4 py-3 font-semibold">휴가일자</th>
+                <th className="px-4 py-3 font-semibold">휴가유형</th>
+                <th className="px-4 py-3 font-semibold">휴가일수</th>
+                <th className="px-4 py-3 font-semibold">사유</th>
+                <th className="px-4 py-3 font-semibold">관리자비고</th>
+                <th className="px-4 py-3 font-semibold">전화번호</th>
               </tr>
             </thead>
             <tbody>

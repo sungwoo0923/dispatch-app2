@@ -136,16 +136,16 @@ export default function CenterReports() {
           </div>
         </div>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[760px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">센터</th>
-                <th className="px-3 py-2.5 font-medium">양식유형</th>
-                <th className="px-3 py-2.5 font-medium">템플릿명</th>
-                <th className="px-3 py-2.5 font-medium">리포트양식명</th>
-                <th className="px-3 py-2.5 font-medium">숨김여부</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">센터</th>
+                <th className="px-3 py-2.5 font-semibold">양식유형</th>
+                <th className="px-3 py-2.5 font-semibold">템플릿명</th>
+                <th className="px-3 py-2.5 font-semibold">리포트양식명</th>
+                <th className="px-3 py-2.5 font-semibold">숨김여부</th>
               </tr>
             </thead>
             <tbody>

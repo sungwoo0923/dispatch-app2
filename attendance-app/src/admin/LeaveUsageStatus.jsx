@@ -133,20 +133,20 @@ export default function LeaveUsageStatus() {
           </Button>
         </div>
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">이름</th>
-                <th className="px-4 py-3 font-medium">사업자</th>
-                <th className="px-4 py-3 font-medium">센터</th>
-                <th className="px-4 py-3 font-medium">근무시작일자</th>
-                <th className="px-4 py-3 font-medium">휴가일자</th>
-                <th className="px-4 py-3 font-medium">휴가유형</th>
-                <th className="px-4 py-3 font-medium">유급여부</th>
-                <th className="px-4 py-3 font-medium">휴가일수</th>
-                <th className="px-4 py-3 font-medium">사유</th>
-                <th className="px-4 py-3 font-medium">전화번호</th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">이름</th>
+                <th className="px-4 py-3 font-semibold">사업자</th>
+                <th className="px-4 py-3 font-semibold">센터</th>
+                <th className="px-4 py-3 font-semibold">근무시작일자</th>
+                <th className="px-4 py-3 font-semibold">휴가일자</th>
+                <th className="px-4 py-3 font-semibold">휴가유형</th>
+                <th className="px-4 py-3 font-semibold">유급여부</th>
+                <th className="px-4 py-3 font-semibold">휴가일수</th>
+                <th className="px-4 py-3 font-semibold">사유</th>
+                <th className="px-4 py-3 font-semibold">전화번호</th>
               </tr>
             </thead>
             <tbody>

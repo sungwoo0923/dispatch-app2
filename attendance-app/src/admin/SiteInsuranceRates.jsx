@@ -228,17 +228,17 @@ export default function SiteInsuranceRates() {
         )}
 
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium"></th>
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium"></th>
-                <th className="px-4 py-3 font-medium">사업자</th>
-                <th className="px-4 py-3 font-medium">센터</th>
-                <th className="px-4 py-3 font-medium">템플릿명</th>
-                <th className="px-4 py-3 font-medium">보험요율항목</th>
-                <th className="px-4 py-3 font-medium">설정일자</th>
+                <th className="px-4 py-3 font-semibold"></th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold"></th>
+                <th className="px-4 py-3 font-semibold">사업자</th>
+                <th className="px-4 py-3 font-semibold">센터</th>
+                <th className="px-4 py-3 font-semibold">템플릿명</th>
+                <th className="px-4 py-3 font-semibold">보험요율항목</th>
+                <th className="px-4 py-3 font-semibold">설정일자</th>
               </tr>
             </thead>
             <tbody>

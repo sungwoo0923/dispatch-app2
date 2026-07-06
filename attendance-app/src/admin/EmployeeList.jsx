@@ -21,6 +21,8 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import SidePanel from "../components/SidePanel";
+import Pagination from "../components/Pagination";
+import { usePagination } from "../hooks/usePagination";
 import {
   EMPLOYMENT_STATUS_OPTIONS,
   NATIONALITY_OPTIONS,
@@ -239,6 +241,36 @@ export default function EmployeeList() {
       return true;
     });
   }, [employees, filters]);
+
+  const { pageRows, page, pageCount, pageSize, total, setPage, changePageSize, PAGE_SIZE_OPTIONS } = usePagination(filteredEmployees, 10);
+
+  const [rowMenu, setRowMenu] = useState(null); // { x, y, emp }
+
+  const openRowMenu = (e, emp) => {
+    e.preventDefault();
+    setRowMenu({ x: e.clientX, y: e.clientY, emp });
+  };
+  const closeRowMenu = () => setRowMenu(null);
+  const runRowAction = (action) => {
+    if (!rowMenu) return;
+    setSelected(new Set([rowMenu.emp.id]));
+    setCopyMode(action);
+    setCopyTargets(new Set());
+    setQuickForm({ name: "", phone: "" });
+    setCopyOpen(true);
+    closeRowMenu();
+  };
+
+  useEffect(() => {
+    if (!rowMenu) return;
+    const onDocClick = () => closeRowMenu();
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("scroll", onDocClick, true);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("scroll", onDocClick, true);
+    };
+  }, [rowMenu]);
 
   const approve = (uid) => updateDoc(doc(db, "users", uid), { approved: true });
   const assignSite = (uid, workSiteId) => updateDoc(doc(db, "users", uid), { workSiteId: workSiteId || null });
@@ -638,53 +670,54 @@ export default function EmployeeList() {
         </Card>
 
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[2400px] text-left text-sm">
+          <table className="w-full min-w-[2400px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">
+                <th className="px-4 py-3 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">이름</th>
-                <th className="px-4 py-3 font-medium">사업자</th>
-                <th className="px-4 py-3 font-medium">센터</th>
-                <th className="px-4 py-3 font-medium">연락처</th>
-                <th className="px-4 py-3 font-medium">성별</th>
-                <th className="px-4 py-3 font-medium">나이</th>
-                <th className="px-4 py-3 font-medium">소속업체</th>
-                <th className="px-4 py-3 font-medium">근무구분</th>
-                <th className="px-4 py-3 font-medium">고용구분</th>
-                <th className="px-4 py-3 font-medium">근무비고</th>
-                <th className="px-4 py-3 font-medium">부서</th>
-                <th className="px-4 py-3 font-medium">직급</th>
-                <th className="px-4 py-3 font-medium">시간템플릿</th>
-                <th className="px-4 py-3 font-medium">수당템플릿</th>
-                <th className="px-4 py-3 font-medium">계약서템플릿</th>
-                <th className="px-4 py-3 font-medium">사직서템플릿</th>
-                <th className="px-4 py-3 font-medium">외/내국인</th>
-                <th className="px-4 py-3 font-medium">국적</th>
-                <th className="px-4 py-3 font-medium">재직상태</th>
-                <th className="px-4 py-3 font-medium">입사일</th>
-                <th className="px-4 py-3 font-medium">퇴사일</th>
-                <th className="px-4 py-3 font-medium">회원가입</th>
-                <th className="px-4 py-3 font-medium">가입코드</th>
-                <th className="px-4 py-3 font-medium">4대보험</th>
-                <th className="px-4 py-3 font-medium">급여</th>
-                <th className="px-4 py-3 font-medium">승인</th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">이름</th>
+                <th className="px-4 py-3 font-semibold">사업자</th>
+                <th className="px-4 py-3 font-semibold">센터</th>
+                <th className="px-4 py-3 font-semibold">연락처</th>
+                <th className="px-4 py-3 font-semibold">성별</th>
+                <th className="px-4 py-3 font-semibold">나이</th>
+                <th className="px-4 py-3 font-semibold">소속업체</th>
+                <th className="px-4 py-3 font-semibold">근무구분</th>
+                <th className="px-4 py-3 font-semibold">고용구분</th>
+                <th className="px-4 py-3 font-semibold">근무비고</th>
+                <th className="px-4 py-3 font-semibold">부서</th>
+                <th className="px-4 py-3 font-semibold">직급</th>
+                <th className="px-4 py-3 font-semibold">시간템플릿</th>
+                <th className="px-4 py-3 font-semibold">수당템플릿</th>
+                <th className="px-4 py-3 font-semibold">계약서템플릿</th>
+                <th className="px-4 py-3 font-semibold">사직서템플릿</th>
+                <th className="px-4 py-3 font-semibold">외/내국인</th>
+                <th className="px-4 py-3 font-semibold">국적</th>
+                <th className="px-4 py-3 font-semibold">재직상태</th>
+                <th className="px-4 py-3 font-semibold">입사일</th>
+                <th className="px-4 py-3 font-semibold">퇴사일</th>
+                <th className="px-4 py-3 font-semibold">회원가입</th>
+                <th className="px-4 py-3 font-semibold">가입코드</th>
+                <th className="px-4 py-3 font-semibold">4대보험</th>
+                <th className="px-4 py-3 font-semibold">급여</th>
+                <th className="px-4 py-3 font-semibold">승인</th>
               </tr>
             </thead>
             <tbody>
-              {filteredEmployees.map((emp, i) => (
+              {pageRows.map((emp, i) => (
                 <tr
                   key={emp.id}
                   onDoubleClick={() => openEditEmployee(emp)}
-                  title="더블클릭하여 수정"
+                  onContextMenu={(e) => openRowMenu(e, emp)}
+                  title="더블클릭하여 수정 · 우클릭하여 복사"
                   className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
                 >
                   <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
                   </td>
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-muted">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-4 py-3 text-ink">{emp.name}</td>
                   <td className="px-4 py-3 text-muted">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
@@ -794,7 +827,7 @@ export default function EmployeeList() {
                   </td>
                 </tr>
               ))}
-              {filteredEmployees.length === 0 && (
+              {pageRows.length === 0 && (
                 <tr>
                   <td colSpan={27} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 근로자가 없습니다.
@@ -804,24 +837,57 @@ export default function EmployeeList() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          total={total}
+          setPage={setPage}
+          changePageSize={changePageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        />
       </Panel>
+
+      {rowMenu && (
+        <div
+          className="fixed z-50 w-36 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg"
+          style={{ left: rowMenu.x, top: rowMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="truncate px-3 py-1 text-[11px] text-muted">{rowMenu.emp.name}</p>
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-left text-sm text-ink hover:bg-slate-50"
+            onClick={() => runRowAction("신규복사")}
+          >
+            신규복사
+          </button>
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-left text-sm text-ink hover:bg-slate-50"
+            onClick={() => runRowAction("근무복사")}
+          >
+            근무복사
+          </button>
+        </div>
+      )}
 
       <Panel
         icon={ArrowLeftRight}
         title={`배정변경 요청 (승인대기 ${changeRequests.filter((r) => r.status === "pending").length}건)`}
       >
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">이름</th>
-                <th className="px-4 py-3 font-medium">현재 근무지</th>
-                <th className="px-4 py-3 font-medium">요청 근무지</th>
-                <th className="px-4 py-3 font-medium">요청 소속업체</th>
-                <th className="px-4 py-3 font-medium">사유</th>
-                <th className="px-4 py-3 font-medium">상태</th>
-                <th className="px-4 py-3 font-medium">처리</th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">이름</th>
+                <th className="px-4 py-3 font-semibold">현재 근무지</th>
+                <th className="px-4 py-3 font-semibold">요청 근무지</th>
+                <th className="px-4 py-3 font-semibold">요청 소속업체</th>
+                <th className="px-4 py-3 font-semibold">사유</th>
+                <th className="px-4 py-3 font-semibold">상태</th>
+                <th className="px-4 py-3 font-semibold">처리</th>
               </tr>
             </thead>
             <tbody>
@@ -873,14 +939,14 @@ export default function EmployeeList() {
 
       <Panel icon={History} title={`변경이력 (${changeLogs.length}건)`}>
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">변경구분</th>
-                <th className="px-4 py-3 font-medium">내용</th>
-                <th className="px-4 py-3 font-medium">처리상태</th>
-                <th className="px-4 py-3 font-medium">변경자</th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">변경구분</th>
+                <th className="px-4 py-3 font-semibold">내용</th>
+                <th className="px-4 py-3 font-semibold">처리상태</th>
+                <th className="px-4 py-3 font-semibold">변경자</th>
               </tr>
             </thead>
             <tbody>
@@ -914,13 +980,13 @@ export default function EmployeeList() {
         <Panel icon={UserPlus} title={`가입 대기 중 (${pending.length}건)`}>
           <p className="mb-2 text-xs text-muted">아직 앱에서 가입코드 입력 전인 근로자입니다.</p>
           <div className="-mx-4 overflow-x-auto md:-mx-5">
-            <table className="w-full min-w-[560px] text-left text-sm">
+            <table className="w-full min-w-[560px] text-center text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-muted">
-                  <th className="px-4 py-3 font-medium">이름</th>
-                  <th className="px-4 py-3 font-medium">연락처</th>
-                  <th className="px-4 py-3 font-medium">가입코드</th>
-                  <th className="px-4 py-3 font-medium"></th>
+                  <th className="px-4 py-3 font-semibold">이름</th>
+                  <th className="px-4 py-3 font-semibold">연락처</th>
+                  <th className="px-4 py-3 font-semibold">가입코드</th>
+                  <th className="px-4 py-3 font-semibold"></th>
                 </tr>
               </thead>
               <tbody>
@@ -1705,13 +1771,13 @@ export default function EmployeeList() {
             </Button>
           </div>
           <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-100">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-center text-sm">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-slate-100 text-xs text-muted">
-                  <th className="px-3 py-2 font-medium">순번</th>
-                  <th className="px-3 py-2 font-medium">템플릿명</th>
-                  <th className="px-3 py-2 font-medium">사용여부</th>
-                  <th className="px-3 py-2 font-medium">선택</th>
+                  <th className="px-3 py-2 font-semibold">순번</th>
+                  <th className="px-3 py-2 font-semibold">템플릿명</th>
+                  <th className="px-3 py-2 font-semibold">사용여부</th>
+                  <th className="px-3 py-2 font-semibold">선택</th>
                 </tr>
               </thead>
               <tbody>
@@ -1773,14 +1839,14 @@ export default function EmployeeList() {
                 <p className="text-xs text-muted">
                   기존 근로자 <b className="text-ink">'{sourceEmployee.name}'</b>의 근무정보를 복사해 이미 등록된 다른 근로자에게 추가 등록할 때 사용합니다.
                 </p>
-                <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-100">
-                  <table className="w-full text-left text-sm">
+                <div className="max-h-64 overflow-x-auto overflow-y-auto rounded-xl border border-slate-100">
+                  <table className="w-full text-center text-sm">
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b border-slate-100 text-xs text-muted">
                         <th className="w-8 px-3 py-2"></th>
-                        <th className="px-3 py-2 font-medium">이름</th>
-                        <th className="px-3 py-2 font-medium">전화번호</th>
-                        <th className="px-3 py-2 font-medium">소속업체</th>
+                        <th className="px-3 py-2 font-semibold">이름</th>
+                        <th className="px-3 py-2 font-semibold">전화번호</th>
+                        <th className="px-3 py-2 font-semibold">소속업체</th>
                       </tr>
                     </thead>
                     <tbody>

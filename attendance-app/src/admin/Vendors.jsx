@@ -191,19 +191,19 @@ export default function Vendors() {
           </div>
         </div>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">상세</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">소속업체</th>
-                <th className="px-3 py-2.5 font-medium">사업자등록번호</th>
-                <th className="px-3 py-2.5 font-medium">업체담당자</th>
-                <th className="px-3 py-2.5 font-medium">업체담당자전화번호</th>
-                <th className="px-3 py-2.5 font-medium">업체대표</th>
-                <th className="px-3 py-2.5 font-medium">업체등록일</th>
-                <th className="px-3 py-2.5 font-medium">4대보험</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">상세</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">소속업체</th>
+                <th className="px-3 py-2.5 font-semibold">사업자등록번호</th>
+                <th className="px-3 py-2.5 font-semibold">업체담당자</th>
+                <th className="px-3 py-2.5 font-semibold">업체담당자전화번호</th>
+                <th className="px-3 py-2.5 font-semibold">업체대표</th>
+                <th className="px-3 py-2.5 font-semibold">업체등록일</th>
+                <th className="px-3 py-2.5 font-semibold">4대보험</th>
               </tr>
             </thead>
             <tbody>

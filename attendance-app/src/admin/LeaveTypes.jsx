@@ -79,17 +79,17 @@ export default function LeaveTypes() {
           </Button>
         </div>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[560px] text-left text-sm">
+          <table className="w-full min-w-[560px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="w-8 px-3 py-2.5"></th>
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">휴가유형</th>
-                <th className="px-3 py-2.5 font-medium">휴가일수</th>
-                <th className="px-3 py-2.5 font-medium">유급여부</th>
-                <th className="px-3 py-2.5 font-medium">위로</th>
-                <th className="px-3 py-2.5 font-medium">아래로</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">휴가유형</th>
+                <th className="px-3 py-2.5 font-semibold">휴가일수</th>
+                <th className="px-3 py-2.5 font-semibold">유급여부</th>
+                <th className="px-3 py-2.5 font-semibold">위로</th>
+                <th className="px-3 py-2.5 font-semibold">아래로</th>
               </tr>
             </thead>
             <tbody>

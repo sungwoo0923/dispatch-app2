@@ -133,14 +133,14 @@ export default function BusinessEntities() {
               </Button>
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-100">
-              <table className="w-full min-w-[560px] text-left text-sm">
+              <table className="w-full min-w-[560px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2.5 font-medium">순번</th>
-                    <th className="px-3 py-2.5 font-medium">사업자</th>
-                    <th className="px-3 py-2.5 font-medium">사업자등록번호</th>
-                    <th className="px-3 py-2.5 font-medium">사업자전화번호</th>
-                    <th className="px-3 py-2.5 font-medium">사업자주소</th>
+                    <th className="px-3 py-2.5 font-semibold">순번</th>
+                    <th className="px-3 py-2.5 font-semibold">사업자</th>
+                    <th className="px-3 py-2.5 font-semibold">사업자등록번호</th>
+                    <th className="px-3 py-2.5 font-semibold">사업자전화번호</th>
+                    <th className="px-3 py-2.5 font-semibold">사업자주소</th>
                   </tr>
                 </thead>
                 <tbody>

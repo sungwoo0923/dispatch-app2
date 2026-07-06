@@ -95,14 +95,14 @@ export default function SiteLeaveSettings() {
 
         <p className="mb-2 text-xs font-medium text-muted">목록 {rows.length}</p>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[640px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">상세</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">센터</th>
-                <th className="px-3 py-2.5 font-medium">적용템플릿 / 조회기준</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">상세</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">센터</th>
+                <th className="px-3 py-2.5 font-semibold">적용템플릿 / 조회기준</th>
               </tr>
             </thead>
             <tbody>
@@ -132,15 +132,15 @@ export default function SiteLeaveSettings() {
           <Card className="space-y-3 p-4">
             <p className="text-sm font-semibold text-ink">{siteName(selectedSiteId)} &gt; 휴가설정</p>
             <div className="overflow-x-auto rounded-xl border border-slate-100">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">순번</th>
-                    <th className="px-3 py-2 font-medium">템플릿</th>
-                    <th className="px-3 py-2 font-medium">조회기준설정</th>
-                    <th className="px-3 py-2 font-medium">적용시점</th>
-                    <th className="px-3 py-2 font-medium">적용종료시점</th>
-                    <th className="px-3 py-2 font-medium">삭제</th>
+                    <th className="px-3 py-2 font-semibold">순번</th>
+                    <th className="px-3 py-2 font-semibold">템플릿</th>
+                    <th className="px-3 py-2 font-semibold">조회기준설정</th>
+                    <th className="px-3 py-2 font-semibold">적용시점</th>
+                    <th className="px-3 py-2 font-semibold">적용종료시점</th>
+                    <th className="px-3 py-2 font-semibold">삭제</th>
                   </tr>
                 </thead>
                 <tbody>

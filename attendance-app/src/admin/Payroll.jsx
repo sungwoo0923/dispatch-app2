@@ -774,26 +774,26 @@ export default function Payroll() {
         </Card>
 
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">
+                <th className="px-4 py-3 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">이름</th>
-                <th className="px-4 py-3 font-medium">근무구분</th>
-                <th className="px-4 py-3 font-medium">근무형태</th>
-                <th className="px-4 py-3 font-medium">부서</th>
-                <th className="px-4 py-3 font-medium">직급</th>
-                <th className="px-4 py-3 font-medium">4대보험</th>
-                {filters.showDailyHours === "Y" && <th className="px-4 py-3 font-medium">요일별 근무시간</th>}
-                {filters.showTemplateInfo === "포함" && <th className="px-4 py-3 font-medium">템플릿정보</th>}
-                <th className="px-4 py-3 font-medium">지급합계</th>
-                <th className="px-4 py-3 font-medium">공제합계</th>
-                <th className="px-4 py-3 font-medium">실수령액</th>
-                <th className="px-4 py-3 font-medium">정산상태</th>
-                <th className="px-4 py-3 font-medium"></th>
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">이름</th>
+                <th className="px-4 py-3 font-semibold">근무구분</th>
+                <th className="px-4 py-3 font-semibold">근무형태</th>
+                <th className="px-4 py-3 font-semibold">부서</th>
+                <th className="px-4 py-3 font-semibold">직급</th>
+                <th className="px-4 py-3 font-semibold">4대보험</th>
+                {filters.showDailyHours === "Y" && <th className="px-4 py-3 font-semibold">요일별 근무시간</th>}
+                {filters.showTemplateInfo === "포함" && <th className="px-4 py-3 font-semibold">템플릿정보</th>}
+                <th className="px-4 py-3 font-semibold">지급합계</th>
+                <th className="px-4 py-3 font-semibold">공제합계</th>
+                <th className="px-4 py-3 font-semibold">실수령액</th>
+                <th className="px-4 py-3 font-semibold">정산상태</th>
+                <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>

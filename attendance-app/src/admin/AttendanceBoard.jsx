@@ -445,22 +445,22 @@ export default function AttendanceBoard() {
             </Card>
 
             <div className="-mx-4 overflow-x-auto md:-mx-5">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-4 py-3 font-medium">
+                    <th className="px-4 py-3 font-semibold">
                       <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
                     </th>
-                    <th className="px-4 py-3 font-medium">순번</th>
-                    <th className="px-4 py-3 font-medium">이름</th>
-                    <th className="px-4 py-3 font-medium">출근시간</th>
-                    <th className="px-4 py-3 font-medium">퇴근시간</th>
-                    <th className="px-4 py-3 font-medium">근무일</th>
-                    <th className="px-4 py-3 font-medium">사업자</th>
-                    <th className="px-4 py-3 font-medium">센터</th>
-                    <th className="px-4 py-3 font-medium">근무구분</th>
-                    <th className="px-4 py-3 font-medium">근무형태</th>
-                    <th className="px-4 py-3 font-medium">상태</th>
+                    <th className="px-4 py-3 font-semibold">순번</th>
+                    <th className="px-4 py-3 font-semibold">이름</th>
+                    <th className="px-4 py-3 font-semibold">출근시간</th>
+                    <th className="px-4 py-3 font-semibold">퇴근시간</th>
+                    <th className="px-4 py-3 font-semibold">근무일</th>
+                    <th className="px-4 py-3 font-semibold">사업자</th>
+                    <th className="px-4 py-3 font-semibold">센터</th>
+                    <th className="px-4 py-3 font-semibold">근무구분</th>
+                    <th className="px-4 py-3 font-semibold">근무형태</th>
+                    <th className="px-4 py-3 font-semibold">상태</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -500,15 +500,15 @@ export default function AttendanceBoard() {
 
         {view === "휴무현황" && (
           <div className="-mx-4 overflow-x-auto md:-mx-5">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[720px] text-center text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-muted">
-                  <th className="px-4 py-3 font-medium">순번</th>
-                  <th className="px-4 py-3 font-medium">종류</th>
-                  <th className="px-4 py-3 font-medium">사유</th>
-                  <th className="px-4 py-3 font-medium">이름</th>
-                  <th className="px-4 py-3 font-medium">전화번호</th>
-                  <th className="px-4 py-3 font-medium">기간</th>
+                  <th className="px-4 py-3 font-semibold">순번</th>
+                  <th className="px-4 py-3 font-semibold">종류</th>
+                  <th className="px-4 py-3 font-semibold">사유</th>
+                  <th className="px-4 py-3 font-semibold">이름</th>
+                  <th className="px-4 py-3 font-semibold">전화번호</th>
+                  <th className="px-4 py-3 font-semibold">기간</th>
                 </tr>
               </thead>
               <tbody>
@@ -538,17 +538,17 @@ export default function AttendanceBoard() {
 
         {view === "수정현황" && (
           <div className="-mx-4 overflow-x-auto md:-mx-5">
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[820px] text-center text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-muted">
-                  <th className="px-4 py-3 font-medium">순번</th>
-                  <th className="px-4 py-3 font-medium">이름</th>
-                  <th className="px-4 py-3 font-medium">근무일자</th>
-                  <th className="px-4 py-3 font-medium">변경항목</th>
-                  <th className="px-4 py-3 font-medium">변경전</th>
-                  <th className="px-4 py-3 font-medium">변경후</th>
-                  <th className="px-4 py-3 font-medium">사유</th>
-                  <th className="px-4 py-3 font-medium">변경일시</th>
+                  <th className="px-4 py-3 font-semibold">순번</th>
+                  <th className="px-4 py-3 font-semibold">이름</th>
+                  <th className="px-4 py-3 font-semibold">근무일자</th>
+                  <th className="px-4 py-3 font-semibold">변경항목</th>
+                  <th className="px-4 py-3 font-semibold">변경전</th>
+                  <th className="px-4 py-3 font-semibold">변경후</th>
+                  <th className="px-4 py-3 font-semibold">사유</th>
+                  <th className="px-4 py-3 font-semibold">변경일시</th>
                 </tr>
               </thead>
               <tbody>

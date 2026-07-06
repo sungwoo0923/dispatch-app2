@@ -133,13 +133,13 @@ export default function InsuranceRateTemplates() {
               </Button>
             </div>
             <div className="mb-3 max-h-56 overflow-y-auto rounded-xl border border-slate-100">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-center text-sm">
                 <thead className="sticky top-0 bg-white">
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">순번</th>
-                    <th className="px-3 py-2 font-medium">사업자</th>
-                    <th className="px-3 py-2 font-medium">템플릿명</th>
-                    <th className="px-3 py-2 font-medium">숨김여부</th>
+                    <th className="px-3 py-2 font-semibold">순번</th>
+                    <th className="px-3 py-2 font-semibold">사업자</th>
+                    <th className="px-3 py-2 font-semibold">템플릿명</th>
+                    <th className="px-3 py-2 font-semibold">숨김여부</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -228,13 +228,13 @@ export default function InsuranceRateTemplates() {
               </Button>
             </div>
             <div className="mb-3 max-h-56 overflow-y-auto rounded-xl border border-slate-100">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-center text-sm">
                 <thead className="sticky top-0 bg-white">
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">순번</th>
-                    <th className="px-3 py-2 font-medium">보험요율종류</th>
-                    <th className="px-3 py-2 font-medium">요율[%]</th>
-                    <th className="px-3 py-2 font-medium">4대보험여부</th>
+                    <th className="px-3 py-2 font-semibold">순번</th>
+                    <th className="px-3 py-2 font-semibold">보험요율종류</th>
+                    <th className="px-3 py-2 font-semibold">요율[%]</th>
+                    <th className="px-3 py-2 font-semibold">4대보험여부</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -1,266 +1,522 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   query,
   where,
   onSnapshot,
   addDoc,
+  updateDoc,
   deleteDoc,
   doc,
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { FileSignature, Trash2, Eye } from "lucide-react";
+import { FileSignature, Trash2, Eye, Search, Download, Printer } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import FilterDropdown from "../components/FilterDropdown";
+import Pagination from "../components/Pagination";
+import SignaturePad from "../components/SignaturePad";
+import { usePagination } from "../hooks/usePagination";
+import { downloadCsv } from "../utils/exportCsv";
 import { buildDefaultContract } from "../utils/contractTemplate";
-import { formatDate } from "../utils/dateUtils";
+import { NATIONALITY_OPTIONS, SHIFT_TYPE_OPTIONS, EMPLOYMENT_TYPE_OPTIONS, TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
+import { formatDate, calculateAge } from "../utils/dateUtils";
+
+const CYCLE_OPTIONS = ["1년", "6개월", "3개월", "기간의 정함 없음"];
+
+const emptyDraft = () => ({
+  entityIds: [],
+  siteIds: [],
+  vendorIds: [],
+  shiftTypes: [],
+  employmentTypes: [],
+  teams: [],
+  positions: [],
+  nationalities: [],
+  searchField: "name",
+  searchText: "",
+});
+
+const departmentOptions = TEAM_OPTIONS.map((t) => ({ value: t, label: t }));
+const positionOptions = POSITION_OPTIONS.map((p) => ({ value: p, label: p }));
 
 export default function Contracts() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [businessEntities, setBusinessEntities] = useState([]);
+  const [shiftTemplates, setShiftTemplates] = useState([]);
+  const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [companyName, setCompanyName] = useState("");
   const [contracts, setContracts] = useState([]);
 
-  const [open, setOpen] = useState(false);
-  const [viewing, setViewing] = useState(null);
-  const [form, setForm] = useState({ uid: "", title: "근로계약서", startDate: "", endDate: "", content: "" });
+  const [draft, setDraft] = useState(emptyDraft());
+  const [applied, setApplied] = useState(emptyDraft());
+  const [selected, setSelected] = useState(() => new Set());
+
+  const [signTarget, setSignTarget] = useState(null); // { emp, contract, content }
+  const [docView, setDocView] = useState(null); // { emp, contract }
+  const [saving, setSaving] = useState(false);
+  const padRef = useRef(null);
 
   useEffect(() => {
     if (!profile?.companyId) return;
-    const unsubEmp = onSnapshot(
-      query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")),
-      (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-    const unsubSites = onSnapshot(
-      query(collection(db, "workSites"), where("companyId", "==", profile.companyId)),
-      (snap) => setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-    const unsubContracts = onSnapshot(
-      query(collection(db, "contracts"), where("companyId", "==", profile.companyId)),
-      (snap) => setContracts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
+    const unsubs = [
+      onSnapshot(
+        query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")),
+        (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (snap) =>
+        setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "vendors"), where("companyId", "==", profile.companyId)), (snap) =>
+        setVendors(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "businessEntities"), where("companyId", "==", profile.companyId)), (snap) =>
+        setBusinessEntities(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "shiftTemplates"), where("companyId", "==", profile.companyId)), (snap) =>
+        setShiftTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "allowanceTemplates"), where("companyId", "==", profile.companyId)), (snap) =>
+        setAllowanceTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "contracts"), where("companyId", "==", profile.companyId)), (snap) =>
+        setContracts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+    ];
     getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
-    return () => {
-      unsubEmp();
-      unsubSites();
-      unsubContracts();
-    };
+    return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
 
-  const sortedContracts = useMemo(
-    () => [...contracts].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)),
-    [contracts]
-  );
+  const entityName_ = (id) => businessEntities.find((b) => b.id === id)?.name || "-";
+  const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
+  const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
+  const shiftTemplateName_ = (id) => shiftTemplates.find((t) => t.id === id)?.name || "-";
+  const allowanceTemplateName_ = (id) => allowanceTemplates.find((t) => t.id === id)?.name || "-";
 
-  const openNew = () => {
-    setForm({ uid: "", title: "근로계약서", startDate: "", endDate: "", content: "" });
-    setOpen(true);
+  const latestContractFor = (uid) =>
+    contracts
+      .filter((c) => c.uid === uid)
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0] || null;
+
+  const rows = useMemo(() => employees.map((emp) => ({ emp, contract: latestContractFor(emp.id) })), [employees, contracts]);
+
+  const filteredRows = useMemo(() => {
+    const a = applied;
+    return rows
+      .filter((r) => !a.entityIds.length || a.entityIds.includes(r.emp.businessEntityId))
+      .filter((r) => !a.siteIds.length || a.siteIds.includes(r.emp.workSiteId))
+      .filter((r) => !a.vendorIds.length || a.vendorIds.includes(r.emp.vendorId))
+      .filter((r) => !a.shiftTypes.length || a.shiftTypes.includes(r.emp.shiftType))
+      .filter((r) => !a.employmentTypes.length || a.employmentTypes.includes(r.emp.employmentType))
+      .filter((r) => !a.teams.length || a.teams.includes(r.emp.team))
+      .filter((r) => !a.positions.length || a.positions.includes(r.emp.position))
+      .filter((r) => !a.nationalities.length || a.nationalities.includes(r.emp.nationality || "내국인"))
+      .filter((r) => {
+        if (!a.searchText.trim()) return true;
+        const v = (r.emp[a.searchField] || "").toString().toLowerCase();
+        return v.includes(a.searchText.trim().toLowerCase());
+      })
+      .sort((x, y) => (x.emp.name || "").localeCompare(y.emp.name || ""));
+  }, [rows, applied]);
+
+  const { pageRows, page, pageCount, pageSize, total, setPage, changePageSize, PAGE_SIZE_OPTIONS } = usePagination(filteredRows, 10);
+
+  const runSearch = () => setApplied(draft);
+  const resetSearch = () => {
+    setDraft(emptyDraft());
+    setApplied(emptyDraft());
   };
 
-  const applyTemplate = () => {
-    const emp = employees.find((e) => e.id === form.uid);
-    if (!emp) return;
-    const site = workSites.find((s) => s.id === emp.workSiteId);
-    setForm((f) => ({
-      ...f,
-      content: buildDefaultContract({
+  const toggleSelect = (uid) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      next.has(uid) ? next.delete(uid) : next.add(uid);
+      return next;
+    });
+  const toggleSelectAll = () =>
+    setSelected((s) => (s.size === pageRows.length ? new Set() : new Set(pageRows.map((r) => r.emp.id))));
+
+  const exportExcel = () => {
+    downloadCsv(
+      "서명계약조회",
+      [
+        "순번", "이름", "사업자", "센터", "전화번호", "외/내국인", "성별", "나이", "계약주기", "계약일자",
+        "소속업체", "근무구분", "근무형태", "부서", "직급", "계약", "사직서", "계약서유형", "시간템플릿", "수당템플릿",
+      ],
+      filteredRows.map((r, i) => [
+        i + 1,
+        r.emp.name || "",
+        entityName_(r.emp.businessEntityId),
+        siteName_(r.emp.workSiteId),
+        r.emp.phone || "",
+        r.emp.nationality || "내국인",
+        r.emp.gender || "",
+        calculateAge(r.emp.residentNumberFront) ?? "",
+        r.contract?.cycle || "",
+        r.contract?.startDate ? formatDate(r.contract.startDate) : "",
+        vendorName_(r.emp.vendorId),
+        r.emp.shiftType || "",
+        r.emp.employmentType || "",
+        r.emp.team || "",
+        r.emp.position || "",
+        r.contract?.status === "signed" ? "서명완료" : r.contract ? "서명대기" : "미발송",
+        r.emp.resignTemplateName || "",
+        r.contract?.title || r.emp.contractTemplateName || "",
+        shiftTemplateName_(r.emp.shiftTemplateId),
+        allowanceTemplateName_(r.emp.allowanceTemplateId),
+      ])
+    );
+  };
+
+  const downloadSelected = () => {
+    const targets = filteredRows.filter((r) => selected.has(r.emp.id) && r.contract);
+    if (targets.length === 0) return;
+    const text = targets
+      .map((r) => `[${r.emp.name}]\n${r.contract.content || ""}\n서명일: ${r.contract.signedAt ? formatDate(r.contract.signedAt) : "미서명"}\n\n`)
+      .join("\n" + "-".repeat(40) + "\n\n");
+    const blob = new Blob(["﻿" + text], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "계약서.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const printSelected = () => window.print();
+
+  const removeSelected = async () => {
+    const targets = filteredRows.filter((r) => selected.has(r.emp.id) && r.contract);
+    if (targets.length === 0) return;
+    if (!(await confirm(`선택된 ${targets.length}건의 계약서를 삭제하시겠습니까?`, "delete"))) return;
+    await Promise.all(targets.map((r) => deleteDoc(doc(db, "contracts", r.contract.id))));
+    setSelected(new Set());
+  };
+
+  const openView = (emp, contract) => {
+    if (contract?.status === "signed") {
+      setDocView({ emp, contract });
+      return;
+    }
+    const content =
+      contract?.content ||
+      buildDefaultContract({
         employeeName: emp.name,
         hireDate: emp.hireDate,
         position: emp.position,
-        siteName: site?.name,
+        siteName: siteName_(emp.workSiteId),
+        vendorName: vendorName_(emp.vendorId),
         companyName,
-      }),
-      startDate: f.startDate || emp.hireDate || "",
-    }));
+        payType: emp.payType,
+        shiftType: emp.shiftType,
+        employmentType: emp.employmentType,
+      });
+    setSignTarget({ emp, contract, content });
   };
 
-  const send = async (e) => {
-    e.preventDefault();
-    const emp = employees.find((x) => x.id === form.uid);
-    await addDoc(collection(db, "contracts"), {
-      companyId: profile.companyId,
-      uid: form.uid,
-      employeeName: emp?.name || "",
-      title: form.title,
-      startDate: form.startDate,
-      endDate: form.endDate || null,
-      content: form.content,
-      status: "sent",
-      signatureDataUrl: null,
-      signedAt: null,
-      createdAt: serverTimestamp(),
-    });
-    setOpen(false);
+  const applySignature = async () => {
+    if (!signTarget || !padRef.current || padRef.current.isEmpty()) return;
+    setSaving(true);
+    const signatureDataUrl = padRef.current.getDataUrl();
+    const signedAt = new Date().toISOString().slice(0, 10);
+    let savedContract;
+    if (signTarget.contract) {
+      await updateDoc(doc(db, "contracts", signTarget.contract.id), { status: "signed", signatureDataUrl, signedAt });
+      savedContract = { ...signTarget.contract, status: "signed", signatureDataUrl, signedAt };
+    } else {
+      const ref = await addDoc(collection(db, "contracts"), {
+        companyId: profile.companyId,
+        uid: signTarget.emp.id,
+        employeeName: signTarget.emp.name,
+        title: "표준근로계약서",
+        cycle: "1년",
+        startDate: signedAt,
+        endDate: null,
+        content: signTarget.content,
+        status: "signed",
+        signatureDataUrl,
+        signedAt,
+        createdAt: serverTimestamp(),
+      });
+      savedContract = {
+        id: ref.id,
+        companyId: profile.companyId,
+        uid: signTarget.emp.id,
+        title: "표준근로계약서",
+        cycle: "1년",
+        startDate: signedAt,
+        content: signTarget.content,
+        status: "signed",
+        signatureDataUrl,
+        signedAt,
+      };
+    }
+    setSaving(false);
+    setSignTarget(null);
+    setDocView({ emp: signTarget.emp, contract: savedContract });
   };
-
-  const remove = (id) => deleteDoc(doc(db, "contracts", id));
 
   return (
     <div className="space-y-6">
-      <Panel
-        icon={FileSignature}
-        title={`계약서 (${sortedContracts.length}건)`}
-        actions={
-          <Button onClick={openNew}>
-            <FileSignature size={16} /> 계약서 발송
-          </Button>
-        }
-      >
-        <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[760px] text-left text-sm">
+      <Panel icon={FileSignature} title="서명계약조회">
+        <div className="space-y-3">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+            <FilterDropdown
+              label="1선택 · 사업자"
+              options={businessEntities.map((b) => ({ value: b.id, label: b.name }))}
+              selected={draft.entityIds}
+              onChange={(v) => setDraft((f) => ({ ...f, entityIds: v }))}
+            />
+            <FilterDropdown
+              label="2선택 · 센터"
+              options={workSites.map((s) => ({ value: s.id, label: s.name }))}
+              selected={draft.siteIds}
+              onChange={(v) => setDraft((f) => ({ ...f, siteIds: v }))}
+            />
+            <FilterDropdown
+              label="3선택 · 소속업체"
+              options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+              selected={draft.vendorIds}
+              onChange={(v) => setDraft((f) => ({ ...f, vendorIds: v }))}
+            />
+            <FilterDropdown
+              label="4선택 · 근무구분"
+              options={SHIFT_TYPE_OPTIONS.map((s) => ({ value: s, label: s }))}
+              selected={draft.shiftTypes}
+              onChange={(v) => setDraft((f) => ({ ...f, shiftTypes: v }))}
+            />
+            <FilterDropdown
+              label="5선택 · 근무형태"
+              options={EMPLOYMENT_TYPE_OPTIONS.map((s) => ({ value: s, label: s }))}
+              selected={draft.employmentTypes}
+              onChange={(v) => setDraft((f) => ({ ...f, employmentTypes: v }))}
+            />
+            <FilterDropdown
+              label="6선택 · 부서"
+              options={departmentOptions}
+              selected={draft.teams}
+              onChange={(v) => setDraft((f) => ({ ...f, teams: v }))}
+            />
+            <FilterDropdown
+              label="7선택 · 직급"
+              options={positionOptions}
+              selected={draft.positions}
+              onChange={(v) => setDraft((f) => ({ ...f, positions: v }))}
+            />
+            <FilterDropdown
+              label="8선택 · 외/내국인"
+              options={NATIONALITY_OPTIONS.map((n) => ({ value: n, label: n }))}
+              selected={draft.nationalities}
+              onChange={(v) => setDraft((f) => ({ ...f, nationalities: v }))}
+            />
+          </div>
+
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+            <span className="shrink-0 text-xs font-medium text-muted">통합검색</span>
+            <select
+              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+              value={draft.searchField}
+              onChange={(e) => setDraft((f) => ({ ...f, searchField: e.target.value }))}
+            >
+              <option value="name">이름</option>
+              <option value="phone">전화번호</option>
+            </select>
+            <input
+              className="w-48 shrink-0 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              placeholder="검색어 입력"
+              value={draft.searchText}
+              onChange={(e) => setDraft((f) => ({ ...f, searchText: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && runSearch()}
+            />
+            <Button onClick={runSearch}>
+              <Search size={16} /> 검색
+            </Button>
+            <Button variant="outline" onClick={resetSearch}>
+              초기화
+            </Button>
+          </div>
+
+          <div className="flex flex-nowrap items-center gap-2">
+            <Button variant="danger" onClick={removeSelected}>
+              <Trash2 size={16} /> 삭제
+            </Button>
+            <Button variant="outline" onClick={downloadSelected}>
+              <Download size={16} /> 다운로드
+            </Button>
+            <Button variant="outline" onClick={printSelected}>
+              <Printer size={16} /> 출력
+            </Button>
+            <Button variant="outline" onClick={exportExcel}>
+              <Download size={16} /> 엑셀
+            </Button>
+          </div>
+        </div>
+
+        <div className="-mx-4 mt-4 overflow-x-auto md:-mx-5">
+          <table className="w-full min-w-[2200px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-medium">순번</th>
-                <th className="px-4 py-3 font-medium">근로자</th>
-                <th className="px-4 py-3 font-medium">제목</th>
-                <th className="px-4 py-3 font-medium">계약기간</th>
-                <th className="px-4 py-3 font-medium">상태</th>
-                <th className="px-4 py-3 font-medium">서명일</th>
-                <th className="px-4 py-3 font-medium"></th>
+                <th className="px-3 py-3 font-semibold">순번</th>
+                <th className="px-3 py-3 font-semibold">
+                  <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
+                </th>
+                <th className="px-3 py-3 font-semibold">계약서</th>
+                <th className="px-3 py-3 font-semibold">이름</th>
+                <th className="px-3 py-3 font-semibold">사업자</th>
+                <th className="px-3 py-3 font-semibold">센터</th>
+                <th className="px-3 py-3 font-semibold">전화번호</th>
+                <th className="px-3 py-3 font-semibold">외/내국인</th>
+                <th className="px-3 py-3 font-semibold">성별</th>
+                <th className="px-3 py-3 font-semibold">나이</th>
+                <th className="px-3 py-3 font-semibold">계약주기</th>
+                <th className="px-3 py-3 font-semibold">계약일자</th>
+                <th className="px-3 py-3 font-semibold">소속업체</th>
+                <th className="px-3 py-3 font-semibold">근무구분</th>
+                <th className="px-3 py-3 font-semibold">근무형태</th>
+                <th className="px-3 py-3 font-semibold">부서</th>
+                <th className="px-3 py-3 font-semibold">직급</th>
+                <th className="px-3 py-3 font-semibold">계약/사직서</th>
+                <th className="px-3 py-3 font-semibold">계약서유형</th>
+                <th className="px-3 py-3 font-semibold">계약</th>
+                <th className="px-3 py-3 font-semibold">시간템플릿</th>
+                <th className="px-3 py-3 font-semibold">수당템플릿</th>
               </tr>
             </thead>
             <tbody>
-              {sortedContracts.map((c, i) => (
-                <tr key={c.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
-                  <td className="px-4 py-3 text-ink">{c.employeeName}</td>
-                  <td className="px-4 py-3 text-muted">{c.title}</td>
-                  <td className="px-4 py-3 text-muted">
-                    {formatDate(c.startDate)} {c.endDate ? `~ ${formatDate(c.endDate)}` : "(기간 무기한)"}
+              {pageRows.map(({ emp, contract }, i) => (
+                <tr key={emp.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                  <td className="px-3 py-3 text-muted">{(page - 1) * pageSize + i + 1}</td>
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
                   </td>
-                  <td className="px-4 py-3">
-                    {c.status === "signed" ? <Badge tone="success">서명완료</Badge> : <Badge tone="warning">서명대기</Badge>}
+                  <td className="px-3 py-3">
+                    <button
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      onClick={() => openView(emp, contract)}
+                    >
+                      <Eye size={14} /> 보기
+                    </button>
                   </td>
-                  <td className="px-4 py-3 text-muted">{c.signedAt ? formatDate(c.signedAt) : "-"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <button className="text-muted hover:text-primary" title="보기" onClick={() => setViewing(c)}>
-                        <Eye size={16} />
-                      </button>
-                      {c.status !== "signed" && (
-                        <button className="text-muted hover:text-danger" title="삭제" onClick={() => remove(c.id)}>
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
+                  <td className="px-3 py-3 text-ink">{emp.name}</td>
+                  <td className="px-3 py-3 text-muted">{entityName_(emp.businessEntityId)}</td>
+                  <td className="px-3 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-3 py-3 text-muted">{emp.phone || "-"}</td>
+                  <td className="px-3 py-3 text-muted">{emp.nationality || "내국인"}</td>
+                  <td className="px-3 py-3 text-muted">{emp.gender || "-"}</td>
+                  <td className="px-3 py-3 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
+                  <td className="px-3 py-3 text-muted">{contract?.cycle || "-"}</td>
+                  <td className="px-3 py-3 text-muted">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
+                  <td className="px-3 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-3 py-3 text-muted">{emp.shiftType || "-"}</td>
+                  <td className="px-3 py-3 text-muted">{emp.employmentType || "-"}</td>
+                  <td className="px-3 py-3 text-muted">{emp.team || "-"}</td>
+                  <td className="px-3 py-3 text-muted">{emp.position || "-"}</td>
+                  <td className="px-3 py-3 text-muted">계약 / {emp.resignTemplateName || "-"}</td>
+                  <td className="px-3 py-3 text-muted">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
+                  <td className="px-3 py-3">
+                    {contract?.status === "signed" ? (
+                      <Badge tone="success">서명완료</Badge>
+                    ) : contract ? (
+                      <Badge tone="warning">서명대기</Badge>
+                    ) : (
+                      <Badge tone="muted">미발송</Badge>
+                    )}
                   </td>
+                  <td className="px-3 py-3 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
+                  <td className="px-3 py-3 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
                 </tr>
               ))}
-              {sortedContracts.length === 0 && (
+              {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
-                    발송된 계약서가 없습니다.
+                  <td colSpan={22} className="px-4 py-6 text-center text-xs text-muted">
+                    조회조건에 해당하는 데이터가 없습니다.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          total={total}
+          setPage={setPage}
+          changePageSize={changePageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        />
       </Panel>
 
       <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title="계약서 발송"
-        size="lg"
+        open={Boolean(signTarget)}
+        onClose={() => setSignTarget(null)}
+        title="서명"
         footer={
           <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setSignTarget(null)}>
               취소
             </Button>
-            <Button onClick={send} disabled={!form.uid || !form.content}>
-              발송
+            <Button variant="outline" onClick={() => padRef.current?.clear()}>
+              다시그리기
+            </Button>
+            <Button onClick={applySignature} disabled={saving}>
+              {saving ? "적용 중..." : "적용"}
             </Button>
           </>
         }
       >
-        <form onSubmit={send} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">대상 근로자</span>
-              <select
-                required
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.uid}
-                onChange={(e) => setForm((f) => ({ ...f, uid: e.target.value }))}
-              >
-                <option value="">선택</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">제목</span>
-              <input
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">계약 시작일</span>
-              <input
-                type="date"
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.startDate}
-                onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">계약 종료일 (선택)</span>
-              <input
-                type="date"
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.endDate}
-                onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-              />
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted">계약 내용</span>
-            <button
-              type="button"
-              onClick={applyTemplate}
-              disabled={!form.uid}
-              className="text-xs text-primary hover:underline disabled:opacity-40"
-            >
-              기본양식 불러오기
-            </button>
-          </div>
-          <textarea
-            required
-            rows={12}
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 font-mono text-xs leading-relaxed"
-            value={form.content}
-            onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-          />
-        </form>
+        <div className="space-y-3">
+          <p className="text-sm text-ink">{signTarget?.emp?.name}님의 근로계약서에 서명해주세요.</p>
+          <p className="mb-1 text-xs text-muted">여기에 서명을 그려주세요</p>
+          <SignaturePad ref={padRef} />
+        </div>
       </Modal>
 
-      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title={viewing?.title} size="lg" footer={<Button onClick={() => setViewing(null)}>닫기</Button>}>
-        {viewing && (
-          <div>
-            <pre className="mb-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-xs leading-relaxed">
-              {viewing.content}
+      <Modal
+        open={Boolean(docView)}
+        onClose={() => setDocView(null)}
+        title={docView?.contract?.title || "표준근로계약서"}
+        size="lg"
+        footer={<Button onClick={() => setDocView(null)}>닫기</Button>}
+      >
+        {docView && (
+          <div className="space-y-4">
+            <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-xs leading-relaxed">
+              {docView.contract.content}
             </pre>
-            {viewing.status === "signed" ? (
+            <div className="grid grid-cols-2 gap-4 rounded-xl border border-slate-200 p-4">
               <div>
-                <p className="mb-1.5 text-xs font-medium text-muted">서명 ({viewing.signedAt})</p>
-                <img src={viewing.signatureDataUrl} alt="서명" className="h-24 rounded-xl border border-slate-200 bg-white" />
+                <p className="mb-1.5 text-xs font-medium text-muted">갑 (회사)</p>
+                <p className="text-sm text-ink">{companyName}</p>
               </div>
-            ) : (
-              <p className="text-xs text-warning">아직 근로자가 서명하지 않았습니다.</p>
-            )}
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-muted">을 (근로자) 성명: {docView.emp.name}</p>
+                {docView.contract.signatureDataUrl ? (
+                  <img
+                    src={docView.contract.signatureDataUrl}
+                    alt="서명"
+                    className="h-20 rounded-lg border border-slate-200 bg-white"
+                  />
+                ) : (
+                  <p className="text-xs text-warning">서명 대기중</p>
+                )}
+                {docView.contract.signedAt && (
+                  <p className="mt-1 text-xs text-muted">서명일: {formatDate(docView.contract.signedAt)}</p>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </Modal>

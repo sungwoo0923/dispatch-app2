@@ -80,12 +80,12 @@ export function LeaveMonthlyStats() {
         </Card>
         <p className="mb-2 text-xs font-medium text-muted">목록 {rows.length}</p>
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[1100px] text-left text-sm">
+          <table className="w-full min-w-[1100px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-3 font-medium">소속업체</th>
-                <th className="px-3 py-3 font-medium">이름</th>
-                <th className="px-3 py-3 font-medium">전화번호</th>
+                <th className="px-3 py-3 font-semibold">소속업체</th>
+                <th className="px-3 py-3 font-semibold">이름</th>
+                <th className="px-3 py-3 font-semibold">전화번호</th>
                 {cols.map((c) => (
                   <th key={c} className="px-2 py-3 text-center font-medium">
                     {c}
@@ -178,14 +178,14 @@ export function LeaveAnnualStats() {
         </Card>
         <p className="mb-2 text-xs font-medium text-muted">목록 {rows.length}</p>
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-3 font-medium">사업자</th>
-                <th className="px-3 py-3 font-medium">센터</th>
-                <th className="px-3 py-3 font-medium">소속업체</th>
-                <th className="px-3 py-3 font-medium">이름</th>
-                <th className="px-3 py-3 font-medium">전화번호</th>
+                <th className="px-3 py-3 font-semibold">사업자</th>
+                <th className="px-3 py-3 font-semibold">센터</th>
+                <th className="px-3 py-3 font-semibold">소속업체</th>
+                <th className="px-3 py-3 font-semibold">이름</th>
+                <th className="px-3 py-3 font-semibold">전화번호</th>
                 {cols.map((c) => (
                   <th key={c} className="px-2 py-3 text-center font-medium">
                     {c}

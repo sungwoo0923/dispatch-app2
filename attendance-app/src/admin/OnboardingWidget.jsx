@@ -40,35 +40,49 @@ function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove,
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState("");
   const [extra, setExtra] = useState({});
+  const [error, setError] = useState("");
 
   const startAdd = () => {
     setEditingId("new");
     setName("");
     setExtra({});
+    setError("");
   };
   const startEdit = (item) => {
     setEditingId(item.id);
     setName(item.name);
     setExtra(item);
+    setError("");
   };
-  const cancelEdit = () => setEditingId(null);
+  const cancelEdit = () => {
+    setEditingId(null);
+    setError("");
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    if (editingId === "new") {
-      if (!(await confirm(`'${name.trim()}'을(를) 추가하시겠습니까?`, "save"))) return;
-      await onAdd(name.trim(), extra);
-    } else {
-      if (!(await confirm(`'${name.trim()}'(으)로 수정하시겠습니까?`, "edit"))) return;
-      await onRename(editingId, name.trim(), extra);
+    try {
+      if (editingId === "new") {
+        if (!(await confirm(`'${name.trim()}'을(를) 추가하시겠습니까?`, "save"))) return;
+        await onAdd(name.trim(), extra);
+      } else {
+        if (!(await confirm(`'${name.trim()}'(으)로 수정하시겠습니까?`, "edit"))) return;
+        await onRename(editingId, name.trim(), extra);
+      }
+      setEditingId(null);
+    } catch (err) {
+      setError(`저장에 실패했습니다: ${err.code || err.message}`);
     }
-    setEditingId(null);
   };
 
   const remove = async (item) => {
     if (!(await confirm(`'${item.name}'을(를) 삭제하시겠습니까?`, "delete"))) return;
-    onRemove(item.id);
+    try {
+      await onRemove(item.id);
+    } catch (err) {
+      setError(`삭제에 실패했습니다: ${err.code || err.message}`);
+    }
   };
 
   return (
@@ -88,6 +102,7 @@ function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove,
             />
           </label>
           {extraFields?.(extra, setExtra)}
+          {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex flex-nowrap justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={cancelEdit}>
               취소
@@ -100,6 +115,7 @@ function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove,
           <Button size="sm" className="mb-3" onClick={startAdd}>
             <Plus size={14} /> 신규 추가
           </Button>
+          {error && <p className="mb-3 text-xs text-danger">{error}</p>}
           <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
             {items.map((item) => (
               <div key={item.id} className="flex items-center justify-between px-4 py-2.5 text-sm text-ink">
@@ -303,31 +319,41 @@ export default function OnboardingWidget() {
 // 빠르게 등록할 수 있게 한다 — 추가 편집은 템플릿 > 시간템플릿에서 계속할 수 있다.
 function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessEntityId }) {
   const confirm = useConfirm();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) setError("");
+  }, [open]);
 
   const toggleDay = (day) => setForm((f) => ({ ...f, workDays: { ...f.workDays, [day]: !f.workDays[day] } }));
 
   const save = async () => {
     if (!form.name.trim()) return;
     if (!(await confirm("저장하시겠습니까?", "save"))) return;
-    const weekdays = Object.fromEntries(
-      WEEKDAYS.map((w) => [w, { holiday: !form.workDays[w], work: !!form.workDays[w], start: form.baseStartTime, end: form.baseEndTime }])
-    );
-    await addDoc(collection(db, "shiftTemplates"), {
-      companyId,
-      businessEntityId,
-      name: form.name.trim(),
-      memo: "",
-      workTimeType: form.workTimeType,
-      visibility: "보임",
-      baseStartTime: form.baseStartTime,
-      baseEndTime: form.baseEndTime,
-      weekdays,
-      breaks: [{ from: form.breakFrom, to: form.breakTo }],
-      overtimeRules: [{ from: Number(form.overtimeFrom) || 0, to: Number(form.overtimeTo) || 0 }],
-      lateRules: form.lateFrom && form.lateTo ? [{ from: Number(form.lateFrom), to: Number(form.lateTo) }] : [],
-      createdAt: serverTimestamp(),
-    });
-    onClose();
+    setError("");
+    try {
+      const weekdays = Object.fromEntries(
+        WEEKDAYS.map((w) => [w, { holiday: !form.workDays[w], work: !!form.workDays[w], start: form.baseStartTime, end: form.baseEndTime }])
+      );
+      await addDoc(collection(db, "shiftTemplates"), {
+        companyId,
+        businessEntityId,
+        name: form.name.trim(),
+        memo: "",
+        workTimeType: form.workTimeType,
+        visibility: "보임",
+        baseStartTime: form.baseStartTime,
+        baseEndTime: form.baseEndTime,
+        weekdays,
+        breaks: [{ from: form.breakFrom, to: form.breakTo }],
+        overtimeRules: [{ from: Number(form.overtimeFrom) || 0, to: Number(form.overtimeTo) || 0 }],
+        lateRules: form.lateFrom && form.lateTo ? [{ from: Number(form.lateFrom), to: Number(form.lateTo) }] : [],
+        createdAt: serverTimestamp(),
+      });
+      onClose();
+    } catch (err) {
+      setError(`저장에 실패했습니다: ${err.code || err.message}`);
+    }
   };
 
   return (
@@ -425,6 +451,8 @@ function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessE
           <p className="mb-1 font-semibold text-ink">안내사항</p>
           <p>시간 기준을 미리 정해두고, 근로자의 출퇴근을 자동으로 관리하는 설정입니다.</p>
         </div>
+
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     </Modal>
   );

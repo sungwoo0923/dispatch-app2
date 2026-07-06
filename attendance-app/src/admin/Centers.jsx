@@ -186,17 +186,17 @@ export default function Centers() {
           </div>
         </div>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[640px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">상세</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">센터</th>
-                <th className="px-3 py-2.5 font-medium">센터주소</th>
-                <th className="px-3 py-2.5 font-medium">센터사용</th>
-                <th className="px-3 py-2.5 font-medium">지정일외 휴일</th>
-                <th className="px-3 py-2.5 font-medium">얼굴촬영</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">상세</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">센터</th>
+                <th className="px-3 py-2.5 font-semibold">센터주소</th>
+                <th className="px-3 py-2.5 font-semibold">센터사용</th>
+                <th className="px-3 py-2.5 font-semibold">지정일외 휴일</th>
+                <th className="px-3 py-2.5 font-semibold">얼굴촬영</th>
               </tr>
             </thead>
             <tbody>
@@ -239,7 +239,7 @@ export default function Centers() {
                     key={t.key}
                     disabled={!selectedId && t.key !== "info"}
                     onClick={() => setTab(t.key)}
-                    className={`shrink-0 rounded-lg px-3 py-2 text-left text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+                    className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
                       tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"
                     }`}
                   >
@@ -434,12 +434,12 @@ function VendorsTab({ companyId, site, entityName }) {
           </Button>
         </div>
         <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="w-8 px-3 py-2"></th>
-                <th className="px-3 py-2 font-medium">사업자</th>
-                <th className="px-3 py-2 font-medium">소속업체</th>
+                <th className="px-3 py-2 font-semibold">사업자</th>
+                <th className="px-3 py-2 font-semibold">소속업체</th>
               </tr>
             </thead>
             <tbody>
@@ -477,12 +477,12 @@ function VendorsTab({ companyId, site, entityName }) {
           </Button>
         </div>
         <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="w-8 px-3 py-2"></th>
-                <th className="px-3 py-2 font-medium">사업자</th>
-                <th className="px-3 py-2 font-medium">소속업체</th>
+                <th className="px-3 py-2 font-semibold">사업자</th>
+                <th className="px-3 py-2 font-semibold">소속업체</th>
               </tr>
             </thead>
             <tbody>
@@ -571,15 +571,15 @@ function OrderedList({ companyId, siteId, collectionName, title, fieldLabel }) {
         </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-100">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
               <th className="w-8 px-2 py-2"></th>
-              <th className="px-2 py-2 font-medium">순번</th>
-              <th className="px-2 py-2 font-medium">{fieldLabel}</th>
-              <th className="px-2 py-2 font-medium">위로</th>
-              <th className="px-2 py-2 font-medium">아래로</th>
-              <th className="px-2 py-2 font-medium">사용여부</th>
+              <th className="px-2 py-2 font-semibold">순번</th>
+              <th className="px-2 py-2 font-semibold">{fieldLabel}</th>
+              <th className="px-2 py-2 font-semibold">위로</th>
+              <th className="px-2 py-2 font-semibold">아래로</th>
+              <th className="px-2 py-2 font-semibold">사용여부</th>
             </tr>
           </thead>
           <tbody>
@@ -666,12 +666,12 @@ function HolidaysTab({ companyId, siteId }) {
         </Button>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-100">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
-              <th className="px-3 py-2 font-medium">No.</th>
-              <th className="px-3 py-2 font-medium">지정외 휴일</th>
-              <th className="px-3 py-2 font-medium">삭제</th>
+              <th className="px-3 py-2 font-semibold">No.</th>
+              <th className="px-3 py-2 font-semibold">지정외 휴일</th>
+              <th className="px-3 py-2 font-semibold">삭제</th>
             </tr>
           </thead>
           <tbody>

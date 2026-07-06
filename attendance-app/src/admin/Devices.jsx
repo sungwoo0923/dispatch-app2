@@ -157,15 +157,15 @@ export default function Devices() {
               </div>
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-100">
-              <table className="w-full min-w-[520px] text-left text-sm">
+              <table className="w-full min-w-[520px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2.5 font-medium">순번</th>
-                    <th className="px-3 py-2.5 font-medium">장치유형</th>
-                    <th className="px-3 py-2.5 font-medium">장치코드</th>
-                    <th className="px-3 py-2.5 font-medium">비밀번호</th>
-                    <th className="px-3 py-2.5 font-medium">장치명</th>
-                    <th className="px-3 py-2.5 font-medium">센터등록</th>
+                    <th className="px-3 py-2.5 font-semibold">순번</th>
+                    <th className="px-3 py-2.5 font-semibold">장치유형</th>
+                    <th className="px-3 py-2.5 font-semibold">장치코드</th>
+                    <th className="px-3 py-2.5 font-semibold">비밀번호</th>
+                    <th className="px-3 py-2.5 font-semibold">장치명</th>
+                    <th className="px-3 py-2.5 font-semibold">센터등록</th>
                   </tr>
                 </thead>
                 <tbody>

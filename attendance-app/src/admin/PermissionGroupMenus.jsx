@@ -116,12 +116,12 @@ export default function PermissionGroupMenus() {
           <div>
             <p className="mb-2 text-xs font-medium text-muted">그룹목록 {rows.length}</p>
             <div className="overflow-x-auto rounded-xl border border-slate-100">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2.5 font-medium">순번</th>
-                    <th className="px-3 py-2.5 font-medium">그룹명</th>
-                    <th className="px-3 py-2.5 font-medium">사용</th>
+                    <th className="px-3 py-2.5 font-semibold">순번</th>
+                    <th className="px-3 py-2.5 font-semibold">그룹명</th>
+                    <th className="px-3 py-2.5 font-semibold">사용</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -161,13 +161,13 @@ export default function PermissionGroupMenus() {
               </div>
             </div>
             <div className="max-h-[420px] overflow-y-auto rounded-xl border border-slate-100">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-center text-sm">
                 <thead className="sticky top-0 bg-white">
                   <tr className="border-b border-slate-100 text-xs text-muted">
                     <th className="w-8 px-3 py-2.5"></th>
-                    <th className="px-3 py-2.5 font-medium">순번</th>
-                    <th className="px-3 py-2.5 font-medium">대메뉴</th>
-                    <th className="px-3 py-2.5 font-medium">중메뉴</th>
+                    <th className="px-3 py-2.5 font-semibold">순번</th>
+                    <th className="px-3 py-2.5 font-semibold">대메뉴</th>
+                    <th className="px-3 py-2.5 font-semibold">중메뉴</th>
                   </tr>
                 </thead>
                 <tbody>

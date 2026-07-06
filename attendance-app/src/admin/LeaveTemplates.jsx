@@ -116,13 +116,13 @@ export default function LeaveTemplates() {
           </div>
         </div>
         <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-          <table className="w-full min-w-[520px] text-left text-sm">
+          <table className="w-full min-w-[520px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-3 py-2.5 font-medium">순번</th>
-                <th className="px-3 py-2.5 font-medium">사업자</th>
-                <th className="px-3 py-2.5 font-medium">템플릿명</th>
-                <th className="px-3 py-2.5 font-medium">숨김여부</th>
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">템플릿명</th>
+                <th className="px-3 py-2.5 font-semibold">숨김여부</th>
               </tr>
             </thead>
             <tbody>
@@ -151,7 +151,7 @@ export default function LeaveTemplates() {
               <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">{form.name || "신규 템플릿"}</div>
               <div className="flex flex-row gap-1 overflow-x-auto lg:flex-col">
                 {TABS.map((t) => (
-                  <button key={t.key} onClick={() => setTab(t.key)} className={`shrink-0 rounded-lg px-3 py-2 text-left text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}>
+                  <button key={t.key} onClick={() => setTab(t.key)} className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}>
                     {t.label}
                   </button>
                 ))}
@@ -265,12 +265,12 @@ function RuleTab({ title, unitLabel, list, setForm, field, addRule, onSave }) {
         </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-100">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
               <th className="w-8 px-3 py-2"></th>
-              <th className="px-3 py-2 font-medium">{unitLabel}</th>
-              <th className="px-3 py-2 font-medium">휴가발생일수</th>
+              <th className="px-3 py-2 font-semibold">{unitLabel}</th>
+              <th className="px-3 py-2 font-semibold">휴가발생일수</th>
             </tr>
           </thead>
           <tbody>
