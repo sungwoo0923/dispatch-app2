@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { Wallet2, Plus, RefreshCw, FileSpreadsheet, Copy as CopyIcon } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -45,6 +46,7 @@ const NUMBER_FIELDS = [
 
 export default function AllowanceTemplates() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [entities, setEntities] = useState([]);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
@@ -86,6 +88,7 @@ export default function AllowanceTemplates() {
 
   const save = async () => {
     if (!form.name.trim() || !form.hourlyWage) return;
+    if (!(await confirm("저장하시겠습니까?", "save"))) return;
     const payload = { ...form };
     for (const f of NUMBER_FIELDS) payload[f.key] = Number(payload[f.key] || 0);
     if (selectedId) {
@@ -98,6 +101,7 @@ export default function AllowanceTemplates() {
 
   const remove = async () => {
     if (!selectedId) return;
+    if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "allowanceTemplates", selectedId));
     startNew();
   };

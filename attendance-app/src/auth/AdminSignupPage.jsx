@@ -23,11 +23,22 @@ async function createUniqueCompanyCode() {
 }
 
 // 부서/직급 start out editable-per-company, seeded from the app defaults so
-// existing selects have sensible options from day one.
-async function seedOrgDefaults(companyId) {
+// existing selects have sensible options from day one. A 사업자 matching the
+// company's own name is also seeded so 근로자등록의 "사업자" 선택란이 처음부터
+// 비어있지 않게 한다 — 실제 사업자등록번호는 조직 > 사업자에서 나중에 채우면 된다.
+async function seedOrgDefaults(companyId, companyName) {
   const batch = writeBatch(db);
   TEAM_OPTIONS.forEach((name) => batch.set(doc(collection(db, "departments")), { companyId, name }));
   POSITION_OPTIONS.forEach((name) => batch.set(doc(collection(db, "positions")), { companyId, name }));
+  batch.set(doc(collection(db, "businessEntities")), {
+    companyId,
+    name: companyName,
+    regNumber: "",
+    phone: "",
+    address: "",
+    memberDetailYN: "등록",
+    active: "사용",
+  });
   await batch.commit();
 }
 
@@ -80,7 +91,7 @@ export default function AdminSignupPage() {
       // into the app — anything awaited after it races the redirect and, if
       // the component has already unmounted by the time it settles, a
       // failure here would silently vanish into the catch block below.
-      await seedOrgDefaults(code);
+      await seedOrgDefaults(code, form.companyName);
 
       await setDoc(doc(db, "users", cred.user.uid), {
         role: "admin",

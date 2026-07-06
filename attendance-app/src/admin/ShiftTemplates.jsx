@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { Clock, Plus, RefreshCw, FileSpreadsheet, Copy as CopyIcon, X } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -32,6 +33,7 @@ const EMPTY_FORM = {
 
 export default function ShiftTemplates() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [entities, setEntities] = useState([]);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
@@ -87,6 +89,7 @@ export default function ShiftTemplates() {
 
   const save = async () => {
     if (!form.name.trim()) return;
+    if (!(await confirm("저장하시겠습니까?", "save"))) return;
     const { startTime, endTime, ...rest } = form;
     const payload = { ...rest, startTime: form.baseStartTime, endTime: form.baseEndTime };
     if (selectedId) {
@@ -99,6 +102,7 @@ export default function ShiftTemplates() {
 
   const remove = async () => {
     if (!selectedId) return;
+    if (!(await confirm(`'${selected?.name}' 템플릿을 삭제하시겠습니까?`, "delete"))) return;
     await deleteDoc(doc(db, "shiftTemplates", selectedId));
     startNew();
   };

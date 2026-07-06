@@ -33,7 +33,7 @@ import {
 } from "../constants/hr";
 import { generateInviteCode } from "../utils/ids";
 import { formatPhoneNumber, formatResidentNumber } from "../utils/phoneAuth";
-import { toDateKey, formatDate } from "../utils/dateUtils";
+import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
 import {
   DOCUMENT_TYPE_OPTIONS,
   uploadPendingEmployeeDocument,
@@ -225,6 +225,10 @@ export default function EmployeeList() {
   }, [profile?.companyId]);
 
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
+  const entityName_ = (id) => businessEntities.find((b) => b.id === id)?.name || "-";
+  const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
+  const shiftTemplateName_ = (id) => shiftTemplates.find((t) => t.id === id)?.name || "-";
+  const allowanceTemplateName_ = (id) => allowanceTemplates.find((t) => t.id === id)?.name || "-";
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
@@ -292,10 +296,16 @@ export default function EmployeeList() {
     setPhotoSaved(false);
   };
 
-  // 신규 등록 시작 시 사원코드를 자동으로 채워둔다 (연도 + 현재 인원수 기준 일련번호).
+  // 신규 등록 시작 시 사원코드를 자동으로 채워두고(연도 + 현재 인원수 기준 일련번호),
+  // 사업자는 회사 개설 시 회사명으로 자동 생성해둔 항목을 기본 선택해둔다.
   const openNewRegister = () => {
     const seq = String(employees.length + pending.length + 1).padStart(4, "0");
-    setRegisterForm({ ...EMPTY_REGISTER_FORM, employeeCode: `EMP${new Date().getFullYear()}${seq}` });
+    const defaultEntity = businessEntities.find((b) => b.name === companyName);
+    setRegisterForm({
+      ...EMPTY_REGISTER_FORM,
+      employeeCode: `EMP${new Date().getFullYear()}${seq}`,
+      businessEntityId: defaultEntity?.id || "",
+    });
     setRegisterOpen(true);
   };
 
@@ -628,7 +638,7 @@ export default function EmployeeList() {
         </Card>
 
         <div className="-mx-4 overflow-x-auto md:-mx-5">
-          <table className="w-full min-w-[1120px] text-left text-sm">
+          <table className="w-full min-w-[2400px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="px-4 py-3 font-medium">
@@ -636,15 +646,30 @@ export default function EmployeeList() {
                 </th>
                 <th className="px-4 py-3 font-medium">순번</th>
                 <th className="px-4 py-3 font-medium">이름</th>
+                <th className="px-4 py-3 font-medium">사업자</th>
+                <th className="px-4 py-3 font-medium">센터</th>
                 <th className="px-4 py-3 font-medium">연락처</th>
                 <th className="px-4 py-3 font-medium">성별</th>
+                <th className="px-4 py-3 font-medium">나이</th>
                 <th className="px-4 py-3 font-medium">소속업체</th>
+                <th className="px-4 py-3 font-medium">근무구분</th>
                 <th className="px-4 py-3 font-medium">고용구분</th>
+                <th className="px-4 py-3 font-medium">근무비고</th>
                 <th className="px-4 py-3 font-medium">부서</th>
                 <th className="px-4 py-3 font-medium">직급</th>
+                <th className="px-4 py-3 font-medium">시간템플릿</th>
+                <th className="px-4 py-3 font-medium">수당템플릿</th>
+                <th className="px-4 py-3 font-medium">계약서템플릿</th>
+                <th className="px-4 py-3 font-medium">사직서템플릿</th>
+                <th className="px-4 py-3 font-medium">외/내국인</th>
+                <th className="px-4 py-3 font-medium">국적</th>
                 <th className="px-4 py-3 font-medium">재직상태</th>
-                <th className="px-4 py-3 font-medium">근무지</th>
                 <th className="px-4 py-3 font-medium">입사일</th>
+                <th className="px-4 py-3 font-medium">퇴사일</th>
+                <th className="px-4 py-3 font-medium">회원가입</th>
+                <th className="px-4 py-3 font-medium">가입코드</th>
+                <th className="px-4 py-3 font-medium">4대보험</th>
+                <th className="px-4 py-3 font-medium">급여</th>
                 <th className="px-4 py-3 font-medium">승인</th>
               </tr>
             </thead>
@@ -661,9 +686,37 @@ export default function EmployeeList() {
                   </td>
                   <td className="px-4 py-3 text-muted">{i + 1}</td>
                   <td className="px-4 py-3 text-ink">{emp.name}</td>
+                  <td className="px-4 py-3 text-muted">{entityName_(emp.businessEntityId)}</td>
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
+                    <select
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      value={emp.workSiteId || ""}
+                      onChange={(e) => assignSite(emp.id, e.target.value)}
+                    >
+                      <option value="">미배정</option>
+                      {workSites.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="px-4 py-3 text-muted">{emp.phone}</td>
                   <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
                   <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
+                    <select
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      value={emp.shiftType || ""}
+                      onChange={(e) => updateField(emp.id, "shiftType", e.target.value)}
+                    >
+                      <option value="">-</option>
+                      {SHIFT_TYPE_OPTIONS.map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
@@ -676,6 +729,7 @@ export default function EmployeeList() {
                       ))}
                     </select>
                   </td>
+                  <td className="px-4 py-3 text-muted">{emp.note || "-"}</td>
                   <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
@@ -704,6 +758,12 @@ export default function EmployeeList() {
                       ))}
                     </select>
                   </td>
+                  <td className="px-4 py-3 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
+                  <td className="px-4 py-3 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
+                  <td className="px-4 py-3 text-muted">{emp.contractTemplateName || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{emp.resignTemplateName || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{emp.nationality || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{emp.country || "-"}</td>
                   <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <select
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
@@ -715,21 +775,12 @@ export default function EmployeeList() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                      value={emp.workSiteId || ""}
-                      onChange={(e) => assignSite(emp.id, e.target.value)}
-                    >
-                      <option value="">미배정</option>
-                      {workSites.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
                   <td className="px-4 py-3 text-muted">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
+                  <td className="px-4 py-3 text-muted">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
+                  <td className="px-4 py-3 text-muted">Y</td>
+                  <td className="px-4 py-3 text-muted">{emp.employeeCode || "-"}</td>
+                  <td className="px-4 py-3 text-muted">{emp.insuranceApplied === "Y" ? "Y" : "N"}</td>
+                  <td className="px-4 py-3 text-muted">{emp.payType || "-"}</td>
                   <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     {emp.approved ? (
                       <Badge tone="success">
@@ -745,7 +796,7 @@ export default function EmployeeList() {
               ))}
               {filteredEmployees.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={27} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 근로자가 없습니다.
                   </td>
                 </tr>

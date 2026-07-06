@@ -4,6 +4,7 @@ import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { KeyRound, Check, X, UserX, RotateCcw, Copy, LogIn } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Panel from "../components/Panel";
 import Button from "../components/Button";
 import Badge from "../components/Badge";
@@ -33,6 +34,7 @@ function formatDate(ts) {
 // 그 전에 UI 노출 자체를 막기 위한 추가 방어선이다.
 export default function PlatformCompanies() {
   const { isSuperAdmin, setActiveCompanyId } = useAuth();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [filter, setFilter] = useState("pending");
@@ -55,7 +57,7 @@ export default function PlatformCompanies() {
   if (!isSuperAdmin) return <Navigate to="/" replace />;
 
   const setStatus = async (companyId, status, confirmMsg) => {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    if (confirmMsg && !(await confirm(confirmMsg, status === "rejected" || status === "suspended" ? "delete" : "save"))) return;
     await updateDoc(doc(db, "companies", companyId), { status });
   };
 
@@ -125,7 +127,7 @@ export default function PlatformCompanies() {
                   <div className="flex gap-1.5">
                     {c.status === "pending" && (
                       <>
-                        <Button size="sm" variant="success" onClick={() => setStatus(c.id, "approved")}>
+                        <Button size="sm" variant="success" onClick={() => setStatus(c.id, "approved", `'${c.name}'의 개설 신청을 승인하시겠습니까?`)}>
                           <Check size={14} /> 승인
                         </Button>
                         <Button size="sm" variant="danger" onClick={() => setStatus(c.id, "rejected", "이 회사의 개설 신청을 거절하시겠습니까?")}>
@@ -148,7 +150,7 @@ export default function PlatformCompanies() {
                       </>
                     )}
                     {(c.status === "suspended" || c.status === "rejected") && (
-                      <Button size="sm" variant="outline" onClick={() => setStatus(c.id, "approved")}>
+                      <Button size="sm" variant="outline" onClick={() => setStatus(c.id, "approved", `'${c.name}'을(를) 복구하시겠습니까?`)}>
                         <RotateCcw size={14} /> 복구
                       </Button>
                     )}

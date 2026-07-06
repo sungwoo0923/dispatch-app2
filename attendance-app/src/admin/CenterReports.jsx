@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { FileBadge2, Plus, RefreshCw, FileSpreadsheet, Eye } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -16,6 +17,7 @@ const EMPTY_FORM = { businessEntityId: "", siteId: "", docType: "계약서", tem
 
 export default function CenterReports() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [entities, setEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [items, setItems] = useState([]);
@@ -55,6 +57,7 @@ export default function CenterReports() {
 
   const save = async () => {
     if (!form.businessEntityId || !form.siteId || !form.templateName.trim()) return;
+    if (!(await confirm("저장하시겠습니까?", "save"))) return;
     if (selectedId) {
       await updateDoc(doc(db, "centerReports", selectedId), form);
     } else {
@@ -64,6 +67,7 @@ export default function CenterReports() {
   };
   const remove = async () => {
     if (!selectedId) return;
+    if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "centerReports", selectedId));
     startNew();
   };

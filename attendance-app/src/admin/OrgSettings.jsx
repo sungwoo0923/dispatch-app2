@@ -3,23 +3,26 @@ import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc } from "fi
 import { Plus, X, Building, KeyRound, Copy, ChevronLeft, Users } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 
 function ManageList({ title, collectionName, items, onBack }) {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [value, setValue] = useState("");
 
   const add = async (e) => {
     e.preventDefault();
     if (!value.trim()) return;
+    if (!(await confirm(`'${value.trim()}' ${title}을(를) 추가하시겠습니까?`, "save"))) return;
     await addDoc(collection(db, collectionName), { companyId: profile.companyId, name: value.trim() });
     setValue("");
   };
 
-  const remove = (id) => {
-    if (!window.confirm("삭제하시겠습니까? 이미 근로자에게 배정된 값이라면 표시가 '-'로 바뀝니다.")) return;
+  const remove = async (id, name) => {
+    if (!(await confirm(`'${name}' ${title}을(를) 삭제하시겠습니까? 이미 근로자에게 배정된 값이라면 표시가 '-'로 바뀝니다.`, "delete"))) return;
     deleteDoc(doc(db, collectionName, id));
   };
 
@@ -43,7 +46,7 @@ function ManageList({ title, collectionName, items, onBack }) {
         {items.map((item) => (
           <div key={item.id} className="flex items-center justify-between px-4 py-2.5 text-sm text-ink">
             {item.name}
-            <button onClick={() => remove(item.id)} className="text-muted hover:text-danger">
+            <button onClick={() => remove(item.id, item.name)} className="text-muted hover:text-danger">
               <X size={14} />
             </button>
           </div>

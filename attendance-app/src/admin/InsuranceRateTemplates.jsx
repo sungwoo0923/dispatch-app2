@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { ShieldPlus, Plus, FileSpreadsheet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -13,6 +14,7 @@ const RATE_TYPES = ["고용보험요율", "건강보험요율", "소득세", "�
 
 export default function InsuranceRateTemplates() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [entities, setEntities] = useState([]);
   const [masters, setMasters] = useState([]);
   const [elements, setElements] = useState([]);
@@ -49,6 +51,7 @@ export default function InsuranceRateTemplates() {
   };
   const saveMaster = async () => {
     if (!masterForm.name.trim()) return;
+    if (!(await confirm("저장하시겠습니까?", "save"))) return;
     if (selectedMasterId) {
       await updateDoc(doc(db, "insuranceRateTemplates", selectedMasterId), masterForm);
     } else {
@@ -58,6 +61,7 @@ export default function InsuranceRateTemplates() {
   };
   const removeMaster = async () => {
     if (!selectedMasterId) return;
+    if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "insuranceRateTemplates", selectedMasterId));
     for (const el of elements.filter((e) => e.templateId === selectedMasterId)) await deleteDoc(doc(db, "insuranceRateElements", el.id));
     startNewMaster();
@@ -95,6 +99,7 @@ export default function InsuranceRateTemplates() {
   };
   const saveElement = async () => {
     if (!selectedMasterId || !elementForm.rateType) return;
+    if (!(await confirm("저장하시겠습니까?", "save"))) return;
     const payload = { ...elementForm, templateId: selectedMasterId, ratePercent: Number(elementForm.ratePercent || 0) };
     if (selectedElementId) {
       await updateDoc(doc(db, "insuranceRateElements", selectedElementId), payload);
@@ -105,6 +110,7 @@ export default function InsuranceRateTemplates() {
   };
   const removeElement = async () => {
     if (!selectedElementId) return;
+    if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "insuranceRateElements", selectedElementId));
     startNewElement();
   };
