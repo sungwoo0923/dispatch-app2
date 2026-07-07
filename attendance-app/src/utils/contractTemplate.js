@@ -14,7 +14,7 @@ export function buildDefaultContract({
   shiftType,
   employmentType,
 }) {
-  return `표 준 근 로 계 약 서
+  return `표준근로계약서
 (식품생산공장 · 도급직원용)
 
 ${companyName || "회사"}(이하 "갑"이라 한다)과(와) ${employeeName || "근로자"}(이하 "을"이라 한다)은 다음과 같이 근로계약을 체결하고, 이를 성실히 이행할 것을 약정한다.

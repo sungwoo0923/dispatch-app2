@@ -6,6 +6,7 @@ import {
   onSnapshot,
   doc,
   getDoc,
+  getDocs,
   updateDoc,
   addDoc,
   setDoc,
@@ -629,7 +630,7 @@ export default function EmployeeList() {
       employmentType: registerForm.employmentType,
     });
     const signedAt = toDateKey();
-    await addDoc(collection(db, "contracts"), {
+    const payload = {
       companyId: profile.companyId,
       uid: editingUid,
       employeeName: registerForm.name,
@@ -641,8 +642,20 @@ export default function EmployeeList() {
       status: stampUrl ? "sent" : "draft",
       companySignatureDataUrl: stampUrl,
       companySignedAt: stampUrl ? signedAt : null,
-      createdAt: serverTimestamp(),
-    });
+    };
+    // 이 근로자에게 이미 근로자 서명 전인(미완료) 계약서가 있다면 중복 문서를
+    // 새로 만들지 않고 그 문서를 갱신한다 — 그렇지 않으면 관리자가 계약서메뉴를
+    // 다시 열 때마다 새 계약서가 쌓여, 근로자가 이미 서명한 계약서와 별개로
+    // "서명대기"인 예전 문서가 그대로 남아있는 것처럼 보이는 문제가 생긴다.
+    const existing = await getDocs(
+      query(collection(db, "contracts"), where("companyId", "==", profile.companyId), where("uid", "==", editingUid))
+    );
+    const unsigned = existing.docs.find((d) => !d.data().employeeSignatureDataUrl);
+    if (unsigned) {
+      await updateDoc(doc(db, "contracts", unsigned.id), payload);
+    } else {
+      await addDoc(collection(db, "contracts"), { ...payload, createdAt: serverTimestamp() });
+    }
     toast.success(stampUrl ? "계약서가 발송되었습니다" : "계약서가 등록되었습니다 (사업자 도장이 없어 서명 없이 등록됨)");
   };
 
