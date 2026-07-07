@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
-import { ShieldCheck, Printer, FileSpreadsheet } from "lucide-react";
+import { ShieldCheck, Printer, FileSpreadsheet, RefreshCw, Search } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -322,6 +322,19 @@ export default function SafetyTrainings() {
                 />
               </div>
             </label>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <button
+              type="button"
+              className="rounded-xl border border-slate-200 p-2.5 text-muted hover:bg-slate-50"
+              title="새로고침"
+              onClick={() => setFilters(EMPTY_FILTERS)}
+            >
+              <RefreshCw size={16} />
+            </button>
+            <Button size="sm">
+              <Search size={13} /> 검색
+            </Button>
           </div>
         </Card>
 
