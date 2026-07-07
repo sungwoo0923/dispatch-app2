@@ -4401,6 +4401,9 @@ const mergedClients = React.useMemo(() => {
         주소: c.주소 || "",
         담당자: c.담당자 || "",
         담당자번호: c.연락처 || c.담당자번호 || "",
+        메모: c.메모 || "",
+        등급: c.등급 || "일반",
+        등급변경일: c.등급변경일 || null,
       });
     }
   });
@@ -5349,7 +5352,9 @@ const getNextFocusIdFromForm = (f) => {
 };
 // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
-  const p = placeList.find(
+  // 하차지거래처(placeList)뿐 아니라 기본거래처(clients)에만 있는 업체도
+  // 주소/담당자/연락처가 채워지도록 두 컬렉션을 합친 mergedClients에서 찾는다
+  const p = mergedClients.find(
     x => norm(x.업체명 || "") === norm(name)
   );
   // ✅ 거래처 → 상차지 자동 적용
@@ -5544,11 +5549,15 @@ const [clientAlert, setClientAlert] = React.useState(null);
 // 🚫 거래처/상하차지 등급 체크 함수
 const checkClientGrade = (name, nextFocusId = null) => {
   if (!name) return;
+  // 하차지거래처(placeRows)뿐 아니라 기본거래처(clients)에만 등록된 업체의
+  // 블랙/주의 등급·메모도 동일하게 경고가 뜨도록 두 컬렉션 모두 확인한다
   const target = (placeRows || []).find(
     (p) => (p.업체명 || "") === name.trim() && (p.등급 === "블랙" || p.등급 === "주의")
+  ) || (clients || []).find(
+    (c) => (c.업체명 || c.거래처명 || "") === name.trim() && (c.등급 === "블랙" || c.등급 === "주의")
   );
   if (target) {
-    setClientAlert({ ...target, _nextFocusId: nextFocusId });
+    setClientAlert({ ...target, 업체명: target.업체명 || target.거래처명 || name.trim(), _nextFocusId: nextFocusId });
   }
 };
 const applyPlaceToForm = (place, type, nextFocusId = null) => {
@@ -11539,7 +11548,7 @@ setConfirmChange(null);
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
-                await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone, null, undefined, { 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
+                await upsertClient({ 거래처명: newClientModalData.name.trim(), 주소: newClientModalData.addr, 담당자: newClientModalData.manager, 연락처: newClientModalData.phone, 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
                 showAlert("신규 거래처 등록이 완료되었습니다.");
                 setNewClientModalOpen(false);
               }
@@ -11557,7 +11566,7 @@ setConfirmChange(null);
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
           onClick={async () => {
             if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
-            await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone, null, undefined, { 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
+            await upsertClient({ 거래처명: newClientModalData.name.trim(), 주소: newClientModalData.addr, 담당자: newClientModalData.manager, 연락처: newClientModalData.phone, 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
             showAlert("신규 거래처 등록이 완료되었습니다.");
             setNewClientModalOpen(false);
           }}>
