@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { ClipboardCheck, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
+import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import DraggableTh from "../components/DraggableTh";
+import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
+import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatTime, formatDate } from "../utils/dateUtils";
 import {
@@ -17,6 +21,7 @@ import {
 } from "../constants/hr";
 
 const VIEW_OPTIONS = ["출근현황", "휴무현황", "수정현황"];
+const EDIT_STATUS_OPTIONS = ["출근", "지각", "조퇴", "출근전", "결근"];
 
 const EMPTY_FILTERS = {
   siteId: "",
@@ -51,6 +56,9 @@ export default function AttendanceBoard() {
   const [editTime, setEditTime] = useState("");
   const [editReason, setEditReason] = useState("");
   const [statusAction, setStatusAction] = useState("출근전");
+  const [detail, setDetail] = useState(null);
+  const [detailEditMode, setDetailEditMode] = useState(false);
+  const [detailForm, setDetailForm] = useState({ checkInTime: "", checkOutTime: "", status: "", reason: "" });
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -131,6 +139,90 @@ export default function AttendanceBoard() {
       })
       .sort((a, b) => a.record.date.localeCompare(b.record.date));
   }, [attendance, employeeByUid, filters]);
+
+  const attendanceColumns = [
+    { key: "name", label: "이름", render: ({ record: r }) => <span className="text-ink">{r.name}</span> },
+    { key: "checkIn", label: "출근시간", render: ({ record: r }) => (r.checkInTime ? formatTime(r.checkInTime) : "-") },
+    { key: "checkOut", label: "퇴근시간", render: ({ record: r }) => (r.checkOutTime ? formatTime(r.checkOutTime) : "-") },
+    { key: "date", label: "근무일", render: ({ record: r }) => formatDate(r.date) },
+    { key: "company", label: "사업자", render: () => companyName },
+    { key: "site", label: "센터", render: ({ record: r, emp }) => r.siteName || siteName_(emp.workSiteId) },
+    { key: "shiftType", label: "근무구분", render: ({ emp }) => emp.shiftType || "-" },
+    { key: "employmentType", label: "근무형태", render: ({ emp }) => emp.employmentType || "-" },
+    {
+      key: "status",
+      label: "상태",
+      render: ({ record: r }) => (
+        <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
+          {r.status || "미출근"}
+        </Badge>
+      ),
+    },
+  ];
+  const {
+    visibleColumns: visibleAttendanceColumns,
+    hidden: hiddenAttendanceColumns,
+    moveColumn: moveAttendanceColumn,
+    toggleColumn: toggleAttendanceColumn,
+    columns: attendanceColumnsOrdered,
+  } = useColumnPrefs("attendanceMain", attendanceColumns);
+
+  const openDetail = (row) => {
+    setDetail(row);
+    setDetailEditMode(false);
+    setDetailForm({
+      checkInTime: row.record.checkInTime ? row.record.checkInTime.slice(11, 16) : "",
+      checkOutTime: row.record.checkOutTime ? row.record.checkOutTime.slice(11, 16) : "",
+      status: row.record.status || "출근전",
+      reason: "",
+    });
+  };
+  const closeDetail = () => {
+    setDetail(null);
+    setDetailEditMode(false);
+  };
+
+  const saveDetailEdit = async () => {
+    if (!detail || !detailForm.reason.trim()) return;
+    const { record: r } = detail;
+    const updates = {};
+    const editLogs = [];
+    const prevCheckIn = r.checkInTime ? r.checkInTime.slice(11, 16) : "";
+    const prevCheckOut = r.checkOutTime ? r.checkOutTime.slice(11, 16) : "";
+    if (detailForm.checkInTime && detailForm.checkInTime !== prevCheckIn) {
+      updates.checkInTime = `${r.date}T${detailForm.checkInTime}:00`;
+      editLogs.push({ field: "출근시각", oldValue: prevCheckIn || "-", newValue: detailForm.checkInTime });
+    }
+    if (detailForm.checkOutTime && detailForm.checkOutTime !== prevCheckOut) {
+      updates.checkOutTime = `${r.date}T${detailForm.checkOutTime}:00`;
+      editLogs.push({ field: "퇴근시각", oldValue: prevCheckOut || "-", newValue: detailForm.checkOutTime });
+    }
+    if (detailForm.status !== (r.status || "출근전")) {
+      updates.status = detailForm.status;
+      editLogs.push({ field: "상태", oldValue: r.status || "출근전", newValue: detailForm.status });
+    }
+    if (Object.keys(updates).length === 0) {
+      closeDetail();
+      return;
+    }
+    updates.source = "manual";
+    await updateDoc(doc(db, "attendance", r.id), updates);
+    for (const log of editLogs) {
+      await addDoc(collection(db, "attendanceEdits"), {
+        companyId: profile.companyId,
+        uid: r.uid,
+        name: r.name,
+        date: r.date,
+        field: log.field,
+        oldValue: log.oldValue,
+        newValue: log.newValue,
+        reason: detailForm.reason,
+        editedAt: serverTimestamp(),
+        editedBy: user?.uid || null,
+      });
+    }
+    closeDetail();
+  };
 
   const toggleSelected = (id) =>
     setSelected((s) => {
@@ -437,10 +529,11 @@ export default function AttendanceBoard() {
               <Button size="sm" variant="outline" onClick={applyStatus} disabled={selected.size === 0}>
                 적용
               </Button>
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={exportCsv}>
                   <FileSpreadsheet size={13} /> 엑셀
                 </Button>
+                <ColumnVisibilityButton columns={attendanceColumnsOrdered} hidden={hiddenAttendanceColumns} toggleColumn={toggleAttendanceColumn} />
               </div>
             </Card>
 
@@ -452,42 +545,38 @@ export default function AttendanceBoard() {
                       <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
                     </th>
                     <th className="px-4 py-3 font-semibold">순번</th>
-                    <th className="px-4 py-3 font-semibold">이름</th>
-                    <th className="px-4 py-3 font-semibold">출근시간</th>
-                    <th className="px-4 py-3 font-semibold">퇴근시간</th>
-                    <th className="px-4 py-3 font-semibold">근무일</th>
-                    <th className="px-4 py-3 font-semibold">사업자</th>
-                    <th className="px-4 py-3 font-semibold">센터</th>
-                    <th className="px-4 py-3 font-semibold">근무구분</th>
-                    <th className="px-4 py-3 font-semibold">근무형태</th>
-                    <th className="px-4 py-3 font-semibold">상태</th>
+                    {visibleAttendanceColumns.map((c) => (
+                      <DraggableTh key={c.key} columnKey={c.key} onMove={moveAttendanceColumn} className="px-4 py-3 font-semibold">
+                        {c.label}
+                      </DraggableTh>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ record: r, emp }, i) => (
-                    <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelected(r.id)} />
-                      </td>
-                      <td className="px-4 py-3 text-muted">{i + 1}</td>
-                      <td className="px-4 py-3 text-ink">{r.name}</td>
-                      <td className="px-4 py-3 text-muted">{r.checkInTime ? formatTime(r.checkInTime) : "-"}</td>
-                      <td className="px-4 py-3 text-muted">{r.checkOutTime ? formatTime(r.checkOutTime) : "-"}</td>
-                      <td className="px-4 py-3 text-muted">{formatDate(r.date)}</td>
-                      <td className="px-4 py-3 text-muted">{companyName}</td>
-                      <td className="px-4 py-3 text-muted">{r.siteName || siteName_(emp.workSiteId)}</td>
-                      <td className="px-4 py-3 text-muted">{emp.shiftType || "-"}</td>
-                      <td className="px-4 py-3 text-muted">{emp.employmentType || "-"}</td>
-                      <td className="px-4 py-3">
-                        <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
-                          {r.status || "미출근"}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {rows.map((row, i) => {
+                    const { record: r } = row;
+                    return (
+                      <tr
+                        key={r.id}
+                        onDoubleClick={() => openDetail(row)}
+                        title="더블클릭하여 상세보기"
+                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                      >
+                        <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelected(r.id)} />
+                        </td>
+                        <td className="px-4 py-3 text-muted">{i + 1}</td>
+                        {visibleAttendanceColumns.map((c) => (
+                          <td key={c.key} className="px-4 py-3 text-muted">
+                            {c.render(row)}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="px-4 py-6 text-center text-xs text-muted">
+                      <td colSpan={visibleAttendanceColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
                         조건에 맞는 출근 기록이 없습니다.
                       </td>
                     </tr>
@@ -581,6 +670,124 @@ export default function AttendanceBoard() {
           </div>
         )}
       </Panel>
+
+      <Modal
+        open={Boolean(detail)}
+        onClose={closeDetail}
+        title="출근현황 상세"
+        footer={
+          detailEditMode ? (
+            <>
+              <Button variant="outline" onClick={() => setDetailEditMode(false)}>
+                취소
+              </Button>
+              <Button onClick={saveDetailEdit} disabled={!detailForm.reason.trim()}>
+                저장
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={closeDetail}>
+                닫기
+              </Button>
+              <Button onClick={() => setDetailEditMode(true)}>
+                <Pencil size={13} /> 수정
+              </Button>
+            </>
+          )
+        }
+      >
+        {detail && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <div>
+                <span className="block text-[11px] font-medium text-muted">이름</span>
+                <span className="text-ink">{detail.record.name}</span>
+              </div>
+              <div>
+                <span className="block text-[11px] font-medium text-muted">근무일</span>
+                <span className="text-ink">{formatDate(detail.record.date)}</span>
+              </div>
+              <div>
+                <span className="block text-[11px] font-medium text-muted">사업자</span>
+                <span className="text-ink">{companyName}</span>
+              </div>
+              <div>
+                <span className="block text-[11px] font-medium text-muted">센터</span>
+                <span className="text-ink">{detail.record.siteName || siteName_(detail.emp.workSiteId)}</span>
+              </div>
+              <div>
+                <span className="block text-[11px] font-medium text-muted">근무구분</span>
+                <span className="text-ink">{detail.emp.shiftType || "-"}</span>
+              </div>
+              <div>
+                <span className="block text-[11px] font-medium text-muted">근무형태</span>
+                <span className="text-ink">{detail.emp.employmentType || "-"}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">출근시각</span>
+                {detailEditMode ? (
+                  <input
+                    type="time"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={detailForm.checkInTime}
+                    onChange={(e) => setDetailForm((f) => ({ ...f, checkInTime: e.target.value }))}
+                  />
+                ) : (
+                  <p className="text-sm text-ink">{detail.record.checkInTime ? formatTime(detail.record.checkInTime) : "-"}</p>
+                )}
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">퇴근시각</span>
+                {detailEditMode ? (
+                  <input
+                    type="time"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={detailForm.checkOutTime}
+                    onChange={(e) => setDetailForm((f) => ({ ...f, checkOutTime: e.target.value }))}
+                  />
+                ) : (
+                  <p className="text-sm text-ink">{detail.record.checkOutTime ? formatTime(detail.record.checkOutTime) : "-"}</p>
+                )}
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">출근상태</span>
+              {detailEditMode ? (
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={detailForm.status}
+                  onChange={(e) => setDetailForm((f) => ({ ...f, status: e.target.value }))}
+                >
+                  {EDIT_STATUS_OPTIONS.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              ) : (
+                <Badge tone={detail.record.status === "출근" ? "success" : detail.record.status === "지각" || detail.record.status === "조퇴" ? "warning" : "danger"}>
+                  {detail.record.status || "미출근"}
+                </Badge>
+              )}
+            </label>
+
+            {detailEditMode && (
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">사유 (필수)</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={detailForm.reason}
+                  onChange={(e) => setDetailForm((f) => ({ ...f, reason: e.target.value }))}
+                  placeholder="변경사유"
+                />
+              </label>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

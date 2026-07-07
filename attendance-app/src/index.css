@@ -24,6 +24,12 @@ input, select, textarea {
   table th, table td {
     white-space: nowrap;
   }
+
+  /* 컬럼명이 화이트 배경에 묻혀 구분이 안 되는 문제를 막기 위해 모든 표의
+     헤더 셀에 앱 톤(연한 블루)의 배경색을 기본으로 깐다. */
+  table thead th {
+    @apply bg-primary-light/70 text-ink font-semibold;
+  }
 }
 
 ::-webkit-scrollbar {

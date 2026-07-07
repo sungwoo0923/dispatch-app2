@@ -25,7 +25,10 @@ import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import SidePanel from "../components/SidePanel";
 import Pagination from "../components/Pagination";
+import DraggableTh from "../components/DraggableTh";
+import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
 import { usePagination } from "../hooks/usePagination";
+import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import {
   EMPLOYMENT_STATUS_OPTIONS,
   NATIONALITY_OPTIONS,
@@ -236,6 +239,134 @@ export default function EmployeeList() {
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const shiftTemplateName_ = (id) => shiftTemplates.find((t) => t.id === id)?.name || "-";
   const allowanceTemplateName_ = (id) => allowanceTemplates.find((t) => t.id === id)?.name || "-";
+
+  const selectCls = "rounded-lg border border-slate-200 px-2 py-1 text-xs";
+  const employeeColumns = [
+    { key: "name", label: "이름", render: (emp) => <span className="text-ink">{emp.name}</span> },
+    { key: "entity", label: "사업자", render: (emp) => entityName_(emp.businessEntityId) },
+    {
+      key: "site",
+      label: "센터",
+      interactive: true,
+      render: (emp) => (
+        <select className={selectCls} value={emp.workSiteId || ""} onChange={(e) => assignSite(emp.id, e.target.value)}>
+          <option value="">미배정</option>
+          {workSites.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      ),
+    },
+    { key: "phone", label: "연락처", render: (emp) => emp.phone },
+    { key: "gender", label: "성별", render: (emp) => emp.gender || "-" },
+    { key: "age", label: "나이", render: (emp) => calculateAge(emp.residentNumberFront) ?? "-" },
+    { key: "vendor", label: "소속업체", render: (emp) => vendorName_(emp.vendorId) },
+    {
+      key: "shiftType",
+      label: "근무구분",
+      interactive: true,
+      render: (emp) => (
+        <select className={selectCls} value={emp.shiftType || ""} onChange={(e) => updateField(emp.id, "shiftType", e.target.value)}>
+          <option value="">-</option>
+          {SHIFT_TYPE_OPTIONS.map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
+      ),
+    },
+    {
+      key: "employmentType",
+      label: "고용구분",
+      interactive: true,
+      render: (emp) => (
+        <select className={selectCls} value={emp.employmentType || ""} onChange={(e) => updateField(emp.id, "employmentType", e.target.value)}>
+          <option value="">-</option>
+          {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
+      ),
+    },
+    { key: "note", label: "근무비고", render: (emp) => emp.note || "-" },
+    {
+      key: "team",
+      label: "부서",
+      interactive: true,
+      render: (emp) => (
+        <select className={selectCls} value={emp.team || ""} onChange={(e) => updateField(emp.id, "team", e.target.value)}>
+          <option value="">-</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.name}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      ),
+    },
+    {
+      key: "position",
+      label: "직급",
+      interactive: true,
+      render: (emp) => (
+        <select className={selectCls} value={emp.position || ""} onChange={(e) => updateField(emp.id, "position", e.target.value)}>
+          <option value="">-</option>
+          {positions.map((p) => (
+            <option key={p.id} value={p.name}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      ),
+    },
+    { key: "shiftTemplate", label: "시간템플릿", render: (emp) => shiftTemplateName_(emp.shiftTemplateId) },
+    { key: "allowanceTemplate", label: "수당템플릿", render: (emp) => allowanceTemplateName_(emp.allowanceTemplateId) },
+    { key: "contractTemplate", label: "계약서템플릿", render: (emp) => emp.contractTemplateName || "-" },
+    { key: "resignTemplate", label: "사직서템플릿", render: (emp) => emp.resignTemplateName || "-" },
+    { key: "nationality", label: "외/내국인", render: (emp) => emp.nationality || "-" },
+    { key: "country", label: "국적", render: (emp) => emp.country || "-" },
+    {
+      key: "employmentStatus",
+      label: "재직상태",
+      interactive: true,
+      render: (emp) => (
+        <select className={selectCls} value={emp.employmentStatus || "재직"} onChange={(e) => updateField(emp.id, "employmentStatus", e.target.value)}>
+          {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
+      ),
+    },
+    { key: "hireDate", label: "입사일", render: (emp) => (emp.hireDate ? formatDate(emp.hireDate) : "-") },
+    { key: "resignDate", label: "퇴사일", render: (emp) => (emp.resignDate ? formatDate(emp.resignDate) : "-") },
+    { key: "signup", label: "회원가입", render: () => "Y" },
+    { key: "employeeCode", label: "가입코드", render: (emp) => emp.employeeCode || "-" },
+    { key: "insurance", label: "4대보험", render: (emp) => (emp.insuranceApplied === "Y" ? "Y" : "N") },
+    { key: "payType", label: "급여", render: (emp) => emp.payType || "-" },
+    {
+      key: "approved",
+      label: "승인",
+      interactive: true,
+      render: (emp) =>
+        emp.approved ? (
+          <Badge tone="success">
+            <Check size={12} /> 승인됨
+          </Badge>
+        ) : (
+          <Button size="sm" onClick={() => approve(emp.id)}>
+            승인
+          </Button>
+        ),
+    },
+  ];
+  const {
+    visibleColumns: visibleEmployeeColumns,
+    hidden: hiddenEmployeeColumns,
+    moveColumn: moveEmployeeColumn,
+    toggleColumn: toggleEmployeeColumn,
+    columns: employeeColumnsOrdered,
+  } = useColumnPrefs("employeeList", employeeColumns);
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
@@ -710,6 +841,7 @@ export default function EmployeeList() {
             <Button size="sm" variant="outline" onClick={() => window.alert(`${selected.size || 0}명에게 SMS를 발송했습니다.`)} disabled={selected.size === 0}>
               <Send size={13} /> SMS발송
             </Button>
+            <ColumnVisibilityButton columns={employeeColumnsOrdered} hidden={hiddenEmployeeColumns} toggleColumn={toggleEmployeeColumn} />
           </div>
         </div>
 
@@ -757,32 +889,11 @@ export default function EmployeeList() {
                   <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
                 </th>
                 <th className="px-4 py-3 font-semibold">순번</th>
-                <th className="px-4 py-3 font-semibold">이름</th>
-                <th className="px-4 py-3 font-semibold">사업자</th>
-                <th className="px-4 py-3 font-semibold">센터</th>
-                <th className="px-4 py-3 font-semibold">연락처</th>
-                <th className="px-4 py-3 font-semibold">성별</th>
-                <th className="px-4 py-3 font-semibold">나이</th>
-                <th className="px-4 py-3 font-semibold">소속업체</th>
-                <th className="px-4 py-3 font-semibold">근무구분</th>
-                <th className="px-4 py-3 font-semibold">고용구분</th>
-                <th className="px-4 py-3 font-semibold">근무비고</th>
-                <th className="px-4 py-3 font-semibold">부서</th>
-                <th className="px-4 py-3 font-semibold">직급</th>
-                <th className="px-4 py-3 font-semibold">시간템플릿</th>
-                <th className="px-4 py-3 font-semibold">수당템플릿</th>
-                <th className="px-4 py-3 font-semibold">계약서템플릿</th>
-                <th className="px-4 py-3 font-semibold">사직서템플릿</th>
-                <th className="px-4 py-3 font-semibold">외/내국인</th>
-                <th className="px-4 py-3 font-semibold">국적</th>
-                <th className="px-4 py-3 font-semibold">재직상태</th>
-                <th className="px-4 py-3 font-semibold">입사일</th>
-                <th className="px-4 py-3 font-semibold">퇴사일</th>
-                <th className="px-4 py-3 font-semibold">회원가입</th>
-                <th className="px-4 py-3 font-semibold">가입코드</th>
-                <th className="px-4 py-3 font-semibold">4대보험</th>
-                <th className="px-4 py-3 font-semibold">급여</th>
-                <th className="px-4 py-3 font-semibold">승인</th>
+                {visibleEmployeeColumns.map((c) => (
+                  <DraggableTh key={c.key} columnKey={c.key} onMove={moveEmployeeColumn} className="px-4 py-3 font-semibold">
+                    {c.label}
+                  </DraggableTh>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -798,118 +909,20 @@ export default function EmployeeList() {
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
                   </td>
                   <td className="px-4 py-3 text-muted">{(page - 1) * pageSize + i + 1}</td>
-                  <td className="px-4 py-3 text-ink">{emp.name}</td>
-                  <td className="px-4 py-3 text-muted">{entityName_(emp.businessEntityId)}</td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                      value={emp.workSiteId || ""}
-                      onChange={(e) => assignSite(emp.id, e.target.value)}
+                  {visibleEmployeeColumns.map((c) => (
+                    <td
+                      key={c.key}
+                      className="px-4 py-3 text-muted"
+                      onDoubleClick={c.interactive ? (e) => e.stopPropagation() : undefined}
                     >
-                      <option value="">미배정</option>
-                      {workSites.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-muted">{emp.phone}</td>
-                  <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
-                  <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                      value={emp.shiftType || ""}
-                      onChange={(e) => updateField(emp.id, "shiftType", e.target.value)}
-                    >
-                      <option value="">-</option>
-                      {SHIFT_TYPE_OPTIONS.map((s) => (
-                        <option key={s}>{s}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                      value={emp.employmentType || ""}
-                      onChange={(e) => updateField(emp.id, "employmentType", e.target.value)}
-                    >
-                      <option value="">-</option>
-                      {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
-                        <option key={t}>{t}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-muted">{emp.note || "-"}</td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                      value={emp.team || ""}
-                      onChange={(e) => updateField(emp.id, "team", e.target.value)}
-                    >
-                      <option value="">-</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.name}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                      value={emp.position || ""}
-                      onChange={(e) => updateField(emp.id, "position", e.target.value)}
-                    >
-                      <option value="">-</option>
-                      {positions.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
-                  <td className="px-4 py-3 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
-                  <td className="px-4 py-3 text-muted">{emp.contractTemplateName || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.resignTemplateName || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.nationality || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.country || "-"}</td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                      value={emp.employmentStatus || "재직"}
-                      onChange={(e) => updateField(emp.id, "employmentStatus", e.target.value)}
-                    >
-                      {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
-                        <option key={s}>{s}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-muted">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
-                  <td className="px-4 py-3 text-muted">Y</td>
-                  <td className="px-4 py-3 text-muted">{emp.employeeCode || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.insuranceApplied === "Y" ? "Y" : "N"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.payType || "-"}</td>
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                    {emp.approved ? (
-                      <Badge tone="success">
-                        <Check size={12} /> 승인됨
-                      </Badge>
-                    ) : (
-                      <Button size="sm" onClick={() => approve(emp.id)}>
-                        승인
-                      </Button>
-                    )}
-                  </td>
+                      {c.render(emp)}
+                    </td>
+                  ))}
                 </tr>
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={27} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={visibleEmployeeColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 근로자가 없습니다.
                   </td>
                 </tr>

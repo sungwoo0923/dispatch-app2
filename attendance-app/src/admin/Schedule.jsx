@@ -12,7 +12,21 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { Plus, CalendarDays, FileSpreadsheet, RefreshCw, LayoutList, Calendar as CalendarIcon, Copy, Repeat, X } from "lucide-react";
+import {
+  Plus,
+  CalendarDays,
+  FileSpreadsheet,
+  RefreshCw,
+  LayoutList,
+  Calendar as CalendarIcon,
+  Copy,
+  Repeat,
+  X,
+  Search,
+  Clock,
+  CalendarOff,
+  UserMinus,
+} from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -20,6 +34,9 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import DraggableTh from "../components/DraggableTh";
+import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
+import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
@@ -56,8 +73,14 @@ export default function Schedule() {
   const [positions, setPositions] = useState([]);
   const [shiftTemplates, setShiftTemplates] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [leaves, setLeaves] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ uid: "", date: toDateKey(), startTime: "09:00", endTime: "18:00", siteId: "" });
+
+  const [bulkFilters, setBulkFilters] = useState(EMPTY_FILTERS);
+  const [bulkSearched, setBulkSearched] = useState(false);
+  const [bulkResults, setBulkResults] = useState([]);
+  const [bulkSelected, setBulkSelected] = useState(() => new Set());
+  const [bulkRange, setBulkRange] = useState({ start: toDateKey(), end: toDateKey() });
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [range, setRange] = useState({ start: toDateKey(), end: toDateKey() });
@@ -108,6 +131,10 @@ export default function Schedule() {
       query(collection(db, "shiftTemplates"), where("companyId", "==", profile.companyId)),
       (snap) => setShiftTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubLeaves = onSnapshot(
+      query(collection(db, "leaves"), where("companyId", "==", profile.companyId)),
+      (snap) => setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     return () => {
       unsubUsers();
       unsubSites();
@@ -115,6 +142,7 @@ export default function Schedule() {
       unsubDept();
       unsubPos();
       unsubTemplates();
+      unsubLeaves();
     };
   }, [profile?.companyId]);
 
@@ -140,42 +168,162 @@ export default function Schedule() {
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
 
+  const matchesFilters = (emp, f) => {
+    if (!emp) return false;
+    if (f.siteId && emp.workSiteId !== f.siteId) return false;
+    if (f.vendorId && emp.vendorId !== f.vendorId) return false;
+    if (f.shiftType && emp.shiftType !== f.shiftType) return false;
+    if (f.employmentType && emp.employmentType !== f.employmentType) return false;
+    if (f.team && emp.team !== f.team) return false;
+    if (f.position && emp.position !== f.position) return false;
+    if (f.nationality && emp.nationality !== f.nationality) return false;
+    if (f.country && emp.country !== f.country) return false;
+    if (f.name && !emp.name?.includes(f.name)) return false;
+    if (f.phone && !emp.phone?.includes(f.phone)) return false;
+    return true;
+  };
+
   const rows = useMemo(() => {
     return schedules
       .map((s) => ({ schedule: s, emp: employeeByUid.get(s.uid) }))
       .filter(({ emp }) => Boolean(emp))
-      .filter(({ emp }) => {
-        if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
-        if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
-        if (filters.shiftType && emp.shiftType !== filters.shiftType) return false;
-        if (filters.employmentType && emp.employmentType !== filters.employmentType) return false;
-        if (filters.team && emp.team !== filters.team) return false;
-        if (filters.position && emp.position !== filters.position) return false;
-        if (filters.nationality && emp.nationality !== filters.nationality) return false;
-        if (filters.country && emp.country !== filters.country) return false;
-        if (filters.name && !emp.name?.includes(filters.name)) return false;
-        if (filters.phone && !emp.phone?.includes(filters.phone)) return false;
-        return true;
-      })
+      .filter(({ emp }) => matchesFilters(emp, filters))
       .sort((a, b) => a.schedule.date.localeCompare(b.schedule.date));
   }, [schedules, employeeByUid, filters]);
 
-  const submit = async (e) => {
-    e.preventDefault();
-    const emp = employees.find((x) => x.id === form.uid);
-    const site = workSites.find((x) => x.id === form.siteId);
-    await addDoc(collection(db, "schedules"), {
-      companyId: profile.companyId,
-      uid: form.uid,
-      name: emp?.name || "",
-      date: form.date,
-      startTime: form.startTime,
-      endTime: form.endTime,
-      siteId: form.siteId || null,
-      siteName: site?.name || "",
-      status: "대기",
-      createdAt: serverTimestamp(),
+  const pendingRows = useMemo(() => rows.filter(({ schedule: s }) => (s.status || "대기") === "대기"), [rows]);
+
+  const leaveRows = useMemo(() => {
+    return leaves
+      .filter((lv) => lv.status === "approved")
+      .map((lv) => ({ leave: lv, emp: employeeByUid.get(lv.uid) }))
+      .filter(({ emp }) => Boolean(emp))
+      .filter(({ leave, emp }) => {
+        if (range.start && (leave.endDate || leave.startDate) < range.start) return false;
+        if (range.end && leave.startDate > range.end) return false;
+        return matchesFilters(emp, filters);
+      })
+      .sort((a, b) => a.leave.startDate.localeCompare(b.leave.startDate));
+  }, [leaves, employeeByUid, filters, range]);
+
+  const resignedRows = useMemo(
+    () => employees.filter((emp) => emp.employmentStatus === "퇴사" && matchesFilters(emp, filters)),
+    [employees, filters]
+  );
+
+  const scheduleColumns = [
+    { key: "name", label: "이름", render: ({ schedule: s }) => <span className="text-ink">{s.name}</span> },
+    { key: "company", label: "사업자", render: () => companyName },
+    { key: "site", label: "센터", render: ({ schedule: s, emp }) => s.siteName || siteName_(emp.workSiteId) },
+    {
+      key: "status",
+      label: "확정",
+      render: ({ schedule: s }) => <Badge tone={STATUS_TONE[s.status || "대기"]}>{s.status || "대기"}</Badge>,
+    },
+    { key: "date", label: "근무일자", render: ({ schedule: s }) => formatDate(s.date) },
+    { key: "time", label: "근무시각", render: ({ schedule: s }) => `${s.startTime} ~ ${s.endTime}` },
+    { key: "phone", label: "전화번호", render: ({ emp }) => emp.phone },
+    { key: "gender", label: "성별", render: ({ emp }) => emp.gender || "-" },
+    { key: "vendor", label: "소속업체", render: ({ emp }) => vendorName_(emp.vendorId) },
+  ];
+  const {
+    visibleColumns: visibleScheduleColumns,
+    hidden: hiddenScheduleColumns,
+    moveColumn: moveScheduleColumn,
+    toggleColumn: toggleScheduleColumn,
+    columns: scheduleColumnsOrdered,
+  } = useColumnPrefs("scheduleMain", scheduleColumns);
+
+  const leaveColumns = [
+    { key: "name", label: "이름", render: ({ emp }) => emp.name },
+    { key: "company", label: "사업자", render: () => companyName },
+    { key: "site", label: "센터", render: ({ emp }) => siteName_(emp.workSiteId) },
+    { key: "type", label: "휴가유형", render: ({ leave }) => leave.type || "-" },
+    {
+      key: "period",
+      label: "휴무기간",
+      render: ({ leave }) => `${formatDate(leave.startDate)} ~ ${formatDate(leave.endDate || leave.startDate)}`,
+    },
+    { key: "phone", label: "전화번호", render: ({ emp }) => emp.phone },
+    { key: "vendor", label: "소속업체", render: ({ emp }) => vendorName_(emp.vendorId) },
+  ];
+  const {
+    visibleColumns: visibleLeaveColumns,
+    hidden: hiddenLeaveColumns,
+    moveColumn: moveLeaveColumn,
+    toggleColumn: toggleLeaveColumn,
+    columns: leaveColumnsOrdered,
+  } = useColumnPrefs("scheduleLeave", leaveColumns);
+
+  const resignedColumns = [
+    { key: "name", label: "이름", render: (emp) => emp.name },
+    { key: "company", label: "사업자", render: () => companyName },
+    { key: "site", label: "센터", render: (emp) => siteName_(emp.workSiteId) },
+    { key: "resignDate", label: "퇴사일", render: (emp) => (emp.resignDate ? formatDate(emp.resignDate) : "-") },
+    { key: "phone", label: "전화번호", render: (emp) => emp.phone },
+    { key: "vendor", label: "소속업체", render: (emp) => vendorName_(emp.vendorId) },
+  ];
+  const {
+    visibleColumns: visibleResignedColumns,
+    hidden: hiddenResignedColumns,
+    moveColumn: moveResignedColumn,
+    toggleColumn: toggleResignedColumn,
+    columns: resignedColumnsOrdered,
+  } = useColumnPrefs("scheduleResigned", resignedColumns);
+
+  const openBulkRegister = () => {
+    setBulkFilters(EMPTY_FILTERS);
+    setBulkSearched(false);
+    setBulkResults([]);
+    setBulkSelected(new Set());
+    setBulkRange({ start: toDateKey(), end: toDateKey() });
+    setOpen(true);
+  };
+
+  const runBulkSearch = () => {
+    setBulkResults(employees.filter((emp) => matchesFilters(emp, bulkFilters)));
+    setBulkSearched(true);
+    setBulkSelected(new Set());
+  };
+
+  const toggleBulkSelected = (id) =>
+    setBulkSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
+  const toggleBulkSelectAll = () =>
+    setBulkSelected((s) => (s.size === bulkResults.length ? new Set() : new Set(bulkResults.map((e) => e.id))));
+
+  const submitBulkSchedule = async () => {
+    if (bulkSelected.size === 0 || !bulkRange.start || !bulkRange.end) return;
+    const dates = [];
+    let cur = new Date(bulkRange.start);
+    const end = new Date(bulkRange.end);
+    while (cur <= end) {
+      dates.push(toDateKey(cur));
+      cur = new Date(cur.getTime() + 86400000);
+    }
+    for (const uid of bulkSelected) {
+      const emp = employees.find((x) => x.id === uid);
+      if (!emp) continue;
+      const site = workSites.find((x) => x.id === emp.workSiteId);
+      for (const date of dates) {
+        await addDoc(collection(db, "schedules"), {
+          companyId: profile.companyId,
+          uid: emp.id,
+          name: emp.name,
+          date,
+          startTime: "09:00",
+          endTime: "18:00",
+          siteId: emp.workSiteId || null,
+          siteName: site?.name || "",
+          status: "대기",
+          createdAt: serverTimestamp(),
+        });
+      }
+    }
     setOpen(false);
   };
 
@@ -337,7 +485,7 @@ export default function Schedule() {
         icon={CalendarDays}
         title="스케줄등록"
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openBulkRegister}>
             <Plus size={16} /> 스케줄 등록
           </Button>
         }
@@ -568,6 +716,9 @@ export default function Schedule() {
               <Button size="sm" variant="outline" onClick={exportCsv}>
                 <FileSpreadsheet size={13} /> 엑셀
               </Button>
+              <div className="ml-auto">
+                <ColumnVisibilityButton columns={scheduleColumnsOrdered} hidden={hiddenScheduleColumns} toggleColumn={toggleScheduleColumn} />
+              </div>
             </Card>
 
             <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
@@ -578,42 +729,33 @@ export default function Schedule() {
                       <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
                     </th>
                     <th className="px-4 py-3 font-semibold">순번</th>
-                    <th className="px-4 py-3 font-semibold">이름</th>
-                    <th className="px-4 py-3 font-semibold">사업자</th>
-                    <th className="px-4 py-3 font-semibold">센터</th>
-                    <th className="px-4 py-3 font-semibold">확정</th>
-                    <th className="px-4 py-3 font-semibold">근무일자</th>
-                    <th className="px-4 py-3 font-semibold">근무시각</th>
-                    <th className="px-4 py-3 font-semibold">전화번호</th>
-                    <th className="px-4 py-3 font-semibold">성별</th>
-                    <th className="px-4 py-3 font-semibold">소속업체</th>
+                    {visibleScheduleColumns.map((c) => (
+                      <DraggableTh key={c.key} columnKey={c.key} onMove={moveScheduleColumn} className="px-4 py-3 font-semibold">
+                        {c.label}
+                      </DraggableTh>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ schedule: s, emp }, i) => (
-                    <tr key={s.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
-                      </td>
-                      <td className="px-4 py-3 text-muted">{i + 1}</td>
-                      <td className="px-4 py-3 text-ink">{s.name}</td>
-                      <td className="px-4 py-3 text-muted">{companyName}</td>
-                      <td className="px-4 py-3 text-muted">{s.siteName || siteName_(emp.workSiteId)}</td>
-                      <td className="px-4 py-3">
-                        <Badge tone={STATUS_TONE[s.status || "대기"]}>{s.status || "대기"}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-muted">{formatDate(s.date)}</td>
-                      <td className="px-4 py-3 text-muted">
-                        {s.startTime} ~ {s.endTime}
-                      </td>
-                      <td className="px-4 py-3 text-muted">{emp.phone}</td>
-                      <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
-                      <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                    </tr>
-                  ))}
+                  {rows.map((row, i) => {
+                    const { schedule: s } = row;
+                    return (
+                      <tr key={s.id} className="border-b border-slate-50 last:border-0">
+                        <td className="px-4 py-3">
+                          <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
+                        </td>
+                        <td className="px-4 py-3 text-muted">{i + 1}</td>
+                        {visibleScheduleColumns.map((c) => (
+                          <td key={c.key} className="px-4 py-3 text-muted">
+                            {c.render(row)}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="px-4 py-6 text-center text-xs text-muted">
+                      <td colSpan={visibleScheduleColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
                         등록된 스케줄이 없습니다.
                       </td>
                     </tr>
@@ -627,101 +769,342 @@ export default function Schedule() {
         )}
       </Panel>
 
+      <Card className="p-4">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
+            <Clock size={13} /> 대기 인원 현황 {pendingRows.length}
+          </p>
+          <ColumnVisibilityButton columns={scheduleColumnsOrdered} hidden={hiddenScheduleColumns} toggleColumn={toggleScheduleColumn} />
+        </div>
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
+          <table className="w-full min-w-[720px] text-center text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-semibold">순번</th>
+                {visibleScheduleColumns.map((c) => (
+                  <DraggableTh key={c.key} columnKey={c.key} onMove={moveScheduleColumn} className="px-4 py-3 font-semibold">
+                    {c.label}
+                  </DraggableTh>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pendingRows.map((row, i) => (
+                <tr key={row.schedule.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  {visibleScheduleColumns.map((c) => (
+                    <td key={c.key} className="px-4 py-3 text-muted">
+                      {c.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {pendingRows.length === 0 && (
+                <tr>
+                  <td colSpan={visibleScheduleColumns.length + 1} className="px-4 py-6 text-center text-xs text-muted">
+                    대기 중인 인원이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
+            <CalendarOff size={13} /> 휴무 인원 현황 {leaveRows.length}
+          </p>
+          <ColumnVisibilityButton columns={leaveColumnsOrdered} hidden={hiddenLeaveColumns} toggleColumn={toggleLeaveColumn} />
+        </div>
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
+          <table className="w-full min-w-[720px] text-center text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-semibold">순번</th>
+                {visibleLeaveColumns.map((c) => (
+                  <DraggableTh key={c.key} columnKey={c.key} onMove={moveLeaveColumn} className="px-4 py-3 font-semibold">
+                    {c.label}
+                  </DraggableTh>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {leaveRows.map((row, i) => (
+                <tr key={row.leave.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  {visibleLeaveColumns.map((c) => (
+                    <td key={c.key} className="px-4 py-3 text-muted">
+                      {c.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {leaveRows.length === 0 && (
+                <tr>
+                  <td colSpan={visibleLeaveColumns.length + 1} className="px-4 py-6 text-center text-xs text-muted">
+                    휴무 중인 인원이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
+            <UserMinus size={13} /> 퇴사 인원 현황 {resignedRows.length}
+          </p>
+          <ColumnVisibilityButton columns={resignedColumnsOrdered} hidden={hiddenResignedColumns} toggleColumn={toggleResignedColumn} />
+        </div>
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
+          <table className="w-full min-w-[720px] text-center text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-semibold">순번</th>
+                {visibleResignedColumns.map((c) => (
+                  <DraggableTh key={c.key} columnKey={c.key} onMove={moveResignedColumn} className="px-4 py-3 font-semibold">
+                    {c.label}
+                  </DraggableTh>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {resignedRows.map((emp, i) => (
+                <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  {visibleResignedColumns.map((c) => (
+                    <td key={c.key} className="px-4 py-3 text-muted">
+                      {c.render(emp)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {resignedRows.length === 0 && (
+                <tr>
+                  <td colSpan={visibleResignedColumns.length + 1} className="px-4 py-6 text-center text-xs text-muted">
+                    퇴사 처리된 인원이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="스케줄 등록"
+        title="출근자등록"
+        size="lg"
         footer={
           <>
             <Button variant="outline" onClick={() => setOpen(false)}>
               취소
             </Button>
-            <Button onClick={submit}>등록</Button>
+            <Button onClick={submitBulkSchedule} disabled={bulkSelected.size === 0}>
+              출근일정등록
+            </Button>
           </>
         }
       >
-        <form onSubmit={submit} className="space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">직원</span>
-            <select
-              required
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.uid}
-              onChange={(e) => setForm((f) => ({ ...f, uid: e.target.value }))}
-            >
-              <option value="">선택</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">근무지</span>
-            <select
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.siteId}
-              onChange={(e) => setForm((f) => ({ ...f, siteId: e.target.value }))}
-            >
-              <option value="">선택 안 함</option>
-              {workSites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">근무일자</span>
-            <input
-              type="date"
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.date}
-              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-            />
-          </label>
-          {shiftTemplates.length > 0 && (
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">시간템플릿으로 채우기</span>
-              <select
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                defaultValue=""
-                onChange={(e) => {
-                  const t = shiftTemplates.find((x) => x.id === e.target.value);
-                  if (t) setForm((f) => ({ ...f, startTime: t.startTime, endTime: t.endTime }));
+        <div className="space-y-3">
+          <Card className="space-y-3 p-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">센터</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.siteId}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, siteId: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {workSites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">소속업체</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.vendorId}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, vendorId: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">근무구분</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.shiftType}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, shiftType: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {SHIFT_TYPE_OPTIONS.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">근무형태</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.employmentType}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, employmentType: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">부서</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.team}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, team: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.name}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">직급</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.position}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, position: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {positions.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">이름</span>
+                <input
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.name}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, name: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">전화번호</span>
+                <input
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.phone}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, phone: e.target.value }))}
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-2">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-200 p-2.5 text-muted hover:bg-slate-50"
+                title="초기화"
+                onClick={() => {
+                  setBulkFilters(EMPTY_FILTERS);
                 }}
               >
-                <option value="">선택 안 함</option>
-                {shiftTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.startTime} ~ {t.endTime})
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">시작시각</span>
-              <input
-                type="time"
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.startTime}
-                onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">종료시각</span>
-              <input
-                type="time"
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={form.endTime}
-                onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
-              />
-            </label>
+                <RefreshCw size={16} />
+              </button>
+              <Button size="sm" onClick={runBulkSearch}>
+                <Search size={13} /> 검색
+              </Button>
+            </div>
+          </Card>
+
+          <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+            <p className="text-xs font-medium text-muted">출근자 목록 {bulkSearched ? bulkResults.length : 0}</p>
+            <p className="text-xs text-muted">선택 {bulkSelected.size}명</p>
           </div>
-        </form>
+          <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-100">
+            <table className="w-full min-w-[560px] text-center text-sm">
+              <thead className="sticky top-0 bg-white">
+                <tr className="border-b border-slate-100 text-xs text-muted">
+                  <th className="px-3 py-2 font-semibold">
+                    <input type="checkbox" checked={bulkSearched && bulkResults.length > 0 && bulkSelected.size === bulkResults.length} onChange={toggleBulkSelectAll} />
+                  </th>
+                  <th className="px-3 py-2 font-semibold">이름</th>
+                  <th className="px-3 py-2 font-semibold">사업자</th>
+                  <th className="px-3 py-2 font-semibold">센터</th>
+                  <th className="px-3 py-2 font-semibold">소속업체</th>
+                  <th className="px-3 py-2 font-semibold">전화번호</th>
+                  <th className="px-3 py-2 font-semibold">성별</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bulkSearched &&
+                  bulkResults.map((emp) => (
+                    <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-3 py-2">
+                        <input type="checkbox" checked={bulkSelected.has(emp.id)} onChange={() => toggleBulkSelected(emp.id)} />
+                      </td>
+                      <td className="px-3 py-2 text-ink">{emp.name}</td>
+                      <td className="px-3 py-2 text-muted">{companyName}</td>
+                      <td className="px-3 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
+                      <td className="px-3 py-2 text-muted">{vendorName_(emp.vendorId)}</td>
+                      <td className="px-3 py-2 text-muted">{emp.phone}</td>
+                      <td className="px-3 py-2 text-muted">{emp.gender || "-"}</td>
+                    </tr>
+                  ))}
+                {!bulkSearched && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6 text-center text-xs text-muted">
+                      조회내역이 없습니다. 필터를 설정한 뒤 검색 버튼을 눌러주세요.
+                    </td>
+                  </tr>
+                )}
+                {bulkSearched && bulkResults.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6 text-center text-xs text-muted">
+                      조회된 내역이 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">출근 기간</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                className="rounded-lg border border-slate-200 px-2 py-2 text-sm"
+                value={bulkRange.start}
+                onChange={(e) => setBulkRange((r) => ({ ...r, start: e.target.value }))}
+              />
+              <span className="text-muted">~</span>
+              <input
+                type="date"
+                className="rounded-lg border border-slate-200 px-2 py-2 text-sm"
+                value={bulkRange.end}
+                onChange={(e) => setBulkRange((r) => ({ ...r, end: e.target.value }))}
+              />
+            </div>
+          </label>
+        </div>
       </Modal>
 
       <Modal
