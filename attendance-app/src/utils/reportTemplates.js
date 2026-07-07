@@ -113,7 +113,7 @@ function wrapDoc(title, bodyHtml) {
   return `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title><style>${PAGE_STYLE}</style></head><body>${bodyHtml}</body></html>`;
 }
 
-export function buildContractHtml({ siteName, workContent, wage, insurance, etc, familyConsent, reportFormat }) {
+export function buildContractHtml({ siteName, workContent, wage, insurance, etc, familyConsent, reportFormat, stampUrl }) {
   const variantLabel = reportFormat && reportFormat !== "표준근로계약서" ? reportFormat.replace("표준근로계약서", "").trim() : "";
   const body = `
     <h1>표 준 근 로 계 약 서</h1>
@@ -148,7 +148,9 @@ export function buildContractHtml({ siteName, workContent, wage, insurance, etc,
       <table class="no-border">
         <tr><td style="width:90px;">(사업주)&nbsp;사 업 체 명 :</td><td><span class="blank-line" style="min-width:260px;">&nbsp;</span>&nbsp;&nbsp;(전화 :&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</td></tr>
         <tr><td>주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소 :</td><td><span class="blank-line" style="min-width:400px;">&nbsp;</span></td></tr>
-        <tr><td>대&nbsp;&nbsp;표&nbsp;&nbsp;자 :</td><td><span class="blank-line" style="min-width:260px;">&nbsp;</span>&nbsp;&nbsp;(서명)</td></tr>
+        <tr><td>대&nbsp;&nbsp;표&nbsp;&nbsp;자 :</td><td><span class="blank-line" style="min-width:260px;">&nbsp;</span>&nbsp;&nbsp;(서명)${
+          stampUrl ? `<img src="${esc(stampUrl)}" style="height:44px;vertical-align:middle;margin-left:8px;" />` : ""
+        }</td></tr>
         <tr><td>(근로자)&nbsp;주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소 :</td><td><span class="blank-line" style="min-width:400px;">&nbsp;</span></td></tr>
         <tr><td>주 민 번 호 :</td><td><span class="blank-line" style="min-width:260px;">&nbsp;</span></td></tr>
         <tr><td>연&nbsp;&nbsp;락&nbsp;&nbsp;처 :</td><td><span class="blank-line" style="min-width:260px;">&nbsp;</span></td></tr>

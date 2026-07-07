@@ -232,7 +232,8 @@ export default function CenterReports() {
 
   const preview = (t) => {
     if (!t.reportFormat) return;
-    openReportPreview(t.docType, t.reportFormat, { siteName: siteName(t.siteId), ...(t.extra || {}) });
+    const stampUrl = entities.find((e) => e.id === t.businessEntityId)?.stampUrl || null;
+    openReportPreview(t.docType, t.reportFormat, { siteName: siteName(t.siteId), stampUrl, ...(t.extra || {}) });
   };
 
   const triggerUpload = () => fileInputRef.current?.click();
@@ -263,9 +264,13 @@ export default function CenterReports() {
       if (!form.businessEntityId) toast.error("사업자를 먼저 선택해주세요.");
       return;
     }
-    const url = await uploadBusinessEntityStamp({ companyId: profile.companyId, entityId: form.businessEntityId, file });
-    await updateDoc(doc(db, "businessEntities", form.businessEntityId), { stampUrl: url });
-    toast.success("도장이 등록되었습니다. 이 사업자의 계약서 문서에 자동으로 반영됩니다.");
+    try {
+      const url = await uploadBusinessEntityStamp({ companyId: profile.companyId, entityId: form.businessEntityId, file });
+      await updateDoc(doc(db, "businessEntities", form.businessEntityId), { stampUrl: url });
+      toast.success("도장이 등록되었습니다. 이 사업자의 계약서 문서에 자동으로 반영됩니다.");
+    } catch (err) {
+      toast.error("도장 업로드에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const downloadLaborLaw = () => {
@@ -514,7 +519,13 @@ export default function CenterReports() {
                   variant="outline"
                   type="button"
                   disabled={!form.reportFormat}
-                  onClick={() => openReportPreview(form.docType, form.reportFormat, { siteName: siteName(form.siteId), ...form.extra })}
+                  onClick={() =>
+                    openReportPreview(form.docType, form.reportFormat, {
+                      siteName: siteName(form.siteId),
+                      stampUrl: entities.find((e) => e.id === form.businessEntityId)?.stampUrl || null,
+                      ...form.extra,
+                    })
+                  }
                 >
                   <Eye size={13} /> 보기
                 </Button>
