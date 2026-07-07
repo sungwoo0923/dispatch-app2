@@ -378,7 +378,7 @@ export default function Payroll() {
       let allowances = p.allowances || 0;
       if (adjustForm.allowanceItem) {
         const t = allowanceTemplates.find((x) => x.name === adjustForm.allowanceItem);
-        if (t) allowances += t.amount;
+        if (t) allowances += Number(t.dailyEtcAllowance || 0);
       }
       const rates = await getSiteInsuranceRates(profile.companyId, emp?.workSiteId, `${month}-28`);
       const result = calcMonthlyPayroll({
@@ -821,9 +821,9 @@ export default function Payroll() {
                         {p?.periodType ? PERIOD_LABELS[p.periodType] : "-"} · {p?.wageType === "hourly" ? "시급" : "월급"}
                       </td>
                     )}
-                    <td className="px-4 py-3 text-muted">{p ? p.grossPay.toLocaleString() + "원" : "-"}</td>
-                    <td className="px-4 py-3 text-muted">{p ? p.deductions.total.toLocaleString() + "원" : "-"}</td>
-                    <td className="px-4 py-3 font-medium text-ink">{p ? p.netPay.toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3 text-muted">{p ? Number(p.grossPay || 0).toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3 text-muted">{p ? Number(p.deductions?.total || 0).toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3 font-medium text-ink">{p ? Number(p.netPay || 0).toLocaleString() + "원" : "-"}</td>
                     <td className="px-4 py-3">
                       {p ? (
                         p.settlementStatus === "confirmed" ? (
@@ -1064,14 +1064,14 @@ export default function Payroll() {
                 defaultValue=""
                 onChange={(e) => {
                   const t = allowanceTemplates.find((x) => x.id === e.target.value);
-                  if (t) setForm((f) => ({ ...f, allowances: Number(f.allowances || 0) + t.amount }));
+                  if (t) setForm((f) => ({ ...f, allowances: Number(f.allowances || 0) + Number(t.dailyEtcAllowance || 0) }));
                   e.target.value = "";
                 }}
               >
                 <option value="">선택 시 기타수당에 더해집니다</option>
                 {allowanceTemplates.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} (+{t.amount.toLocaleString()}원)
+                    {t.name} (+{Number(t.dailyEtcAllowance || 0).toLocaleString()}원)
                   </option>
                 ))}
               </select>
