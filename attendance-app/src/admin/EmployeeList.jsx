@@ -897,11 +897,11 @@ export default function EmployeeList() {
           <table className="w-full min-w-[2400px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="sticky left-0 z-20 w-10 px-2 py-3 font-semibold">
+                <th className="sticky left-0 z-20 w-10 bg-primary-light px-2 py-3 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="sticky left-10 z-20 w-14 px-2 py-3 font-semibold">순번</th>
-                <th className="sticky left-24 z-20 w-28 px-2 py-3 font-semibold">이름</th>
+                <th className="sticky left-10 z-20 w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
+                <th className="sticky left-24 z-20 w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
                 {visibleEmployeeColumns.map((c) => (
                   <DraggableTh key={c.key} columnKey={c.key} onMove={moveEmployeeColumn} className="px-4 py-3 font-semibold">
                     {c.label}
