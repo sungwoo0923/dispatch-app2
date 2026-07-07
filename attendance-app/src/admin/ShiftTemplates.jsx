@@ -5,11 +5,12 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
-import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 import Modal from "../components/Modal";
+import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
+import { formatDate } from "../utils/dateUtils";
 
 const WEEKDAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
 const TABS = [
@@ -18,6 +19,12 @@ const TABS = [
   { key: "overtime", label: "연장시간" },
   { key: "late", label: "지각설정" },
 ];
+const REQUIRED_FIELDS = [
+  { key: "businessEntityId", label: "사업자" },
+  { key: "name", label: "템플릿명" },
+  { key: "baseStartTime", label: "기본근무시작시간" },
+  { key: "baseEndTime", label: "기본근무종료시간" },
+];
 
 const EMPTY_FORM = {
   businessEntityId: "",
@@ -25,12 +32,36 @@ const EMPTY_FORM = {
   memo: "",
   workTimeType: "실근무",
   visibility: "보임",
+  breakMode: "직접 지정",
+  overtimeBaseMode: "근무종료시간 이후부터",
+  overtimeBaseHours: "",
   baseStartTime: "07:00",
   baseEndTime: "11:00",
   weekdays: Object.fromEntries(
     WEEKDAYS.map((w, i) => [w, { holiday: i >= 5, work: i < 5, start: "07:00", end: "11:00" }])
   ),
 };
+
+function fmtCreatedAt(ts) {
+  if (!ts?.seconds) return "-";
+  const d = new Date(ts.seconds * 1000);
+  return formatDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+}
+
+// 요일별 근무/휴무를 한 눈에 보이도록 요일 첫 글자 배지로 압축하고, 근무시간은
+// 시작/종료 시각이 같은 요일끼리 묶어 "월화수목금 07:00~11:00"처럼 한 줄로
+// 요약한다 — 요일 7개를 세로로 나열하던 기존 표시를 대체한다.
+function summarizeSchedule(weekdays) {
+  const workDays = WEEKDAYS.filter((w) => weekdays?.[w]?.work);
+  if (workDays.length === 0) return "휴무";
+  const groups = new Map();
+  workDays.forEach((w) => {
+    const key = `${weekdays[w].start || "-"}~${weekdays[w].end || "-"}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(w[0]);
+  });
+  return [...groups.entries()].map(([time, days]) => `${days.join("")} ${time}`).join(", ");
+}
 
 export default function ShiftTemplates() {
   const { profile } = useAuth();
@@ -39,6 +70,7 @@ export default function ShiftTemplates() {
   const [entities, setEntities] = useState([]);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
+  const [panelOpen, setPanelOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("info");
   const [form, setForm] = useState(EMPTY_FORM);
@@ -69,17 +101,20 @@ export default function ShiftTemplates() {
 
   const selected = items.find((t) => t.id === selectedId) || null;
 
-  const startNew = () => {
+  const openNew = () => {
     setSelectedId(null);
     setForm(EMPTY_FORM);
     setTab("info");
+    setPanelOpen(true);
   };
 
-  const select = (t) => {
+  const openEdit = (t) => {
     setSelectedId(t.id);
     setForm({ ...EMPTY_FORM, ...t, weekdays: t.weekdays || EMPTY_FORM.weekdays });
     setTab("info");
+    setPanelOpen(true);
   };
+  const closePanel = () => setPanelOpen(false);
 
   const applyBaseTime = () =>
     setForm((f) => ({
@@ -90,17 +125,21 @@ export default function ShiftTemplates() {
     }));
 
   const save = async () => {
-    if (!form.name.trim()) return;
+    const missing = REQUIRED_FIELDS.filter((f) => !String(form[f.key] || "").trim()).map((f) => f.label);
+    if (missing.length) {
+      toast.error(`다음 필수 항목을 입력/선택해주세요: ${missing.join(", ")}`);
+      return;
+    }
     if (!(await confirm("저장하시겠습니까?", "save"))) return;
     const { startTime, endTime, ...rest } = form;
     const payload = { ...rest, startTime: form.baseStartTime, endTime: form.baseEndTime };
     if (selectedId) {
       await updateDoc(doc(db, "shiftTemplates", selectedId), payload);
     } else {
-      const ref_ = await addDoc(collection(db, "shiftTemplates"), { companyId: profile.companyId, ...payload, createdAt: serverTimestamp() });
-      setSelectedId(ref_.id);
+      await addDoc(collection(db, "shiftTemplates"), { companyId: profile.companyId, ...payload, createdAt: serverTimestamp() });
     }
     toast.success("저장되었습니다");
+    closePanel();
   };
 
   const remove = async () => {
@@ -108,7 +147,7 @@ export default function ShiftTemplates() {
     if (!(await confirm(`'${selected?.name}' 템플릿을 삭제하시겠습니까?`, "delete"))) return;
     await deleteDoc(doc(db, "shiftTemplates", selectedId));
     toast.success("삭제되었습니다");
-    startNew();
+    closePanel();
   };
 
   const openCopy = () => {
@@ -128,36 +167,50 @@ export default function ShiftTemplates() {
     });
     toast.success("복사되었습니다");
     setCopyOpen(false);
+    closePanel();
   };
 
   const exportCsv = () => {
-    const headers = ["사업자", "템플릿명", "근무시간유형", "기본근무시작시간", "기본근무종료시간", "숨김여부"];
-    downloadCsv("시간템플릿", headers, rows.map((t) => [entityName(t.businessEntityId), t.name, t.workTimeType, t.baseStartTime, t.baseEndTime, t.visibility]));
+    const headers = ["사업자", "템플릿명", "등록일", "근무시간유형", "근무요일", "요일별근무시간", "숨김여부"];
+    downloadCsv(
+      "시간템플릿",
+      headers,
+      rows.map((t) => [
+        entityName(t.businessEntityId),
+        t.name,
+        fmtCreatedAt(t.createdAt),
+        t.workTimeType,
+        WEEKDAYS.filter((w) => t.weekdays?.[w]?.work).map((w) => w[0]).join(""),
+        summarizeSchedule(t.weekdays),
+        t.visibility,
+      ])
+    );
   };
 
   return (
     <div className="space-y-6">
       <Panel icon={Clock} title="시간템플릿">
         <p className="mb-4 text-xs text-muted">시간 템플릿은 요일별 휴무/근무 여부와 근무시작/종료 시간을 등록합니다. 휴게시간 / 연장 시간 / 지각 시간을 설정하여 유연하게 관리할 수 있습니다.</p>
-        <Card className="mb-4 space-y-3 p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="block sm:col-span-2">
-              <span className="mb-1.5 block text-xs font-medium text-muted">검색어</span>
-              <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="템플릿명 검색" />
-            </label>
-            <div className="flex items-end gap-2">
-              <button type="button" className="rounded-xl border border-slate-200 p-2.5 text-muted hover:bg-slate-50" onClick={() => setSearch("")}>
-                <RefreshCw size={16} />
-              </button>
-              <Button>검색</Button>
-            </div>
+        <div className="mb-3 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
+          <span className="shrink-0 text-xs font-medium text-muted">검색조건</span>
+          <span className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-muted">템플릿명</span>
+          <div className="flex shrink-0 flex-nowrap overflow-hidden rounded-xl border border-slate-200">
+            <input
+              className="w-40 border-0 px-3 py-2 text-sm focus:outline-none"
+              placeholder="템플릿명을 입력하세요."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button type="button" className="border-l border-slate-200 bg-slate-50 px-2.5 text-xs text-muted hover:bg-slate-100" onClick={() => setSearch("")}>
+              <RefreshCw size={14} />
+            </button>
           </div>
-        </Card>
+        </div>
 
         <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
           <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
-            <Button size="sm" onClick={startNew}>
+            <Button size="sm" onClick={openNew}>
               <Plus size={13} /> 신규
             </Button>
             <Button size="sm" variant="outline" onClick={exportCsv}>
@@ -165,38 +218,59 @@ export default function ShiftTemplates() {
             </Button>
           </div>
         </div>
-        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
-          <table className="w-full min-w-[640px] text-center text-sm">
+        <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
+          <table className="w-full min-w-[820px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">상세</th>
                 <th className="px-3 py-2.5 font-semibold">사업자</th>
                 <th className="px-3 py-2.5 font-semibold">템플릿명</th>
+                <th className="px-3 py-2.5 font-semibold">등록일</th>
                 <th className="px-3 py-2.5 font-semibold">근무시간유형</th>
-                <th className="px-3 py-2.5 font-semibold">근무시작시간</th>
-                <th className="px-3 py-2.5 font-semibold">근무종료시간</th>
+                <th className="px-3 py-2.5 font-semibold">근무요일</th>
+                <th className="px-3 py-2.5 font-semibold">요일별근무시간</th>
                 <th className="px-3 py-2.5 font-semibold">숨김여부</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((t, i) => (
-                <tr
-                  key={t.id}
-                  onClick={() => select(t)}
-                  className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedId === t.id ? "bg-primary-light/40" : ""}`}
-                >
+                <tr key={t.id} onDoubleClick={() => openEdit(t)} className="odd:bg-white even:bg-slate-50/50 cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100">
                   <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5">
+                    <button className="text-xs text-primary hover:underline" onClick={() => openEdit(t)}>
+                      상세
+                    </button>
+                  </td>
                   <td className="px-3 py-2.5 text-muted">{entityName(t.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{t.name}</td>
+                  <td className="px-3 py-2.5 text-muted">{fmtCreatedAt(t.createdAt)}</td>
                   <td className="px-3 py-2.5 text-muted">{t.workTimeType || "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.baseStartTime}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.baseEndTime}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-nowrap justify-center gap-1">
+                      {WEEKDAYS.map((w) => {
+                        const isWork = !!t.weekdays?.[w]?.work;
+                        return (
+                          <span
+                            key={w}
+                            className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
+                              isWork ? "bg-primary text-white" : "bg-slate-100 text-muted"
+                            }`}
+                            title={`${w} ${isWork ? "근무" : "휴무"}`}
+                          >
+                            {w[0]}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-muted">{summarizeSchedule(t.weekdays)}</td>
                   <td className="px-3 py-2.5 text-muted">{t.visibility || "보임"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-xs text-muted">
+                  <td colSpan={9} className="px-3 py-6 text-center text-xs text-muted">
                     등록된 시간템플릿이 없습니다.
                   </td>
                 </tr>
@@ -204,173 +278,221 @@ export default function ShiftTemplates() {
             </tbody>
           </table>
         </div>
+      </Panel>
 
-        <Card className="p-0">
-          <div className="flex flex-col lg:flex-row">
-            <div className="border-b border-slate-100 p-4 lg:w-40 lg:border-b-0 lg:border-r">
-              <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">
-                {selected ? selected.name : "신규 템플릿"}
-              </div>
-              <div className="flex flex-row gap-1 overflow-x-auto overscroll-x-contain lg:flex-col">
-                {TABS.map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => setTab(t.key)}
-                    className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
+      <SidePanel
+        open={panelOpen}
+        onClose={closePanel}
+        title="시간템플릿 > 상세"
+        footer={
+          <>
+            {selectedId && (
+              <Button variant="outline" onClick={remove}>
+                삭제
+              </Button>
+            )}
+            {selectedId && (
+              <Button variant="outline" onClick={openCopy}>
+                <CopyIcon size={13} /> 복사
+              </Button>
+            )}
+            <Button onClick={save}>저장</Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4 lg:flex-row">
+          <div className="lg:w-40 lg:shrink-0">
+            <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">
+              {selected ? selected.name : "시간템플릿"}
             </div>
-
-            <div className="flex-1 p-4">
-              {tab === "info" && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
-                      <select
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        value={form.businessEntityId}
-                        onChange={(e) => setForm((f) => ({ ...f, businessEntityId: e.target.value }))}
-                      >
-                        <option value="">선택</option>
-                        {entities.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명 *</span>
-                      <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-                    </label>
-                  </div>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-muted">메모</span>
-                    <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.memo} onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} />
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <span className="mb-1.5 block text-xs font-medium text-muted">근무시간유형</span>
-                      <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
-                        {["공수", "실근무"].map((v) => (
-                          <label key={v} className="flex items-center gap-1.5">
-                            <input type="radio" checked={form.workTimeType === v} onChange={() => setForm((f) => ({ ...f, workTimeType: v }))} />
-                            {v}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
-                      <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
-                        {["숨김", "보임"].map((v) => (
-                          <label key={v} className="flex items-center gap-1.5">
-                            <input type="radio" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
-                            {v}
-                          </label>
-                        ))}
-                        <Button size="sm" variant="outline" onClick={save}>
-                          적용
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 items-end">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">기본근무시작시간 *</span>
-                      <input type="time" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.baseStartTime} onChange={(e) => setForm((f) => ({ ...f, baseStartTime: e.target.value }))} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">기본근무종료시간 *</span>
-                      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
-                        <input type="time" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.baseEndTime} onChange={(e) => setForm((f) => ({ ...f, baseEndTime: e.target.value }))} />
-                        <Button size="sm" variant="outline" onClick={applyBaseTime}>
-                          기본시간적용
-                        </Button>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
-                    <table className="w-full min-w-[480px] text-center text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-xs text-muted">
-                          <th className="px-3 py-2 font-semibold">휴일여부</th>
-                          <th className="px-3 py-2 font-semibold">근무여부</th>
-                          <th className="px-3 py-2 font-semibold">근무시작시간</th>
-                          <th className="px-3 py-2 font-semibold">근무종료시간</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {WEEKDAYS.map((w) => {
-                          const v = form.weekdays[w] || {};
-                          return (
-                            <tr key={w} className="border-b border-slate-50 last:border-0">
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!v.holiday}
-                                    onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, holiday: e.target.checked } } }))}
-                                  />
-                                  {w}
-                                </label>
-                              </td>
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!v.work}
-                                    onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, work: e.target.checked } } }))}
-                                  />
-                                  {w}
-                                </label>
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="time"
-                                  className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                                  value={v.start || "07:00"}
-                                  onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, start: e.target.value } } }))}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="time"
-                                  className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                                  value={v.end || "11:00"}
-                                  onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, end: e.target.value } } }))}
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
-                    <Button variant="outline" onClick={remove} disabled={!selectedId}>
-                      삭제
-                    </Button>
-                    <Button variant="outline" onClick={openCopy} disabled={!selectedId}>
-                      <CopyIcon size={13} /> 복사
-                    </Button>
-                    <Button onClick={save}>저장</Button>
-                  </div>
-                </div>
-              )}
-              {tab === "break" && <RangeListTab form={form} setForm={setForm} field="breaks" title="휴게시간" onSave={save} />}
-              {tab === "overtime" && <ThresholdListTab form={form} setForm={setForm} field="overtimeRules" fromLabel="분 부터" toLabel="분 연장" onSave={save} />}
-              {tab === "late" && <ThresholdListTab form={form} setForm={setForm} field="lateRules" fromLabel="분 지각시" toLabel="분 소급" onSave={save} />}
+            <div className="flex flex-row gap-1 overflow-x-auto overscroll-x-contain lg:flex-col">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
           </div>
-        </Card>
-      </Panel>
+
+          <div className="flex-1">
+            {tab === "info" && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">
+                      사업자 <span className="text-danger">필수</span>
+                    </span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      value={form.businessEntityId}
+                      onChange={(e) => setForm((f) => ({ ...f, businessEntityId: e.target.value }))}
+                    >
+                      <option value="">선택</option>
+                      {entities.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">
+                      템플릿명 <span className="text-danger">필수</span>
+                    </span>
+                    <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">메모</span>
+                  <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.memo} onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="mb-1.5 block text-xs font-medium text-muted">근무시간유형</span>
+                    <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
+                      {["공수", "실근무", "일급수"].map((v) => (
+                        <label key={v} className="flex items-center gap-1.5">
+                          <input type="radio" checked={form.workTimeType === v} onChange={() => setForm((f) => ({ ...f, workTimeType: v }))} />
+                          {v}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
+                    <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
+                      {["숨김", "보임"].map((v) => (
+                        <label key={v} className="flex items-center gap-1.5">
+                          <input type="radio" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
+                          {v}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="mb-1.5 block text-xs font-medium text-muted">휴게시간구분</span>
+                    <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
+                      {["직접 지정", "근무시간 내 포함"].map((v) => (
+                        <label key={v} className="flex items-center gap-1.5">
+                          <input type="radio" checked={form.breakMode === v} onChange={() => setForm((f) => ({ ...f, breakMode: v }))} />
+                          {v}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="mb-1.5 block text-xs font-medium text-muted">연장시간설정</span>
+                    <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
+                      <label className="flex items-center gap-1.5">
+                        <input type="radio" checked={form.overtimeBaseMode === "근무종료시간 이후부터"} onChange={() => setForm((f) => ({ ...f, overtimeBaseMode: "근무종료시간 이후부터" }))} />
+                        근무종료시간 이후부터
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input type="radio" checked={form.overtimeBaseMode === "근무시작시간 기준"} onChange={() => setForm((f) => ({ ...f, overtimeBaseMode: "근무시작시간 기준" }))} />
+                        근무시작시간 기준
+                        <input
+                          type="number"
+                          className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                          value={form.overtimeBaseHours}
+                          onChange={(e) => setForm((f) => ({ ...f, overtimeBaseHours: e.target.value }))}
+                          disabled={form.overtimeBaseMode !== "근무시작시간 기준"}
+                        />
+                        시간 초과부터
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 items-end">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">
+                      기본근무시작시간 <span className="text-danger">필수</span>
+                    </span>
+                    <input type="time" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.baseStartTime} onChange={(e) => setForm((f) => ({ ...f, baseStartTime: e.target.value }))} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">
+                      기본근무종료시간 <span className="text-danger">필수</span>
+                    </span>
+                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+                      <input type="time" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.baseEndTime} onChange={(e) => setForm((f) => ({ ...f, baseEndTime: e.target.value }))} />
+                      <Button size="sm" variant="outline" onClick={applyBaseTime}>
+                        기본시간적용
+                      </Button>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
+                  <table className="w-full min-w-[480px] text-center text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-xs text-muted">
+                        <th className="px-3 py-2 font-semibold">휴일여부</th>
+                        <th className="px-3 py-2 font-semibold">근무여부</th>
+                        <th className="px-3 py-2 font-semibold">근무시작시간</th>
+                        <th className="px-3 py-2 font-semibold">근무종료시간</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {WEEKDAYS.map((w) => {
+                        const v = form.weekdays[w] || {};
+                        return (
+                          <tr key={w} className={v.work ? "border-b border-slate-50 bg-primary-light/20 last:border-0" : "border-b border-slate-50 last:border-0"}>
+                            <td className="px-3 py-2">
+                              <label className="flex items-center gap-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={!!v.holiday}
+                                  onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, holiday: e.target.checked } } }))}
+                                />
+                                {w}
+                              </label>
+                            </td>
+                            <td className="px-3 py-2">
+                              <label className="flex items-center gap-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={!!v.work}
+                                  onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, work: e.target.checked } } }))}
+                                />
+                                {w}
+                              </label>
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="time"
+                                className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                                value={v.start || "07:00"}
+                                onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, start: e.target.value } } }))}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="time"
+                                className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                                value={v.end || "11:00"}
+                                onChange={(e) => setForm((f) => ({ ...f, weekdays: { ...f.weekdays, [w]: { ...v, end: e.target.value } } }))}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {tab === "break" && <RangeListTab form={form} setForm={setForm} field="breaks" title="휴게시간" onSave={save} />}
+            {tab === "overtime" && <ThresholdListTab form={form} setForm={setForm} field="overtimeRules" fromLabel="분 부터" toLabel="분 연장" onSave={save} />}
+            {tab === "late" && <ThresholdListTab form={form} setForm={setForm} field="lateRules" fromLabel="분 지각시" toLabel="분 소급" onSave={save} />}
+          </div>
+        </div>
+      </SidePanel>
 
       <Modal
         open={copyOpen}

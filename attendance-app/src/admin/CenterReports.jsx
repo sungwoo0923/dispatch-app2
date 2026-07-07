@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { FileBadge2, Plus, RefreshCw, FileSpreadsheet, Eye, Search } from "lucide-react";
+import { FileBadge2, Plus, RefreshCw, FileSpreadsheet, Eye, Search, Upload } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -26,6 +26,43 @@ const SEARCH_FIELD_OPTIONS = [
   { value: "templateName", label: "템플릿명" },
   { value: "reportFormat", label: "리포트양식명" },
 ];
+
+const REQUIRED_FIELDS = [
+  { key: "businessEntityId", label: "사업자" },
+  { key: "siteId", label: "센터" },
+  { key: "templateName", label: "템플릿명" },
+  { key: "reportFormat", label: "리포트양식명" },
+];
+
+// 업로드한 문서(txt)에서 익숙한 한글 항목명을 기준으로 다음 항목명이 나오기
+// 전까지의 텍스트를 그대로 잘라 담는 휴리스틱 매칭이다. 실제 문서 구조를
+// 이해하는 것이 아니라 알려진 라벨 텍스트만 인식하므로, 라벨이 다르게 표기된
+// 문서(스캔 이미지, 표 구조가 다른 문서 등)는 인식하지 못할 수 있다.
+const UPLOAD_SECTION_LABELS = [
+  { key: "workContent", pattern: /업\s*무\s*의?\s*내\s*용/ },
+  { key: "wage", pattern: /임\s*금/ },
+  { key: "insurance", pattern: /사회보험/ },
+  { key: "familyConsent", pattern: /가족관계/ },
+  { key: "etc", pattern: /^\s*(\d+\s*[.)]\s*)?기\s*타\s*$/ },
+];
+
+function parseUploadedContractText(text) {
+  const lines = text.split(/\r?\n/);
+  const marks = [];
+  lines.forEach((line, idx) => {
+    for (const s of UPLOAD_SECTION_LABELS) {
+      if (s.pattern.test(line) && !marks.some((m) => m.key === s.key)) marks.push({ key: s.key, idx });
+    }
+  });
+  marks.sort((a, b) => a.idx - b.idx);
+  const result = {};
+  marks.forEach((m, i) => {
+    const end = i + 1 < marks.length ? marks[i + 1].idx : lines.length;
+    const text_ = lines.slice(m.idx + 1, end).join("\n").trim();
+    if (text_) result[m.key] = text_;
+  });
+  return result;
+}
 
 const emptyForm = () => ({
   businessEntityId: "",
@@ -60,7 +97,9 @@ export default function CenterReports() {
   const [entities, setEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [admins, setAdmins] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [items, setItems] = useState([]);
+  const fileInputRef = useRef(null);
 
   const [draft, setDraft] = useState(emptyDraft());
   const [applied, setApplied] = useState(emptyDraft());
@@ -78,6 +117,7 @@ export default function CenterReports() {
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (s) => setWorkSites(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(query(collection(db, "centerReports"), where("companyId", "==", profile.companyId)), (s) => setItems(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "admin")), (s) => setAdmins(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (s) => setEmployees(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
@@ -142,7 +182,11 @@ export default function CenterReports() {
   };
 
   const save = async () => {
-    if (!form.businessEntityId || !form.siteId || !form.templateName.trim()) return;
+    const missing = REQUIRED_FIELDS.filter((f) => !String(form[f.key] || "").trim()).map((f) => f.label);
+    if (missing.length) {
+      toast.error(`다음 필수 항목을 입력/선택해주세요: ${missing.join(", ")}`);
+      return;
+    }
     if (!(await confirm("저장하시겠습니까?", "save"))) return;
     if (selectedId) {
       await updateDoc(doc(db, "centerReports", selectedId), form);
@@ -184,6 +228,22 @@ export default function CenterReports() {
   const preview = (t) => {
     if (!t.reportFormat) return;
     openReportPreview(t.docType, t.reportFormat, { siteName: siteName(t.siteId), ...(t.extra || {}) });
+  };
+
+  const triggerUpload = () => fileInputRef.current?.click();
+  const handleUploadFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const text = await file.text();
+    const parsed = parseUploadedContractText(text);
+    const fieldCount = Object.keys(parsed).length;
+    if (fieldCount === 0) {
+      toast.error("문서에서 업무의 내용/임금/사회보험/기타 등의 항목을 인식하지 못했습니다. 텍스트(txt) 형식의 문서를 이용해주세요.");
+      return;
+    }
+    setForm((f) => ({ ...f, extra: { ...f.extra, ...parsed } }));
+    toast.success(`업로드한 문서에서 ${fieldCount}개 항목을 불러와 반영했습니다.`);
   };
 
   const exportCsv = () => {
@@ -293,7 +353,7 @@ export default function CenterReports() {
             </thead>
             <tbody>
               {rows.map((t, i) => (
-                <tr key={t.id} className="odd:bg-white even:bg-slate-50/50 border-b border-slate-50 last:border-0 hover:bg-slate-100">
+                <tr key={t.id} onDoubleClick={() => openEdit(t)} className="odd:bg-white even:bg-slate-50/50 border-b border-slate-50 last:border-0 hover:bg-slate-100 cursor-pointer">
                   <td className="px-3 py-2.5 text-muted">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => openEdit(t)}>
@@ -425,6 +485,18 @@ export default function CenterReports() {
             </label>
           </div>
 
+          {form.docType === "계약서" && (
+            <div>
+              <input ref={fileInputRef} type="file" accept=".txt" className="hidden" onChange={handleUploadFile} />
+              <Button size="sm" variant="outline" type="button" onClick={triggerUpload}>
+                <Upload size={13} /> 양식 업로드
+              </Button>
+              <p className="mt-1.5 text-[11px] text-muted">
+                텍스트(txt) 형식의 다른 표준근로계약서 문서를 업로드하면 업무의 내용/임금/사회보험/기타 항목을 인식해 아래 내용에 반영합니다.
+              </p>
+            </div>
+          )}
+
           <div>
             <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
             <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
@@ -525,27 +597,19 @@ export default function CenterReports() {
                 <p className="mb-1.5 text-xs font-medium text-muted">결재 순서 선택</p>
                 <div className="grid grid-cols-4 gap-3">
                   {[0, 1, 2, 3].map((idx) => (
-                    <label key={idx} className="block">
-                      <span className="mb-1 block text-xs text-muted">{idx + 1}순위</span>
-                      <select
-                        className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                        value={form.extra.approvers[idx] || ""}
-                        onChange={(e) =>
-                          setForm((f) => {
-                            const approvers = [...f.extra.approvers];
-                            approvers[idx] = e.target.value;
-                            return { ...f, extra: { ...f.extra, approvers } };
-                          })
-                        }
-                      >
-                        <option value="">선택</option>
-                        {admins.map((a) => (
-                          <option key={a.id} value={a.name}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <ApproverPicker
+                      key={idx}
+                      index={idx}
+                      value={form.extra.approvers[idx] || ""}
+                      people={[...admins, ...employees]}
+                      onChange={(name) =>
+                        setForm((f) => {
+                          const approvers = [...f.extra.approvers];
+                          approvers[idx] = name;
+                          return { ...f, extra: { ...f.extra, approvers } };
+                        })
+                      }
+                    />
                   ))}
                 </div>
               </div>
@@ -602,6 +666,84 @@ export default function CenterReports() {
           <p className="text-[11px] text-muted">다른 센터에 적용이 필요할 경우 사업자, 센터를 지정하여 복사 할 수 있습니다.</p>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// 이름을 입력하고 조회하면 관리자/근로자 중 일치하는 사람의 이름/직급/부서를
+// 보여주는 팝업에서 적용을 눌러 결재자로 지정한다. 직접입력도 가능하도록
+// 입력창 값 자체를 그대로 onChange로 흘려보낸다.
+function ApproverPicker({ index, value, onChange, people }) {
+  const [query, setQuery] = useState(value || "");
+  const [open, setOpen] = useState(false);
+  const [matches, setMatches] = useState(null);
+
+  useEffect(() => setQuery(value || ""), [value]);
+
+  const doSearch = () => {
+    const q = query.trim();
+    if (!q) return;
+    setMatches(people.filter((p) => p.name?.includes(q)));
+    setOpen(true);
+  };
+
+  const apply = (person) => {
+    onChange(person.name);
+    setQuery(person.name);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <span className="mb-1 block text-xs text-muted">{index + 1}순위</span>
+      <div className="flex flex-nowrap overflow-hidden rounded-lg border border-slate-200">
+        <input
+          className="w-full min-w-0 border-0 px-2.5 py-2 text-sm focus:outline-none"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onChange(e.target.value);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && doSearch()}
+          placeholder="이름 입력"
+        />
+        <button type="button" className="shrink-0 border-l border-slate-200 bg-slate-50 px-2 text-muted hover:bg-slate-100" onClick={doSearch}>
+          <Search size={13} />
+        </button>
+      </div>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 w-60 rounded-xl border border-slate-200 bg-white p-2.5 shadow-lg">
+          {(matches || []).length === 0 ? (
+            <>
+              <p className="py-2 text-center text-xs text-muted">조회결과가 없습니다.</p>
+              <div className="flex justify-end">
+                <button type="button" className="rounded-md border border-slate-200 px-2 py-1 text-xs text-muted hover:bg-slate-50" onClick={() => setOpen(false)}>
+                  닫기
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1.5">
+              {matches.map((p) => (
+                <div key={p.id} className="rounded-lg border border-slate-100 p-2 text-xs">
+                  <p className="font-semibold text-ink">{p.name}</p>
+                  <p className="text-muted">
+                    {p.position || "-"} · {p.team || "-"}
+                  </p>
+                  <div className="mt-1.5 flex justify-end gap-1.5">
+                    <button type="button" className="rounded-md border border-slate-200 px-2 py-1 text-muted hover:bg-slate-50" onClick={() => setOpen(false)}>
+                      취소
+                    </button>
+                    <button type="button" className="rounded-md bg-primary px-2 py-1 text-white hover:bg-primary-dark" onClick={() => apply(p)}>
+                      적용
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -348,6 +348,21 @@ export default function EmployeeList() {
     setRegisterOpen(true);
   };
 
+  // F4로 신규 근로자 등록 팝업을 바로 열 수 있게 한다. ref에 최신 콜백을 담아두어
+  // 이벤트 리스너는 한 번만 등록하면서도 employees/pending 등 최신 상태를 반영한다.
+  const openNewRegisterRef = useRef(openNewRegister);
+  openNewRegisterRef.current = openNewRegister;
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "F4") {
+        e.preventDefault();
+        openNewRegisterRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   // 등록 팝업을 companyName/businessEntities가 아직 로딩되기 전(onSnapshot이 붙기
   // 전)에 열면 openNewRegister가 계산한 기본값이 빈 값으로 굳어버린다 — 데이터가
   // 늦게 도착해도 신규 등록(아직 아무 값도 고르지 않은 상태)이라면 뒤늦게 채워준다.
