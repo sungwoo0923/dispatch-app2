@@ -30,6 +30,16 @@ input, select, textarea {
   table thead th {
     @apply bg-primary-light/70 text-ink font-semibold;
   }
+
+  /* 모든 표의 컬럼명과 그 안의 내용은 항상 가운데 정렬한다. text-align만으로는
+     th/td 안의 inline-flex 래퍼(드래그 아이콘, 뱃지 등)가 여전히 왼쪽 정렬되므로
+     justify-content까지 함께 맞춰준다. */
+  table th, table td {
+    text-align: center;
+  }
+  table th > *, table td > * {
+    justify-content: center;
+  }
 }
 
 ::-webkit-scrollbar {

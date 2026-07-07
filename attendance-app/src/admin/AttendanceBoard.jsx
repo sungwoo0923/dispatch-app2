@@ -141,7 +141,8 @@ export default function AttendanceBoard() {
   }, [attendance, employeeByUid, filters]);
 
   const attendanceColumns = [
-    { key: "name", label: "이름", render: ({ record: r }) => <span className="text-ink">{r.name}</span> },
+    { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
+    { key: "position", label: "직급", render: ({ emp }) => emp.position || "-" },
     { key: "checkIn", label: "출근시간", render: ({ record: r }) => (r.checkInTime ? formatTime(r.checkInTime) : "-") },
     { key: "checkOut", label: "퇴근시간", render: ({ record: r }) => (r.checkOutTime ? formatTime(r.checkOutTime) : "-") },
     { key: "date", label: "근무일", render: ({ record: r }) => formatDate(r.date) },
@@ -149,9 +150,25 @@ export default function AttendanceBoard() {
     { key: "site", label: "센터", render: ({ record: r, emp }) => r.siteName || siteName_(emp.workSiteId) },
     { key: "shiftType", label: "근무구분", render: ({ emp }) => emp.shiftType || "-" },
     { key: "employmentType", label: "근무형태", render: ({ emp }) => emp.employmentType || "-" },
+    { key: "gender", label: "성별", render: ({ emp }) => emp.gender || "-" },
+    { key: "nationality", label: "외/내국인", render: ({ emp }) => emp.nationality || "-" },
+    { key: "country", label: "국적", render: ({ emp }) => emp.country || "-" },
+    { key: "insurance", label: "4대보험", render: ({ emp }) => (emp.insuranceApplied === "Y" ? "Y" : "N") },
+    { key: "workLocation", label: "근무위치", render: ({ emp }) => emp.workLocation || "-" },
+    { key: "note", label: "근무비고", render: ({ emp }) => emp.note || "-" },
+    {
+      key: "checkInType",
+      label: "출근유형",
+      render: ({ record: r }) => (r.checkInTime ? (r.source === "manual" ? "수동" : "자동") : "-"),
+    },
+    {
+      key: "checkOutType",
+      label: "퇴근유형",
+      render: ({ record: r }) => (r.checkOutTime ? (r.source === "manual" ? "수동" : "자동") : "-"),
+    },
     {
       key: "status",
-      label: "상태",
+      label: "근무상태",
       render: ({ record: r }) => (
         <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
           {r.status || "미출근"}
@@ -541,10 +558,11 @@ export default function AttendanceBoard() {
               <table className="w-full min-w-[980px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-4 py-3 font-semibold">
+                    <th className="sticky left-0 z-20 w-10 bg-primary-light/70 px-2 py-3 font-semibold">
                       <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
                     </th>
-                    <th className="px-4 py-3 font-semibold">순번</th>
+                    <th className="sticky left-10 z-20 w-14 bg-primary-light/70 px-2 py-3 font-semibold">순번</th>
+                    <th className="sticky left-24 z-20 w-28 bg-primary-light/70 px-2 py-3 font-semibold">이름</th>
                     {visibleAttendanceColumns.map((c) => (
                       <DraggableTh key={c.key} columnKey={c.key} onMove={moveAttendanceColumn} className="px-4 py-3 font-semibold">
                         {c.label}
@@ -562,10 +580,11 @@ export default function AttendanceBoard() {
                         title="더블클릭하여 상세보기"
                         className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
                       >
-                        <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
+                        <td className="sticky left-0 z-10 w-10 bg-white px-2 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelected(r.id)} />
                         </td>
-                        <td className="px-4 py-3 text-muted">{i + 1}</td>
+                        <td className="sticky left-10 z-10 w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
+                        <td className="sticky left-24 z-10 w-28 bg-white px-2 py-3 text-ink">{r.name}</td>
                         {visibleAttendanceColumns.map((c) => (
                           <td key={c.key} className="px-4 py-3 text-muted">
                             {c.render(row)}
@@ -576,7 +595,7 @@ export default function AttendanceBoard() {
                   })}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={visibleAttendanceColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
+                      <td colSpan={visibleAttendanceColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
                         조건에 맞는 출근 기록이 없습니다.
                       </td>
                     </tr>

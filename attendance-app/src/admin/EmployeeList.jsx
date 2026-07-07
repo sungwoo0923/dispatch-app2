@@ -242,7 +242,6 @@ export default function EmployeeList() {
 
   const selectCls = "rounded-lg border border-slate-200 px-2 py-1 text-xs";
   const employeeColumns = [
-    { key: "name", label: "이름", render: (emp) => <span className="text-ink">{emp.name}</span> },
     { key: "entity", label: "사업자", render: (emp) => entityName_(emp.businessEntityId) },
     {
       key: "site",
@@ -885,10 +884,11 @@ export default function EmployeeList() {
           <table className="w-full min-w-[2400px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-semibold">
+                <th className="sticky left-0 z-20 w-10 px-2 py-3 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="sticky left-10 z-20 w-14 px-2 py-3 font-semibold">순번</th>
+                <th className="sticky left-24 z-20 w-28 px-2 py-3 font-semibold">이름</th>
                 {visibleEmployeeColumns.map((c) => (
                   <DraggableTh key={c.key} columnKey={c.key} onMove={moveEmployeeColumn} className="px-4 py-3 font-semibold">
                     {c.label}
@@ -905,10 +905,16 @@ export default function EmployeeList() {
                   title="더블클릭하여 수정 · 우클릭하여 복사"
                   className="cursor-pointer border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50 hover:bg-slate-100"
                 >
-                  <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
+                  <td
+                    className={`sticky left-0 z-10 w-10 px-2 py-3 ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                  >
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
                   </td>
-                  <td className="px-4 py-3 text-muted">{(page - 1) * pageSize + i + 1}</td>
+                  <td className={`sticky left-10 z-10 w-14 px-2 py-3 text-muted ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>
+                    {(page - 1) * pageSize + i + 1}
+                  </td>
+                  <td className={`sticky left-24 z-10 w-28 px-2 py-3 text-ink ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>{emp.name}</td>
                   {visibleEmployeeColumns.map((c) => (
                     <td
                       key={c.key}
@@ -922,7 +928,7 @@ export default function EmployeeList() {
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={visibleEmployeeColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={visibleEmployeeColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 근로자가 없습니다.
                   </td>
                 </tr>

@@ -34,11 +34,12 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import SidePanel from "../components/SidePanel";
 import DraggableTh from "../components/DraggableTh";
 import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { downloadCsv } from "../utils/exportCsv";
-import { toDateKey, formatDate } from "../utils/dateUtils";
+import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import {
   EMPLOYMENT_TYPE_OPTIONS,
@@ -72,6 +73,7 @@ export default function Schedule() {
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
   const [shiftTemplates, setShiftTemplates] = useState([]);
+  const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [open, setOpen] = useState(false);
@@ -131,6 +133,10 @@ export default function Schedule() {
       query(collection(db, "shiftTemplates"), where("companyId", "==", profile.companyId)),
       (snap) => setShiftTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubAllowT = onSnapshot(
+      query(collection(db, "allowanceTemplates"), where("companyId", "==", profile.companyId)),
+      (snap) => setAllowanceTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     const unsubLeaves = onSnapshot(
       query(collection(db, "leaves"), where("companyId", "==", profile.companyId)),
       (snap) => setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -142,6 +148,7 @@ export default function Schedule() {
       unsubDept();
       unsubPos();
       unsubTemplates();
+      unsubAllowT();
       unsubLeaves();
     };
   }, [profile?.companyId]);
@@ -167,6 +174,8 @@ export default function Schedule() {
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
+  const shiftTemplateName_ = (id) => shiftTemplates.find((t) => t.id === id)?.name || "-";
+  const allowanceTemplateName_ = (id) => allowanceTemplates.find((t) => t.id === id)?.name || "-";
 
   const matchesFilters = (emp, f) => {
     if (!emp) return false;
@@ -191,6 +200,9 @@ export default function Schedule() {
       .sort((a, b) => a.schedule.date.localeCompare(b.schedule.date));
   }, [schedules, employeeByUid, filters]);
 
+  // 스케줄 인원 현황은 "확정된" 근무만 모아두는 카드다 — 대기/취소 상태 건은
+  // 각자의 카드(대기/휴무/퇴사)에만 나타나야 하며 여기 중복으로 잡히면 안 된다.
+  const confirmedRows = useMemo(() => rows.filter(({ schedule: s }) => s.status === "출근확정"), [rows]);
   const pendingRows = useMemo(() => rows.filter(({ schedule: s }) => (s.status || "대기") === "대기"), [rows]);
 
   const leaveRows = useMemo(() => {
@@ -212,7 +224,6 @@ export default function Schedule() {
   );
 
   const scheduleColumns = [
-    { key: "name", label: "이름", render: ({ schedule: s }) => <span className="text-ink">{s.name}</span> },
     { key: "company", label: "사업자", render: () => companyName },
     { key: "site", label: "센터", render: ({ schedule: s, emp }) => s.siteName || siteName_(emp.workSiteId) },
     {
@@ -335,7 +346,16 @@ export default function Schedule() {
       return next;
     });
 
-  const toggleSelectAll = () => setSelected((s) => (s.size === rows.length ? new Set() : new Set(rows.map((r) => r.schedule.id))));
+  // 스케줄 인원 현황(출근확정)과 대기 인원 현황은 체크박스 선택 상태를 공유한다 —
+  // 각 표의 "전체선택"은 그 표에 보이는 행만 토글하고 다른 표의 선택은 건드리지 않는다.
+  const toggleSelectAllIn = (rowsSubset) =>
+    setSelected((s) => {
+      const ids = rowsSubset.map((r) => r.schedule.id);
+      const allSelected = ids.length > 0 && ids.every((id) => s.has(id));
+      const next = new Set(s);
+      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
 
   const applyStatus = async () => {
     for (const id of selected) {
@@ -465,7 +485,7 @@ export default function Schedule() {
 
   const exportCsv = () => {
     const headers = ["이름", "사업자", "센터", "확정", "근무일자", "근무시각", "전화번호", "성별", "소속업체"];
-    const rowsOut = rows.map(({ schedule: s, emp }) => [
+    const rowsOut = confirmedRows.map(({ schedule: s, emp }) => [
       s.name,
       companyName,
       s.siteName || "-",
@@ -725,10 +745,15 @@ export default function Schedule() {
               <table className="w-full min-w-[980px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-4 py-3 font-semibold">
-                      <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
+                    <th className="sticky left-0 z-20 w-10 bg-primary-light/70 px-2 py-3 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={confirmedRows.length > 0 && confirmedRows.every(({ schedule: s }) => selected.has(s.id))}
+                        onChange={() => toggleSelectAllIn(confirmedRows)}
+                      />
                     </th>
-                    <th className="px-4 py-3 font-semibold">순번</th>
+                    <th className="sticky left-10 z-20 w-14 bg-primary-light/70 px-2 py-3 font-semibold">순번</th>
+                    <th className="sticky left-24 z-20 w-28 bg-primary-light/70 px-2 py-3 font-semibold">이름</th>
                     {visibleScheduleColumns.map((c) => (
                       <DraggableTh key={c.key} columnKey={c.key} onMove={moveScheduleColumn} className="px-4 py-3 font-semibold">
                         {c.label}
@@ -737,14 +762,15 @@ export default function Schedule() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, i) => {
+                  {confirmedRows.map((row, i) => {
                     const { schedule: s } = row;
                     return (
                       <tr key={s.id} className="border-b border-slate-50 last:border-0">
-                        <td className="px-4 py-3">
+                        <td className="sticky left-0 z-10 w-10 bg-white px-2 py-3">
                           <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
                         </td>
-                        <td className="px-4 py-3 text-muted">{i + 1}</td>
+                        <td className="sticky left-10 z-10 w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
+                        <td className="sticky left-24 z-10 w-28 bg-white px-2 py-3 text-ink">{s.name}</td>
                         {visibleScheduleColumns.map((c) => (
                           <td key={c.key} className="px-4 py-3 text-muted">
                             {c.render(row)}
@@ -753,10 +779,10 @@ export default function Schedule() {
                       </tr>
                     );
                   })}
-                  {rows.length === 0 && (
+                  {confirmedRows.length === 0 && (
                     <tr>
-                      <td colSpan={visibleScheduleColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
-                        등록된 스케줄이 없습니다.
+                      <td colSpan={visibleScheduleColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
+                        출근확정된 스케줄이 없습니다.
                       </td>
                     </tr>
                   )}
@@ -765,7 +791,7 @@ export default function Schedule() {
             </div>
           </>
         ) : (
-          <CalendarView month={calendarMonth} setMonth={setCalendarMonth} rows={rows} />
+          <CalendarView month={calendarMonth} setMonth={setCalendarMonth} rows={confirmedRows} />
         )}
       </Panel>
 
@@ -780,7 +806,15 @@ export default function Schedule() {
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="sticky left-0 z-20 w-10 bg-primary-light/70 px-2 py-3 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={pendingRows.length > 0 && pendingRows.every(({ schedule: s }) => selected.has(s.id))}
+                    onChange={() => toggleSelectAllIn(pendingRows)}
+                  />
+                </th>
+                <th className="sticky left-10 z-20 w-14 bg-primary-light/70 px-2 py-3 font-semibold">순번</th>
+                <th className="sticky left-24 z-20 w-28 bg-primary-light/70 px-2 py-3 font-semibold">이름</th>
                 {visibleScheduleColumns.map((c) => (
                   <DraggableTh key={c.key} columnKey={c.key} onMove={moveScheduleColumn} className="px-4 py-3 font-semibold">
                     {c.label}
@@ -791,7 +825,11 @@ export default function Schedule() {
             <tbody>
               {pendingRows.map((row, i) => (
                 <tr key={row.schedule.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="sticky left-0 z-10 w-10 bg-white px-2 py-3">
+                    <input type="checkbox" checked={selected.has(row.schedule.id)} onChange={() => toggleSelected(row.schedule.id)} />
+                  </td>
+                  <td className="sticky left-10 z-10 w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
+                  <td className="sticky left-24 z-10 w-28 bg-white px-2 py-3 text-ink">{row.schedule.name}</td>
                   {visibleScheduleColumns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-muted">
                       {c.render(row)}
@@ -801,7 +839,7 @@ export default function Schedule() {
               ))}
               {pendingRows.length === 0 && (
                 <tr>
-                  <td colSpan={visibleScheduleColumns.length + 1} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={visibleScheduleColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
                     대기 중인 인원이 없습니다.
                   </td>
                 </tr>
@@ -895,11 +933,10 @@ export default function Schedule() {
         </div>
       </Card>
 
-      <Modal
+      <SidePanel
         open={open}
         onClose={() => setOpen(false)}
-        title="출근자등록"
-        size="lg"
+        title="스케줄등록 > 출근자등록"
         footer={
           <>
             <Button variant="outline" onClick={() => setOpen(false)}>
@@ -1001,6 +1038,32 @@ export default function Schedule() {
                 </select>
               </label>
               <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">국적구분</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.nationality}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, nationality: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {NATIONALITY_OPTIONS.map((n) => (
+                    <option key={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">국가구분</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                  value={bulkFilters.country}
+                  onChange={(e) => setBulkFilters((f) => ({ ...f, country: e.target.value }))}
+                >
+                  <option value="">전체</option>
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
                 <span className="mb-1 block text-[11px] font-medium text-muted">이름</span>
                 <input
                   className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
@@ -1038,46 +1101,82 @@ export default function Schedule() {
             <p className="text-xs font-medium text-muted">출근자 목록 {bulkSearched ? bulkResults.length : 0}</p>
             <p className="text-xs text-muted">선택 {bulkSelected.size}명</p>
           </div>
-          <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-100">
-            <table className="w-full min-w-[560px] text-center text-sm">
+          <div className="-mx-6 overflow-x-auto overscroll-x-contain">
+            <table className="w-full min-w-[1600px] text-center text-sm">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-slate-100 text-xs text-muted">
                   <th className="px-3 py-2 font-semibold">
                     <input type="checkbox" checked={bulkSearched && bulkResults.length > 0 && bulkSelected.size === bulkResults.length} onChange={toggleBulkSelectAll} />
                   </th>
+                  <th className="px-3 py-2 font-semibold">순번</th>
                   <th className="px-3 py-2 font-semibold">이름</th>
-                  <th className="px-3 py-2 font-semibold">사업자</th>
-                  <th className="px-3 py-2 font-semibold">센터</th>
-                  <th className="px-3 py-2 font-semibold">소속업체</th>
                   <th className="px-3 py-2 font-semibold">전화번호</th>
                   <th className="px-3 py-2 font-semibold">성별</th>
+                  <th className="px-3 py-2 font-semibold">나이</th>
+                  <th className="px-3 py-2 font-semibold">휴면</th>
+                  <th className="px-3 py-2 font-semibold">센터</th>
+                  <th className="px-3 py-2 font-semibold">사업자</th>
+                  <th className="px-3 py-2 font-semibold">소속업체</th>
+                  <th className="px-3 py-2 font-semibold">근무위치</th>
+                  <th className="px-3 py-2 font-semibold">근무구분</th>
+                  <th className="px-3 py-2 font-semibold">근무형태</th>
+                  <th className="px-3 py-2 font-semibold">근무비고</th>
+                  <th className="px-3 py-2 font-semibold">부서</th>
+                  <th className="px-3 py-2 font-semibold">직급</th>
+                  <th className="px-3 py-2 font-semibold">시간템플릿</th>
+                  <th className="px-3 py-2 font-semibold">수당템플릿</th>
+                  <th className="px-3 py-2 font-semibold">계약서템플릿</th>
+                  <th className="px-3 py-2 font-semibold">사직서템플릿</th>
+                  <th className="px-3 py-2 font-semibold">외/내국인</th>
+                  <th className="px-3 py-2 font-semibold">국적</th>
+                  <th className="px-3 py-2 font-semibold">회원가입</th>
+                  <th className="px-3 py-2 font-semibold">4대보험</th>
+                  <th className="px-3 py-2 font-semibold">급여</th>
                 </tr>
               </thead>
               <tbody>
                 {bulkSearched &&
-                  bulkResults.map((emp) => (
+                  bulkResults.map((emp, i) => (
                     <tr key={emp.id} className="border-b border-slate-50 last:border-0">
                       <td className="px-3 py-2">
                         <input type="checkbox" checked={bulkSelected.has(emp.id)} onChange={() => toggleBulkSelected(emp.id)} />
                       </td>
+                      <td className="px-3 py-2 text-muted">{i + 1}</td>
                       <td className="px-3 py-2 text-ink">{emp.name}</td>
-                      <td className="px-3 py-2 text-muted">{companyName}</td>
-                      <td className="px-3 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
-                      <td className="px-3 py-2 text-muted">{vendorName_(emp.vendorId)}</td>
                       <td className="px-3 py-2 text-muted">{emp.phone}</td>
                       <td className="px-3 py-2 text-muted">{emp.gender || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.employmentStatus === "휴직" ? "Y" : "N"}</td>
+                      <td className="px-3 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
+                      <td className="px-3 py-2 text-muted">{companyName}</td>
+                      <td className="px-3 py-2 text-muted">{vendorName_(emp.vendorId)}</td>
+                      <td className="px-3 py-2 text-muted">{emp.workLocation || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.shiftType || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.employmentType || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.note || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.team || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.position || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
+                      <td className="px-3 py-2 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
+                      <td className="px-3 py-2 text-muted">{emp.contractTemplateName || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.resignTemplateName || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.nationality || "-"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.country || "-"}</td>
+                      <td className="px-3 py-2 text-muted">Y</td>
+                      <td className="px-3 py-2 text-muted">{emp.insuranceApplied === "Y" ? "Y" : "N"}</td>
+                      <td className="px-3 py-2 text-muted">{emp.payType || "-"}</td>
                     </tr>
                   ))}
                 {!bulkSearched && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-xs text-muted">
+                    <td colSpan={24} className="px-3 py-6 text-center text-xs text-muted">
                       조회내역이 없습니다. 필터를 설정한 뒤 검색 버튼을 눌러주세요.
                     </td>
                   </tr>
                 )}
                 {bulkSearched && bulkResults.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-xs text-muted">
+                    <td colSpan={24} className="px-3 py-6 text-center text-xs text-muted">
                       조회된 내역이 없습니다.
                     </td>
                   </tr>
@@ -1105,7 +1204,7 @@ export default function Schedule() {
             </div>
           </label>
         </div>
-      </Modal>
+      </SidePanel>
 
       <Modal
         open={copyOpen}
