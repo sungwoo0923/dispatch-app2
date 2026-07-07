@@ -12412,10 +12412,12 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-  // ✅ 전체 개별 다운로드
+  // ✅ 전체 개별 다운로드 (서명 이미지는 제외)
+  const isSignatureItem = (item) => item?.source === "driver_signature" || item?.name === "서명.png";
   const handleDownloadAll = () => {
-    if (!items.length) return;
-    items.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
+    const targets = items.filter(item => !isSignatureItem(item));
+    if (!targets.length) return;
+    targets.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
   };
 
   const handleCopy = async (item, id) => {
@@ -12619,12 +12621,12 @@ const handleDelete = async (item) => {
       {/* 전체화면 뷰 */}
       {selected && (
         <div className="fixed inset-0 bg-black/95 z-[999999] flex items-center justify-center"
-          onClick={() => setSelected(null)}>
+          onClick={e => { e.stopPropagation(); setSelected(null); }}>
           <img src={selected.base64 || selected.url} alt="full"
             className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg transition-transform duration-200"
             style={{ transform: `rotate(${getRotation(selected.id)}deg)` }} />
           <button className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full text-white text-xl transition"
-            onClick={() => setSelected(null)}>×</button>
+            onClick={e => { e.stopPropagation(); setSelected(null); }}>×</button>
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/40 text-[12px]">
             Ctrl+C 로 복사 &nbsp;|&nbsp; ESC 로 닫기
           </div>

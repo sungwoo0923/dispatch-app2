@@ -32,6 +32,7 @@ export default function UploadPage() {
   const [manualCar, setManualCar]   = useState("");
   const [manualName, setManualName] = useState("");
 
+  const [uploadStep, setUploadStep] = useState(1); // 1: 배차정보/확인사항, 2: 거래명세서 예시/파일선택/서명
   const [files, setFiles]         = useState([]);
   const [previews, setPreviews]   = useState([]);
   const [progress, setProgress]   = useState({});
@@ -154,13 +155,23 @@ export default function UploadPage() {
   }, []);
 
   // ── 파일 선택 처리 ───────────────────────────────────────
+  // 같은 사진(내용이 동일한 파일)을 중복으로 추가하려 하면 막고 안내한다
   const handleFiles = useCallback((newFiles) => {
     const arr = Array.from(newFiles).filter(f => f.type.startsWith("image/") || f.type === "application/pdf");
     if (!arr.length) return;
-    setFiles(prev => [...prev, ...arr]);
     arr.forEach(f => {
       const reader = new FileReader();
-      reader.onload = (e) => setPreviews(prev => [...prev, { name: f.name, src: e.target.result, type: f.type }]);
+      reader.onload = (e) => {
+        const src = e.target.result;
+        setPreviews(prev => {
+          if (prev.some(p => p.src === src)) {
+            alert("이미 추가한 사진입니다. 같은 사진은 중복으로 업로드할 수 없습니다.");
+            return prev;
+          }
+          setFiles(prevFiles => [...prevFiles, f]);
+          return [...prev, { name: f.name, src, type: f.type }];
+        });
+      };
       reader.readAsDataURL(f);
     });
   }, []);
@@ -232,8 +243,18 @@ export default function UploadPage() {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      // 실제 업로드는 base64 변환 후 한 번에 저장되어 바이트 단위 진행률이 없으므로,
+      // 처리 중에는 서서히 올라가다가(최대 95%) 완료 시 100%로 딱 떨어지게 흉내낸다.
+      setProgress(prev => ({ ...prev, [i]: 1 }));
+      const progressTimer = setInterval(() => {
+        setProgress(prev => {
+          const cur = prev[i] || 0;
+          if (cur <= 0 || cur >= 95) return prev;
+          return { ...prev, [i]: Math.min(95, Math.round(cur + Math.random() * 10 + 3)) };
+        });
+      }, 150);
+
       try {
-        setProgress(prev => ({ ...prev, [i]: 10 }));
         const compressed = await compressImage(file);
 
         const base64 = await new Promise((resolve, reject) => {
@@ -245,12 +266,11 @@ export default function UploadPage() {
 
         const sizeKB = Math.round(base64.length * 0.75 / 1024);
         if (base64.length > 1_300_000) {
+          clearInterval(progressTimer);
           alert(`${file.name} 파일이 너무 큽니다 (${sizeKB}KB). 사진을 더 작게 찍거나 다른 사진을 사용하세요.`);
           setProgress(prev => { const n = {...prev}; delete n[i]; return n; });
           continue;
         }
-
-        setProgress(prev => ({ ...prev, [i]: 70 }));
 
         // 첫 번째 파일 업로드 시 서명 이미지도 저장
         if (i === 0 && sigRef.current && signed) {
@@ -274,12 +294,16 @@ export default function UploadPage() {
           source: "driver_upload",
         });
 
+        clearInterval(progressTimer);
         setProgress(prev => ({ ...prev, [i]: 100 }));
         results.push({ name: file.name, url: base64, docId: docRef.id });
 
       } catch (err) {
+        clearInterval(progressTimer);
         console.error("업로드 오류:", err);
         alert(`${file.name} 업로드 실패: ${err.message}`);
+        // 진행률이 중간에서 멈춘 채로 남지 않도록 실패 상태로 명확히 표시
+        setProgress(prev => ({ ...prev, [i]: -1 }));
       }
     }
 
@@ -386,6 +410,8 @@ export default function UploadPage() {
 
         {/* ── 메인 업로드 UI ── */}
         {status === "ready" && (
+          <>
+          {uploadStep === 1 && (
           <>
             {/* 오더 정보 카드 (오더 기반 모드) */}
             {!isManual && order && (
@@ -563,10 +589,44 @@ export default function UploadPage() {
               ))}
               {!allChecked && (
                 <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, color: "#94a3b8" }}>
-                  모든 항목 확인 후 업로드할 수 있습니다
+                  모든 항목 확인 후 다음으로 진행할 수 있습니다
                 </div>
               )}
             </div>
+
+            {/* 다음 버튼: 확인사항을 모두 체크해야 활성화 */}
+            <button
+              onClick={() => allChecked && setUploadStep(2)}
+              disabled={!allChecked}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: 12,
+                border: "none",
+                background: allChecked ? "#1B2B4B" : "#cbd5e1",
+                opacity: allChecked ? 1 : 0.7,
+                color: "white",
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: allChecked ? "pointer" : "not-allowed",
+                fontFamily: "'Noto Sans KR', sans-serif",
+                transition: "background 0.2s",
+              }}
+            >
+              다음
+            </button>
+          </>
+          )}
+
+          {uploadStep === 2 && (
+          <>
+            {/* 이전 단계로 */}
+            <button
+              onClick={() => setUploadStep(1)}
+              style={{ background: "none", border: "none", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "4px 0 12px", display: "flex", alignItems: "center", gap: 4 }}
+            >
+              ← 배차정보로 돌아가기
+            </button>
 
             {/* 거래명세서 예시 */}
             <div style={cardStyle}>
@@ -644,58 +704,6 @@ export default function UploadPage() {
               </div>
             )}
 
-            {/* 서명 카드 */}
-            <div style={cardStyle}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>서명</span>
-                {signed && <span style={{ marginLeft: "auto", fontSize: 11, color: "#059669", fontWeight: 700 }}>서명 완료</span>}
-              </div>
-              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>
-                아래 칸에 서명해주세요 (손가락으로 서명)
-              </div>
-              <canvas
-                ref={sigRef}
-                width={440}
-                height={120}
-                style={{ width: "100%", height: 120, border: "1.5px solid #cbd5e1", borderRadius: 10, background: "#f8fafc", touchAction: "none", display: "block" }}
-                onPointerDown={(e) => {
-                  setSigDrawing(true);
-                  const rect = sigRef.current.getBoundingClientRect();
-                  const ctx = sigRef.current.getContext("2d");
-                  const scaleX = sigRef.current.width / rect.width;
-                  const scaleY = sigRef.current.height / rect.height;
-                  ctx.beginPath();
-                  ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
-                  setSigned(true);
-                }}
-                onPointerMove={(e) => {
-                  if (!sigDrawing) return;
-                  const rect = sigRef.current.getBoundingClientRect();
-                  const ctx = sigRef.current.getContext("2d");
-                  const scaleX = sigRef.current.width / rect.width;
-                  const scaleY = sigRef.current.height / rect.height;
-                  ctx.lineWidth = 2.5;
-                  ctx.strokeStyle = "#1B2B4B";
-                  ctx.lineCap = "round";
-                  ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
-                  ctx.stroke();
-                }}
-                onPointerUp={() => setSigDrawing(false)}
-                onPointerLeave={() => setSigDrawing(false)}
-              />
-              <button
-                onClick={() => {
-                  const ctx = sigRef.current.getContext("2d");
-                  ctx.clearRect(0, 0, sigRef.current.width, sigRef.current.height);
-                  setSigned(false);
-                }}
-                style={{ marginTop: 8, padding: "6px 14px", borderRadius: 7, border: "1px solid #e2e8f0", background: "white", color: "#6b7280", fontSize: 12, cursor: "pointer" }}
-              >
-                다시 서명
-              </button>
-            </div>
-
             {/* 업로드 영역 */}
             <div style={cardStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
@@ -746,7 +754,7 @@ export default function UploadPage() {
                             <span style={{ fontSize: 10, color: "#6b7280", marginTop: 4 }}>PDF</span>
                           </div>
                         )}
-                        {uploading && progress[i] !== undefined && progress[i] < 100 && (
+                        {uploading && progress[i] > 0 && progress[i] < 100 && (
                           <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <span style={{ color: "white", fontWeight: 700, fontSize: 16 }}>{progress[i]}%</span>
                           </div>
@@ -754,6 +762,12 @@ export default function UploadPage() {
                         {uploading && progress[i] === 100 && (
                           <div style={{ position: "absolute", inset: 0, background: "rgba(5,150,105,0.7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <span style={{ color: "white", fontSize: 24 }}>✓</span>
+                          </div>
+                        )}
+                        {uploading && progress[i] === -1 && (
+                          <div style={{ position: "absolute", inset: 0, background: "rgba(220,38,38,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ color: "white", fontSize: 20 }}>✕</span>
+                            <span style={{ color: "white", fontSize: 11, fontWeight: 700, marginTop: 2 }}>실패</span>
                           </div>
                         )}
                         {!uploading && (
@@ -768,22 +782,80 @@ export default function UploadPage() {
                 </div>
               )}
 
-              {files.length > 0 && !allChecked && (
-                <div style={{ textAlign: "center", padding: "10px 0 4px", fontSize: 13, color: "#ef4444", fontWeight: 600 }}>
-                  위 확인사항을 모두 체크해주세요
-                </div>
-              )}
+            </div>
+
+            {/* 서명 카드 (마지막 단계) */}
+            <div style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>서명</span>
+                {signed && <span style={{ marginLeft: "auto", fontSize: 11, color: "#059669", fontWeight: 700 }}>서명 완료</span>}
+              </div>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>
+                아래 칸에 서명해주세요 (손가락으로 서명)
+              </div>
+              <canvas
+                ref={sigRef}
+                width={440}
+                height={120}
+                style={{ width: "100%", height: 120, border: "1.5px solid #cbd5e1", borderRadius: 10, background: "#f8fafc", touchAction: "none", display: "block", pointerEvents: signed ? "none" : "auto" }}
+                onPointerDown={(e) => {
+                  if (signed) return;
+                  setSigDrawing(true);
+                  const rect = sigRef.current.getBoundingClientRect();
+                  const ctx = sigRef.current.getContext("2d");
+                  const scaleX = sigRef.current.width / rect.width;
+                  const scaleY = sigRef.current.height / rect.height;
+                  ctx.beginPath();
+                  ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+                }}
+                onPointerMove={(e) => {
+                  if (!sigDrawing || signed) return;
+                  const rect = sigRef.current.getBoundingClientRect();
+                  const ctx = sigRef.current.getContext("2d");
+                  const scaleX = sigRef.current.width / rect.width;
+                  const scaleY = sigRef.current.height / rect.height;
+                  ctx.lineWidth = 2.5;
+                  ctx.strokeStyle = "#1B2B4B";
+                  ctx.lineCap = "round";
+                  ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+                  ctx.stroke();
+                }}
+                onPointerUp={() => {
+                  setSigDrawing(prevDrawing => {
+                    if (prevDrawing) setSigned(true);
+                    return false;
+                  });
+                }}
+                onPointerLeave={() => {
+                  setSigDrawing(prevDrawing => {
+                    if (prevDrawing) setSigned(true);
+                    return false;
+                  });
+                }}
+              />
+              <button
+                onClick={() => {
+                  const ctx = sigRef.current.getContext("2d");
+                  ctx.clearRect(0, 0, sigRef.current.width, sigRef.current.height);
+                  setSigned(false);
+                }}
+                style={{ marginTop: 8, padding: "6px 14px", borderRadius: 7, border: "1px solid #e2e8f0", background: "white", color: "#6b7280", fontSize: 12, cursor: "pointer" }}
+              >
+                다시 서명
+              </button>
+
               {files.length > 0 && (
                 <button
                   onClick={handleUpload}
-                  disabled={uploading || !allChecked}
+                  disabled={uploading}
                   style={{
                     width: "100%",
+                    marginTop: 16,
                     padding: "14px",
                     borderRadius: 12,
                     border: "none",
-                    background: uploading ? "#94a3b8" : !allChecked ? "#cbd5e1" : "#1B2B4B",
-                    opacity: !allChecked ? 0.7 : 1,
+                    background: uploading ? "#94a3b8" : "#1B2B4B",
                     color: "white",
                     fontWeight: 700,
                     fontSize: 15,
@@ -796,6 +868,8 @@ export default function UploadPage() {
                 </button>
               )}
             </div>
+          </>
+          )}
           </>
         )}
       </div>
