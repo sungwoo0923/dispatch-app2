@@ -16,6 +16,8 @@ import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History,
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
+import { useConfirm } from "../hooks/useConfirm";
+import { buildDefaultContract } from "../utils/contractTemplate";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
@@ -107,6 +109,7 @@ function SectionHeader({ children }) {
 export default function EmployeeList() {
   const { profile } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -464,18 +467,58 @@ export default function EmployeeList() {
   };
 
   const applyTemplatePick = (report) => {
-    if (templatePicker === "contract") {
-      setRegisterForm((f) => ({ ...f, contractTemplateId: report.id, contractTemplateName: report.templateName }));
-    } else if (templatePicker === "resign") {
+    if (templatePicker === "resign") {
       setRegisterForm((f) => ({ ...f, resignTemplateId: report.id, resignTemplateName: report.templateName }));
     }
     setTemplatePicker(null);
     setTemplateSearch("");
   };
 
+  const contractReportOptions = useMemo(() => centerReports.filter((r) => r.docType === "계약서"), [centerReports]);
+
+  // 근로자등록 > 계약 탭에서 계약서 템플릿을 고르면, 이미 계정이 있는(수정 중인)
+  // 근로자에 한해 즉시 발송할지 물어본다. 아직 가입 전(신규 등록, uid 없음)인
+  // 경우는 uid가 없어 계약서 문서를 만들 수 없으므로 템플릿 선택만 저장해두고,
+  // 실제 발송은 이후 계약서 메뉴의 자동발송으로 진행한다.
+  const selectContractTemplate = async (reportId) => {
+    const report = centerReports.find((r) => r.id === reportId);
+    setRegisterForm((f) => ({ ...f, contractTemplateId: reportId, contractTemplateName: report?.templateName || "" }));
+    if (!reportId || !editingUid) return;
+    if (!(await confirm(`계약서를 ${registerForm.name || "해당 근로자"}님에게 즉시 발송하시겠습니까?`, "send"))) return;
+    const entity = businessEntities.find((b) => b.id === registerForm.businessEntityId);
+    const stampUrl = entity?.stampUrl || null;
+    const content = buildDefaultContract({
+      employeeName: registerForm.name,
+      hireDate: registerForm.hireDate,
+      position: registerForm.position,
+      siteName: siteName_(registerForm.workSiteId),
+      vendorName: vendorName_(registerForm.vendorId),
+      companyName,
+      payType: registerForm.payType,
+      shiftType: registerForm.shiftType,
+      employmentType: registerForm.employmentType,
+    });
+    const signedAt = toDateKey();
+    await addDoc(collection(db, "contracts"), {
+      companyId: profile.companyId,
+      uid: editingUid,
+      employeeName: registerForm.name,
+      title: report?.templateName || "표준근로계약서",
+      cycle: "1년",
+      startDate: signedAt,
+      endDate: null,
+      content,
+      status: stampUrl ? "sent" : "draft",
+      companySignatureDataUrl: stampUrl,
+      companySignedAt: stampUrl ? signedAt : null,
+      createdAt: serverTimestamp(),
+    });
+    toast.success(stampUrl ? "계약서가 발송되었습니다" : "계약서가 등록되었습니다 (사업자 도장이 없어 서명 없이 등록됨)");
+  };
+
   const templatePickerResults = useMemo(() => {
     if (!templatePicker) return [];
-    const docType = templatePicker === "contract" ? "계약서" : "사직서";
+    const docType = "사직서";
     return centerReports.filter((r) => r.docType === docType && (!templateSearch || r.templateName?.includes(templateSearch)));
   }, [templatePicker, centerReports, templateSearch]);
 
@@ -1667,21 +1710,24 @@ export default function EmployeeList() {
                   </div>
                 )}
                 {regTab === "계약" && (
-                  <div className="flex flex-nowrap items-end gap-2">
-                    <label className="block flex-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-muted">계약서 템플릿</span>
-                      <input
-                        readOnly
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm"
-                        value={registerForm.contractTemplateName}
-                        placeholder="계약서템플릿 선택"
-                      />
+                      <select
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                        value={registerForm.contractTemplateId}
+                        onChange={(e) => selectContractTemplate(e.target.value)}
+                      >
+                        <option value="">선택</option>
+                        {contractReportOptions.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.templateName}
+                          </option>
+                        ))}
+                      </select>
                     </label>
-                    <Button type="button" variant="outline" onClick={() => setTemplatePicker("contract")}>
-                      <Search size={14} /> 조회
-                    </Button>
-                    <p className="w-full text-[11px] text-muted">
-                      출근확정 시 여기서 선택한 템플릿으로 전자근로계약서가 자동 생성됩니다.
+                    <p className="col-span-2 text-[11px] text-muted">
+                      출근확정 시 여기서 선택한 템플릿으로 전자근로계약서가 자동 생성됩니다. 이미 계정이 있는 근로자는 템플릿 선택 시 즉시 발송할지 물어봅니다.
                     </p>
                   </div>
                 )}
@@ -1786,7 +1832,7 @@ export default function EmployeeList() {
       <Modal
         open={Boolean(templatePicker)}
         onClose={() => setTemplatePicker(null)}
-        title={templatePicker === "contract" ? "계약서템플릿조회" : "사직서템플릿조회"}
+        title="사직서템플릿조회"
       >
         <div className="space-y-3">
           <div className="flex flex-nowrap items-end gap-2">

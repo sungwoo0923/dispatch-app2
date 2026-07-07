@@ -33,5 +33,18 @@ service firebase.storage {
       allow read: if isCompanyAdmin();
       allow write: if isCompanyAdmin() && request.resource.size < 10 * 1024 * 1024;
     }
+
+    // 사업자(businessEntities)의 인감/서명 도장 이미지 — 센터별리포트 > 계약서
+    // 상세에서 업로드하며, 전자문서의 갑(회사) 서명란에 표시된다.
+    match /companies/{companyId}/entities/{entityId}/{fileName} {
+      function isCompanyAdmin() {
+        return request.auth != null &&
+          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+      }
+
+      allow read: if request.auth != null;
+      allow write: if isCompanyAdmin() && request.resource.size < 10 * 1024 * 1024;
+    }
   }
 }

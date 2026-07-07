@@ -1,10 +1,11 @@
-import { AlertTriangle, Save, Pencil } from "lucide-react";
+import { AlertTriangle, Save, Pencil, Send } from "lucide-react";
 import Button from "./Button";
 
 const KIND = {
   delete: { icon: AlertTriangle, tone: "bg-red-50 text-danger", button: "danger", label: "삭제" },
   save: { icon: Save, tone: "bg-primary-light text-primary", button: "primary", label: "저장" },
   edit: { icon: Pencil, tone: "bg-primary-light text-primary", button: "primary", label: "수정" },
+  send: { icon: Send, tone: "bg-primary-light text-primary", button: "primary", label: "예" },
 };
 
 // 프로그램 전역에서 저장/수정/삭제 액션 전에 뜨는 확인 팝업. useConfirm() 훅으로

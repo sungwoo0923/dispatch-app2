@@ -7,6 +7,7 @@ import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import { formatDate } from "../utils/dateUtils";
+import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
 
 export default function ContractsPage() {
   const { user } = useAuth();
@@ -37,7 +38,7 @@ export default function ContractsPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {c.status === "signed" ? <Badge tone="success">다운로드</Badge> : <Badge tone="warning">작성필요</Badge>}
+              <Badge tone={CONTRACT_STATUS_TONE[contractStatus(c)]}>{contractStatus(c)}</Badge>
               <ChevronRight size={16} className="text-muted" />
             </div>
           </Card>

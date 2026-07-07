@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { ArrowLeft, PenLine } from "lucide-react";
+import { ArrowLeft, PenLine, Download } from "lucide-react";
 import { db } from "../firebase";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
-import { toDateKey } from "../utils/dateUtils";
+import { toDateKey, formatDate } from "../utils/dateUtils";
 
 export default function ContractDetail() {
   const { contractId } = useParams();
@@ -25,15 +25,29 @@ export default function ContractDetail() {
   const submitSignature = async () => {
     if (!padRef.current || padRef.current.isEmpty()) return;
     setSaving(true);
-    const signatureDataUrl = padRef.current.getDataUrl();
-    await updateDoc(doc(db, "contracts", contractId), {
-      status: "signed",
-      signatureDataUrl,
-      signedAt: toDateKey(),
-    });
-    setContract((c) => ({ ...c, status: "signed", signatureDataUrl, signedAt: toDateKey() }));
+    const employeeSignatureDataUrl = padRef.current.getDataUrl();
+    const employeeSignedAt = toDateKey();
+    const status = contract.companySignatureDataUrl ? "signed" : "sent";
+    await updateDoc(doc(db, "contracts", contractId), { status, employeeSignatureDataUrl, employeeSignedAt });
+    setContract((c) => ({ ...c, status, employeeSignatureDataUrl, employeeSignedAt }));
     setSaving(false);
     setSigning(false);
+  };
+
+  const downloadContract = () => {
+    const text =
+      `${contract.title}\n\n${contract.content || ""}\n\n` +
+      `갑(회사) 서명일: ${contract.companySignedAt ? formatDate(contract.companySignedAt) : "미서명"}\n` +
+      `을(근로자) 서명일: ${contract.employeeSignedAt ? formatDate(contract.employeeSignedAt) : "미서명"}\n`;
+    const blob = new Blob(["﻿" + text], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${contract.title || "계약서"}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   if (!contract) return <p className="px-4 pt-4 text-xs text-muted">불러오는 중...</p>;
@@ -45,22 +59,41 @@ export default function ContractDetail() {
       </Link>
 
       <Card className="p-5">
-        <p className="mb-3 text-base font-semibold text-ink">{contract.title}</p>
+        <p className="mb-3 text-center text-base font-semibold text-ink">{contract.title}</p>
         <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-[11px] leading-relaxed">
           {contract.content}
         </pre>
       </Card>
 
-      {contract.status === "signed" ? (
-        <Card className="p-5">
-          <p className="mb-1.5 text-xs font-medium text-muted">서명 완료 ({contract.signedAt})</p>
-          <img src={contract.signatureDataUrl} alt="서명" className="h-24 rounded-xl border border-slate-200 bg-white" />
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-4 text-center">
+          <p className="mb-1.5 text-xs font-medium text-muted">갑 (회사)</p>
+          {contract.companySignatureDataUrl ? (
+            <img src={contract.companySignatureDataUrl} alt="회사 서명/도장" className="mx-auto h-16 rounded-lg border border-slate-200 bg-white" />
+          ) : (
+            <p className="text-xs text-warning">서명 대기중</p>
+          )}
+          {contract.companySignedAt && <p className="mt-1 text-[11px] text-muted">{formatDate(contract.companySignedAt)}</p>}
         </Card>
-      ) : (
-        <Button className="w-full" size="lg" onClick={() => setSigning(true)}>
-          <PenLine size={16} /> 서명하기
+        <Card className="p-4 text-center">
+          <p className="mb-1.5 text-xs font-medium text-muted">을 (근로자)</p>
+          {contract.employeeSignatureDataUrl ? (
+            <img src={contract.employeeSignatureDataUrl} alt="내 서명" className="mx-auto h-16 rounded-lg border border-slate-200 bg-white" />
+          ) : (
+            <p className="text-xs text-warning">서명 필요</p>
+          )}
+          {contract.employeeSignedAt && <p className="mt-1 text-[11px] text-muted">{formatDate(contract.employeeSignedAt)}</p>}
+        </Card>
+      </div>
+
+      <div className="flex flex-nowrap gap-2">
+        <Button className="flex-1" size="lg" onClick={() => setSigning(true)}>
+          <PenLine size={16} /> {contract.employeeSignatureDataUrl ? "재서명" : "서명하기"}
         </Button>
-      )}
+        <Button className="flex-1" size="lg" variant="outline" onClick={downloadContract}>
+          <Download size={16} /> 다운로드
+        </Button>
+      </div>
 
       <Modal
         open={signing}

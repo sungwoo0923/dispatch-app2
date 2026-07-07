@@ -17,6 +17,15 @@ input, select, textarea {
   font-size: 16px; /* prevents iOS auto-zoom on focus */
 }
 
+@layer base {
+  /* 표/뱃지 텍스트가 줄바꿈되어 세로로 늘어지지 않도록 기본을 한 줄로 고정한다.
+     특정 셀에서 의도적으로 줄바꿈이 필요하면 개별적으로 whitespace-normal/
+     whitespace-pre-wrap 유틸리티 클래스를 얹어 이 기본값을 덮어쓸 수 있다. */
+  table th, table td {
+    white-space: nowrap;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

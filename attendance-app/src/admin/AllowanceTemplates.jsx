@@ -9,6 +9,7 @@ import Button from "../components/Button";
 import Panel from "../components/Panel";
 import Modal from "../components/Modal";
 import SidePanel from "../components/SidePanel";
+import CurrencyInput from "../components/CurrencyInput";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate } from "../utils/dateUtils";
 import { PAY_TYPE_OPTIONS } from "../constants/hr";
@@ -361,11 +362,10 @@ export default function AllowanceTemplates() {
               {BASIC_FIELDS.map((f) => (
                 <label key={f.key} className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">{f.label}</span>
-                  <input
-                    type="number"
+                  <CurrencyInput
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                     value={form[f.key]}
-                    onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                    onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
                   />
                 </label>
               ))}
@@ -378,11 +378,10 @@ export default function AllowanceTemplates() {
               {INDIVIDUAL_FIELDS.map((f) => (
                 <label key={f.key} className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">{f.label}</span>
-                  <input
-                    type="number"
+                  <CurrencyInput
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                     value={form[f.key]}
-                    onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                    onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
                   />
                 </label>
               ))}

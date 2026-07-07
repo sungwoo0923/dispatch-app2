@@ -67,3 +67,12 @@ export async function uploadEmployeePhoto({ companyId, uid, file }) {
   await uploadBytes(storageRef, file);
   return getDownloadURL(storageRef);
 }
+
+// 사업자(businessEntities)의 인감/서명 도장 이미지. 전자문서(계약서 등)의 갑(회사)
+// 서명란에 그대로 삽입해 쓴다.
+export async function uploadBusinessEntityStamp({ companyId, entityId, file }) {
+  const path = `companies/${companyId}/entities/${entityId}/stamp_${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}

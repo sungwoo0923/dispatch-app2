@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { FileBadge2, Plus, RefreshCw, FileSpreadsheet, Eye, Search, Upload } from "lucide-react";
+import { FileBadge2, Plus, RefreshCw, FileSpreadsheet, Eye, Search, Upload, Scale, Stamp, Download, Printer } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -11,6 +11,9 @@ import Modal from "../components/Modal";
 import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate } from "../utils/dateUtils";
+import { extractTextFromFile, UPLOAD_ACCEPT } from "../utils/fileTextExtract";
+import { uploadBusinessEntityStamp } from "../utils/documents";
+import { LABOR_LAW_CHAPTERS, LABOR_LAW_DISCLAIMER } from "../utils/laborLawText";
 import { DEFAULT_EXTRA, CONTRACT_FORMAT_OPTIONS, getContractFormatDefaults, isKnownContractWage, openReportPreview } from "../utils/reportTemplates";
 
 const DOC_TYPES = ["계약서", "사직서", "안전교육일지", "재직증명서", "퇴직증명서", "급여명세서"];
@@ -99,7 +102,9 @@ export default function CenterReports() {
   const [admins, setAdmins] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [items, setItems] = useState([]);
+  const [lawOpen, setLawOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const stampInputRef = useRef(null);
 
   const [draft, setDraft] = useState(emptyDraft());
   const [applied, setApplied] = useState(emptyDraft());
@@ -235,15 +240,47 @@ export default function CenterReports() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const text = await file.text();
+    const text = await extractTextFromFile(file);
+    if (!text.trim()) {
+      toast.error("이 파일 형식(한글/워드 등)에서는 텍스트를 읽어올 수 없습니다. txt/csv/pdf/엑셀 형식을 이용해주세요.");
+      return;
+    }
     const parsed = parseUploadedContractText(text);
     const fieldCount = Object.keys(parsed).length;
     if (fieldCount === 0) {
-      toast.error("문서에서 업무의 내용/임금/사회보험/기타 등의 항목을 인식하지 못했습니다. 텍스트(txt) 형식의 문서를 이용해주세요.");
+      toast.error("문서에서 업무의 내용/임금/사회보험/기타 등의 항목을 인식하지 못했습니다.");
       return;
     }
     setForm((f) => ({ ...f, extra: { ...f.extra, ...parsed } }));
     toast.success(`업로드한 문서에서 ${fieldCount}개 항목을 불러와 반영했습니다.`);
+  };
+
+  const triggerStampUpload = () => stampInputRef.current?.click();
+  const handleUploadStamp = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !form.businessEntityId) {
+      if (!form.businessEntityId) toast.error("사업자를 먼저 선택해주세요.");
+      return;
+    }
+    const url = await uploadBusinessEntityStamp({ companyId: profile.companyId, entityId: form.businessEntityId, file });
+    await updateDoc(doc(db, "businessEntities", form.businessEntityId), { stampUrl: url });
+    toast.success("도장이 등록되었습니다. 이 사업자의 계약서 문서에 자동으로 반영됩니다.");
+  };
+
+  const downloadLaborLaw = () => {
+    const text = LABOR_LAW_CHAPTERS.map(
+      (ch) => `${ch.title}\n\n${ch.articles.map((a) => `${a.no} (${a.title})\n${a.text}`).join("\n\n")}`
+    ).join("\n\n" + "=".repeat(40) + "\n\n");
+    const blob = new Blob(["﻿" + LABOR_LAW_DISCLAIMER + "\n\n" + text], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "근로기준법.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const exportCsv = () => {
@@ -487,12 +524,23 @@ export default function CenterReports() {
 
           {form.docType === "계약서" && (
             <div>
-              <input ref={fileInputRef} type="file" accept=".txt" className="hidden" onChange={handleUploadFile} />
-              <Button size="sm" variant="outline" type="button" onClick={triggerUpload}>
-                <Upload size={13} /> 양식 업로드
-              </Button>
+              <input ref={fileInputRef} type="file" accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFile} />
+              <input ref={stampInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadStamp} />
+              <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+                <Button size="sm" variant="outline" type="button" onClick={triggerUpload}>
+                  <Upload size={13} /> 양식 업로드
+                </Button>
+                <Button size="sm" variant="outline" type="button" onClick={triggerStampUpload}>
+                  <Stamp size={13} /> 도장 업로드
+                </Button>
+                <Button size="sm" variant="outline" type="button" onClick={() => setLawOpen(true)}>
+                  <Scale size={13} /> 근로기준법
+                </Button>
+              </div>
               <p className="mt-1.5 text-[11px] text-muted">
-                텍스트(txt) 형식의 다른 표준근로계약서 문서를 업로드하면 업무의 내용/임금/사회보험/기타 항목을 인식해 아래 내용에 반영합니다.
+                txt/csv/pdf/엑셀 형식의 다른 표준근로계약서 문서를 업로드하면 업무의 내용/임금/사회보험/기타 항목을 인식해 아래 내용에 반영합니다. (한글(hwp)·워드 문서는 이 앱에서 텍스트 추출을 지원하지 않습니다)
+                <br />
+                도장 업로드는 선택한 사업자의 인감으로 등록되어, 이 사업자의 계약서 문서에서 대표자 서명란에 자동으로 표시됩니다.
               </p>
             </div>
           )}
@@ -664,6 +712,43 @@ export default function CenterReports() {
             <input className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={copyForm.templateName} onChange={(e) => setCopyForm((f) => ({ ...f, templateName: e.target.value }))} />
           </label>
           <p className="text-[11px] text-muted">다른 센터에 적용이 필요할 경우 사업자, 센터를 지정하여 복사 할 수 있습니다.</p>
+        </div>
+      </Modal>
+
+      <Modal
+        open={lawOpen}
+        onClose={() => setLawOpen(false)}
+        title="근로기준법"
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={downloadLaborLaw}>
+              <Download size={14} /> 다운로드
+            </Button>
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer size={14} /> 인쇄
+            </Button>
+            <Button onClick={() => setLawOpen(false)}>닫기</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="rounded-xl bg-primary-light/40 px-3.5 py-2.5 text-xs leading-relaxed text-primary">{LABOR_LAW_DISCLAIMER}</p>
+          {LABOR_LAW_CHAPTERS.map((ch) => (
+            <div key={ch.title}>
+              <p className="mb-2 text-sm font-bold text-ink">{ch.title}</p>
+              <div className="space-y-2.5">
+                {ch.articles.map((a) => (
+                  <div key={a.no} className="rounded-lg border border-slate-100 p-3">
+                    <p className="mb-1 text-xs font-semibold text-ink">
+                      {a.no} ({a.title})
+                    </p>
+                    <p className="whitespace-normal text-xs leading-relaxed text-muted">{a.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </Modal>
     </div>

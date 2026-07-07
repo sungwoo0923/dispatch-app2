@@ -76,7 +76,12 @@ export const DEFAULT_EXTRA = {
     special: "1. 코로나바이러스 확산 방지 대비 철저\n2. 손세정제, 마스크 착용",
     eduContent: "1. 안전모등 보호구 착용관련 교육\n2. 컨베이어 주변 작업시 불안전행동 관련 교육",
     mainWork: "* 택배 하차작업 및 지역별 분류작업(오전)\n* 택배 상차작업(오후)",
-    approvers: ["", "", "", ""],
+    approvers: [
+      { name: "", position: "" },
+      { name: "", position: "" },
+      { name: "", position: "" },
+      { name: "", position: "" },
+    ],
   },
 };
 
@@ -183,13 +188,17 @@ export function buildResignationHtml({ siteName }) {
 }
 
 export function buildTbmHtml({ siteName, eduMinutes, cautions, eduCategory, special, eduContent, mainWork, approvers }) {
-  const approverCols = (approvers && approvers.length ? approvers : ["", "", "", ""])
-    .map((_, i) => `<th>${i + 1}순위</th>`)
-    .join("");
-  const approverVals = (approvers && approvers.length ? approvers : ["", "", "", ""]).map((a) => `<td>${esc(a || "")}</td>`).join("");
+  const filledApprovers = (approvers && approvers.length ? approvers : []).filter((a) => a?.name);
+  const approvalLine =
+    filledApprovers.length > 0
+      ? `<table style="width:${filledApprovers.length * 90}px;">
+          <tr>${filledApprovers.map((a) => `<th>${esc(a.position || "결재")}</th>`).join("")}</tr>
+          <tr>${filledApprovers.map((a) => `<td style="height:36px;">${esc(a.name)}</td>`).join("")}</tr>
+        </table>`
+      : `<table style="width:120px;"><tr><td>결재</td></tr><tr><td style="height:36px;">&nbsp;</td></tr></table>`;
   const body = `
     <table class="no-border" style="margin-bottom:6px;">
-      <tr><td></td><td style="text-align:right;width:120px;"><table style="width:120px;"><tr><td>결재</td></tr><tr><td>&nbsp;</td></tr></table></td></tr>
+      <tr><td></td><td style="text-align:right;width:${filledApprovers.length ? filledApprovers.length * 90 + 20 : 140}px;">${approvalLine}</td></tr>
     </table>
     <h1 style="font-size:16px;letter-spacing:2px;">일일 안전교육일지(TBM)</h1>
     <p>현장명: ${esc(siteName || "-")}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;날씨: 맑음/우천/흐림/눈/태풍/황사&nbsp;중</p>
@@ -207,9 +216,7 @@ export function buildTbmHtml({ siteName, eduMinutes, cautions, eduCategory, spec
     <table>
       <tr><th style="width:50px;">번호</th><th>성명</th><th>핸드폰</th><th>시간</th><th>서명</th></tr>
       ${[1, 2, 3, 4, 5, 6, 7].map((n) => `<tr><td>${n}</td><td>&nbsp;</td><td>--</td><td>~</td><td>&nbsp;</td></tr>`).join("")}
-    </table>
-    <p class="section-title">결재자 정보</p>
-    <table><tr>${approverCols}</tr><tr>${approverVals}</tr></table>`;
+    </table>`;
   return wrapDoc("일일 안전교육일지(TBM)", body);
 }
 

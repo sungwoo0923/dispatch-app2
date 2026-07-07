@@ -11,7 +11,7 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { FileSignature, Trash2, Eye, Search, Download, Printer } from "lucide-react";
+import { FileSignature, Trash2, Eye, Search, Download, Printer, Send, Stamp, FileText } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -28,6 +28,7 @@ import { downloadCsv } from "../utils/exportCsv";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { NATIONALITY_OPTIONS, SHIFT_TYPE_OPTIONS, EMPLOYMENT_TYPE_OPTIONS, TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
 import { formatDate, calculateAge } from "../utils/dateUtils";
+import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
 
 const CYCLE_OPTIONS = ["1년", "6개월", "3개월", "기간의 정함 없음"];
 
@@ -66,6 +67,7 @@ export default function Contracts() {
 
   const [signTarget, setSignTarget] = useState(null); // { emp, contract, content }
   const [docView, setDocView] = useState(null); // { emp, contract }
+  const [detailView, setDetailView] = useState(null); // { emp, contract }
   const [saving, setSaving] = useState(false);
   const [signError, setSignError] = useState("");
   const padRef = useRef(null);
@@ -105,6 +107,7 @@ export default function Contracts() {
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
   const shiftTemplateName_ = (id) => shiftTemplates.find((t) => t.id === id)?.name || "-";
   const allowanceTemplateName_ = (id) => allowanceTemplates.find((t) => t.id === id)?.name || "-";
+  const stampFor = (emp) => businessEntities.find((b) => b.id === emp.businessEntityId)?.stampUrl || null;
 
   const latestContractFor = (uid) =>
     contracts
@@ -172,7 +175,7 @@ export default function Contracts() {
         r.emp.employmentType || "",
         r.emp.team || "",
         r.emp.position || "",
-        r.contract?.status === "signed" ? "서명완료" : r.contract ? "서명대기" : "미발송",
+        contractStatus(r.contract),
         r.emp.resignTemplateName || "",
         r.contract?.title || r.emp.contractTemplateName || "",
         shiftTemplateName_(r.emp.shiftTemplateId),
@@ -185,7 +188,12 @@ export default function Contracts() {
     const targets = filteredRows.filter((r) => selected.has(r.emp.id) && r.contract);
     if (targets.length === 0) return;
     const text = targets
-      .map((r) => `[${r.emp.name}]\n${r.contract.content || ""}\n서명일: ${r.contract.signedAt ? formatDate(r.contract.signedAt) : "미서명"}\n\n`)
+      .map(
+        (r) =>
+          `[${r.emp.name}]\n${r.contract.content || ""}\n갑(회사) 서명일: ${
+            r.contract.companySignedAt ? formatDate(r.contract.companySignedAt) : "미서명"
+          }\n을(근로자) 서명일: ${r.contract.employeeSignedAt ? formatDate(r.contract.employeeSignedAt) : "미서명"}\n\n`
+      )
       .join("\n" + "-".repeat(40) + "\n\n");
     const blob = new Blob(["﻿" + text], { type: "text/plain;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -209,67 +217,66 @@ export default function Contracts() {
     setSelected(new Set());
   };
 
+  const buildContentFor = (emp, contract) =>
+    contract?.content ||
+    buildDefaultContract({
+      employeeName: emp.name,
+      hireDate: emp.hireDate,
+      position: emp.position,
+      siteName: siteName_(emp.workSiteId),
+      vendorName: vendorName_(emp.vendorId),
+      companyName,
+      payType: emp.payType,
+      shiftType: emp.shiftType,
+      employmentType: emp.employmentType,
+    });
+
+  // 보기: 회사(갑) 서명이 이미 있으면 상세(양쪽 서명 확인 + 재서명)를, 없으면
+  // 바로 서명 화면을 연다 — 관리자가 PC에서 서명하는 것은 갑(회사) 서명이다.
   const openView = (emp, contract) => {
-    if (contract?.status === "signed") {
+    if (contract?.companySignatureDataUrl) {
       setDocView({ emp, contract });
       return;
     }
-    const content =
-      contract?.content ||
-      buildDefaultContract({
-        employeeName: emp.name,
-        hireDate: emp.hireDate,
-        position: emp.position,
-        siteName: siteName_(emp.workSiteId),
-        vendorName: vendorName_(emp.vendorId),
-        companyName,
-        payType: emp.payType,
-        shiftType: emp.shiftType,
-        employmentType: emp.employmentType,
-      });
     setSignError("");
-    setSignTarget({ emp, contract, content });
+    setSignTarget({ emp, contract, content: buildContentFor(emp, contract) });
+  };
+
+  const openResign = (emp, contract) => {
+    setSignError("");
+    setSignTarget({ emp, contract, content: buildContentFor(emp, contract) });
+  };
+
+  const saveCompanySignature = async ({ emp, contract, content }, signatureDataUrl) => {
+    const signedAt = new Date().toISOString().slice(0, 10);
+    const status = contract?.employeeSignatureDataUrl ? "signed" : "sent";
+    if (contract) {
+      await updateDoc(doc(db, "contracts", contract.id), { status, companySignatureDataUrl: signatureDataUrl, companySignedAt: signedAt });
+      return { ...contract, status, companySignatureDataUrl: signatureDataUrl, companySignedAt: signedAt };
+    }
+    const payload = {
+      companyId: profile.companyId,
+      uid: emp.id,
+      employeeName: emp.name,
+      title: "표준근로계약서",
+      cycle: "1년",
+      startDate: signedAt,
+      endDate: null,
+      content,
+      status,
+      companySignatureDataUrl: signatureDataUrl,
+      companySignedAt: signedAt,
+    };
+    const ref = await addDoc(collection(db, "contracts"), { ...payload, createdAt: serverTimestamp() });
+    return { id: ref.id, ...payload };
   };
 
   const applySignature = async () => {
     if (!signTarget || !padRef.current || padRef.current.isEmpty()) return;
     setSaving(true);
     setSignError("");
-    const signatureDataUrl = padRef.current.getDataUrl();
-    const signedAt = new Date().toISOString().slice(0, 10);
     try {
-      let savedContract;
-      if (signTarget.contract) {
-        await updateDoc(doc(db, "contracts", signTarget.contract.id), { status: "signed", signatureDataUrl, signedAt });
-        savedContract = { ...signTarget.contract, status: "signed", signatureDataUrl, signedAt };
-      } else {
-        const ref = await addDoc(collection(db, "contracts"), {
-          companyId: profile.companyId,
-          uid: signTarget.emp.id,
-          employeeName: signTarget.emp.name,
-          title: "표준근로계약서",
-          cycle: "1년",
-          startDate: signedAt,
-          endDate: null,
-          content: signTarget.content,
-          status: "signed",
-          signatureDataUrl,
-          signedAt,
-          createdAt: serverTimestamp(),
-        });
-        savedContract = {
-          id: ref.id,
-          companyId: profile.companyId,
-          uid: signTarget.emp.id,
-          title: "표준근로계약서",
-          cycle: "1년",
-          startDate: signedAt,
-          content: signTarget.content,
-          status: "signed",
-          signatureDataUrl,
-          signedAt,
-        };
-      }
+      const savedContract = await saveCompanySignature(signTarget, padRef.current.getDataUrl());
       toast.success("서명이 적용되었습니다");
       setSignTarget(null);
       setDocView({ emp: signTarget.emp, contract: savedContract });
@@ -278,6 +285,44 @@ export default function Contracts() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const applyStampSignature = async () => {
+    const stampUrl = signTarget && stampFor(signTarget.emp);
+    if (!stampUrl) return;
+    setSaving(true);
+    setSignError("");
+    try {
+      const savedContract = await saveCompanySignature(signTarget, stampUrl);
+      toast.success("도장이 적용되었습니다");
+      setSignTarget(null);
+      setDocView({ emp: signTarget.emp, contract: savedContract });
+    } catch (err) {
+      setSignError(`도장 적용에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const autoSend = async () => {
+    const targets = filteredRows.filter((r) => selected.has(r.emp.id));
+    if (targets.length === 0) return;
+    const withStamp = targets.filter((r) => stampFor(r.emp));
+    const withoutStamp = targets.length - withStamp.length;
+    if (withStamp.length === 0) {
+      toast.error("선택된 근로자의 사업자에 등록된 도장이 없습니다. 센터별리포트 > 계약서 상세에서 도장을 먼저 업로드해주세요.");
+      return;
+    }
+    if (
+      !(await confirm(
+        `선택된 ${withStamp.length}명에게 사업주 도장을 적용해 계약서를 즉시 발송하시겠습니까?${withoutStamp ? ` (도장 미등록 ${withoutStamp}명 제외)` : ""}`,
+        "save"
+      ))
+    )
+      return;
+    await Promise.all(withStamp.map((r) => saveCompanySignature({ emp: r.emp, contract: r.contract, content: buildContentFor(r.emp, r.contract) }, stampFor(r.emp))));
+    toast.success(`${withStamp.length}건 발송되었습니다`);
+    setSelected(new Set());
   };
 
   return (
@@ -370,6 +415,9 @@ export default function Contracts() {
         <div className="mt-4 flex flex-nowrap items-center justify-between gap-2">
           <p className="text-xs font-medium text-muted">목록 {total}건</p>
           <div className="flex flex-nowrap items-center gap-2">
+            <Button size="sm" onClick={autoSend}>
+              <Send size={14} /> 자동발송
+            </Button>
             <Button variant="danger" size="sm" onClick={removeSelected}>
               <Trash2 size={14} /> 삭제
             </Button>
@@ -384,6 +432,9 @@ export default function Contracts() {
             </Button>
           </div>
         </div>
+        <p className="mt-1.5 text-[11px] text-muted">
+          자동발송: 선택한 근로자의 사업자에 등록된 도장을 적용해 갑(회사) 서명을 자동으로 완료하고 즉시 발송합니다. (도장은 센터별리포트 &gt; 계약서 상세에서 등록)
+        </p>
 
         <div className="-mx-4 mt-2 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[1700px] text-center text-xs">
@@ -394,6 +445,7 @@ export default function Contracts() {
                   <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
                 </th>
                 <th className="px-2 py-2 font-semibold">계약서</th>
+                <th className="px-2 py-2 font-semibold">상세</th>
                 <th className="px-2 py-2 font-semibold">이름</th>
                 <th className="px-2 py-2 font-semibold">사업자</th>
                 <th className="px-2 py-2 font-semibold">센터</th>
@@ -430,6 +482,14 @@ export default function Contracts() {
                       <Eye size={14} /> 보기
                     </button>
                   </td>
+                  <td className="px-2 py-2">
+                    <button
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      onClick={() => setDetailView({ emp, contract })}
+                    >
+                      <FileText size={14} /> 상세
+                    </button>
+                  </td>
                   <td className="px-2 py-2 text-ink">{emp.name}</td>
                   <td className="px-2 py-2 text-muted">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-2 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
@@ -447,13 +507,7 @@ export default function Contracts() {
                   <td className="px-2 py-2 text-muted">계약 / {emp.resignTemplateName || "-"}</td>
                   <td className="px-2 py-2 text-muted">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
                   <td className="px-2 py-2">
-                    {contract?.status === "signed" ? (
-                      <Badge tone="success">서명완료</Badge>
-                    ) : contract ? (
-                      <Badge tone="warning">서명대기</Badge>
-                    ) : (
-                      <Badge tone="muted">미발송</Badge>
-                    )}
+                    <Badge tone={CONTRACT_STATUS_TONE[contractStatus(contract)]}>{contractStatus(contract)}</Badge>
                   </td>
                   <td className="px-2 py-2 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
                   <td className="px-2 py-2 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
@@ -461,7 +515,7 @@ export default function Contracts() {
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={22} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={23} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 데이터가 없습니다.
                   </td>
                 </tr>
@@ -483,7 +537,7 @@ export default function Contracts() {
       <Modal
         open={Boolean(signTarget)}
         onClose={() => setSignTarget(null)}
-        title="서명"
+        title="갑(회사) 서명"
         footer={
           <>
             <Button variant="outline" onClick={() => setSignTarget(null)}>
@@ -493,14 +547,25 @@ export default function Contracts() {
               다시그리기
             </Button>
             <Button onClick={applySignature} disabled={saving}>
-              {saving ? "적용 중..." : "적용"}
+              {saving ? "적용 중..." : "서명으로 적용"}
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-ink">{signTarget?.emp?.name}님의 근로계약서에 서명해주세요.</p>
-          <p className="mb-1 text-xs text-muted">여기에 서명을 그려주세요</p>
+          <p className="text-sm text-ink">{signTarget?.emp?.name}님의 근로계약서에 사업주(갑)로서 서명합니다.</p>
+          {signTarget && stampFor(signTarget.emp) && (
+            <div className="flex flex-nowrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <img src={stampFor(signTarget.emp)} alt="등록된 도장" className="h-14 w-14 rounded-lg border border-slate-200 bg-white object-contain" />
+              <div className="flex-1">
+                <p className="text-xs text-ink">등록된 사업자 도장이 있습니다. 손으로 그리는 대신 바로 적용할 수 있습니다.</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={applyStampSignature} disabled={saving}>
+                <Stamp size={13} /> 도장 사용
+              </Button>
+            </div>
+          )}
+          <p className="mb-1 text-xs text-muted">또는 여기에 직접 서명을 그려주세요</p>
           <SignaturePad ref={padRef} />
           {signError && <p className="text-xs text-danger">{signError}</p>}
         </div>
@@ -511,7 +576,14 @@ export default function Contracts() {
         onClose={() => setDocView(null)}
         title={docView?.contract?.title || "표준근로계약서"}
         size="lg"
-        footer={<Button onClick={() => setDocView(null)}>닫기</Button>}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => docView && openResign(docView.emp, docView.contract)}>
+              재서명
+            </Button>
+            <Button onClick={() => setDocView(null)}>닫기</Button>
+          </>
+        }
       >
         {docView && (
           <div className="space-y-4">
@@ -519,26 +591,63 @@ export default function Contracts() {
               {docView.contract.content}
             </pre>
             <div className="grid grid-cols-2 gap-4 rounded-xl border border-slate-200 p-4">
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-muted">갑 (회사)</p>
-                <p className="text-sm text-ink">{companyName}</p>
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-muted">을 (근로자) 성명: {docView.emp.name}</p>
-                {docView.contract.signatureDataUrl ? (
+              <div className="text-center">
+                <p className="mb-1.5 text-xs font-medium text-muted">갑 (회사) {companyName}</p>
+                {docView.contract.companySignatureDataUrl ? (
                   <img
-                    src={docView.contract.signatureDataUrl}
-                    alt="서명"
-                    className="h-20 rounded-lg border border-slate-200 bg-white"
+                    src={docView.contract.companySignatureDataUrl}
+                    alt="회사 서명/도장"
+                    className="mx-auto h-20 rounded-lg border border-slate-200 bg-white"
                   />
                 ) : (
                   <p className="text-xs text-warning">서명 대기중</p>
                 )}
-                {docView.contract.signedAt && (
-                  <p className="mt-1 text-xs text-muted">서명일: {formatDate(docView.contract.signedAt)}</p>
+                {docView.contract.companySignedAt && <p className="mt-1 text-xs text-muted">서명일: {formatDate(docView.contract.companySignedAt)}</p>}
+              </div>
+              <div className="text-center">
+                <p className="mb-1.5 text-xs font-medium text-muted">을 (근로자) {docView.emp.name}</p>
+                {docView.contract.employeeSignatureDataUrl ? (
+                  <img
+                    src={docView.contract.employeeSignatureDataUrl}
+                    alt="근로자 서명"
+                    className="mx-auto h-20 rounded-lg border border-slate-200 bg-white"
+                  />
+                ) : (
+                  <p className="text-xs text-warning">서명 대기중 (근로자 모바일에서 서명 예정)</p>
                 )}
+                {docView.contract.employeeSignedAt && <p className="mt-1 text-xs text-muted">서명일: {formatDate(docView.contract.employeeSignedAt)}</p>}
               </div>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(detailView)}
+        onClose={() => setDetailView(null)}
+        title="계약서 상세"
+        footer={<Button onClick={() => setDetailView(null)}>닫기</Button>}
+      >
+        {detailView && (
+          <div className="space-y-2 text-center">
+            {[
+              ["이름", detailView.emp.name],
+              ["사업자", entityName_(detailView.emp.businessEntityId)],
+              ["센터", siteName_(detailView.emp.workSiteId)],
+              ["소속업체", vendorName_(detailView.emp.vendorId)],
+              ["전화번호", detailView.emp.phone || "-"],
+              ["계약서유형", detailView.contract?.title || detailView.emp.contractTemplateName || "표준근로계약서"],
+              ["계약주기", detailView.contract?.cycle || "-"],
+              ["계약일자", detailView.contract?.startDate ? formatDate(detailView.contract.startDate) : "-"],
+              ["시간템플릿", shiftTemplateName_(detailView.emp.shiftTemplateId)],
+              ["수당템플릿", allowanceTemplateName_(detailView.emp.allowanceTemplateId)],
+              ["서명상태", contractStatus(detailView.contract)],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between border-b border-slate-50 py-2 text-sm last:border-0">
+                <span className="text-xs text-muted">{label}</span>
+                <span className="text-ink">{value}</span>
+              </div>
+            ))}
           </div>
         )}
       </Modal>

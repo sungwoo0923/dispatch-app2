@@ -314,8 +314,10 @@ service cloud.firestore {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
       allow create: if isAdminOf(request.resource.data.companyId);
+      // 근로자는 자신의 계약서라면 언제든 (재)서명할 수 있어야 하므로 status
+      // 제약 없이 허용한다 — 회사 측 서명/도장은 관리자만 갱신할 수 있다.
       allow update: if isSignedIn() &&
-        (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'sent'));
+        (isAdminOf(resource.data.companyId) || resource.data.uid == request.auth.uid);
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
