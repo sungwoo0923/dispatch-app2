@@ -27,7 +27,7 @@ const MAX_SITES = 10;
 const TABS = [
   { key: "info", label: "센터정보" },
   { key: "vendors", label: "소속업체" },
-  { key: "shift", label: "근무형태" },
+  { key: "shift", label: "근무구분&형태" },
   { key: "deptpos", label: "부서&직급" },
   { key: "holidays", label: "지정외 휴일추가" },
 ];
@@ -85,6 +85,11 @@ export default function Centers() {
     setSelectedId(null);
     setInfo(EMPTY_INFO);
     setTab("info");
+  };
+  const tabIndex = TABS.findIndex((t) => t.key === tab);
+  const goStep = (dir) => {
+    const next = TABS[tabIndex + dir];
+    if (next && (selectedId || next.key === "info")) setTab(next.key);
   };
 
   const searchAddress = async () => {
@@ -358,6 +363,17 @@ export default function Centers() {
                 </div>
               )}
               {tab === "holidays" && selectedId && <HolidaysTab companyId={profile.companyId} siteId={selectedId} />}
+
+              {selectedId && (
+                <div className="mt-4 flex justify-between border-t border-slate-100 pt-3">
+                  <Button size="sm" variant="outline" disabled={tabIndex === 0} onClick={() => goStep(-1)}>
+                    이전단계
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={tabIndex === TABS.length - 1} onClick={() => goStep(1)}>
+                    다음단계
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </Card>
