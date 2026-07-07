@@ -299,6 +299,12 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    match /siteSafetyReports/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     // Metadata only; actual file bytes live in Storage under
     // companies/{companyId}/employees/{uid}/, gated by storage.rules.
     match /documents/{docId} {
