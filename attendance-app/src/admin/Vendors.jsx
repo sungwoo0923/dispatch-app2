@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { Building, Plus, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { db, storage } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
+import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey } from "../utils/dateUtils";
 
@@ -34,10 +37,12 @@ const EMPTY_FORM = {
 
 export default function Vendors() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [entities, setEntities] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [uploading, setUploading] = useState(false);
 
@@ -67,12 +72,16 @@ export default function Vendors() {
   const startNew = () => {
     setSelectedId(null);
     setForm(EMPTY_FORM);
+    setPanelOpen(true);
   };
 
   const select = (v) => {
     setSelectedId(v.id);
     setForm({ ...EMPTY_FORM, ...v });
+    setPanelOpen(true);
   };
+
+  const closePanel = () => setPanelOpen(false);
 
   useEffect(() => {
     if (!form.sameAsRegistered) return;
@@ -113,6 +122,7 @@ export default function Vendors() {
 
   const save = async () => {
     if (!form.businessEntityId || !form.name.trim()) return;
+    if (!(await confirm("저장하시겠습니까?"))) return;
     const { sameAsRegistered, ...payload } = form;
     if (selectedId) {
       await updateDoc(doc(db, "vendors", selectedId), payload);
@@ -124,6 +134,14 @@ export default function Vendors() {
       });
       setSelectedId(ref_.id);
     }
+    setPanelOpen(false);
+  };
+
+  const removeVendor = async () => {
+    if (!selectedId) return;
+    if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
+    await deleteDoc(doc(db, "vendors", selectedId));
+    setPanelOpen(false);
   };
 
   const exportCsv = () => {
@@ -204,11 +222,12 @@ export default function Vendors() {
                 <th className="px-3 py-2.5 font-semibold">업체대표</th>
                 <th className="px-3 py-2.5 font-semibold">업체등록일</th>
                 <th className="px-3 py-2.5 font-semibold">4대보험</th>
+                <th className="px-3 py-2.5 font-semibold">직인등록여부</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((v, i) => (
-                <tr key={v.id} className="border-b border-slate-50 last:border-0">
+                <tr key={v.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => select(v)}>
                   <td className="px-3 py-2.5 text-muted">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => select(v)}>
@@ -223,11 +242,14 @@ export default function Vendors() {
                   <td className="px-3 py-2.5 text-muted">{v.ceoName || "-"}</td>
                   <td className="px-3 py-2.5 text-muted">{v.registeredAt ? formatDate(v.registeredAt) : "-"}</td>
                   <td className="px-3 py-2.5 text-muted">{v.insuranceYN || "사용"}</td>
+                  <td className="px-3 py-2.5">
+                    {v.sealImageUrl ? <Badge tone="success">등록</Badge> : <Badge tone="muted">미등록</Badge>}
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-xs text-muted">
+                  <td colSpan={11} className="px-3 py-6 text-center text-xs text-muted">
                     등록된 소속업체가 없습니다.
                   </td>
                 </tr>
@@ -236,8 +258,28 @@ export default function Vendors() {
           </table>
         </div>
 
-        <Card className="p-4">
-          <p className="mb-3 text-sm font-semibold text-ink">소속업체 &gt; 상세</p>
+        <div className="rounded-xl bg-primary-light/40 p-3.5 text-xs leading-relaxed text-primary">
+          소속업체는 근로자가 실제로 속한 고용단위로, 도급/파견/자회사/지점/대리점 등 다양한 형태로 등록할 수 있습니다.
+          소속업체에서 등록된 4대보험 여부는 근로자 등록 시 자동으로 값이 셋팅되어 빠르고 정확하게 입력할 수 있습니다.
+          증명서 발급정보를 등록하면 계약/사직/재직/퇴직/급여 명세서 조회 시 해당 정보가 전자문서 양식에 자동으로 반영됩니다.
+        </div>
+      </Panel>
+
+      <SidePanel
+        open={panelOpen}
+        onClose={closePanel}
+        title="소속업체 > 상세"
+        footer={
+          <>
+            {selectedId && (
+              <Button variant="outline" onClick={removeVendor}>
+                삭제
+              </Button>
+            )}
+            <Button onClick={save}>저장</Button>
+          </>
+        }
+      >
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -444,18 +486,7 @@ export default function Vendors() {
               </div>
             </div>
           </div>
-
-          <div className="mt-4 flex flex-nowrap justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
-            <Button onClick={save}>저장</Button>
-          </div>
-        </Card>
-
-        <div className="mt-4 rounded-xl bg-primary-light/40 p-3.5 text-xs leading-relaxed text-primary">
-          소속업체는 근로자가 실제로 속한 고용단위로, 도급/파견/자회사/지점/대리점 등 다양한 형태로 등록할 수 있습니다.
-          소속업체에서 등록된 4대보험 여부는 근로자 등록 시 자동으로 값이 셋팅되어 빠르고 정확하게 입력할 수 있습니다.
-          증명서 발급정보를 등록하면 계약/사직/재직/퇴직/급여 명세서 조회 시 해당 정보가 전자문서 양식에 자동으로 반영됩니다.
-        </div>
-      </Panel>
+      </SidePanel>
     </div>
   );
 }
