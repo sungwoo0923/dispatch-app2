@@ -4,6 +4,7 @@ import { Clock, Plus, RefreshCw, FileSpreadsheet, Copy as CopyIcon, X } from "lu
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 export default function ShiftTemplates() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [entities, setEntities] = useState([]);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
@@ -98,12 +100,14 @@ export default function ShiftTemplates() {
       const ref_ = await addDoc(collection(db, "shiftTemplates"), { companyId: profile.companyId, ...payload, createdAt: serverTimestamp() });
       setSelectedId(ref_.id);
     }
+    toast.success("저장되었습니다");
   };
 
   const remove = async () => {
     if (!selectedId) return;
     if (!(await confirm(`'${selected?.name}' 템플릿을 삭제하시겠습니까?`, "delete"))) return;
     await deleteDoc(doc(db, "shiftTemplates", selectedId));
+    toast.success("삭제되었습니다");
     startNew();
   };
 
@@ -122,6 +126,7 @@ export default function ShiftTemplates() {
       name: copyForm.name,
       createdAt: serverTimestamp(),
     });
+    toast.success("복사되었습니다");
     setCopyOpen(false);
   };
 

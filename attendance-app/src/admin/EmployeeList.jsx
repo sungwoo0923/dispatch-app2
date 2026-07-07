@@ -15,6 +15,7 @@ import {
 import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
@@ -105,6 +106,7 @@ function SectionHeader({ children }) {
 
 export default function EmployeeList() {
   const { profile } = useAuth();
+  const toast = useToast();
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -272,7 +274,7 @@ export default function EmployeeList() {
     };
   }, [rowMenu]);
 
-  const approve = (uid) => updateDoc(doc(db, "users", uid), { approved: true });
+  const approve = (uid) => updateDoc(doc(db, "users", uid), { approved: true }).then(() => toast.success("승인되었습니다"));
   const assignSite = (uid, workSiteId) => updateDoc(doc(db, "users", uid), { workSiteId: workSiteId || null });
   const updateField = (uid, field, value) => updateDoc(doc(db, "users", uid), { [field]: value });
 
@@ -285,9 +287,12 @@ export default function EmployeeList() {
       status: "approved",
       resolvedAt: serverTimestamp(),
     });
+    toast.success("승인되었습니다");
   };
   const rejectChangeRequest = (req) =>
-    updateDoc(doc(db, "assignmentChangeRequests", req.id), { status: "rejected", resolvedAt: serverTimestamp() });
+    updateDoc(doc(db, "assignmentChangeRequests", req.id), { status: "rejected", resolvedAt: serverTimestamp() }).then(() =>
+      toast.success("거절되었습니다")
+    );
 
   const createSite = async (e) => {
     e.preventDefault();
@@ -299,6 +304,7 @@ export default function EmployeeList() {
       radiusM: Number(siteForm.radiusM) || 100,
       createdAt: serverTimestamp(),
     });
+    toast.success("저장되었습니다");
     setSiteForm({ name: "", lat: "", lng: "", radiusM: 100 });
     setSiteModalOpen(false);
   };
@@ -310,6 +316,7 @@ export default function EmployeeList() {
       name: vendorName,
       createdAt: serverTimestamp(),
     });
+    toast.success("저장되었습니다");
     setVendorName("");
     setVendorModalOpen(false);
   };
@@ -394,6 +401,7 @@ export default function EmployeeList() {
       for (const { docType, file } of stagedDocs) {
         await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
       }
+      toast.success("수정되었습니다");
       closeRegisterModal();
       return;
     }
@@ -413,6 +421,7 @@ export default function EmployeeList() {
     for (const { docType, file } of stagedDocs) {
       await uploadPendingEmployeeDocument({ companyId: profile.companyId, pendingCode: code, employeeName: registerForm.name, docType, file });
     }
+    toast.success("저장되었습니다");
     setIssuedCode(code);
   };
 
@@ -500,6 +509,7 @@ export default function EmployeeList() {
       await updateDoc(doc(db, "users", uid), payload);
       await logChange(uid, "근무복사", `${sourceEmployee.name}의 근무정보를 복사`);
     }
+    toast.success("적용되었습니다");
     setCopyOpen(false);
     setSelected(new Set());
   };
@@ -522,6 +532,7 @@ export default function EmployeeList() {
       employmentStatus: "재직",
       createdAt: serverTimestamp(),
     });
+    toast.success("저장되었습니다");
     setCopyOpen(false);
     setSelected(new Set());
   };
@@ -543,6 +554,7 @@ export default function EmployeeList() {
         await logChange(uid, "템플릿적용", `${templateForm.kind}: ${templateName} (적용시점 ${templateForm.effectiveDate})`);
       }
     }
+    toast.success("적용되었습니다");
   };
 
   return (
@@ -722,7 +734,7 @@ export default function EmployeeList() {
                   onDoubleClick={() => openEditEmployee(emp)}
                   onContextMenu={(e) => openRowMenu(e, emp)}
                   title="더블클릭하여 수정 · 우클릭하여 복사"
-                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
+                  className="cursor-pointer border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50 hover:bg-slate-100"
                 >
                   <td className="px-4 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
@@ -905,7 +917,7 @@ export default function EmployeeList() {
                 .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
                 .slice(0, 20)
                 .map((req, i) => (
-                  <tr key={req.id} className="border-b border-slate-50 last:border-0">
+                  <tr key={req.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
                     <td className="px-4 py-3 text-muted">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{req.name}</td>
                     <td className="px-4 py-3 text-muted">{req.currentSiteName || "-"}</td>
@@ -964,7 +976,7 @@ export default function EmployeeList() {
                 .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
                 .slice(0, 20)
                 .map((log, i) => (
-                  <tr key={log.id} className="border-b border-slate-50 last:border-0">
+                  <tr key={log.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
                     <td className="px-4 py-3 text-muted">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{log.kind}</td>
                     <td className="px-4 py-3 text-muted">{log.detail}</td>
@@ -1001,7 +1013,7 @@ export default function EmployeeList() {
               </thead>
               <tbody>
                 {pending.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-50 last:border-0">
+                  <tr key={p.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
                     <td className="px-4 py-3 text-ink">{p.name}</td>
                     <td className="px-4 py-3 text-muted">{p.phone}</td>
                     <td className="px-4 py-3 font-mono text-primary">{p.id}</td>
@@ -1172,19 +1184,10 @@ export default function EmployeeList() {
 
               <div className="grid grid-cols-4 gap-3">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
-                  <select
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                    value={registerForm.businessEntityId}
-                    onChange={(e) => setRegisterForm((f) => ({ ...f, businessEntityId: e.target.value }))}
-                  >
-                    <option value="">선택</option>
-                    {businessEntities.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">사업자</span>
+                  <div className="flex w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-ink">
+                    {entityName_(registerForm.businessEntityId)}
+                  </div>
                 </label>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">이름 *</span>
@@ -1396,7 +1399,11 @@ export default function EmployeeList() {
                   <select
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={registerForm.workSiteId}
-                    onChange={(e) => setRegisterForm((f) => ({ ...f, workSiteId: e.target.value }))}
+                    onChange={(e) => {
+                      const siteId = e.target.value;
+                      const site = workSites.find((s) => s.id === siteId);
+                      setRegisterForm((f) => ({ ...f, workSiteId: siteId, workLocation: site?.address || "" }));
+                    }}
                   >
                     <option value="">선택</option>
                     {workSites.map((s) => (
@@ -1483,9 +1490,10 @@ export default function EmployeeList() {
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">근무위치</span>
                   <input
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    readOnly
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted"
                     value={registerForm.workLocation}
-                    onChange={(e) => setRegisterForm((f) => ({ ...f, workLocation: e.target.value }))}
+                    placeholder="센터 선택 시 자동으로 채워집니다"
                   />
                 </label>
                 <label className="block">
@@ -1792,7 +1800,7 @@ export default function EmployeeList() {
               </thead>
               <tbody>
                 {templatePickerResults.map((r, i) => (
-                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
                     <td className="px-3 py-2 text-muted">{i + 1}</td>
                     <td className="px-3 py-2 text-ink">{r.templateName}</td>
                     <td className="px-3 py-2 text-muted">{r.visibility === "숨김" ? "미사용" : "사용"}</td>
@@ -1863,7 +1871,7 @@ export default function EmployeeList() {
                       {employees
                         .filter((e) => e.id !== sourceEmployee.id)
                         .map((e) => (
-                          <tr key={e.id} className="border-b border-slate-50 last:border-0">
+                          <tr key={e.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
                             <td className="px-3 py-2">
                               <input
                                 type="checkbox"

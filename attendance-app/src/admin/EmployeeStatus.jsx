@@ -4,6 +4,7 @@ import { UserCog, Search, Download } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -42,6 +43,7 @@ const emptyDraft = () => ({
 export default function EmployeeStatus() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [employees, setEmployees] = useState([]);
   const [businessEntities, setBusinessEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -145,6 +147,7 @@ export default function EmployeeStatus() {
         })
       )
     );
+    toast.success("적용되었습니다");
     setSelected(new Set());
     setBulkDate("");
     setBulkReason("");
@@ -171,6 +174,7 @@ export default function EmployeeStatus() {
       lastWorkDate: editForm.lastWorkDate || null,
       changeReason: editForm.changeReason || "",
     });
+    toast.success("수정되었습니다");
     setEditing(null);
   };
 

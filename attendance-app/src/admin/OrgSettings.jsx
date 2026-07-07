@@ -15,6 +15,7 @@ import { Plus, Copy, KeyRound, Building, Search, Download, ChevronUp, ChevronDow
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -28,6 +29,7 @@ const TAB_KEY = "kpwork_org_settings_tab";
 
 function RankManager({ label, collectionName, presetOptions, items, companyId }) {
   const confirm = useConfirm();
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [applied, setApplied] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -86,6 +88,7 @@ function RankManager({ label, collectionName, presetOptions, items, companyId })
           createdAt: serverTimestamp(),
         });
       }
+      toast.success(selected ? "수정되었습니다" : "저장되었습니다");
       startNew();
     } catch (err) {
       setError(`저장에 실패했습니다: ${err.code || err.message}`);
@@ -98,6 +101,7 @@ function RankManager({ label, collectionName, presetOptions, items, companyId })
     setError("");
     try {
       await deleteDoc(doc(db, collectionName, selected.id));
+      toast.success("삭제되었습니다");
       startNew();
     } catch (err) {
       setError(`삭제에 실패했습니다: ${err.code || err.message}`);

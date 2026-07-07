@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { X } from "lucide-react";
 
 // Wide, right-anchored slide-in panel (registration/detail forms), as
@@ -5,6 +6,15 @@ import { X } from "lucide-react";
 // 근로자등록 상세 screen (dark header bar with breadcrumb + close, full-width
 // horizontal sections, sticky footer action button).
 export default function SidePanel({ open, onClose, title, children, footer }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose?.();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">

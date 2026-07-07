@@ -14,6 +14,7 @@ import { Building2, Plus, Pencil, Trash2, ChevronLeft, Search, Clock } from "luc
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { openAddressSearch } from "../utils/daumPostcode";
@@ -37,6 +38,7 @@ const EMPTY_SHIFT_FORM = {
 // "내 회사 등록하기" 안에서 버튼으로 열리는 서브 팝업 공통 UI.
 function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove, extraFields }) {
   const confirm = useConfirm();
+  const toast = useToast();
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState("");
   const [extra, setExtra] = useState({});
@@ -66,9 +68,11 @@ function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove,
       if (editingId === "new") {
         if (!(await confirm(`'${name.trim()}'을(를) 추가하시겠습니까?`, "save"))) return;
         await onAdd(name.trim(), extra);
+        toast.success("저장되었습니다");
       } else {
         if (!(await confirm(`'${name.trim()}'(으)로 수정하시겠습니까?`, "edit"))) return;
         await onRename(editingId, name.trim(), extra);
+        toast.success("수정되었습니다");
       }
       setEditingId(null);
     } catch (err) {
@@ -80,6 +84,7 @@ function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove,
     if (!(await confirm(`'${item.name}'을(를) 삭제하시겠습니까?`, "delete"))) return;
     try {
       await onRemove(item.id);
+      toast.success("삭제되었습니다");
     } catch (err) {
       setError(`삭제에 실패했습니다: ${err.code || err.message}`);
     }
@@ -144,6 +149,7 @@ function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove,
 export default function OnboardingWidget() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [company, setCompany] = useState(null);
   const [vendors, setVendors] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -184,6 +190,7 @@ export default function OnboardingWidget() {
     try {
       if (!(await confirm("사업자등록번호를 저장하시겠습니까?", "save"))) return;
       await updateDoc(doc(db, "companies", profile.companyId), { bizRegNo: bizRegNo.trim() });
+      toast.success("저장되었습니다");
     } catch (err) {
       setError("저장에 실패했습니다. 권한 문제일 수 있으니 잠시 후 다시 시도해주세요. (" + (err.code || err.message) + ")");
     }
@@ -319,6 +326,7 @@ export default function OnboardingWidget() {
 // 빠르게 등록할 수 있게 한다 — 추가 편집은 템플릿 > 시간템플릿에서 계속할 수 있다.
 function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessEntityId }) {
   const confirm = useConfirm();
+  const toast = useToast();
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -361,6 +369,7 @@ function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessE
           })
         )
       );
+      toast.success(names.length > 1 ? `${names.length}개 템플릿이 저장되었습니다` : "저장되었습니다");
       onClose();
     } catch (err) {
       setError(`저장에 실패했습니다: ${err.code || err.message}`);

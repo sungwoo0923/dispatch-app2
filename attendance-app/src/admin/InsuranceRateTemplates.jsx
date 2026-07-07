@@ -4,6 +4,7 @@ import { ShieldPlus, Plus, FileSpreadsheet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -15,6 +16,7 @@ const RATE_TYPES = ["고용보험요율", "건강보험요율", "소득세", "�
 export default function InsuranceRateTemplates() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [entities, setEntities] = useState([]);
   const [masters, setMasters] = useState([]);
   const [elements, setElements] = useState([]);
@@ -58,12 +60,14 @@ export default function InsuranceRateTemplates() {
       const ref_ = await addDoc(collection(db, "insuranceRateTemplates"), { companyId: profile.companyId, ...masterForm, createdAt: serverTimestamp() });
       setSelectedMasterId(ref_.id);
     }
+    toast.success("저장되었습니다");
   };
   const removeMaster = async () => {
     if (!selectedMasterId) return;
     if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "insuranceRateTemplates", selectedMasterId));
     for (const el of elements.filter((e) => e.templateId === selectedMasterId)) await deleteDoc(doc(db, "insuranceRateElements", el.id));
+    toast.success("삭제되었습니다");
     startNewMaster();
   };
   const openCopyMaster = () => {
@@ -84,6 +88,7 @@ export default function InsuranceRateTemplates() {
       const { id, templateId, createdAt, ...rest } = el;
       await addDoc(collection(db, "insuranceRateElements"), { ...rest, templateId: ref_.id, companyId: profile.companyId, createdAt: serverTimestamp() });
     }
+    toast.success("복사되었습니다");
     setCopyOpen(false);
   };
 
@@ -107,11 +112,13 @@ export default function InsuranceRateTemplates() {
       const ref_ = await addDoc(collection(db, "insuranceRateElements"), { companyId: profile.companyId, ...payload, createdAt: serverTimestamp() });
       setSelectedElementId(ref_.id);
     }
+    toast.success("저장되었습니다");
   };
   const removeElement = async () => {
     if (!selectedElementId) return;
     if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "insuranceRateElements", selectedElementId));
+    toast.success("삭제되었습니다");
     startNewElement();
   };
 

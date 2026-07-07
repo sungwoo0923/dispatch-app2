@@ -109,6 +109,7 @@ export const NAV = [
     children: [
       { to: "/settings/admins", label: "관리자 계정" },
       { to: "/settings/org", label: "부서·직급" },
+      { to: "/settings/me", label: "내 정보" },
     ],
   },
 ];

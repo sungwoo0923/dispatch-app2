@@ -4,6 +4,7 @@ import { Wallet2, Plus, RefreshCw, FileSpreadsheet, Copy as CopyIcon } from "luc
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -47,6 +48,7 @@ const NUMBER_FIELDS = [
 export default function AllowanceTemplates() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [entities, setEntities] = useState([]);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
@@ -97,12 +99,14 @@ export default function AllowanceTemplates() {
       const ref_ = await addDoc(collection(db, "allowanceTemplates"), { companyId: profile.companyId, ...payload, createdAt: serverTimestamp() });
       setSelectedId(ref_.id);
     }
+    toast.success("저장되었습니다");
   };
 
   const remove = async () => {
     if (!selectedId) return;
     if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "allowanceTemplates", selectedId));
+    toast.success("삭제되었습니다");
     startNew();
   };
 
@@ -120,6 +124,7 @@ export default function AllowanceTemplates() {
       name: copyForm.name,
       createdAt: serverTimestamp(),
     });
+    toast.success("복사되었습니다");
     setCopyOpen(false);
   };
 

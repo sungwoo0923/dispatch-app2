@@ -4,6 +4,7 @@ import { UserPlus, Copy, ShieldCheck, PenLine, Search, Download } from "lucide-r
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -21,6 +22,7 @@ const emptyFilters = () => ({ team: "", position: "", auth: "", approved: "", se
 export default function AdminAccounts() {
   const { profile, user } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [admins, setAdmins] = useState([]);
   const [groups, setGroups] = useState([]);
   const [open, setOpen] = useState(false);
@@ -122,6 +124,7 @@ export default function AdminAccounts() {
         approved: editForm.approved,
         active: editForm.active ? "사용" : "미사용",
       });
+      toast.success("수정되었습니다");
       setEditing(null);
     } catch (err) {
       setEditError(`저장에 실패했습니다: ${err.code || err.message}`);
@@ -140,6 +143,7 @@ export default function AdminAccounts() {
     });
     setMySignature(dataUrl);
     setSavingSignature(false);
+    toast.success("서명이 저장되었습니다");
   };
 
   const issueInvite = async () => {

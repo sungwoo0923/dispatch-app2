@@ -4,6 +4,7 @@ import { FileBadge2, Plus, RefreshCw, FileSpreadsheet, Eye } from "lucide-react"
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -18,6 +19,7 @@ const EMPTY_FORM = { businessEntityId: "", siteId: "", docType: "계약서", tem
 export default function CenterReports() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [entities, setEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [items, setItems] = useState([]);
@@ -64,11 +66,13 @@ export default function CenterReports() {
       const ref_ = await addDoc(collection(db, "centerReports"), { companyId: profile.companyId, ...form, createdAt: serverTimestamp() });
       setSelectedId(ref_.id);
     }
+    toast.success("저장되었습니다");
   };
   const remove = async () => {
     if (!selectedId) return;
     if (!(await confirm("삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "centerReports", selectedId));
+    toast.success("삭제되었습니다");
     startNew();
   };
 
@@ -87,6 +91,7 @@ export default function CenterReports() {
       templateName: copyForm.templateName,
       createdAt: serverTimestamp(),
     });
+    toast.success("복사되었습니다");
     setCopyOpen(false);
   };
 

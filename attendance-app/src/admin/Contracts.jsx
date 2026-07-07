@@ -15,6 +15,7 @@ import { FileSignature, Trash2, Eye, Search, Download, Printer } from "lucide-re
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -49,6 +50,7 @@ const positionOptions = POSITION_OPTIONS.map((p) => ({ value: p, label: p }));
 export default function Contracts() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -203,6 +205,7 @@ export default function Contracts() {
     if (targets.length === 0) return;
     if (!(await confirm(`선택된 ${targets.length}건의 계약서를 삭제하시겠습니까?`, "delete"))) return;
     await Promise.all(targets.map((r) => deleteDoc(doc(db, "contracts", r.contract.id))));
+    toast.success("삭제되었습니다");
     setSelected(new Set());
   };
 
@@ -267,6 +270,7 @@ export default function Contracts() {
           signedAt,
         };
       }
+      toast.success("서명이 적용되었습니다");
       setSignTarget(null);
       setDocView({ emp: signTarget.emp, contract: savedContract });
     } catch (err) {

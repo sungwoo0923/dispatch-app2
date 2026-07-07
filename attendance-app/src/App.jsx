@@ -19,6 +19,7 @@ import SafetySettings from "./admin/SafetySettings";
 import Board from "./admin/Board";
 import AdminAccounts from "./admin/AdminAccounts";
 import OrgSettings from "./admin/OrgSettings";
+import MyInfo from "./admin/MyInfo";
 import BusinessEntities from "./admin/BusinessEntities";
 import Vendors from "./admin/Vendors";
 import Centers from "./admin/Centers";
@@ -136,6 +137,7 @@ export default function App() {
           <Route path="board" element={<Board />} />
           <Route path="settings/admins" element={<AdminAccounts />} />
           <Route path="settings/org" element={<OrgSettings />} />
+          <Route path="settings/me" element={<MyInfo />} />
           <Route path="org/entities" element={<BusinessEntities />} />
           <Route path="org/vendors" element={<Vendors />} />
           <Route path="org/centers" element={<Centers />} />

@@ -15,6 +15,7 @@ import { MapPin, Plus, RefreshCw, FileSpreadsheet, ArrowUp, ArrowDown, Search, T
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -43,6 +44,7 @@ const EMPTY_INFO = {
 export default function Centers() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [entities, setEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [search, setSearch] = useState("");
@@ -94,6 +96,7 @@ export default function Centers() {
     if (!selectedId) return;
     if (!(await confirm(`'${selectedSite?.name}' 센터를 삭제하시겠습니까?`, "delete"))) return;
     await deleteDoc(doc(db, "workSites", selectedId));
+    toast.success("삭제되었습니다");
     startNew();
   };
 
@@ -124,6 +127,7 @@ export default function Centers() {
       });
       setSelectedId(ref_.id);
     }
+    toast.success("저장되었습니다");
   };
 
   const exportCsv = () => {
