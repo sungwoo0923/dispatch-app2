@@ -60,7 +60,7 @@ export default function ContractDetail() {
 
       <Card className="p-5">
         <p className="mb-3 text-center text-base font-semibold text-ink">{contract.title}</p>
-        <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-[11px] leading-relaxed">
+        <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-sans text-[11px] leading-relaxed text-ink">
           {contract.content}
         </pre>
       </Card>

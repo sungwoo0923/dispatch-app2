@@ -51,6 +51,7 @@ import {
   uploadEmployeePhoto,
 } from "../utils/documents";
 import { openAddressSearch } from "../utils/daumPostcode";
+import { openReportPreview } from "../utils/reportTemplates";
 
 const REG_TABS = ["시간템플릿", "수당템플릿", "계약", "계약종료", "첨부서류", "기본 불러오기"];
 
@@ -100,6 +101,22 @@ const EMPTY_REGISTER_FORM = {
 // approved/role/companyId/employmentStatus 등 이 폼이 다루지 않는 필드는
 // registerForm에 잔류하더라도 절대 덮어쓰지 않기 위함이다.
 const REGISTER_FIELD_KEYS = Object.keys(EMPTY_REGISTER_FORM);
+
+// 등록/수정 저장 전 반드시 채워져 있어야 하는 항목들. tab이 있으면 해당 값이
+// 비어있을 때 그 탭으로 자동 전환해 보여준다 (탭이 없으면 항상 보이는
+// 메인 섹션 필드).
+const REQUIRED_FIELDS = [
+  { key: "name", label: "이름" },
+  { key: "phone", label: "전화번호" },
+  { key: "vendorId", label: "소속업체" },
+  { key: "workSiteId", label: "센터" },
+  { key: "hireDate", label: "입사일자" },
+  { key: "workStartDate", label: "근무시작일" },
+  { key: "shiftTemplateId", label: "시간템플릿", tab: "시간템플릿" },
+  { key: "allowanceTemplateId", label: "수당템플릿", tab: "수당템플릿" },
+  { key: "contractTemplateId", label: "계약서템플릿", tab: "계약" },
+  { key: "resignTemplateId", label: "사직서템플릿", tab: "계약종료" },
+];
 
 function SectionHeader({ children }) {
   return (
@@ -479,6 +496,7 @@ export default function EmployeeList() {
       employeeCode: `EMP${new Date().getFullYear()}${seq}`,
       businessEntityId: defaultEntity?.id || "",
     });
+    setManualCode(generateInviteCode(7));
     setRegisterOpen(true);
   };
 
@@ -516,8 +534,6 @@ export default function EmployeeList() {
     setPhotoSaved(!!emp.photoUrl);
     setRegisterOpen(true);
   };
-
-  const generateManualCode = () => setManualCode(generateInviteCode(7));
 
   const photoInputRef = useRef(null);
   const handlePhotoFileChange = (e) => {
@@ -561,6 +577,14 @@ export default function EmployeeList() {
 
   const submitRegister = async (e) => {
     e.preventDefault();
+
+    const missing = REQUIRED_FIELDS.find((f) => !registerForm[f.key]);
+    if (missing) {
+      toast.error(`[${missing.label}] 항목을 입력/선택해주세요.`);
+      if (missing.tab) setRegTab(missing.tab);
+      document.getElementById(`field-${missing.key}`)?.focus();
+      return;
+    }
 
     try {
       if (editingUid) {
@@ -1305,8 +1329,11 @@ export default function EmployeeList() {
                   </div>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">이름 *</span>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">
+                    이름 <span className="text-danger">*</span>
+                  </span>
                   <input
+                    id="field-name"
                     required
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={registerForm.name}
@@ -1315,8 +1342,11 @@ export default function EmployeeList() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">전화번호 *</span>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">
+                    전화번호 <span className="text-danger">*</span>
+                  </span>
                   <input
+                    id="field-phone"
                     required
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={registerForm.phone}
@@ -1412,18 +1442,12 @@ export default function EmployeeList() {
                 {!editingUid && (
                   <>
                     <label className="col-span-4 block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">가입코드</span>
-                      <div className="flex flex-nowrap gap-2">
-                        <input
-                          disabled
-                          className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted"
-                          value={manualCode}
-                          placeholder="생성 버튼을 눌러 미리 발급하거나, 등록시 자동생성"
-                        />
-                        <Button type="button" variant="outline" className="shrink-0" onClick={generateManualCode}>
-                          생성
-                        </Button>
-                      </div>
+                      <span className="mb-1.5 block text-xs font-medium text-muted">가입코드 (자동생성)</span>
+                      <input
+                        disabled
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-mono text-ink"
+                        value={manualCode}
+                      />
                     </label>
                     <p className="col-span-4 flex items-center text-[11px] text-muted">
                       근로자에게 가입코드를 알려주어야 모바일앱에서 회원가입 및 개인정보 등록이 가능합니다.
@@ -1510,8 +1534,11 @@ export default function EmployeeList() {
               <SectionHeader>센터정보</SectionHeader>
               <div className="grid grid-cols-4 gap-3">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">센터 *</span>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">
+                    센터 <span className="text-danger">*</span>
+                  </span>
                   <select
+                    id="field-workSiteId"
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={registerForm.workSiteId}
                     onChange={(e) => {
@@ -1535,8 +1562,11 @@ export default function EmployeeList() {
               <SectionHeader>입/퇴사정보</SectionHeader>
               <div className="grid grid-cols-3 gap-3">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">소속업체 *</span>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">
+                    소속업체 <span className="text-danger">*</span>
+                  </span>
                   <select
+                    id="field-vendorId"
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={registerForm.vendorId}
                     onChange={(e) => setRegisterForm((f) => ({ ...f, vendorId: e.target.value }))}
@@ -1550,8 +1580,11 @@ export default function EmployeeList() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">입사일자 *</span>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">
+                    입사일자 <span className="text-danger">*</span>
+                  </span>
                   <input
+                    id="field-hireDate"
                     required
                     type="date"
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
@@ -1631,8 +1664,11 @@ export default function EmployeeList() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">근무시작일 *</span>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">
+                    근무시작일 <span className="text-danger">*</span>
+                  </span>
                   <input
+                    id="field-workStartDate"
                     required
                     type="date"
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
@@ -1732,8 +1768,11 @@ export default function EmployeeList() {
                 {regTab === "시간템플릿" && (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명</span>
+                      <span className="mb-1.5 block text-xs font-medium text-muted">
+                        템플릿명 <span className="text-danger">*</span>
+                      </span>
                       <select
+                        id="field-shiftTemplateId"
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                         value={registerForm.shiftTemplateId}
                         onChange={(e) => setRegisterForm((f) => ({ ...f, shiftTemplateId: e.target.value }))}
@@ -1760,8 +1799,11 @@ export default function EmployeeList() {
                 {regTab === "수당템플릿" && (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명</span>
+                      <span className="mb-1.5 block text-xs font-medium text-muted">
+                        템플릿명 <span className="text-danger">*</span>
+                      </span>
                       <select
+                        id="field-allowanceTemplateId"
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                         value={registerForm.allowanceTemplateId}
                         onChange={(e) => setRegisterForm((f) => ({ ...f, allowanceTemplateId: e.target.value }))}
@@ -1788,8 +1830,11 @@ export default function EmployeeList() {
                 {regTab === "계약" && (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">계약서 템플릿</span>
+                      <span className="mb-1.5 block text-xs font-medium text-muted">
+                        계약서 템플릿 <span className="text-danger">*</span>
+                      </span>
                       <select
+                        id="field-contractTemplateId"
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                         value={registerForm.contractTemplateId}
                         onChange={(e) => selectContractTemplate(e.target.value)}
@@ -1810,8 +1855,11 @@ export default function EmployeeList() {
                 {regTab === "계약종료" && (
                   <div className="flex flex-nowrap items-end gap-2">
                     <label className="block flex-1">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">사직서 템플릿</span>
+                      <span className="mb-1.5 block text-xs font-medium text-muted">
+                        사직서 템플릿 <span className="text-danger">*</span>
+                      </span>
                       <input
+                        id="field-resignTemplateId"
                         readOnly
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm"
                         value={registerForm.resignTemplateName}
@@ -1932,6 +1980,7 @@ export default function EmployeeList() {
                   <th className="px-3 py-2 font-semibold">순번</th>
                   <th className="px-3 py-2 font-semibold">템플릿명</th>
                   <th className="px-3 py-2 font-semibold">사용여부</th>
+                  <th className="px-3 py-2 font-semibold">양식</th>
                   <th className="px-3 py-2 font-semibold">선택</th>
                 </tr>
               </thead>
@@ -1942,6 +1991,16 @@ export default function EmployeeList() {
                     <td className="px-3 py-2 text-ink">{r.templateName}</td>
                     <td className="px-3 py-2 text-muted">{r.visibility === "숨김" ? "미사용" : "사용"}</td>
                     <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline disabled:text-muted disabled:no-underline"
+                        disabled={!r.reportFormat}
+                        onClick={() => openReportPreview(r.docType, r.reportFormat, { siteName: siteName_(registerForm.workSiteId), ...(r.extra || {}) })}
+                      >
+                        양식
+                      </button>
+                    </td>
+                    <td className="px-3 py-2">
                       <button type="button" className="text-xs text-primary hover:underline" onClick={() => applyTemplatePick(r)}>
                         선택
                       </button>
@@ -1950,7 +2009,7 @@ export default function EmployeeList() {
                 ))}
                 {templatePickerResults.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-6 text-center text-xs text-muted">
+                    <td colSpan={5} className="px-3 py-6 text-center text-xs text-muted">
                       등록된 템플릿이 없습니다. 템플릿 &gt; 센터별리포트에서 먼저 등록해주세요.
                     </td>
                   </tr>

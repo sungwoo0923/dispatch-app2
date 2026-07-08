@@ -587,7 +587,7 @@ export default function Contracts() {
       >
         {docView && (
           <div className="space-y-4">
-            <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-xs leading-relaxed">
+            <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-sans text-xs leading-relaxed text-ink">
               {docView.contract.content}
             </pre>
             <div className="grid grid-cols-2 gap-4 rounded-xl border border-slate-200 p-4">
