@@ -19,13 +19,14 @@ import {
   Navigation,
   FileSignature,
   Megaphone,
-  Sparkles,
   LogIn,
   LogOut,
   DoorOpen,
   Bell,
   X,
   ShieldAlert,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -38,7 +39,6 @@ import { formatTime, toDateKey } from "../utils/dateUtils";
 import { getPrimarySafetyManager } from "../utils/safety";
 import { useToast } from "../hooks/useToast";
 
-const ONBOARDING_DISMISSED_KEY = "kpwork_onboarding_dismissed";
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
 const SAFETY_TIPS = [
   "레일 작업 중 레일에 기대지마세요.",
@@ -93,9 +93,6 @@ export default function Home() {
   const [notifications, setNotifications] = useState([]);
   const [pendingResignation, setPendingResignation] = useState(false);
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0);
-  const [showOnboarding, setShowOnboarding] = useState(
-    () => typeof window !== "undefined" && !window.localStorage.getItem(ONBOARDING_DISMISSED_KEY)
-  );
   const padRef = useRef(null);
 
   useEffect(() => {
@@ -310,11 +307,6 @@ export default function Home() {
     setSavingSignature(false);
   };
 
-  const dismissOnboarding = () => {
-    window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
-    setShowOnboarding(false);
-  };
-
   const submitEarlyLeave = async (e) => {
     e.preventDefault();
     if (!earlyLeaveReason.trim()) return;
@@ -347,62 +339,76 @@ export default function Home() {
   const dateStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WEEKDAY_KR[now.getDay()]})`;
   const siteVendorLabel = [workSite?.name, vendor?.name].filter(Boolean).join(" · ") || "-";
 
-  return (
-    <div className="space-y-4 px-4 pt-4">
-      <Card className="p-5 text-center">
-        <p className="text-sm font-medium text-muted">{ampm}</p>
-        <p className="text-4xl font-bold tabular-nums text-ink">{timeStr}</p>
-        <p className="mt-1 text-xs text-muted">{dateStr}</p>
+  const inRadius = distance != null && distance <= manualCheckInRadiusM;
+  const proximityPct = distance != null ? Math.max(6, Math.min(100, (manualCheckInRadiusM / Math.max(distance, manualCheckInRadiusM)) * 100)) : 0;
 
-        <div className="mt-3">
+  return (
+    <div className="space-y-4 px-4 pb-2 pt-4">
+      <div className="-mx-4 -mt-4 rounded-b-[32px] bg-gradient-to-br from-primary via-primary to-primary-dark px-5 pb-7 pt-6 text-white shadow-lg shadow-primary/25">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-medium text-white/70">{ampm}</p>
+            <p className="text-[2.75rem] font-bold leading-none tabular-nums tracking-tight">{timeStr}</p>
+            <p className="mt-2 text-xs text-white/70">{dateStr}</p>
+          </div>
+          <div className={`flex h-11 w-11 items-center justify-center rounded-2xl backdrop-blur ${checkedIn ? "bg-white/20" : "bg-white/10"}`}>
+            {checkedIn ? <CheckCircle2 size={20} /> : <Clock size={20} className="text-white/80" />}
+          </div>
+        </div>
+
+        <div className="mt-4">
           {checkedIn ? (
-            <p className="text-sm font-semibold text-success">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold">
+              <CheckCircle2 size={13} />
               출근완료 · {formatTime(todayAttendance.checkInTime)}
               {checkedOut && ` · 퇴근 ${formatTime(todayAttendance.checkOutTime)}`}
-            </p>
+            </div>
           ) : canCheckIn ? (
-            <p className="text-xs text-muted">근무지 반경 {manualCheckInRadiusM}m 이내에서 출근 버튼을 눌러주세요</p>
+            <p className="text-xs text-white/80">근무지 반경 {manualCheckInRadiusM}m 이내에서 출근 버튼을 눌러주세요</p>
           ) : (
-            <p className="text-xs text-warning">관리자가 오늘 출근확정 처리한 스케줄이 없습니다</p>
+            <p className="text-xs text-white/70">관리자가 오늘 출근확정 처리한 스케줄이 없습니다</p>
           )}
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-5 grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={openCheckIn}
             disabled={!workSite || checkedIn}
-            className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-5 text-white transition-colors disabled:bg-slate-300 ${
-              canCheckIn ? "bg-primary hover:bg-primary-dark" : "bg-slate-300 hover:bg-slate-400"
+            className={`relative flex flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl py-5 font-semibold transition-colors disabled:cursor-not-allowed ${
+              !checkedIn && canCheckIn ? "bg-white text-primary shadow-lg shadow-black/10 hover:bg-white/90" : "bg-white/10 text-white/50"
             }`}
           >
-            <span className="flex items-center gap-1.5 text-base font-semibold">
+            {canCheckIn && !checkedIn && (
+              <span className="absolute inset-0 animate-ping rounded-2xl bg-white/40" style={{ animationDuration: "2.2s" }} />
+            )}
+            <span className="relative flex items-center gap-1.5 text-base">
               <LogIn size={18} /> 출근
             </span>
-            <span className="text-[11px] font-medium tracking-wide opacity-80">IN</span>
+            <span className="relative text-[11px] font-medium tracking-wide opacity-70">IN</span>
           </button>
           <button
             type="button"
             onClick={manualCheckOut}
             disabled={!checkedIn || checkedOut}
-            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-purple-600 py-5 text-white transition-colors hover:bg-purple-700 disabled:bg-slate-300"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-white/10 py-5 font-semibold text-white transition-colors hover:bg-white/20 disabled:text-white/40"
           >
-            <span className="flex items-center gap-1.5 text-base font-semibold">
+            <span className="flex items-center gap-1.5 text-base">
               <LogOut size={18} /> 퇴근
             </span>
-            <span className="text-[11px] font-medium tracking-wide opacity-80">OUT</span>
+            <span className="text-[11px] font-medium tracking-wide opacity-70">OUT</span>
           </button>
         </div>
 
         {checkedIn && !checkedOut && (
           <div className="mt-3">
             {myEarlyLeaveToday ? (
-              <div className="flex items-center justify-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs">
-                <DoorOpen size={14} className="text-muted" />
-                {myEarlyLeaveToday.status === "pending" && <span className="font-medium text-warning">조퇴 승인대기 중</span>}
-                {myEarlyLeaveToday.status === "approved" && <span className="font-medium text-success">조퇴 승인완료</span>}
+              <div className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-2.5 text-xs">
+                <DoorOpen size={14} />
+                {myEarlyLeaveToday.status === "pending" && <span className="font-medium">조퇴 승인대기 중</span>}
+                {myEarlyLeaveToday.status === "approved" && <span className="font-medium">조퇴 승인완료</span>}
                 {myEarlyLeaveToday.status === "rejected" && (
-                  <span className="font-medium text-danger">
+                  <span className="font-medium">
                     조퇴 반려됨{myEarlyLeaveToday.adminNote ? ` · ${myEarlyLeaveToday.adminNote}` : ""}
                   </span>
                 )}
@@ -411,14 +417,14 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setEarlyLeaveOpen(true)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-xs font-medium text-muted hover:bg-slate-50"
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/20 py-2.5 text-xs font-medium text-white/90 hover:bg-white/10"
               >
                 <DoorOpen size={14} /> 조퇴 신청
               </button>
             )}
           </div>
         )}
-      </Card>
+      </div>
 
       {notifications.length > 0 && (
         <div className="space-y-2">
@@ -437,12 +443,14 @@ export default function Home() {
         </div>
       )}
 
-      <Card className="bg-rose-50 p-5">
-        <p className="mb-1 text-xs font-semibold text-rose-500">오늘도 안전하게!</p>
-        <p className="text-sm font-semibold leading-relaxed text-ink">{SAFETY_TIPS[tipIndex]}</p>
+      <Card className="overflow-hidden border-none bg-gradient-to-br from-rose-500 to-rose-600 p-5 text-white shadow-lg shadow-rose-500/25">
+        <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/85">
+          <ShieldAlert size={13} /> 오늘도 안전하게!
+        </p>
+        <p className="text-sm font-semibold leading-relaxed">{SAFETY_TIPS[tipIndex]}</p>
         <div className="mt-3 flex justify-center gap-1.5">
           {SAFETY_TIPS.map((_, i) => (
-            <span key={i} className={`h-1.5 w-1.5 rounded-full ${i === tipIndex ? "bg-rose-400" : "bg-rose-200"}`} />
+            <span key={i} className={`h-1.5 rounded-full transition-all ${i === tipIndex ? "w-4 bg-white" : "w-1.5 bg-white/40"}`} />
           ))}
         </div>
       </Card>
@@ -483,38 +491,42 @@ export default function Home() {
             </Card>
           </Link>
         )}
-
-        {showOnboarding && (
-          <Card className="flex items-center gap-3 p-4">
-            <Sparkles size={18} className="shrink-0 text-primary" />
-            <p className="flex-1 text-xs text-ink">오늘도 출근이 처음이신가요?</p>
-            <button className="shrink-0 text-xs font-medium text-muted" onClick={dismissOnboarding}>
-              Skip
-            </button>
-          </Card>
-        )}
       </div>
 
       <Card className="p-5">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-          <MapPin size={16} className="text-primary" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-light text-primary">
+            <MapPin size={15} />
+          </div>
           근무지 정보
         </div>
         {loadingSite ? (
           <p className="text-xs text-muted">불러오는 중...</p>
         ) : workSite ? (
-          <div className="space-y-1.5 text-sm text-muted">
+          <div className="space-y-2">
             <p className="text-base font-bold text-ink">{workSite.name}</p>
-            <div className="flex items-center gap-1.5">
-              <Navigation size={14} />
-              {workSite.lat == null || workSite.lng == null ? (
-                <span className="text-danger">이 근무지에는 위치 좌표가 설정되어 있지 않습니다. 관리자에게 문의해주세요.</span>
-              ) : distance != null ? (
-                <span>현재 위치까지 약 {Math.round(distance)}m</span>
-              ) : (
-                <span>위치 확인 중...</span>
-              )}
-            </div>
+            {workSite.lat == null || workSite.lng == null ? (
+              <p className="flex items-center gap-1.5 text-xs text-danger">
+                <Navigation size={13} /> 이 근무지에는 위치 좌표가 설정되어 있지 않습니다. 관리자에게 문의해주세요.
+              </p>
+            ) : distance != null ? (
+              <div>
+                <div className="flex items-center justify-between text-xs text-muted">
+                  <span className="flex items-center gap-1.5">
+                    <Navigation size={13} /> 현재 위치까지 약 {Math.round(distance)}m
+                  </span>
+                  <span className={`font-semibold ${inRadius ? "text-primary" : "text-muted"}`}>{inRadius ? "반경 안" : "반경 밖"}</span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full transition-all ${inRadius ? "bg-primary" : "bg-slate-300"}`}
+                    style={{ width: `${proximityPct}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted">위치 확인 중...</p>
+            )}
           </div>
         ) : (
           <p className="text-xs text-warning">관리자가 아직 근무지를 배정하지 않았습니다.</p>

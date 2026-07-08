@@ -1,4 +1,4 @@
-import { CalendarCheck2, CheckCircle2, MapPin, Wallet, CalendarClock } from "lucide-react";
+import { CheckCircle2, MapPin, Wallet, CalendarClock } from "lucide-react";
 
 export default function AuthShell({ title, subtitle, children }) {
   return (
@@ -8,11 +8,8 @@ export default function AuthShell({ title, subtitle, children }) {
         <div className="pointer-events-none absolute -bottom-24 -right-16 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
 
         <div className="relative z-10">
-          <div className="mb-12 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
-              <CalendarCheck2 size={18} />
-            </div>
-            <span className="text-lg font-bold">KP-work</span>
+          <div className="mb-12 inline-flex items-center rounded-2xl bg-white/95 px-3 py-2 shadow-lg shadow-black/10">
+            <img src="/logo.png" alt="KP-Work" className="h-8 w-auto" />
           </div>
           <h1 className="max-w-sm text-3xl font-bold leading-snug">
             출근부터 급여정산까지,
@@ -50,11 +47,8 @@ export default function AuthShell({ title, subtitle, children }) {
 
       <div className="flex w-full items-center justify-center px-6 py-14 lg:w-1/2">
         <div className="w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-2 lg:hidden">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white">
-              <CalendarCheck2 size={20} />
-            </div>
-            <span className="text-lg font-bold text-ink">KP-work</span>
+          <div className="mb-8 flex items-center lg:hidden">
+            <img src="/logo.png" alt="KP-Work" className="h-10 w-auto" />
           </div>
           {subtitle && <p className="mb-1 text-xs font-medium text-primary">{subtitle}</p>}
           {title && <h2 className="mb-6 text-xl font-bold text-ink">{title}</h2>}

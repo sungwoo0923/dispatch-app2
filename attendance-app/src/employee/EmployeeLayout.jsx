@@ -21,13 +21,16 @@ export default function EmployeeLayout() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
-      <header className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
-        <div>
-          <p className="text-xs text-muted">안녕하세요</p>
-          <p className="text-sm font-semibold text-ink">{profile?.name}님</p>
-        </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
-          {profile?.name?.[0] || "K"}
+      <header className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-3">
+        <img src="/logo.png" alt="KP-Work" className="h-7 w-auto" />
+        <div className="flex items-center gap-2.5">
+          <div className="text-right">
+            <p className="text-[10px] leading-tight text-muted">안녕하세요</p>
+            <p className="text-xs font-semibold leading-tight text-ink">{profile?.name}님</p>
+          </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
+            {profile?.name?.[0] || "K"}
+          </div>
         </div>
       </header>
 

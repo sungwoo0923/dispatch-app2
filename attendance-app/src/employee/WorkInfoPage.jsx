@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { Building2, FileSignature, Wallet, CalendarClock } from "lucide-react";
+import { Building2, FileSignature, Wallet, CalendarClock, Landmark, MapPin, ChevronRight } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
-import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 
@@ -95,45 +94,56 @@ export default function WorkInfoPage() {
   };
 
   return (
-    <div className="space-y-4 px-4 pt-4">
-      <Card className="p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <Building2 size={16} className="text-primary" />
-            출근조직
+    <div className="space-y-4 px-4 pb-2 pt-4">
+      <div className="-mx-4 -mt-4 overflow-hidden rounded-b-[32px] bg-gradient-to-br from-primary via-primary to-primary-dark px-5 pb-8 pt-6 text-white shadow-lg shadow-primary/25">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold text-white/75">
+            <Building2 size={14} /> 출근조직
           </div>
           {pendingRequest ? (
-            <Badge tone="warning">변경 승인대기</Badge>
+            <span className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium text-white">
+              변경 승인대기
+            </span>
           ) : (
-            <button className="text-xs font-medium text-primary" onClick={openChangeModal}>
+            <button className="text-xs font-semibold text-white/90 hover:text-white" onClick={openChangeModal}>
               변경
             </button>
           )}
         </div>
-        <div className="space-y-1">
-          <p className="text-base font-bold text-ink">{workSite?.name || "배정된 근무지가 없습니다"}</p>
-          {vendor && <p className="text-sm font-medium text-muted">{vendor.name}</p>}
+        <div className="mt-2 space-y-1">
+          <p className="text-2xl font-bold tracking-tight">{workSite?.name || "배정된 근무지가 없습니다"}</p>
+          {vendor && <p className="text-sm font-medium text-white/75">{vendor.name}</p>}
         </div>
+      </div>
 
-        <div className="mt-4 rounded-xl border border-rose-100 bg-rose-50/40 p-4">
-          <p className="mb-2 text-xs font-bold text-muted">급여정보</p>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted">예금주</span>
-              <span className="font-semibold text-ink">{profile?.name || "-"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">은행</span>
-              <span className="font-semibold text-ink">{profile?.bankName || "-"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">계좌번호</span>
-              <span className="font-semibold text-ink">{profile?.bankAccount || "-"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">주소</span>
-              <span className="font-semibold text-ink">{workSite?.address || "-"}</span>
-            </div>
+      <Card className="-mt-9 p-5">
+        <p className="mb-3 flex items-center gap-2 text-xs font-bold text-muted">
+          <Wallet size={13} className="text-primary" /> 급여정보
+        </p>
+        <div className="divide-y divide-slate-100">
+          <div className="flex items-center justify-between py-2.5 text-sm">
+            <span className="flex items-center gap-2 text-muted">
+              <Landmark size={14} className="text-slate-300" /> 예금주
+            </span>
+            <span className="font-semibold text-ink">{profile?.name || "-"}</span>
+          </div>
+          <div className="flex items-center justify-between py-2.5 text-sm">
+            <span className="flex items-center gap-2 text-muted">
+              <Landmark size={14} className="text-slate-300" /> 은행
+            </span>
+            <span className="font-semibold text-ink">{profile?.bankName || "-"}</span>
+          </div>
+          <div className="flex items-center justify-between py-2.5 text-sm">
+            <span className="flex items-center gap-2 text-muted">
+              <Landmark size={14} className="text-slate-300" /> 계좌번호
+            </span>
+            <span className="font-semibold text-ink">{profile?.bankAccount || "-"}</span>
+          </div>
+          <div className="flex items-center justify-between py-2.5 text-sm">
+            <span className="flex items-center gap-2 text-muted">
+              <MapPin size={14} className="text-slate-300" /> 주소
+            </span>
+            <span className="font-semibold text-ink">{workSite?.address || "-"}</span>
           </div>
         </div>
       </Card>
@@ -143,13 +153,18 @@ export default function WorkInfoPage() {
           <Link
             key={to}
             to={to}
-            className={`flex flex-col items-center justify-center gap-2 rounded-2xl ${bg} p-4 text-center text-white shadow-card`}
+            className={`group flex flex-col items-center justify-center gap-2 rounded-2xl ${bg} p-4 text-center text-white shadow-lg shadow-black/5 transition-transform active:scale-95`}
           >
-            <Icon size={24} />
+            <Icon size={22} />
             <p className="text-sm font-bold">{label}</p>
           </Link>
         ))}
       </div>
+
+      <Card className="flex items-center gap-3 p-4 text-muted">
+        <ChevronRight size={14} className="shrink-0" />
+        <p className="text-xs">카드를 눌러 계약서·급여명세서·휴가신청 내역을 확인하세요.</p>
+      </Card>
 
       <Modal
         open={changeOpen}

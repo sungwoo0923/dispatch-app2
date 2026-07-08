@@ -104,11 +104,8 @@ export default function ContractDetail() {
             <Button variant="outline" onClick={() => setSigning(false)}>
               취소
             </Button>
-            <Button variant="outline" onClick={() => padRef.current?.clear()}>
-              다시그리기
-            </Button>
             <Button onClick={submitSignature} disabled={saving}>
-              {saving ? "적용 중..." : "적용"}
+              {saving ? "저장 중..." : "서명 저장"}
             </Button>
           </>
         }

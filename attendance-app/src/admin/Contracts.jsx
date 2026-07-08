@@ -127,7 +127,7 @@ export default function Contracts() {
   const smsMessageFor = (emp, contract) => {
     const status = contractStatus(contract);
     if (status === "서명대기" || status === "발송대기") {
-      return `[${companyName || "회사"}] ${emp.name}님, 근로계약서 서명이 아직 완료되지 않았습니다. KP-work 앱에서 계약서를 확인하고 서명해주세요.`;
+      return `[${companyName || "회사"}] ${emp.name}님, 근로계약서 서명이 아직 완료되지 않았습니다. KP-Work 앱에서 계약서를 확인하고 서명해주세요.`;
     }
     return `[${companyName || "회사"}] ${emp.name}님, 안녕하세요.`;
   };

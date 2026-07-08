@@ -162,9 +162,6 @@ export default function ResignationPage() {
             <Button variant="outline" onClick={() => setSigning(false)}>
               취소
             </Button>
-            <Button variant="outline" onClick={() => padRef.current?.clear()}>
-              다시그리기
-            </Button>
             <Button onClick={submitSignature} disabled={saving}>
               {saving ? "제출 중..." : "제출"}
             </Button>

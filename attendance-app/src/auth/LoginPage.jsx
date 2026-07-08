@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { CalendarCheck2, User, Lock } from "lucide-react";
+import { User, Lock } from "lucide-react";
 import { auth } from "../firebase";
 import Button from "../components/Button";
 import BuildInfo from "../components/BuildInfo";
@@ -34,11 +34,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-6 py-14">
       <div className="w-full max-w-sm">
-        <div className="mb-10 flex flex-col items-center gap-2">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-white">
-            <CalendarCheck2 size={28} />
-          </div>
-          <span className="text-xl font-bold text-ink">KP-work</span>
+        <div className="mb-10 flex flex-col items-center">
+          <img src="/logo.png" alt="KP-Work" className="h-16 w-auto" />
         </div>
 
         <form onSubmit={handleSubmit}>
