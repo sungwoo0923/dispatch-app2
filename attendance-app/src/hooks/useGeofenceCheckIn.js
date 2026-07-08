@@ -163,28 +163,32 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
   // devtools 등으로 우회될 수 있으므로 이 함수 자체가 최종 관문 역할을 한다.
   // { ok: false, reason } 형태로 실패 사유를 돌려주어 호출부가 안내 메시지를
   // 보여줄 수 있게 한다.
-  const manualCheckIn = useCallback(async () => {
-    if (!canCheckIn) return { ok: false, reason: "not-confirmed" };
-    if (distance == null) return { ok: false, reason: "no-location" };
-    if (distance > MANUAL_CHECK_IN_RADIUS_M) return { ok: false, reason: "too-far" };
+  const manualCheckIn = useCallback(
+    async (extraFields = {}) => {
+      if (!canCheckIn) return { ok: false, reason: "not-confirmed" };
+      if (distance == null) return { ok: false, reason: "no-location" };
+      if (distance > MANUAL_CHECK_IN_RADIUS_M) return { ok: false, reason: "too-far" };
 
-    await writeAttendance({
-      uid,
-      name,
-      companyId,
-      status: "출근",
-      extra: {
-        checkInTime: new Date().toISOString(),
-        checkInLocation: { distanceM: Math.round(distance) },
-        source: "manual",
-        siteId: workSite?.id || null,
-        siteName: workSite?.name || "",
-      },
-    });
-    autoCheckedInRef.current = true;
-    refreshToday();
-    return { ok: true };
-  }, [uid, name, companyId, distance, workSite, refreshToday, canCheckIn]);
+      await writeAttendance({
+        uid,
+        name,
+        companyId,
+        status: "출근",
+        extra: {
+          checkInTime: new Date().toISOString(),
+          checkInLocation: { distanceM: Math.round(distance) },
+          source: "manual",
+          siteId: workSite?.id || null,
+          siteName: workSite?.name || "",
+          ...extraFields,
+        },
+      });
+      autoCheckedInRef.current = true;
+      refreshToday();
+      return { ok: true };
+    },
+    [uid, name, companyId, distance, workSite, refreshToday, canCheckIn]
+  );
 
   const manualCheckOut = useCallback(async () => {
     await writeAttendance({

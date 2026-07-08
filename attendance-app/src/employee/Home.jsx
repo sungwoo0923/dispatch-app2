@@ -17,7 +17,6 @@ import {
 import {
   MapPin,
   Navigation,
-  ShieldCheck,
   FileSignature,
   Megaphone,
   Sparkles,
@@ -34,8 +33,8 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
-import { formatTime, attendanceDocId, toDateKey } from "../utils/dateUtils";
-import { signSafetyAttendance } from "../utils/safety";
+import { formatTime, toDateKey } from "../utils/dateUtils";
+import { getPrimarySafetyManager } from "../utils/safety";
 import { useToast } from "../hooks/useToast";
 
 const ONBOARDING_DISMISSED_KEY = "kpwork_onboarding_dismissed";
@@ -45,6 +44,30 @@ const SAFETY_TIPS = [
   "안전모와 안전화를 반드시 착용하세요.",
   "무리한 중량물은 2인 1조로 운반하세요.",
 ];
+
+// 출근 전 필수 서류 — 일용직은 근로계약동의서까지, 그 외 근무형태는
+// 안전교육일지만 매 출근 시 확인/서명한다.
+const DOC_META = {
+  contract: {
+    title: "근로계약 및 개인정보 수집 동의서",
+    content:
+      "본인은 소속 회사 및 배정 근무지에서 근로계약에 따라 성실히 근무할 것을 동의하며, " +
+      "회사가 근태관리·급여정산·안전관리 목적으로 본인의 성명, 연락처, 근무기록, 위치정보(출퇴근 확인용)를 " +
+      "수집·이용하는 것에 동의합니다. 수집된 개인정보는 근로관계 종료 후 관계 법령에 따른 보관기간이 " +
+      "지나면 파기됩니다. 본인은 위 내용을 충분히 확인하였으며, 이에 동의하고 서명합니다.",
+  },
+  safety: {
+    title: "안전교육일지",
+    content:
+      "본인은 오늘 근무를 시작하기 전 아래 안전수칙을 확인하였습니다.\n\n" +
+      "1. 작업 전 안전모, 안전화 등 지급받은 보호구를 반드시 착용한다.\n" +
+      "2. 컨베이어·설비 주변에서는 걸터앉거나 기대는 행위를 하지 않는다.\n" +
+      "3. 중량물은 무리하게 혼자 옮기지 않고 2인 1조로 운반한다.\n" +
+      "4. 현장 내 위험요소를 발견하면 즉시 관리감독자에게 보고한다.\n" +
+      "5. 반복작업으로 인한 근골격계 질환 예방을 위해 적절히 휴식·스트레칭을 실시한다.\n\n" +
+      "본인은 위 안전수칙을 확인하였으며, 이를 준수할 것을 서약하고 서명합니다.",
+  },
+};
 
 export default function Home() {
   const { profile, user } = useAuth();
@@ -59,7 +82,9 @@ export default function Home() {
   const [latestNotice, setLatestNotice] = useState(null);
   const [tipIndex, setTipIndex] = useState(0);
   const [showChecklist, setShowChecklist] = useState(false);
-  const [checklist, setChecklist] = useState({ contract: false, safety: false });
+  const [docStep, setDocStep] = useState(0);
+  const [docRead, setDocRead] = useState({});
+  const [docSignatures, setDocSignatures] = useState({});
   const [earlyLeaveOpen, setEarlyLeaveOpen] = useState(false);
   const [earlyLeaveReason, setEarlyLeaveReason] = useState("");
   const [earlyLeaveSaving, setEarlyLeaveSaving] = useState(false);
@@ -176,7 +201,11 @@ export default function Home() {
 
   const checkedIn = todayAttendance?.status === "출근" && todayAttendance?.checkInTime;
   const checkedOut = Boolean(todayAttendance?.checkOutTime);
-  const needsSafetySign = checkedIn && workSite?.safetyManaged && !todayAttendance?.safetySignature;
+
+  // 일용직은 근로계약동의서까지 매 출근 시 확인/서명해야 하고, 그 외
+  // 근무형태는 안전교육일지만 확인/서명하면 된다.
+  const requiredDocs = profile?.employmentType === "일용직" ? ["contract", "safety"] : ["safety"];
+  const currentDocKey = requiredDocs[docStep];
 
   const openCheckIn = () => {
     if (!workSite || checkedIn) return;
@@ -184,12 +213,40 @@ export default function Home() {
       toast.error("관리자가 오늘 출근확정 처리한 스케줄이 없습니다.");
       return;
     }
-    setChecklist({ contract: false, safety: false });
+    setDocRead({});
+    setDocSignatures({});
+    setDocStep(0);
     setShowChecklist(true);
   };
 
-  const confirmCheckIn = async () => {
-    const result = await manualCheckIn();
+  const markDocRead = () => setDocRead((r) => ({ ...r, [currentDocKey]: true }));
+
+  const finalizeCheckIn = async (signatures) => {
+    let extra = {};
+    if (signatures.safety) {
+      const manager = workSite ? await getPrimarySafetyManager(profile.companyId, workSite.id) : null;
+      let supervisorSignature = null;
+      let supervisorName = "";
+      if (manager) {
+        const sigSnap = await getDoc(doc(db, "adminSignatures", manager.adminUid));
+        if (sigSnap.exists()) {
+          supervisorSignature = sigSnap.data().signatureDataUrl || null;
+          supervisorName = manager.adminName || sigSnap.data().name || "";
+        }
+      }
+      extra = {
+        ...extra,
+        safetySignature: signatures.safety,
+        safetySignedAt: new Date().toISOString(),
+        supervisorSignature,
+        supervisorName,
+      };
+    }
+    if (signatures.contract) {
+      extra = { ...extra, contractSignatureDataUrl: signatures.contract, contractSignedAt: new Date().toISOString() };
+    }
+
+    const result = await manualCheckIn(extra);
     if (result.ok) {
       setShowChecklist(false);
       return;
@@ -203,17 +260,20 @@ export default function Home() {
     }
   };
 
-  const submitSafetySignature = async () => {
+  const submitDocSignature = async () => {
     if (!padRef.current || padRef.current.isEmpty()) return;
+    const signatureDataUrl = padRef.current.getDataUrl();
+    const nextSignatures = { ...docSignatures, [currentDocKey]: signatureDataUrl };
+    setDocSignatures(nextSignatures);
+    padRef.current.clear();
+
+    if (docStep + 1 < requiredDocs.length) {
+      setDocStep((s) => s + 1);
+      return;
+    }
     setSavingSignature(true);
-    await signSafetyAttendance({
-      attendanceDocId: attendanceDocId(user.uid, toDateKey()),
-      companyId: profile.companyId,
-      siteId: workSite.id,
-      signatureDataUrl: padRef.current.getDataUrl(),
-    });
+    await finalizeCheckIn(nextSignatures);
     setSavingSignature(false);
-    refreshToday();
   };
 
   const dismissOnboarding = () => {
@@ -353,20 +413,6 @@ export default function Home() {
         </div>
       </Card>
 
-      {needsSafetySign && (
-        <Card className="p-5">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-            <ShieldCheck size={16} className="text-primary" />
-            안전교육 서명이 필요합니다
-          </div>
-          <p className="mb-3 text-xs text-muted">이 근무지는 안전관리가 적용됩니다. 출근 확인을 위해 서명해주세요.</p>
-          <SignaturePad ref={padRef} />
-          <Button className="mt-3 w-full" onClick={submitSafetySignature} disabled={savingSignature}>
-            {savingSignature ? "제출 중..." : "서명 제출"}
-          </Button>
-        </Card>
-      )}
-
       <div className="space-y-2">
         {pendingContracts > 0 && (
           <Link to="/contracts">
@@ -436,43 +482,38 @@ export default function Home() {
       <Modal
         open={showChecklist}
         onClose={() => setShowChecklist(false)}
-        title="서류작성"
+        title={`서류작성 (${docStep + 1}/${requiredDocs.length}) · ${currentDocKey ? DOC_META[currentDocKey].title : ""}`}
         footer={
-          <Button
-            className="w-full"
-            onClick={confirmCheckIn}
-            disabled={!checklist.contract || !checklist.safety}
-          >
-            출근완료
-          </Button>
+          docRead[currentDocKey] ? (
+            <>
+              <Button variant="outline" onClick={() => padRef.current?.clear()}>
+                다시그리기
+              </Button>
+              <Button className="flex-1" onClick={submitDocSignature} disabled={savingSignature}>
+                {savingSignature ? "제출 중..." : docStep + 1 < requiredDocs.length ? "서명 후 다음 서류" : "서명 후 출근완료"}
+              </Button>
+            </>
+          ) : (
+            <Button className="w-full" onClick={markDocRead}>
+              내용을 확인했습니다
+            </Button>
+          )
         }
       >
-        <div className="space-y-3">
-          <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={checklist.contract}
-              onChange={(e) => setChecklist((c) => ({ ...c, contract: e.target.checked }))}
-            />
-            <div>
-              <p className="text-sm font-medium text-ink">[필수] 근로계약 및 개인정보 수집 동의서</p>
-              <p className="mt-0.5 text-xs text-muted">{siteVendorLabel}</p>
+        {currentDocKey && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted">{siteVendorLabel}</p>
+            <div className="max-h-60 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-ink">
+              {DOC_META[currentDocKey].content}
             </div>
-          </label>
-          <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={checklist.safety}
-              onChange={(e) => setChecklist((c) => ({ ...c, safety: e.target.checked }))}
-            />
-            <div>
-              <p className="text-sm font-medium text-ink">[필수] 안전교육일지</p>
-              <p className="mt-0.5 text-xs text-muted">{siteVendorLabel}</p>
-            </div>
-          </label>
-        </div>
+            {docRead[currentDocKey] && (
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-muted">서명</p>
+                <SignaturePad ref={padRef} />
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
 
       <Modal
