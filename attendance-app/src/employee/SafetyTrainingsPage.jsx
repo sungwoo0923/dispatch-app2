@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
-import { ShieldCheck } from "lucide-react";
+import { collection, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
+import { ShieldCheck, FileText, Video, PlayCircle } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
@@ -42,7 +43,11 @@ export default function SafetyTrainingsPage() {
 
   return (
     <div className="space-y-3 px-4 pt-4">
-      <h2 className="text-sm font-semibold text-ink">안전교육</h2>
+      <h2 className="text-base font-bold text-ink">안전교육</h2>
+
+      <MandatoryMaterials />
+
+      <p className="mt-2 text-sm font-semibold text-ink">출근일자별 안전교육 서명</p>
       {rows.length === 0 && <p className="text-xs text-muted">안전관리 근무지 출근 기록이 없습니다.</p>}
       {rows.map((r) => (
         <Card key={r.id} className="p-4">
@@ -87,5 +92,159 @@ export default function SafetyTrainingsPage() {
         <SignaturePad ref={padRef} />
       </Modal>
     </div>
+  );
+}
+
+// 관리자가 등록한 안전교육자료(지침/영상)를 근로자가 반드시 확인 후 서명해야
+// 이수 처리되는 섹션. 지침은 끝까지 스크롤해야, 영상은 끝까지 시청해야
+// "서명하기" 버튼이 열린다 — 건너뛰기로 이수 처리를 우회할 수 없게 한다.
+function MandatoryMaterials() {
+  const { user, profile } = useAuth();
+  const toast = useToast();
+  const [materials, setMaterials] = useState([]);
+  const [myCompletions, setMyCompletions] = useState([]);
+  const [viewing, setViewing] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const padRef = useRef(null);
+  const scrollRef = useRef(null);
+  const videoRef = useRef(null);
+  const maxWatchedRef = useRef(0);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsubs = [
+      onSnapshot(query(collection(db, "safetyMaterials"), where("companyId", "==", profile.companyId), where("active", "==", true)), (s) =>
+        setMaterials(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "safetyCompletions"), where("uid", "==", user.uid)), (s) =>
+        setMyCompletions(s.docs.map((d) => d.data()))
+      ),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [profile?.companyId, user?.uid]);
+
+  const completedIds = new Set(myCompletions.map((c) => c.materialId));
+  const pending = materials.filter((m) => !completedIds.has(m.id));
+
+  const openMaterial = (m) => {
+    setViewing(m);
+    setConfirmed(false);
+    maxWatchedRef.current = 0;
+  };
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 8) setConfirmed(true);
+  };
+
+  const handleTimeUpdate = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.currentTime > maxWatchedRef.current + 0.5) {
+      // 되감기 없이 앞으로 건너뛰려는 시도를 막는다 — 지금까지 본 지점으로 되돌린다.
+      v.currentTime = maxWatchedRef.current;
+      return;
+    }
+    maxWatchedRef.current = Math.max(maxWatchedRef.current, v.currentTime);
+  };
+
+  const submitCompletion = async () => {
+    if (!padRef.current || padRef.current.isEmpty() || !viewing) return;
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "safetyCompletions"), {
+        companyId: profile.companyId,
+        materialId: viewing.id,
+        uid: user.uid,
+        name: profile.name,
+        signatureDataUrl: padRef.current.getDataUrl(),
+        completedAt: serverTimestamp(),
+      });
+      toast.success("이수 처리되었습니다");
+      setViewing(null);
+    } catch (err) {
+      toast.error(`이수 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (materials.length === 0) return null;
+
+  return (
+    <>
+      <Card className={`p-4 ${pending.length > 0 ? "border border-danger/20 bg-red-50" : ""}`}>
+        <p className="mb-2 text-sm font-bold text-ink">필수 안전교육자료 {pending.length > 0 && <span className="text-danger">(미이수 {pending.length}건)</span>}</p>
+        <div className="space-y-2">
+          {materials.map((m) => {
+            const done = completedIds.has(m.id);
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => !done && openMaterial(m)}
+                disabled={done}
+                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-left disabled:opacity-60"
+              >
+                {m.type === "video" ? <Video size={16} className="shrink-0 text-primary" /> : <FileText size={16} className="shrink-0 text-primary" />}
+                <span className="flex-1 truncate text-sm font-medium text-ink">{m.title}</span>
+                <Badge tone={done ? "success" : "warning"}>{done ? "이수완료" : "이수필요"}</Badge>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Modal
+        open={Boolean(viewing)}
+        onClose={() => setViewing(null)}
+        title={viewing?.title}
+        footer={
+          confirmed ? (
+            <Button className="w-full" onClick={submitCompletion} disabled={saving}>
+              {saving ? "제출 중..." : "서명 후 이수완료"}
+            </Button>
+          ) : (
+            <p className="w-full text-center text-xs text-muted">
+              {viewing?.type === "video" ? "영상을 끝까지 시청하면 서명할 수 있습니다." : "끝까지 스크롤하면 서명할 수 있습니다."}
+            </p>
+          )
+        }
+      >
+        {viewing && (
+          <div className="space-y-3">
+            {viewing.type === "video" ? (
+              <video
+                ref={videoRef}
+                src={viewing.videoUrl}
+                controls
+                controlsList="nofastforward"
+                onTimeUpdate={handleTimeUpdate}
+                onEnded={() => setConfirmed(true)}
+                className="w-full rounded-xl bg-black"
+              />
+            ) : (
+              <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="max-h-72 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-ink"
+              >
+                {viewing.content}
+              </div>
+            )}
+            {confirmed && (
+              <div>
+                <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-muted">
+                  <PlayCircle size={13} /> 확인 완료 · 서명해주세요
+                </p>
+                <SignaturePad ref={padRef} />
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }

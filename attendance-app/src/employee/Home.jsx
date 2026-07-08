@@ -25,6 +25,7 @@ import {
   DoorOpen,
   Bell,
   X,
+  ShieldAlert,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -91,6 +92,7 @@ export default function Home() {
   const [myEarlyLeaveToday, setMyEarlyLeaveToday] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [pendingResignation, setPendingResignation] = useState(false);
+  const [pendingSafetyCount, setPendingSafetyCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(
     () => typeof window !== "undefined" && !window.localStorage.getItem(ONBOARDING_DISMISSED_KEY)
   );
@@ -178,6 +180,30 @@ export default function Home() {
 
   const dismissNotification = (id) => updateDoc(doc(db, "notifications", id), { read: true });
 
+  // 안전교육자료(지침/영상) 미이수 건수 — 하나라도 남아있으면 출근 버튼을
+  // 막고 안전교육 페이지로 안내한다 (관리자가 등록한 필수 안전교육 이수 강제).
+  useEffect(() => {
+    if (!profile?.companyId || !user) return;
+    let materialIds = [];
+    let completedIds = new Set();
+    const recompute = () => setPendingSafetyCount(materialIds.filter((id) => !completedIds.has(id)).length);
+    const unsub1 = onSnapshot(
+      query(collection(db, "safetyMaterials"), where("companyId", "==", profile.companyId), where("active", "==", true)),
+      (snap) => {
+        materialIds = snap.docs.map((d) => d.id);
+        recompute();
+      }
+    );
+    const unsub2 = onSnapshot(query(collection(db, "safetyCompletions"), where("uid", "==", user.uid)), (snap) => {
+      completedIds = new Set(snap.docs.map((d) => d.data().materialId));
+      recompute();
+    });
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, [profile?.companyId, user]);
+
   useEffect(() => {
     if (!profile?.companyId) return;
     getDocs(
@@ -211,6 +237,10 @@ export default function Home() {
     if (!workSite || checkedIn) return;
     if (!canCheckIn) {
       toast.error("관리자가 오늘 출근확정 처리한 스케줄이 없습니다.");
+      return;
+    }
+    if (pendingSafetyCount > 0) {
+      toast.error("미이수 안전교육자료가 있습니다. 안전교육 메뉴에서 먼저 이수해주세요.");
       return;
     }
     setDocRead({});
@@ -414,6 +444,15 @@ export default function Home() {
       </Card>
 
       <div className="space-y-2">
+        {pendingSafetyCount > 0 && (
+          <Link to="/safety">
+            <Card className="flex items-center gap-3 border border-danger/20 bg-red-50 p-4">
+              <ShieldAlert size={18} className="shrink-0 text-danger" />
+              <p className="flex-1 text-xs text-ink">미이수 안전교육자료 {pendingSafetyCount}건이 있습니다. 이수하지 않으면 출근할 수 없습니다.</p>
+            </Card>
+          </Link>
+        )}
+
         {pendingContracts > 0 && (
           <Link to="/contracts">
             <Card className="flex items-center gap-3 p-4">

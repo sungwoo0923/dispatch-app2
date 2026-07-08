@@ -46,5 +46,19 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow write: if isCompanyAdmin() && request.resource.size < 10 * 1024 * 1024;
     }
+
+    // 안전교육자료(지침 영상 등) — 영상 파일은 용량이 크므로 다른 업로드보다
+    // 훨씬 넉넉한 용량 제한(200MB)을 둔다. 읽기는 같은 회사 로그인 사용자
+    // 누구나(직원이 시청해야 하므로), 쓰기(업로드)는 회사 관리자만 가능하다.
+    match /companies/{companyId}/safety-materials/{materialId}/{fileName} {
+      function isCompanyAdmin() {
+        return request.auth != null &&
+          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+      }
+
+      allow read: if request.auth != null;
+      allow write: if isCompanyAdmin() && request.resource.size < 200 * 1024 * 1024;
+    }
   }
 }

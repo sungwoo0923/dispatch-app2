@@ -1,5 +1,15 @@
 import { collection, query, where, getDocs, doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "../firebase";
+
+// 안전교육자료(지침/영상) 업로드 — 텍스트 지침은 Firestore에 내용만 저장하면
+// 되지만, 영상 파일은 Storage에 올려야 한다.
+export async function uploadSafetyMaterialFile({ companyId, materialId, file }) {
+  const path = `companies/${companyId}/safety-materials/${materialId}/${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}
 
 export const SAFETY_MANAGER_ROLES = ["총괄책임자", "안전관리자", "담당반장", "관리감독자"];
 
