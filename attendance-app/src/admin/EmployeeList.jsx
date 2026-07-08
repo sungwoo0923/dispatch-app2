@@ -538,6 +538,27 @@ export default function EmployeeList() {
     if (result) setRegisterForm((f) => ({ ...f, address: result.address }));
   };
 
+  // 근로자등록 폼(EMPTY_REGISTER_FORM/REGISTER_FIELD_KEYS)은 employmentStatus를
+  // 다루지 않으므로(위 주석 참고), 퇴직처리는 저장 버튼과 무관하게 즉시
+  // Firestore에 반영한다 — 다른 폼 필드 변경사항의 저장 여부와 섞이면 안 되는
+  // 별도의 인사처리 액션이기 때문.
+  const processResignation = async () => {
+    if (!editingUid) return;
+    const resignDate = registerForm.resignDate || toDateKey();
+    if (!(await confirm(`${registerForm.name} 근로자를 ${formatDate(resignDate)}자로 퇴직처리 하시겠습니까?`, "delete"))) return;
+    await updateDoc(doc(db, "users", editingUid), { employmentStatus: "퇴사", resignDate });
+    setRegisterForm((f) => ({ ...f, employmentStatus: "퇴사", resignDate }));
+    toast.success("퇴직처리 되었습니다");
+  };
+
+  const cancelResignation = async () => {
+    if (!editingUid) return;
+    if (!(await confirm(`${registerForm.name} 근로자의 퇴직처리를 취소하고 재직 상태로 되돌리시겠습니까?`, "edit"))) return;
+    await updateDoc(doc(db, "users", editingUid), { employmentStatus: "재직", resignDate: "" });
+    setRegisterForm((f) => ({ ...f, employmentStatus: "재직", resignDate: "" }));
+    toast.success("재직 상태로 변경되었습니다");
+  };
+
   const submitRegister = async (e) => {
     e.preventDefault();
 
@@ -1548,6 +1569,25 @@ export default function EmployeeList() {
                   />
                 </label>
               </div>
+              {editingUid && (
+                <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="text-xs text-muted">
+                    현재 재직상태:{" "}
+                    <span className={`font-semibold ${registerForm.employmentStatus === "퇴사" ? "text-danger" : "text-ink"}`}>
+                      {registerForm.employmentStatus || "재직"}
+                    </span>
+                  </p>
+                  {registerForm.employmentStatus === "퇴사" ? (
+                    <Button type="button" variant="outline" size="sm" onClick={cancelResignation}>
+                      퇴직처리 취소
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="danger" size="sm" onClick={processResignation}>
+                      퇴직처리
+                    </Button>
+                  )}
+                </div>
+              )}
             </Card>
 
             <Card className="p-5">
