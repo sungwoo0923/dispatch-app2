@@ -14,6 +14,11 @@ const BADGE_SOURCES = {
     filter: (d) => ["submitted", "manager_signed"].includes(d.status),
   },
   "/leaves": { collection: "leaves", filter: (d) => d.status === "pending" },
+  "/employees/inquiries": {
+    collection: "inquiries",
+    // 문의는 회사 전체가 아니라 "나에게" 온 것만 배지로 잡는다.
+    filter: (d, adminUid) => d.status === "답변대기" && d.toUid === adminUid,
+  },
 };
 
 const seconds = (ts) => ts?.seconds ?? 0;
@@ -41,12 +46,12 @@ export function useNavBadges(companyId, adminUid) {
   const badgeCounts = useMemo(() => {
     const out = {};
     for (const [navPath, { filter }] of Object.entries(BADGE_SOURCES)) {
-      const list = (items[navPath] || []).filter(filter);
+      const list = (items[navPath] || []).filter((d) => filter(d, adminUid));
       const lastSeen = seconds(readState[navPath]);
       out[navPath] = list.filter((d) => seconds(d.createdAt) > lastSeen).length;
     }
     return out;
-  }, [items, readState]);
+  }, [items, readState, adminUid]);
 
   const markSeen = (navPath) => {
     if (!adminUid || !BADGE_SOURCES[navPath]) return;

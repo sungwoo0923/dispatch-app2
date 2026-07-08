@@ -362,6 +362,16 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    // 근로자 문의/건의 — 작성자 본인과 문의를 받은 관리자만 조회 가능. 다른
+    // 근로자에게는 절대 노출되지 않는 1:1 문의함이다.
+    match /inquiries/{id} {
+      allow read: if isSignedIn() &&
+        (resource.data.fromUid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() && request.resource.data.fromUid == request.auth.uid;
+      allow update: if isAdminOf(resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId) || resource.data.fromUid == request.auth.uid;
+    }
+
     match /payrolls/{payrollId} {
       // payrollId is `${month}_${uid}`; same not-yet-created-doc reasoning as attendance above.
       allow get: if isSignedIn() && payrollId.split('_')[1] == request.auth.uid;

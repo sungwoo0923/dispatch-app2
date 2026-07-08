@@ -14,6 +14,7 @@ import EmployeeList from "./admin/EmployeeList";
 import EmployeeStatus from "./admin/EmployeeStatus";
 import Contracts from "./admin/Contracts";
 import Documents from "./admin/Documents";
+import Inquiries from "./admin/Inquiries";
 import SafetyTrainings from "./admin/SafetyTrainings";
 import SafetySettings from "./admin/SafetySettings";
 import Board from "./admin/Board";
@@ -117,6 +118,7 @@ export default function App() {
           <Route path="employees/status" element={<EmployeeStatus />} />
           <Route path="employees/contracts" element={<Contracts />} />
           <Route path="employees/documents" element={<Documents />} />
+          <Route path="employees/inquiries" element={<Inquiries />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="attendance" element={<AttendanceBoard />} />
           <Route path="leaves" element={<LeaveApprovals />} />
