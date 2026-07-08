@@ -6277,6 +6277,9 @@ const dropTime = order.하차시간 || "시간 없음";
             {isUrgentOrder(order) && (
               <span className="text-[0.68em] font-bold text-red-500">긴급</span>
             )}
+            {String(order.운행유형 || "").trim() === "왕복" && (
+              <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded">왕복</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -6428,6 +6431,12 @@ const dropTime = order.하차시간 || "시간 없음";
   {isCold && (
     <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
       냉장/냉동
+    </span>
+  )}
+
+  {String(order.운행유형 || "").trim() === "왕복" && (
+    <span className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-wide">
+      왕복
     </span>
   )}
 
@@ -13321,8 +13330,7 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   const [vehicle, setVehicle] = useState("전체");
   const [client, setClient] = useState("전체");
   const [sortKey, setSortKey] = useState("date_desc");
-  const [includePickupVia, setIncludePickupVia] = useState(false);
-  const [includeDropVia, setIncludeDropVia] = useState(false);
+  const [includeVia, setIncludeVia] = useState(false);
   const [matchedRows, setMatchedRows] = useState([]);
   const [result, setResult] = useState(null);
   const [fareDetailItemStd, setFareDetailItemStd] = useState(null);
@@ -13439,6 +13447,106 @@ const isTransitStopRow = (r) => {
   return /^\d+\./.test(name) || name.includes("경유");
 };
 
+// 경유지 목록(배열/JSON문자열/인덱스객체) 정규화 — DispatchApp.jsx / StandardFare.jsx와 동일
+const _parseWaypointList = (v) => {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+  }
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+    if (v.업체명) return [v];
+  }
+  return [];
+};
+
+// kg/g으로 입력해도 항상 톤 단위 문자열로 통일 (예: "100kg" → "0.1톤")
+const toTonUnit = (v = "") => {
+  const str = String(v ?? "").trim();
+  if (!str) return "";
+  const m = str.match(/^([\d.]+)\s*(kg|g|톤|ton|t)?$/i);
+  if (!m) return str;
+  const num = parseFloat(m[1]);
+  if (isNaN(num)) return str;
+  const unit = (m[2] || "톤").toLowerCase();
+  let tons;
+  if (unit === "kg") tons = num / 1000;
+  else if (unit === "g") tons = num / 1000000;
+  else tons = num;
+  let formatted = tons.toFixed(3).replace(/\.?0+$/, "");
+  if (formatted === "" || formatted === "-") formatted = "0";
+  return `${formatted}톤`;
+};
+
+// 경유지 포함 총 화물내용/톤수 계산 — DispatchApp.jsx / StandardFare.jsx와 동일한 로직
+const mergeViaCargoText = (mainCargo, waypointLists) => {
+  const mainStr = String(mainCargo || "").trim();
+  const UNITS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통", "바구니"];
+  const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
+  const getType = (s) => {
+    for (const u of UNITS) { if (String(s).endsWith(u)) return NORM[u] || u; }
+    return null;
+  };
+  const getNum = (s) => { const m = String(s).match(/^([\d,.]+)/); return m ? parseFloat(m[1].replace(/,/g, "")) : null; };
+  const allCargos = [];
+  if (mainStr && mainStr !== "없음") allCargos.push(mainStr);
+  let hasViaWithCargo = false;
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (!s) continue;
+      const wCargo = String(s.화물내용 || "").trim();
+      if (!wCargo || wCargo === "없음") continue;
+      const isTypeOnly = UNITS.some(u => wCargo === u || wCargo === (NORM[u] || u));
+      if (isTypeOnly) continue;
+      allCargos.push(wCargo);
+      hasViaWithCargo = true;
+    }
+  }
+  if (!hasViaWithCargo) return mainStr;
+  const byUnit = {};
+  const untyped = [];
+  for (const cargo of allCargos) {
+    const type = getType(cargo);
+    if (type !== null) {
+      const n = getNum(cargo);
+      if (n !== null) { byUnit[type] = (byUnit[type] || 0) + n; }
+      else if (!untyped.includes(cargo)) untyped.push(cargo);
+    } else {
+      if (!untyped.includes(cargo)) untyped.push(cargo);
+    }
+  }
+  const parts = [...Object.entries(byUnit).map(([u, n]) => `${n}${u}`), ...untyped];
+  return parts.join("+");
+};
+const mergeViaTonnage = (mainTon, waypointLists) => {
+  const parseKg = (s) => {
+    const str = String(s || "").trim().replace(/,/g, "");
+    const kg = str.match(/([\d.]+)\s*kg/i);
+    if (kg) return parseFloat(kg[1]);
+    const ton = str.match(/([\d.]+)\s*톤/);
+    if (ton) return parseFloat(ton[1]) * 1000;
+    return null;
+  };
+  const fmtKg = (kg) => (kg / 1000).toFixed(3).replace(/\.?0+$/, "") + "톤";
+  const mainKg = parseKg(mainTon);
+  let totalKg = mainKg || 0;
+  let hasViaWithTon = false;
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (!s) continue;
+      const t = String(s.차량톤수 || "").trim();
+      if (!t) continue;
+      const kg = parseKg(t);
+      if (kg !== null) { totalKg += kg; hasViaWithTon = true; }
+    }
+  }
+  if (!hasViaWithTon) return toTonUnit(mainTon) || "";
+  if (totalKg <= 0) return toTonUnit(mainTon) || "";
+  return fmtKg(totalKg);
+};
+
 const FARE_HOLIDAYS = [
   "2025-01-01","2025-02-09","2025-02-10","2025-02-11","2025-03-01",
   "2025-05-05","2025-06-06","2025-08-15","2025-09-16","2025-09-17",
@@ -13473,7 +13581,7 @@ const calcFareMobile = () => {
     if (!p && !pa) return true;
     const mainMatches = (p && (name.includes(p)||addr.includes(p))) || (pa && (name.includes(pa)||addr.includes(pa)));
     if (mainMatches) return true;
-    if (includePickupVia && p) return getPickupVias(r).some(n => clean(n).includes(p));
+    if (includeVia && p) return getPickupVias(r).some(n => clean(n).includes(p));
     return false;
   });
   list = list.filter(r => {
@@ -13482,21 +13590,26 @@ const calcFareMobile = () => {
     if (!d && !da) return true;
     const mainMatches = (d && (name.includes(d)||addr.includes(d))) || (da && (name.includes(da)||addr.includes(da)));
     if (mainMatches) return true;
-    if (includeDropVia && d) return getDropVias(r).some(n => clean(n).includes(d));
+    if (includeVia && d) return getDropVias(r).some(n => clean(n).includes(d));
     return false;
   });
+  // 경유지 포함 시 비교 기준 화물내용/톤수 = 본 오더 + 경유지 전체 합산
+  const mergedCargoOf = r => includeVia ? mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.화물내용 || "");
+  const mergedTonOf = r => includeVia ? mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.차량톤수 || "");
+
   if (cargo.trim()) {
     const cargoNum = extractCargoNumber(cargo);
     const cargoText = clean(cargo);
     list = list.filter(r => {
-      const rowNum = extractCargoNumber(r.화물내용);
-      const rowText = clean(r.화물내용);
+      const rowCargo = mergedCargoOf(r);
+      const rowNum = extractCargoNumber(rowCargo);
+      const rowText = clean(rowCargo);
       return cargoNum !== null ? rowNum === cargoNum : rowText.includes(cargoText);
     });
   }
   if (ton.trim()) {
     const tonNum = extractTonNum(ton);
-    list = list.filter(r => { const rt = extractTonNum(r.차량톤수); return rt && Math.abs(rt-tonNum)<=0.7; });
+    list = list.filter(r => { const rt = extractTonNum(mergedTonOf(r)); return rt && Math.abs(rt-tonNum)<=0.7; });
   }
   if (vehicle !== "전체") {
     const vg = normalizeVehicleGroup(vehicle);
@@ -13508,9 +13621,20 @@ const calcFareMobile = () => {
 
   // 경유지 없는 직접 노선만 (토글 꺼진 경우)
   list = list.filter(r => {
-    if (!includePickupVia && getPickupVias(r).length > 0) return false;
-    if (!includeDropVia && getDropVias(r).length > 0) return false;
+    if (!includeVia && (getPickupVias(r).length > 0 || getDropVias(r).length > 0)) return false;
     return true;
+  });
+
+  // 결과에 경유지 표시를 위해 태깅 (경유지 포함 합산 화물/톤수도 함께)
+  list = list.map(r => {
+    const vias = [...getPickupVias(r), ...getDropVias(r)];
+    if (!vias.length) return r;
+    return {
+      ...r,
+      _viaNames: vias,
+      _mergedCargo: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]),
+      _mergedTon: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]),
+    };
   });
 
   const 기준차량그룹 = vehicle === "전체" ? null : normalizeVehicleGroup(vehicle);
@@ -13588,43 +13712,37 @@ const calcFareMobile = () => {
               <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 반찬단지" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
             </div>
           </div>
-          {/* 주소 검색 */}
+          {/* 주소 검색 — 드롭다운 없이 입력한 텍스트 그대로 검색에 사용 */}
           <div className="bg-blue-50 rounded-xl p-3 space-y-2">
             <div className="text-[11px] font-bold text-blue-500">주소로 검색 (선택)</div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <div className="text-[10px] text-blue-400 mb-1">상차지주소</div>
-                <MobileAddressSearch
+                <input
+                  className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
                   value={pickupAddr}
-                  onChange={v => setPickupAddr(v)}
-                  onSelect={s => s && setPickupAddr(s.address)}
-                  placeholder="예: 인천시 서구 원창동"
+                  onChange={e => setPickupAddr(e.target.value)}
+                  placeholder="예: 김포"
                   onKeyDown={e=>e.key==="Enter"&&calcFareMobile()}
                 />
               </div>
               <div>
                 <div className="text-[10px] text-blue-400 mb-1">하차지주소</div>
-                <MobileAddressSearch
+                <input
+                  className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
                   value={dropAddr}
-                  onChange={v => setDropAddr(v)}
-                  onSelect={s => s && setDropAddr(s.address)}
+                  onChange={e => setDropAddr(e.target.value)}
+                  placeholder="예: 경남"
                   onKeyDown={e=>e.key==="Enter"&&calcFareMobile()}
-                  placeholder="예: 경기도 포천시"
                 />
               </div>
             </div>
           </div>
-          {/* 경유지 포함 여부 (PC와 동일) */}
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setIncludePickupVia(v => !v)}
-              className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition ${includePickupVia ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"}`}>
-              상차경유지포함
-            </button>
-            <button type="button" onClick={() => setIncludeDropVia(v => !v)}
-              className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition ${includeDropVia ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"}`}>
-              하차경유지포함
-            </button>
-          </div>
+          {/* 경유지 포함 여부 (PC와 동일한 단일 토글) */}
+          <button type="button" onClick={() => setIncludeVia(v => !v)}
+            className={`w-full py-2 rounded-xl text-[12px] font-bold border transition ${includeVia ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"}`}>
+            경유포함
+          </button>
           {/* 차종/톤수/화물 */}
           <div className="grid grid-cols-3 gap-2">
             <div>
@@ -13660,11 +13778,13 @@ const calcFareMobile = () => {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="text-[11px] font-bold text-gray-500 mb-1.5">거래처</div>
-              <select className="w-full border border-gray-200 rounded-xl px-2 py-2 text-[12px] bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
-                value={client} onChange={e=>setClient(e.target.value)}>
-                <option value="전체">전체</option>
-                {clientList.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <MobilePlaceSuggest
+                value={client === "전체" ? "" : client}
+                onChange={v => setClient(v || "전체")}
+                names={clientList}
+                placeholder="전체 (입력하여 검색)"
+                onKeyDown={e=>e.key==="Enter"&&calcFareMobile()}
+              />
             </div>
             <div>
               <div className="text-[11px] font-bold text-gray-500 mb-1.5">정렬방식</div>
@@ -13691,7 +13811,7 @@ const calcFareMobile = () => {
             <button onClick={() => {
                 setPickup(""); setDrop(""); setPickupAddr(""); setDropAddr(""); setTon(""); setCargo("");
                 setVehicle("전체"); setClient("전체"); setSortKey("date_desc");
-                setIncludePickupVia(false); setIncludeDropVia(false);
+                setIncludeVia(false);
                 setMatchedRows([]); setResult(null);
               }}
               className="px-4 py-3 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold">
@@ -13769,6 +13889,9 @@ const calcFareMobile = () => {
                         {r.긴급 === true && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">긴급</span>
                         )}
+                        {r._viaNames?.length > 0 && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">경유</span>
+                        )}
                         <span className="text-[11px] text-gray-400">{(r.상차일||"").slice(0,10)}</span>
                       </div>
                       <div className="text-[13px] font-bold text-gray-900 truncate">
@@ -13779,10 +13902,13 @@ const calcFareMobile = () => {
                           {shortAddr(r.상차지주소)} → {shortAddr(r.하차지주소)}
                         </div>
                       )}
+                      {r._viaNames?.length > 0 && (
+                        <div className="text-[11px] text-amber-600 mt-0.5">경유: {r._viaNames.join(", ")}</div>
+                      )}
                       {r.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{r.거래처명}</div>}
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {r.화물내용 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r.화물내용}</span>}
-                        {r.차량톤수 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r.차량톤수}</span>}
+                        {(r._mergedCargo || r.화물내용) && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r._mergedCargo || r.화물내용}</span>}
+                        {(r._mergedTon || r.차량톤수) && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r._mergedTon || r.차량톤수}</span>}
                         {r.차량종류 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r.차량종류}</span>}
                       </div>
                     </div>
@@ -13855,17 +13981,23 @@ const calcFareMobile = () => {
                   {fareDetailItemStd.하차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{fareDetailItemStd.하차지주소}</div>}
                 </div>
               </div>
+              {fareDetailItemStd._viaNames?.length > 0 && (
+                <div className="bg-amber-50 rounded-xl p-3">
+                  <div className="text-[10px] font-bold text-amber-500 mb-1">경유지</div>
+                  <div className="text-[12px] font-semibold text-amber-700">{fareDetailItemStd._viaNames.join(", ")}</div>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-2">
-                {fareDetailItemStd.화물내용 && (
+                {(fareDetailItemStd._mergedCargo || fareDetailItemStd.화물내용) && (
                   <div className="bg-gray-50 rounded-xl p-3">
                     <div className="text-[10px] font-bold text-gray-400 mb-1">화물</div>
-                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItemStd.화물내용}</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItemStd._mergedCargo || fareDetailItemStd.화물내용}</div>
                   </div>
                 )}
-                {fareDetailItemStd.차량톤수 && (
+                {(fareDetailItemStd._mergedTon || fareDetailItemStd.차량톤수) && (
                   <div className="bg-gray-50 rounded-xl p-3">
                     <div className="text-[10px] font-bold text-gray-400 mb-1">톤수</div>
-                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItemStd.차량톤수}</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItemStd._mergedTon || fareDetailItemStd.차량톤수}</div>
                   </div>
                 )}
                 {fareDetailItemStd.차량종류 && (

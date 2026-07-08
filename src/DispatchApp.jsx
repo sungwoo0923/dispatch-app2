@@ -12649,14 +12649,14 @@ const handleDelete = async (item) => {
     </div>
   );
 }
+// 왕복 오더 표시 — 행 배경 강조와는 별도로, 한눈에 띄는 진한 배지
 const RoundTripBadge = () => (
   <span
     className="
-      ml-1 px-1.5 py-0.5
-      text-[10px] font-bold
-      rounded-full
-      bg-indigo-100 text-indigo-700
-      border border-indigo-300
+      inline-flex items-center ml-1 px-2 py-0.5
+      text-[10px] font-extrabold tracking-wide
+      rounded
+      bg-[#1B2B4B] text-white
       whitespace-nowrap
     "
   >
@@ -17903,6 +17903,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.상차지명}</span>
+    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
   <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
@@ -26189,6 +26190,7 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <span>{row.상차지명}</span>
+    {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
@@ -34626,6 +34628,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         setCopyPanelOpen(true);
                       }}
                       className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} cursor-pointer hover:bg-blue-50/50 transition`}
+                      style={String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}}
                     >
                       {deleteMode && (
                         <td className={cellBase}>
@@ -34647,7 +34650,12 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={cellBase}>{r.하차일 || ""}</td>
                       <td className={cellBase}>{r.하차시간 || ""}</td>
                       <td className={`${cellBase} font-semibold text-gray-800`}>{r.거래처명 || ""}</td>
-                      <td className={`${cellBase} font-medium`}>{r.상차지명 || ""}</td>
+                      <td className={`${cellBase} font-medium`}>
+                        <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
+                          <span>{r.상차지명 || ""}</span>
+                          {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+                        </div>
+                      </td>
                       <td className={cellBase}>
                         {r.상차지주소 && r.상차지주소.length > 10 ? (
                           openLoadAddrs.has(r._id) ? (

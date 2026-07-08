@@ -51,6 +51,106 @@ function normalizeVehicleGroup(v = "") {
   return "ETC";
 }
 
+// kg/g으로 입력해도 항상 톤 단위 문자열로 통일 (예: "100kg" → "0.1톤")
+const toTonUnit = (v = "") => {
+  const str = String(v ?? "").trim();
+  if (!str) return "";
+  const m = str.match(/^([\d.]+)\s*(kg|g|톤|ton|t)?$/i);
+  if (!m) return str;
+  const num = parseFloat(m[1]);
+  if (isNaN(num)) return str;
+  const unit = (m[2] || "톤").toLowerCase();
+  let tons;
+  if (unit === "kg") tons = num / 1000;
+  else if (unit === "g") tons = num / 1000000;
+  else tons = num;
+  let formatted = tons.toFixed(3).replace(/\.?0+$/, "");
+  if (formatted === "" || formatted === "-") formatted = "0";
+  return `${formatted}톤`;
+};
+
+// 경유지 목록(배열/JSON문자열/인덱스객체) 정규화 — DispatchApp.jsx와 동일
+function _parseWaypointList(v) {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+  }
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+    if (v.업체명) return [v];
+  }
+  return [];
+}
+
+// 경유지 포함 총 화물내용/톤수 계산 — DispatchApp.jsx와 동일한 로직
+function mergeViaCargoText(mainCargo, waypointLists) {
+  const mainStr = String(mainCargo || "").trim();
+  const UNITS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통", "바구니"];
+  const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
+  const getType = (s) => {
+    for (const u of UNITS) { if (String(s).endsWith(u)) return NORM[u] || u; }
+    return null;
+  };
+  const getNum = (s) => { const m = String(s).match(/^([\d,.]+)/); return m ? parseFloat(m[1].replace(/,/g, "")) : null; };
+  const allCargos = [];
+  if (mainStr && mainStr !== "없음") allCargos.push(mainStr);
+  let hasViaWithCargo = false;
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (!s) continue;
+      const wCargo = String(s.화물내용 || "").trim();
+      if (!wCargo || wCargo === "없음") continue;
+      const isTypeOnly = UNITS.some(u => wCargo === u || wCargo === (NORM[u] || u));
+      if (isTypeOnly) continue;
+      allCargos.push(wCargo);
+      hasViaWithCargo = true;
+    }
+  }
+  if (!hasViaWithCargo) return mainStr;
+  const byUnit = {};
+  const untyped = [];
+  for (const cargo of allCargos) {
+    const type = getType(cargo);
+    if (type !== null) {
+      const n = getNum(cargo);
+      if (n !== null) { byUnit[type] = (byUnit[type] || 0) + n; }
+      else if (!untyped.includes(cargo)) untyped.push(cargo);
+    } else {
+      if (!untyped.includes(cargo)) untyped.push(cargo);
+    }
+  }
+  const parts = [...Object.entries(byUnit).map(([u, n]) => `${n}${u}`), ...untyped];
+  return parts.join("+");
+}
+function mergeViaTonnage(mainTon, waypointLists) {
+  const parseKg = (s) => {
+    const str = String(s || "").trim().replace(/,/g, "");
+    const kg = str.match(/([\d.]+)\s*kg/i);
+    if (kg) return parseFloat(kg[1]);
+    const ton = str.match(/([\d.]+)\s*톤/);
+    if (ton) return parseFloat(ton[1]) * 1000;
+    return null;
+  };
+  const fmtKg = (kg) => (kg / 1000).toFixed(3).replace(/\.?0+$/, "") + "톤";
+  const mainKg = parseKg(mainTon);
+  let totalKg = mainKg || 0;
+  let hasViaWithTon = false;
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (!s) continue;
+      const t = String(s.차량톤수 || "").trim();
+      if (!t) continue;
+      const kg = parseKg(t);
+      if (kg !== null) { totalKg += kg; hasViaWithTon = true; }
+    }
+  }
+  if (!hasViaWithTon) return toTonUnit(mainTon) || "";
+  if (totalKg <= 0) return toTonUnit(mainTon) || "";
+  return fmtKg(totalKg);
+}
+
 const HOLIDAYS = [
   "2025-01-01","2025-02-09","2025-02-10","2025-02-11","2025-03-01",
   "2025-05-05","2025-06-06","2025-08-15","2025-09-16","2025-09-17",
@@ -460,8 +560,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const [resetKey, setResetKey] = useState(0);
 
   // 표준운임 경유지 포함 토글
-  const [includePickupVia, setIncludePickupVia] = useState(false);
-  const [includeDropVia, setIncludeDropVia] = useState(false);
+  const [includeVia, setIncludeVia] = useState(false);
 
   // 전국운임 상태
   const [nfFrom, setNfFrom] = useState("");
@@ -648,13 +747,17 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     const getPickupVias = r => [..._saVia(r.경유상차목록||[]),..._saVia(r.경유지_상차||[]),..._saVia(r.경유지상차||[])].map(_viaName).filter(Boolean);
     const getDropVias = r => [..._saVia(r.경유하차목록||[]),..._saVia(r.경유지_하차||[]),..._saVia(r.경유지하차||[])].map(_viaName).filter(Boolean);
 
+    // 경유지 포함 시 비교 기준 화물내용/톤수 = 본 오더 + 경유지 전체 합산
+    const mergedCargoOf = r => includeVia ? mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.화물내용 || "");
+    const mergedTonOf = r => includeVia ? mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.차량톤수 || "");
+
     list = list.filter(r => {
       const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
       const p = clean(pickup), pa = clean(pickupAddr);
       if (!p && !pa) return true;
       const mainMatches = (p && (name.includes(p)||addr.includes(p))) || (pa && (name.includes(pa)||addr.includes(pa)));
       if (mainMatches) return true;
-      if (includePickupVia && p) return getPickupVias(r).some(n => clean(n).includes(p));
+      if (includeVia && p) return getPickupVias(r).some(n => clean(n).includes(p));
       return false;
     });
     list = list.filter(r => {
@@ -663,21 +766,22 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
       if (!d && !da) return true;
       const mainMatches = (d && (name.includes(d)||addr.includes(d))) || (da && (name.includes(da)||addr.includes(da)));
       if (mainMatches) return true;
-      if (includeDropVia && d) return getDropVias(r).some(n => clean(n).includes(d));
+      if (includeVia && d) return getDropVias(r).some(n => clean(n).includes(d));
       return false;
     });
     if (cargo.trim()) {
       const cargoNum = extractCargoNumber(cargo);
       const cargoText = clean(cargo);
       list = list.filter(r => {
-        const rowNum = extractCargoNumber(r.화물내용);
-        const rowText = clean(r.화물내용);
+        const rowCargo = mergedCargoOf(r);
+        const rowNum = extractCargoNumber(rowCargo);
+        const rowText = clean(rowCargo);
         return cargoNum !== null ? rowNum === cargoNum : rowText.includes(cargoText);
       });
     }
     if (ton.trim()) {
       const tonNum = extractTon(ton);
-      list = list.filter(r => { const rt = extractTon(r.차량톤수); return rt && Math.abs(rt-tonNum)<=0.7; });
+      list = list.filter(r => { const rt = extractTon(mergedTonOf(r)); return rt && Math.abs(rt-tonNum)<=0.7; });
     }
     if (vehicle !== "전체") {
       const vg = normalizeVehicleGroup(vehicle);
@@ -689,9 +793,15 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
     // 경유지 없는 직접 노선만 (토글 꺼진 경우)
     list = list.filter(r => {
-      if (!includePickupVia && getPickupVias(r).length > 0) return false;
-      if (!includeDropVia && getDropVias(r).length > 0) return false;
+      if (!includeVia && (getPickupVias(r).length > 0 || getDropVias(r).length > 0)) return false;
       return true;
+    });
+
+    // 결과 표시용: 경유지 목록 + 경유지 포함 합산 화물/톤수 태깅
+    list = list.map(r => {
+      const vias = [...getPickupVias(r), ...getDropVias(r)];
+      if (!vias.length) return r;
+      return { ...r, _viaNames: vias, _mergedCargo: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]), _mergedTon: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) };
     });
 
     const 기준차량그룹 = vehicle === "전체" ? null : normalizeVehicleGroup(vehicle);
@@ -741,7 +851,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const reset = () => {
     setPickup(""); setDrop(""); setCargo(""); setTon(""); setVehicle("전체");
     setPickupAddr(""); setDropAddr(""); setClient("전체"); setResult([]); setAiFare(null); setSearched(false);
-    setIncludePickupVia(false); setIncludeDropVia(false);
+    setIncludeVia(false);
     setResetKey(k => k + 1);
     ["sf_pickup","sf_drop","sf_cargo","sf_ton","sf_vehicle","sf_pickupAddr","sf_dropAddr","sf_client"].forEach(k=>localStorage.removeItem(k));
   };
@@ -814,20 +924,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                         <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
                     </div>
-                    {/* 상차경유지포함 토글 */}
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() => setIncludePickupVia(v => !v)}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition ${
-                          includePickupVia
-                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                            : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                        }`}
-                      >
-                        상차경유지포함
-                      </button>
-                    </div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                     <div className="text-[11px] font-bold text-[#1B2B4B] mb-2 uppercase tracking-wider">하차지</div>
@@ -841,21 +937,20 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                         <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
                     </div>
-                    {/* 하차경유지포함 토글 */}
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() => setIncludeDropVia(v => !v)}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition ${
-                          includeDropVia
-                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                            : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                        }`}
-                      >
-                        하차경유지포함
-                      </button>
-                    </div>
                   </div>
+                </div>
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIncludeVia(v => !v)}
+                    className={`px-3 py-1.5 text-[12px] font-semibold rounded border transition ${
+                      includeVia
+                        ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                        : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                    }`}
+                  >
+                    경유포함
+                  </button>
                 </div>
               </div>
 
@@ -991,9 +1086,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                                 <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-semibold">{waypointText}</span>
                               ) : <span className="text-gray-300">-</span>}
                             </td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.화물내용}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedCargo || r.화물내용}</td>
                             <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.차량톤수}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedTon || r.차량톤수}</td>
                             <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
                             <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
                             <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
