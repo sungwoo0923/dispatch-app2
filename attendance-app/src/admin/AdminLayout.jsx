@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Menu, X, LogOut, CalendarCheck2, ChevronDown, DoorOpen } from "lucide-react";
+import { Menu, X, LogOut, CalendarCheck2, ChevronDown, DoorOpen, FileWarning } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Breadcrumb from "../components/Breadcrumb";
@@ -78,6 +78,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [earlyLeaveCount, setEarlyLeaveCount] = useState(0);
+  const [resignationCount, setResignationCount] = useState(0);
   const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
 
   useEffect(() => {
@@ -90,6 +91,14 @@ export default function AdminLayout() {
         where("status", "==", "pending")
       ),
       (snap) => setEarlyLeaveCount(snap.size)
+    );
+    return () => unsub();
+  }, [profile?.companyId]);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(query(collection(db, "resignationRequests"), where("companyId", "==", profile.companyId)), (snap) =>
+      setResignationCount(snap.docs.filter((d) => ["submitted", "manager_signed"].includes(d.data().status)).length)
     );
     return () => unsub();
   }, [profile?.companyId]);
@@ -156,6 +165,15 @@ export default function AdminLayout() {
                 className="flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20"
               >
                 <DoorOpen size={14} /> 조퇴요청 {earlyLeaveCount}건이 있습니다
+              </button>
+            )}
+            {resignationCount > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/employees/resignations")}
+                className="flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20"
+              >
+                <FileWarning size={14} /> 사직서 결재대기 {resignationCount}건이 있습니다
               </button>
             )}
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">

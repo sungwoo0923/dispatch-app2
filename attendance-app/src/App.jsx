@@ -13,6 +13,7 @@ import Dashboard from "./admin/Dashboard";
 import EmployeeList from "./admin/EmployeeList";
 import EmployeeStatus from "./admin/EmployeeStatus";
 import Contracts from "./admin/Contracts";
+import ResignationApprovals from "./admin/ResignationApprovals";
 import Documents from "./admin/Documents";
 import SafetyTrainings from "./admin/SafetyTrainings";
 import SafetySettings from "./admin/SafetySettings";
@@ -54,6 +55,7 @@ import WorkInfoPage from "./employee/WorkInfoPage";
 import MyInfoPage from "./employee/MyInfoPage";
 import ContractsPage from "./employee/ContractsPage";
 import ContractDetail from "./employee/ContractDetail";
+import ResignationPage from "./employee/ResignationPage";
 import DocumentsPage from "./employee/DocumentsPage";
 import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
 import BoardPage from "./employee/BoardPage";
@@ -118,6 +120,7 @@ export default function App() {
           <Route path="employees" element={<EmployeeList />} />
           <Route path="employees/status" element={<EmployeeStatus />} />
           <Route path="employees/contracts" element={<Contracts />} />
+          <Route path="employees/resignations" element={<ResignationApprovals />} />
           <Route path="employees/documents" element={<Documents />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="attendance" element={<AttendanceBoard />} />
@@ -173,6 +176,7 @@ export default function App() {
         <Route path="my-info" element={<MyInfoPage />} />
         <Route path="contracts" element={<ContractsPage />} />
         <Route path="contracts/:contractId" element={<ContractDetail />} />
+        <Route path="resignation" element={<ResignationPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="safety" element={<SafetyTrainingsPage />} />
         <Route path="board" element={<BoardPage />} />

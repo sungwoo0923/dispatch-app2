@@ -724,6 +724,43 @@ export default function EmployeeList() {
     setTemplateSearch("");
   };
 
+  // 사직서템플릿을 미리 배정해두는 것과, 실제로 그 근로자의 사직 절차를
+  // 시작하는 것은 별개의 행위다 — 템플릿 선택은 근로자등록 시 항상 필요하지만
+  // (선택지 준비), 실제 사직서 발송은 관리자가 이 버튼을 눌러 명시적으로
+  // 시작해야 한다. 발송 후에는 모바일에서 근로자 서명 → 담당/대표 결재 순으로
+  // 진행되며, 대표 서명까지 완료되면 자동으로 퇴직처리된다.
+  const sendResignationRequest = async () => {
+    if (!editingUid || !registerForm.resignTemplateId) return;
+    if (!(await confirm(`${registerForm.name}님에게 사직서를 발송하시겠습니까? 근로자 서명과 결재가 모두 완료되면 자동으로 퇴직처리됩니다.`, "send")))
+      return;
+    try {
+      await addDoc(collection(db, "resignationRequests"), {
+        companyId: profile.companyId,
+        uid: editingUid,
+        employeeName: registerForm.name,
+        position: registerForm.position || "",
+        siteName: siteName_(registerForm.workSiteId),
+        hireDate: registerForm.hireDate || "",
+        resignDate: registerForm.resignTemplateDate || toDateKey(),
+        templateName: registerForm.resignTemplateName,
+        reason: "",
+        employeeSignatureDataUrl: null,
+        employeeSignedAt: null,
+        managerSignatureDataUrl: null,
+        managerSignedAt: null,
+        managerName: "",
+        ceoSignatureDataUrl: null,
+        ceoSignedAt: null,
+        ceoName: "",
+        status: "employee_pending",
+        createdAt: serverTimestamp(),
+      });
+      toast.success("사직서가 발송되었습니다");
+    } catch {
+      toast.error("사직서 발송에 실패했습니다.");
+    }
+  };
+
   const contractReportOptions = useMemo(() => centerReports.filter((r) => r.docType === "계약서"), [centerReports]);
 
   // 근로자등록 > 계약 탭에서 계약서 템플릿을 고르면, 이미 계정이 있는(수정 중인)
@@ -1960,6 +1997,11 @@ export default function EmployeeList() {
                         onChange={(e) => setRegisterForm((f) => ({ ...f, resignTemplateDate: e.target.value }))}
                       />
                     </label>
+                    {editingUid && (
+                      <Button type="button" variant="danger" onClick={sendResignationRequest} disabled={!registerForm.resignTemplateId}>
+                        <Send size={14} /> 사직서 발송
+                      </Button>
+                    )}
                   </div>
                 )}
                 {regTab === "첨부서류" && (

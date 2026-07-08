@@ -65,6 +65,7 @@ export default function Home() {
   const [earlyLeaveSaving, setEarlyLeaveSaving] = useState(false);
   const [myEarlyLeaveToday, setMyEarlyLeaveToday] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [pendingResignation, setPendingResignation] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
     () => typeof window !== "undefined" && !window.localStorage.getItem(ONBOARDING_DISMISSED_KEY)
   );
@@ -116,6 +117,15 @@ export default function Home() {
     getDocs(query(collection(db, "contracts"), where("uid", "==", user.uid))).then((snap) => {
       setPendingContracts(snap.docs.filter((d) => d.data().status !== "signed").length);
     });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      query(collection(db, "resignationRequests"), where("uid", "==", user.uid), where("status", "==", "employee_pending")),
+      (snap) => setPendingResignation(!snap.empty)
+    );
+    return () => unsub();
   }, [user]);
 
   useEffect(() => {
@@ -362,7 +372,16 @@ export default function Home() {
           <Link to="/contracts">
             <Card className="flex items-center gap-3 p-4">
               <FileSignature size={18} className="shrink-0 text-primary" />
-              <p className="flex-1 text-xs text-ink">작성할 계약서(사직서) 있습니다. 완료해주세요.</p>
+              <p className="flex-1 text-xs text-ink">작성할 계약서가 있습니다. 완료해주세요.</p>
+            </Card>
+          </Link>
+        )}
+
+        {pendingResignation && (
+          <Link to="/resignation">
+            <Card className="flex items-center gap-3 border border-danger/20 bg-red-50 p-4">
+              <FileSignature size={18} className="shrink-0 text-danger" />
+              <p className="flex-1 text-xs text-ink">서명이 필요한 사직서가 있습니다. 확인해주세요.</p>
             </Card>
           </Link>
         )}

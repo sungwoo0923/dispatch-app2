@@ -160,19 +160,36 @@ export function buildContractHtml({ siteName, workContent, wage, insurance, etc,
   return wrapDoc(reportFormat || "표준근로계약서", body);
 }
 
-export function buildResignationHtml({ siteName }) {
+export function buildResignationHtml({
+  siteName,
+  employeeName,
+  position,
+  hireDate,
+  resignDate,
+  reason,
+  employeeSignatureDataUrl,
+  managerSignatureDataUrl,
+  managerName,
+  ceoSignatureDataUrl,
+  ceoName,
+}) {
+  const sigCell = (url) => (url ? `<img src="${esc(url)}" style="height:36px;vertical-align:middle;" />` : "&nbsp;");
   const body = `
     <table class="no-border" style="margin-bottom:6px;">
       <tr><td></td><td style="text-align:right;width:220px;">
-        <table style="width:220px;"><tr><td style="width:60px;">결재</td><td>담당</td><td>대표</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>
+        <table style="width:220px;">
+          <tr><td style="width:60px;">결재</td><td>담당</td><td>대표</td></tr>
+          <tr><td>&nbsp;</td><td>${sigCell(managerSignatureDataUrl)}</td><td>${sigCell(ceoSignatureDataUrl)}</td></tr>
+          <tr><td>&nbsp;</td><td style="font-size:10px;color:#666;">${esc(managerName || "")}</td><td style="font-size:10px;color:#666;">${esc(ceoName || "")}</td></tr>
+        </table>
       </td></tr>
     </table>
     <h1>사 직 서 (원)</h1>
     <table>
-      <tr><td style="width:110px;">성명</td><td></td><td style="width:110px;">직책</td><td></td></tr>
+      <tr><td style="width:110px;">성명</td><td>${esc(employeeName || "-")}</td><td style="width:110px;">직책</td><td>${esc(position || "-")}</td></tr>
       <tr><td>근무지</td><td colspan="3">${esc(siteName || "-")}</td></tr>
-      <tr><td>입사일자</td><td></td><td>퇴사일자</td><td></td></tr>
-      <tr><td>퇴사사유</td><td colspan="3"></td></tr>
+      <tr><td>입사일자</td><td>${esc(hireDate || "-")}</td><td>퇴사일자</td><td>${esc(resignDate || "-")}</td></tr>
+      <tr><td>퇴사사유</td><td colspan="3">${esc(reason || "-")}</td></tr>
       <tr><td rowspan="2">퇴사 후<br/>연락처</td><td colspan="3">주&nbsp;&nbsp;&nbsp;&nbsp;소</td></tr>
       <tr><td colspan="3">전화번호</td></tr>
     </table>
@@ -185,7 +202,11 @@ export function buildResignationHtml({ siteName }) {
       4. 기타 회사와 관련한 제반 사항은 회사규정에 의거 퇴사일 전일까지 처리하겠습니다.<br/>
       5. 만일 본인이 상기 사항을 위반하였을 때에는 이유 여하를 막론하고 서약에 의거 민.형사상의 책임과 손해배상 의무를 지겠습니다.
     </p>
-    <p style="text-align:center;margin-top:36px;">신청인 : <span class="blank-line" style="min-width:160px;">&nbsp;</span> (서명)</p>`;
+    <p style="text-align:center;margin-top:36px;">신청인 : ${
+      employeeSignatureDataUrl
+        ? `<img src="${esc(employeeSignatureDataUrl)}" style="height:40px;vertical-align:middle;" />`
+        : `<span class="blank-line" style="min-width:160px;">&nbsp;</span> (서명)`
+    }</p>`;
   return wrapDoc("사직서", body);
 }
 
