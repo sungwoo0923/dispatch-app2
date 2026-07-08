@@ -56,6 +56,17 @@ import SmsButton from "../components/SmsButton";
 
 const REG_TABS = ["시간템플릿", "수당템플릿", "계약", "계약종료", "첨부서류", "기본 불러오기"];
 
+// 근로자가 내정보 > 기본정보 수정요청에서 보내는 필드 — ID(externalId)는
+// 항상 잠겨있어 근로자가 바꿀 수 없으므로 여기에 포함하지 않는다.
+const INFO_FIELD_LABELS = {
+  residentNumberFront: "주민/외국인번호",
+  address: "주소",
+  addressDetail: "상세주소",
+  bankName: "급여은행",
+  bankAccount: "급여계좌",
+  accountHolder: "예금주",
+};
+
 const EMPTY_REGISTER_FORM = {
   businessEntityId: "",
   photoUrl: "",
@@ -196,6 +207,7 @@ export default function EmployeeList() {
   const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [changeLogs, setChangeLogs] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
+  const [infoChangeRequests, setInfoChangeRequests] = useState([]);
   const [businessEntities, setBusinessEntities] = useState([]);
   const [centerReports, setCenterReports] = useState([]);
   const [companyName, setCompanyName] = useState("");
@@ -257,6 +269,10 @@ export default function EmployeeList() {
       query(collection(db, "assignmentChangeRequests"), where("companyId", "==", profile.companyId)),
       (snap) => setChangeRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubInfoChangeReq = onSnapshot(
+      query(collection(db, "infoChangeRequests"), where("companyId", "==", profile.companyId)),
+      (snap) => setInfoChangeRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     const unsubEntities = onSnapshot(
       query(collection(db, "businessEntities"), where("companyId", "==", profile.companyId)),
       (snap) => setBusinessEntities(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -277,6 +293,7 @@ export default function EmployeeList() {
       unsubAllowT();
       unsubLogs();
       unsubChangeReq();
+      unsubInfoChangeReq();
       unsubEntities();
       unsubReports();
     };
@@ -514,6 +531,25 @@ export default function EmployeeList() {
     updateDoc(doc(db, "assignmentChangeRequests", req.id), { status: "rejected", resolvedAt: serverTimestamp() }).then(() =>
       toast.success("거절되었습니다")
     );
+
+  // 근로자가 내정보 > 기본정보를 최초 저장한 뒤에는 스스로 수정할 수 없고
+  // 이 수정요청을 통해서만 값이 바뀐다 — 관리자가 승인해야 실제
+  // users/{uid} 문서에 반영되고, 반려하면 근로자가 입력한 값은 그대로
+  // 남아 아무 것도 바뀌지 않는다.
+  const approveInfoChangeRequest = async (req) => {
+    await updateDoc(doc(db, "users", req.uid), req.requestedValues);
+    await updateDoc(doc(db, "infoChangeRequests", req.id), { status: "approved", resolvedAt: serverTimestamp() });
+    toast.success("승인되었습니다");
+  };
+  const rejectInfoChangeRequest = (req) =>
+    updateDoc(doc(db, "infoChangeRequests", req.id), { status: "rejected", resolvedAt: serverTimestamp() }).then(() =>
+      toast.success("반려되었습니다")
+    );
+  const deleteInfoChangeRequest = async (req) => {
+    if (!(await confirm("이 수정요청을 삭제하시겠습니까?", "delete"))) return;
+    await deleteDoc(doc(db, "infoChangeRequests", req.id));
+    toast.success("삭제되었습니다");
+  };
 
   const deleteEmployee = async (emp) => {
     if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
@@ -1256,6 +1292,83 @@ export default function EmployeeList() {
                 <tr>
                   <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
                     배정변경 요청이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel icon={UserPlus} title={`기본정보 수정요청 (승인대기 ${infoChangeRequests.filter((r) => r.status === "pending").length}건)`}>
+        <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
+          <table className="w-full min-w-[720px] text-center text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-4 py-3 font-semibold">순번</th>
+                <th className="px-4 py-3 font-semibold">이름</th>
+                <th className="px-4 py-3 font-semibold">변경내용</th>
+                <th className="px-4 py-3 font-semibold">사유</th>
+                <th className="px-4 py-3 font-semibold">상태</th>
+                <th className="px-4 py-3 font-semibold">처리</th>
+                <th className="px-4 py-3 font-semibold"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...infoChangeRequests]
+                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+                .slice(0, 20)
+                .map((req, i) => {
+                  const changed = Object.entries(INFO_FIELD_LABELS).filter(
+                    ([key]) => (req.currentValues?.[key] || "") !== (req.requestedValues?.[key] || "")
+                  );
+                  return (
+                    <tr key={req.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
+                      <td className="px-4 py-3 text-ink">{i + 1}</td>
+                      <td className="px-4 py-3 text-ink">{req.name}</td>
+                      <td className="px-4 py-3 text-left text-xs text-ink">
+                        {changed.length === 0
+                          ? "-"
+                          : changed.map(([key, label]) => (
+                              <p key={key}>
+                                {label}: {req.currentValues?.[key] || "-"} → {req.requestedValues?.[key] || "-"}
+                              </p>
+                            ))}
+                      </td>
+                      <td className="px-4 py-3 text-ink">{req.reason || "-"}</td>
+                      <td className="px-4 py-3">
+                        {req.status === "pending" ? (
+                          <Badge tone="warning">승인대기</Badge>
+                        ) : req.status === "approved" ? (
+                          <Badge tone="success">승인완료</Badge>
+                        ) : (
+                          <Badge tone="danger">반려</Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {req.status === "pending" && (
+                          <div className="flex flex-nowrap gap-1.5">
+                            <Button size="sm" onClick={() => approveInfoChangeRequest(req)}>
+                              <Check size={13} /> 승인
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => rejectInfoChangeRequest(req)}>
+                              <X size={13} /> 반려
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button type="button" className="text-muted hover:text-danger" title="삭제" onClick={() => deleteInfoChangeRequest(req)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              {infoChangeRequests.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
+                    기본정보 수정요청이 없습니다.
                   </td>
                 </tr>
               )}

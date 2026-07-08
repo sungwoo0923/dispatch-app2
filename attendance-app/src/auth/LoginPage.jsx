@@ -35,7 +35,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-white px-6 py-14">
       <div className="w-full max-w-sm">
         <div className="mb-10 flex flex-col items-center">
-          <img src="/logo.png" alt="KP-Work" className="h-16 w-auto" />
+          <img src="/logo.png" alt="KP-Work" className="h-28 w-auto" />
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -45,9 +45,10 @@ export default function LoginPage() {
               <input
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 pr-10 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary-light"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(normalizePhone(e.target.value).slice(0, 11))}
                 placeholder="대시(-) 없이 숫자만 입력"
                 inputMode="numeric"
+                maxLength={11}
                 required
               />
               <User size={16} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300" />

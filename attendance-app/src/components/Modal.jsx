@@ -13,21 +13,30 @@ export default function Modal({ open, onClose, title, children, footer, size = "
       if (e.key === "Escape") onClose?.();
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    // 모달이 열려있는 동안 뒤쪽 페이지가 스크롤되지 않도록 막는다 — 이게
+    // 없으면 모바일에서 모달 안을 스크롤하려는 손가락 제스처가 뒤쪽 배경
+    // 페이지에 먹혀서, 정작 모달 안의 서명/저장 버튼까지 스크롤해서 내려갈
+    // 수가 없었다(화면 아래로 잘려 안 보이는 것처럼 느껴짐).
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [open, onClose]);
 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4">
-      <div className={`w-full ${SIZES[size]} rounded-t-2xl sm:rounded-2xl bg-white shadow-xl max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+      <div className={`flex w-full ${SIZES[size]} max-h-[90vh] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}>
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
           <h3 className="text-base font-semibold text-ink">{title}</h3>
           <button onClick={onClose} className="text-muted hover:text-ink">
             <X size={20} />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
-        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-4">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-4">{footer}</div>}
       </div>
     </div>
   );

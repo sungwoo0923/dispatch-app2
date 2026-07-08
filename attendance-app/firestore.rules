@@ -83,6 +83,16 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    // 내정보 > 기본정보 최초 저장 후 잠긴 값을 근로자가 스스로 못 고치고
+    // 관리자에게 수정을 요청하는 문서 — 승인/반려는 관리자만 할 수 있다.
+    match /infoChangeRequests/{id} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAdminOf(resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     // 소속업체 (subcontracting vendor names) — same low-sensitivity pattern as workSites.
     match /vendors/{vendorId} {
       allow read: if isSignedIn();

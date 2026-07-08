@@ -21,8 +21,8 @@ export default function EmployeeLayout() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
-      <header className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-3">
-        <img src="/logo.png" alt="KP-Work" className="h-7 w-auto" />
+      <header className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-2.5">
+        <img src="/logo.png" alt="KP-Work" className="h-11 w-auto" />
         <div className="flex items-center gap-2.5">
           <div className="text-right">
             <p className="text-[10px] leading-tight text-muted">안녕하세요</p>

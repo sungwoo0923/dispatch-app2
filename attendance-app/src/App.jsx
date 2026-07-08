@@ -62,8 +62,13 @@ import { PENDING_INVITE_KEY, SUPER_ADMIN_PICK_COMPANY_KEY } from "./constants/se
 
 function LoadingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-light border-t-primary" />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-white">
+      <img src="/logo.png" alt="KP-Work" className="w-40 sm:w-48" />
+      <div className="flex gap-1.5">
+        <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-primary" />
+      </div>
     </div>
   );
 }
