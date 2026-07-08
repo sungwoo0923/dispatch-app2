@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot } from "firebase/firestore";
 import {
   MapPin,
   Navigation,
@@ -20,6 +20,7 @@ import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
 import { formatTime, attendanceDocId, toDateKey } from "../utils/dateUtils";
 import { signSafetyAttendance } from "../utils/safety";
+import { useToast } from "../hooks/useToast";
 
 const ONBOARDING_DISMISSED_KEY = "kpwork_onboarding_dismissed";
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
@@ -31,8 +32,10 @@ const SAFETY_TIPS = [
 
 export default function Home() {
   const { profile, user } = useAuth();
+  const toast = useToast();
   const [workSite, setWorkSite] = useState(null);
   const [vendor, setVendor] = useState(null);
+  const [todaySchedule, setTodaySchedule] = useState(null);
   const [loadingSite, setLoadingSite] = useState(true);
   const [savingSignature, setSavingSignature] = useState(false);
   const [now, setNow] = useState(new Date());
@@ -76,6 +79,17 @@ export default function Home() {
     });
   }, [profile?.vendorId]);
 
+  // 관리자가 스케줄등록에서 "출근확정" 처리한 날에만 출근 버튼이 동작해야
+  // 하므로, 오늘 날짜의 스케줄 상태를 실시간으로 구독해둔다.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      query(collection(db, "schedules"), where("uid", "==", user.uid), where("date", "==", toDateKey())),
+      (snap) => setTodaySchedule(snap.docs[0]?.data() || null)
+    );
+    return () => unsub();
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     getDocs(query(collection(db, "contracts"), where("uid", "==", user.uid))).then((snap) => {
@@ -92,13 +106,16 @@ export default function Home() {
     });
   }, [profile?.companyId]);
 
-  const { distance, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday } =
+  const canCheckIn = todaySchedule?.status === "출근확정";
+
+  const { distance, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday, manualCheckInRadiusM } =
     useGeofenceCheckIn({
       uid: user?.uid,
       name: profile?.name,
       companyId: profile?.companyId,
       workSite,
       enabled: Boolean(workSite),
+      canCheckIn,
     });
 
   const checkedIn = todayAttendance?.status === "출근" && todayAttendance?.checkInTime;
@@ -107,13 +124,27 @@ export default function Home() {
 
   const openCheckIn = () => {
     if (!workSite || checkedIn) return;
+    if (!canCheckIn) {
+      toast.error("관리자가 오늘 출근확정 처리한 스케줄이 없습니다.");
+      return;
+    }
     setChecklist({ contract: false, safety: false });
     setShowChecklist(true);
   };
 
   const confirmCheckIn = async () => {
-    setShowChecklist(false);
-    await manualCheckIn();
+    const result = await manualCheckIn();
+    if (result.ok) {
+      setShowChecklist(false);
+      return;
+    }
+    if (result.reason === "too-far") {
+      toast.error(`근무지 반경 ${manualCheckInRadiusM}m 이내에서만 출근이 가능합니다.`);
+    } else if (result.reason === "no-location") {
+      toast.error("위치 확인 중입니다. 잠시 후 다시 시도해주세요.");
+    } else {
+      toast.error("관리자가 오늘 출근확정 처리한 스케줄이 없습니다.");
+    }
   };
 
   const submitSafetySignature = async () => {
@@ -153,8 +184,10 @@ export default function Home() {
               출근완료 · {formatTime(todayAttendance.checkInTime)}
               {checkedOut && ` · 퇴근 ${formatTime(todayAttendance.checkOutTime)}`}
             </p>
+          ) : canCheckIn ? (
+            <p className="text-xs text-muted">근무지 반경 {manualCheckInRadiusM}m 이내에서 출근 버튼을 눌러주세요</p>
           ) : (
-            <p className="text-xs text-muted">근무지 반경에 들어오면 자동으로 출근 처리됩니다</p>
+            <p className="text-xs text-warning">관리자가 오늘 출근확정 처리한 스케줄이 없습니다</p>
           )}
         </div>
 
@@ -163,7 +196,9 @@ export default function Home() {
             type="button"
             onClick={openCheckIn}
             disabled={!workSite || checkedIn}
-            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-primary py-5 text-white transition-colors hover:bg-primary-dark disabled:bg-slate-300"
+            className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-5 text-white transition-colors disabled:bg-slate-300 ${
+              canCheckIn ? "bg-primary hover:bg-primary-dark" : "bg-slate-300 hover:bg-slate-400"
+            }`}
           >
             <span className="flex items-center gap-1.5 text-base font-semibold">
               <LogIn size={18} /> 출근
