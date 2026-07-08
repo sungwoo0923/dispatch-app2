@@ -39,6 +39,9 @@ const EMPTY_INFO = {
   faceYN: "사용",
   address: "",
   memo: "",
+  lat: "",
+  lng: "",
+  radiusM: 100,
 };
 
 export default function Centers() {
@@ -114,6 +117,9 @@ export default function Centers() {
       faceYN: s.faceYN || "사용",
       address: s.address || "",
       memo: s.memo || "",
+      lat: s.lat ?? "",
+      lng: s.lng ?? "",
+      radiusM: s.radiusM ?? 100,
     });
     setTab("info");
   };
@@ -121,13 +127,18 @@ export default function Centers() {
   const saveInfo = async () => {
     if (!info.businessEntityId || !info.name.trim()) return;
     if (!(await confirm("저장하시겠습니까?", "save"))) return;
+    const payload = {
+      ...info,
+      lat: info.lat === "" ? null : parseFloat(info.lat),
+      lng: info.lng === "" ? null : parseFloat(info.lng),
+      radiusM: Number(info.radiusM) || 100,
+    };
     if (selectedId) {
-      await updateDoc(doc(db, "workSites", selectedId), info);
+      await updateDoc(doc(db, "workSites", selectedId), payload);
     } else {
       const ref_ = await addDoc(collection(db, "workSites"), {
         companyId: profile.companyId,
-        radiusM: 100,
-        ...info,
+        ...payload,
         createdAt: serverTimestamp(),
       });
       setSelectedId(ref_.id);
@@ -335,6 +346,43 @@ export default function Centers() {
                       />
                     </label>
                   </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">위도(lat) *</span>
+                      <input
+                        type="number"
+                        step="0.000001"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={info.lat}
+                        onChange={(e) => setInfo((f) => ({ ...f, lat: e.target.value }))}
+                        placeholder="예: 37.5665"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">경도(lng) *</span>
+                      <input
+                        type="number"
+                        step="0.000001"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={info.lng}
+                        onChange={(e) => setInfo((f) => ({ ...f, lng: e.target.value }))}
+                        placeholder="예: 126.9780"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">출근인정반경(m)</span>
+                      <input
+                        type="number"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={info.radiusM}
+                        onChange={(e) => setInfo((f) => ({ ...f, radiusM: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-muted">
+                    위도/경도가 설정되어 있어야 근로자 모바일 앱에서 반경 내 자동/수동 출근이 정상 동작합니다. 지도(예: 구글맵)에서
+                    센터 위치를 우클릭하면 좌표를 확인할 수 있습니다.
+                  </p>
                   <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
                     {selectedId && (
                       <Button variant="danger" onClick={removeSite}>

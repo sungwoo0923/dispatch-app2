@@ -284,7 +284,11 @@ export default function Home() {
     if (result.reason === "too-far") {
       toast.error(`근무지 반경 ${manualCheckInRadiusM}m 이내에서만 출근이 가능합니다.`);
     } else if (result.reason === "no-location") {
-      toast.error("위치 확인 중입니다. 잠시 후 다시 시도해주세요.");
+      if (workSite && (workSite.lat == null || workSite.lng == null)) {
+        toast.error("이 근무지에는 위치 좌표가 설정되어 있지 않아 출근할 수 없습니다. 관리자에게 문의해주세요.");
+      } else {
+        toast.error("위치 확인 중입니다. 잠시 후 다시 시도해주세요.");
+      }
     } else {
       toast.error("관리자가 오늘 출근확정 처리한 스케줄이 없습니다.");
     }
@@ -503,7 +507,9 @@ export default function Home() {
             <p className="text-base font-bold text-ink">{workSite.name}</p>
             <div className="flex items-center gap-1.5">
               <Navigation size={14} />
-              {distance != null ? (
+              {workSite.lat == null || workSite.lng == null ? (
+                <span className="text-danger">이 근무지에는 위치 좌표가 설정되어 있지 않습니다. 관리자에게 문의해주세요.</span>
+              ) : distance != null ? (
                 <span>현재 위치까지 약 {Math.round(distance)}m</span>
               ) : (
                 <span>위치 확인 중...</span>

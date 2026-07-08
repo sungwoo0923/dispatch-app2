@@ -476,8 +476,28 @@ export default function EmployeeList() {
   }, [rowMenu]);
 
   const approve = (uid) => updateDoc(doc(db, "users", uid), { approved: true }).then(() => toast.success("승인되었습니다"));
-  const assignSite = (uid, workSiteId) => updateDoc(doc(db, "users", uid), { workSiteId: workSiteId || null });
-  const updateField = (uid, field, value) => updateDoc(doc(db, "users", uid), { [field]: value });
+
+  // 목록 화면의 인라인 드롭다운(센터/근무구분/근무형태/부서/직급 등)으로 바로
+  // 바꾸는 것도 근로자등록 상세에서 수정하는 것과 동일한 정보 변경이므로,
+  // 변경이력에 남아야 한다.
+  const logFieldChange = (uid, field, beforeRaw, afterRaw) => {
+    const label = CHANGE_LOG_FIELD_LABELS[field];
+    if (!label) return;
+    const display = (v) => (field === "workSiteId" ? siteName_(v) : field === "vendorId" ? vendorName_(v) : v || "-");
+    if ((beforeRaw || "") === (afterRaw || "")) return;
+    logChange(uid, "정보수정", `${label}: ${display(beforeRaw)} → ${display(afterRaw)}`);
+  };
+
+  const assignSite = (uid, workSiteId) => {
+    const before = employees.find((e) => e.id === uid)?.workSiteId;
+    updateDoc(doc(db, "users", uid), { workSiteId: workSiteId || null });
+    logFieldChange(uid, "workSiteId", before, workSiteId);
+  };
+  const updateField = (uid, field, value) => {
+    const before = employees.find((e) => e.id === uid)?.[field];
+    updateDoc(doc(db, "users", uid), { [field]: value });
+    logFieldChange(uid, field, before, value);
+  };
 
   const approveChangeRequest = async (req) => {
     await updateDoc(doc(db, "users", req.uid), {

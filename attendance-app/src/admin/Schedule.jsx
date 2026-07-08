@@ -228,7 +228,7 @@ export default function Schedule() {
 
   const scheduleColumns = [
     { key: "company", label: "사업자", render: () => companyName },
-    { key: "site", label: "센터", render: ({ schedule: s, emp }) => s.siteName || siteName_(emp.workSiteId) },
+    { key: "site", label: "센터", render: ({ schedule: s, emp }) => siteName_(emp.workSiteId) || s.siteName || "-" },
     {
       key: "status",
       label: "확정",
@@ -421,6 +421,39 @@ export default function Schedule() {
   // users.employmentStatus)가 달라 kind별로 분기해 처리한다.
   const [rowMenu, setRowMenu] = useState(null); // { x, y, kind: "confirmed"|"pending"|"leave"|"resigned", row }
 
+  // 근로자목록 더블클릭 수정과 동일하게, 스케줄 목록도 행을 더블클릭하면
+  // 사이드에서 슬라이드로 수정창이 뜬다.
+  const [editSchedule, setEditSchedule] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const openScheduleEdit = (s) => {
+    setEditSchedule(s);
+    setEditForm({ date: s.date, startTime: s.startTime, endTime: s.endTime, siteId: s.siteId || "", status: s.status || "대기" });
+  };
+
+  const saveScheduleEdit = async () => {
+    if (!editSchedule || !editForm) return;
+    setEditSaving(true);
+    try {
+      const site = workSites.find((w) => w.id === editForm.siteId);
+      await updateDoc(doc(db, "schedules", editSchedule.id), {
+        date: editForm.date,
+        startTime: editForm.startTime,
+        endTime: editForm.endTime,
+        siteId: editForm.siteId || null,
+        siteName: site?.name || "",
+        status: editForm.status,
+      });
+      toast.success("수정되었습니다");
+      setEditSchedule(null);
+    } catch (err) {
+      toast.error(`수정에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const openRowMenu = (e, kind, row) => {
     e.preventDefault();
     setRowMenu({ x: e.clientX, y: e.clientY, kind, row });
@@ -590,7 +623,7 @@ export default function Schedule() {
     const rowsOut = confirmedRows.map(({ schedule: s, emp }) => [
       s.name,
       companyName,
-      s.siteName || "-",
+      siteName_(emp.workSiteId) || s.siteName || "-",
       s.status || "대기",
       formatDate(s.date),
       `${s.startTime} ~ ${s.endTime}`,
@@ -869,7 +902,9 @@ export default function Schedule() {
                     return (
                       <tr
                         key={s.id}
-                        className="border-b border-slate-50 last:border-0"
+                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                        title="더블클릭하여 수정 · 우클릭하여 상태변경"
+                        onDoubleClick={() => openScheduleEdit(s)}
                         onContextMenu={(e) => openRowMenu(e, "confirmed", row)}
                       >
                         <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3">
@@ -932,7 +967,9 @@ export default function Schedule() {
               {pendingRows.map((row, i) => (
                 <tr
                   key={row.schedule.id}
-                  className="border-b border-slate-50 last:border-0"
+                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                  title="더블클릭하여 수정 · 우클릭하여 상태변경"
+                  onDoubleClick={() => openScheduleEdit(row.schedule)}
                   onContextMenu={(e) => openRowMenu(e, "pending", row)}
                 >
                   <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3">
@@ -1072,6 +1109,78 @@ export default function Schedule() {
           ))}
         </div>
       )}
+
+      <SidePanel
+        open={Boolean(editSchedule)}
+        onClose={() => setEditSchedule(null)}
+        title={`스케줄등록 > 수정 (${editSchedule?.name || ""})`}
+        footer={
+          <Button onClick={saveScheduleEdit} disabled={editSaving}>
+            {editSaving ? "저장 중..." : "저장"}
+          </Button>
+        }
+      >
+        {editForm && (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">근무일자</span>
+              <input
+                type="date"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={editForm.date}
+                onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))}
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">출근시각</span>
+                <input
+                  type="time"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={editForm.startTime}
+                  onChange={(e) => setEditForm((f) => ({ ...f, startTime: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">퇴근시각</span>
+                <input
+                  type="time"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={editForm.endTime}
+                  onChange={(e) => setEditForm((f) => ({ ...f, endTime: e.target.value }))}
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+              <select
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={editForm.siteId}
+                onChange={(e) => setEditForm((f) => ({ ...f, siteId: e.target.value }))}
+              >
+                <option value="">미배정</option>
+                {workSites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">확정상태</span>
+              <select
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={editForm.status}
+                onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+              >
+                {["대기", "출근확정", "휴무"].map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+      </SidePanel>
 
       <SidePanel
         open={open}
