@@ -74,6 +74,7 @@ service cloud.firestore {
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update: if isAdminOf(resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     // 소속업체 (subcontracting vendor names) — same low-sensitivity pattern as workSites.
@@ -155,6 +156,7 @@ service cloud.firestore {
     match /employeeChangeLogs/{id} {
       allow read: if isSignedIn();
       allow create: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     match /shiftTemplates/{id} {

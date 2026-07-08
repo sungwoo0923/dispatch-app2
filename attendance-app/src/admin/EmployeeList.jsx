@@ -406,6 +406,16 @@ export default function EmployeeList() {
           </Button>
         ),
     },
+    {
+      key: "delete",
+      label: "삭제",
+      interactive: true,
+      render: (emp) => (
+        <button type="button" className="text-muted hover:text-danger" title="삭제" onClick={() => deleteEmployee(emp)}>
+          <Trash2 size={14} />
+        </button>
+      ),
+    },
   ];
   const {
     visibleColumns: visibleEmployeeColumns,
@@ -417,6 +427,7 @@ export default function EmployeeList() {
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
+      if (emp.deleted) return false;
       if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
       if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
       if (filters.status && (emp.employmentStatus || "재직") !== filters.status) return false;
@@ -474,6 +485,24 @@ export default function EmployeeList() {
     updateDoc(doc(db, "assignmentChangeRequests", req.id), { status: "rejected", resolvedAt: serverTimestamp() }).then(() =>
       toast.success("거절되었습니다")
     );
+
+  const deleteEmployee = async (emp) => {
+    if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
+    await updateDoc(doc(db, "users", emp.id), { deleted: true });
+    toast.success("삭제되었습니다");
+  };
+
+  const deleteChangeRequest = async (req) => {
+    if (!(await confirm("이 배정변경 요청을 삭제하시겠습니까?", "delete"))) return;
+    await deleteDoc(doc(db, "assignmentChangeRequests", req.id));
+    toast.success("삭제되었습니다");
+  };
+
+  const deleteChangeLog = async (log) => {
+    if (!(await confirm("이 변경이력을 삭제하시겠습니까?", "delete"))) return;
+    await deleteDoc(doc(db, "employeeChangeLogs", log.id));
+    toast.success("삭제되었습니다");
+  };
 
   const createSite = async (e) => {
     e.preventDefault();
@@ -1090,6 +1119,7 @@ export default function EmployeeList() {
                 <th className="px-4 py-3 font-semibold">사유</th>
                 <th className="px-4 py-3 font-semibold">상태</th>
                 <th className="px-4 py-3 font-semibold">처리</th>
+                <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
@@ -1125,11 +1155,16 @@ export default function EmployeeList() {
                         </div>
                       )}
                     </td>
+                    <td className="px-4 py-3">
+                      <button type="button" className="text-muted hover:text-danger" title="삭제" onClick={() => deleteChangeRequest(req)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               {changeRequests.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
                     배정변경 요청이 없습니다.
                   </td>
                 </tr>
@@ -1149,6 +1184,7 @@ export default function EmployeeList() {
                 <th className="px-4 py-3 font-semibold">내용</th>
                 <th className="px-4 py-3 font-semibold">처리상태</th>
                 <th className="px-4 py-3 font-semibold">변경자</th>
+                <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
@@ -1164,11 +1200,16 @@ export default function EmployeeList() {
                       <Badge tone="success">{log.status}</Badge>
                     </td>
                     <td className="px-4 py-3 text-ink">{log.createdByName}</td>
+                    <td className="px-4 py-3">
+                      <button type="button" className="text-muted hover:text-danger" title="삭제" onClick={() => deleteChangeLog(log)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               {changeLogs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted">
                     변경이력이 없습니다.
                   </td>
                 </tr>

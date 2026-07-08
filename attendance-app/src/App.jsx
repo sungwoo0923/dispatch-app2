@@ -156,6 +156,7 @@ export default function App() {
   }
 
   // employee role
+  if (profile.deleted) return <PendingApprovalPage />;
   if (!profile.approved) return <PendingApprovalPage />;
   if (profile.employmentStatus === "퇴사") return <PendingApprovalPage />;
 
