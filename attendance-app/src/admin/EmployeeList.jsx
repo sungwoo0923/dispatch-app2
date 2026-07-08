@@ -119,6 +119,34 @@ const REQUIRED_FIELDS = [
   { key: "resignTemplateId", label: "사직서템플릿", tab: "계약종료" },
 ];
 
+// 근로자수정 저장 시 값이 바뀐 필드만 골라 변경이력에 남기기 위한 한글 라벨.
+// 여기 없는 키는 변경이력에서 제외한다 (사진/첨부서류 등 별도 처리되는 필드,
+// 혹은 사용자에게 의미있게 설명하기 애매한 내부 필드).
+const CHANGE_LOG_FIELD_LABELS = {
+  name: "이름",
+  phone: "전화번호",
+  gender: "성별",
+  nationality: "국적구분",
+  country: "국적",
+  visaStatus: "체류자격",
+  workSiteId: "센터",
+  vendorId: "소속업체",
+  hireDate: "입사일자",
+  resignDate: "퇴사일자",
+  workStartDate: "근무시작일",
+  employmentType: "근무형태",
+  shiftType: "근무구분",
+  payType: "지급구분",
+  team: "부서",
+  position: "직급",
+  insuranceApplied: "4대보험 적용",
+  residentNumberFront: "주민번호",
+  address: "주소",
+  bankName: "은행명",
+  bankAccount: "계좌번호",
+  accountHolder: "예금주",
+};
+
 function SectionHeader({ children }) {
   return (
     <div className="mb-3 mt-5 flex items-center gap-2 first:mt-0">
@@ -150,6 +178,7 @@ export default function EmployeeList() {
   const [issuedCode, setIssuedCode] = useState("");
   const [manualCode, setManualCode] = useState("");
   const [editingUid, setEditingUid] = useState(null);
+  const [editingOriginal, setEditingOriginal] = useState(null);
 
   // 등록화면의 사진: 아직 uid가 없는 신규 등록 단계라 다른 첨부서류와 마찬가지로
   // 로컬에만 들고 있다가 최종 등록 시점에 업로드한다. photoSaved는 "등록" 버튼(파일
@@ -482,6 +511,7 @@ export default function EmployeeList() {
     setStagedDocs([]);
     setLoadFromId("");
     setEditingUid(null);
+    setEditingOriginal(null);
     setPhotoFile(null);
     setPhotoPreviewUrl("");
     setPhotoSaved(false);
@@ -530,6 +560,7 @@ export default function EmployeeList() {
   // SidePanel/폼으로 불러와 수정할 수 있게 한다 — 가입코드 발급 단계는 건너뛴다.
   const openEditEmployee = (emp) => {
     setEditingUid(emp.id);
+    setEditingOriginal(emp);
     setRegisterForm({ ...EMPTY_REGISTER_FORM, ...emp });
     setPhotoPreviewUrl(emp.photoUrl || "");
     setPhotoSaved(!!emp.photoUrl);
@@ -596,6 +627,15 @@ export default function EmployeeList() {
         await updateDoc(doc(db, "users", editingUid), payload);
         for (const { docType, file } of stagedDocs) {
           await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
+        }
+        if (editingOriginal) {
+          for (const [key, label] of Object.entries(CHANGE_LOG_FIELD_LABELS)) {
+            const before = editingOriginal[key] ?? "";
+            const after = payload[key] ?? "";
+            if (before !== after) {
+              await logChange(editingUid, "정보수정", `${label}: ${before || "-"} → ${after || "-"}`);
+            }
+          }
         }
         toast.success("수정되었습니다");
         closeRegisterModal();
