@@ -70,19 +70,22 @@ export default function SafetyMaterials() {
     }
     setSaving(true);
     try {
-      const ref_ = await addDoc(collection(db, "safetyMaterials"), {
+      // 영상은 업로드가 실패할 수 있는 지점이므로, Storage 업로드를 먼저 끝낸
+      // 뒤에 Firestore 문서를 만든다 — 순서를 반대로 하면 업로드 실패 시
+      // 영상 없는 "빈 껍데기" 자료가 목록에 등록된 것처럼 남는다.
+      let videoUrl = "";
+      if (form.type === "video") {
+        videoUrl = await uploadSafetyMaterialFile({ companyId: profile.companyId, materialId: `tmp_${Date.now()}`, file });
+      }
+      await addDoc(collection(db, "safetyMaterials"), {
         companyId: profile.companyId,
         title: form.title,
         type: form.type,
         content: form.type === "text" ? form.content : "",
-        videoUrl: "",
+        videoUrl,
         active: true,
         createdAt: serverTimestamp(),
       });
-      if (form.type === "video") {
-        const videoUrl = await uploadSafetyMaterialFile({ companyId: profile.companyId, materialId: ref_.id, file });
-        await updateDoc(doc(db, "safetyMaterials", ref_.id), { videoUrl });
-      }
       toast.success("안전교육자료가 등록되었습니다");
       setPanelOpen(false);
     } catch (err) {
