@@ -118,6 +118,9 @@ service cloud.firestore {
         (request.resource.data.uid == request.auth.uid || isAdminOf(request.resource.data.companyId));
       allow update: if isSignedIn() &&
         (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'pending'));
+      // 승인/반려 전(pending)에는 신청 본인이 취소할 수 있고, 이후에는 관리자만 삭제 가능.
+      allow delete: if isSignedIn() &&
+        (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'pending'));
     }
 
     // 근로자 개인 알림(조퇴 승인/거절 등) — 관리자가 발행하고 본인만 읽고

@@ -24,9 +24,17 @@ cp .env.example .env.local
 4. **Storage → 시작하기로 버킷을 생성합니다.** (서류/도장/프로필사진 업로드에 필수. 이 단계를 건너뛰면 업로드 시 브라우저 콘솔에 CORS 오류/400 오류가 발생합니다.)
 5. 프로젝트 설정 → 일반 → "내 앱"에서 웹 앱 추가 → 표시되는 설정값을 `.env.local`에 채워 넣습니다.
 6. `.firebaserc`의 `REPLACE_WITH_NEW_FIREBASE_PROJECT_ID`를 실제 프로젝트 ID로 변경합니다.
-7. 규칙/인덱스 배포 (Firestore와 Storage 규칙을 **둘 다** 배포해야 서류함이 정상 동작합니다):
-   `npx firebase deploy --only firestore:rules,firestore:indexes,storage:rules`
-   이후 `firestore.rules`나 `storage.rules`를 수정할 때마다 이 명령을 다시 실행해 최신 규칙을 반영해야 합니다.
+7. 규칙/인덱스 배포. **반드시 Firestore와 Storage를 별도 명령으로 나눠서 배포하세요** — 한 명령에 묶어서
+   배포하면(`--only firestore:rules,storage:rules`) Storage 준비가 안 되어 있을 때(4번 단계를 건너뛴 경우)
+   배포 전체가 실패하면서 Firestore 규칙조차 반영되지 않습니다. (실제로 이 문제 때문에 세션 내내 반영해온
+   Firestore 규칙 변경사항이 프로젝트에 전혀 배포되지 않았던 적이 있었습니다.)
+   ```bash
+   npx firebase deploy --only firestore:rules,firestore:indexes
+   npx firebase deploy --only storage:rules
+   ```
+   이후 `firestore.rules`나 `storage.rules`를 수정할 때마다 해당 명령을 다시 실행해 최신 규칙을 반영해야 합니다.
+   두 번째 명령이 "Firebase Storage has not been set up..." 오류로 실패한다면 4번 단계(Storage 콘솔에서
+   버킷 생성)를 아직 하지 않은 것이니 먼저 완료한 뒤 다시 실행하세요.
 
 실제 프로젝트를 아직 만들지 않았다면 `.env.local`의 `VITE_USE_EMULATOR=true` 상태로 두고 아래 로컬 에뮬레이터로 개발할 수 있습니다.
 
