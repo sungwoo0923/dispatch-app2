@@ -68,6 +68,19 @@ export default function AddressSearchModal({ open, onClose, title = "출근지 �
             <p className="mt-1 text-xs text-muted">
               {result.lat.toFixed(5)}, {result.lng.toFixed(5)}
             </p>
+            {!result.precise && (
+              <p className="mt-1.5 text-xs text-warning">
+                입력하신 상세 주소를 정확히 찾지 못해 인근 지역(동/구 등) 기준 좌표입니다. 지도에서 위치를 꼭 확인해주세요.
+              </p>
+            )}
+            <a
+              className="mt-1.5 inline-block text-xs text-primary hover:underline"
+              href={`https://map.kakao.com/?urlX=${result.lng}&urlY=${result.lat}&urlLevel=3`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              지도에서 위치 확인 →
+            </a>
           </div>
         )}
       </div>
