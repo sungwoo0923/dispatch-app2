@@ -306,7 +306,16 @@ export default function EmployeeList() {
         </select>
       ),
     },
-    { key: "phone", label: "연락처", render: (emp) => emp.phone },
+    {
+      key: "phone",
+      label: "연락처",
+      render: (emp) => (
+        <span className="inline-flex items-center gap-1">
+          {emp.phone}
+          <SmsButton phone={emp.phone} />
+        </span>
+      ),
+    },
     { key: "gender", label: "성별", render: (emp) => emp.gender || "-" },
     { key: "age", label: "나이", render: (emp) => calculateAge(emp.residentNumberFront) ?? "-" },
     { key: "vendor", label: "소속업체", render: (emp) => vendorName_(emp.vendorId) },

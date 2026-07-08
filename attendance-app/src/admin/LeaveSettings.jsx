@@ -4,6 +4,7 @@ import { CalendarCog, Plus, RefreshCw, FileSpreadsheet, Trash2, ArrowUp, ArrowDo
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
@@ -65,6 +66,7 @@ const standardYearlyRules = () =>
 function TemplatesTab() {
   const { profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const [entities, setEntities] = useState([]);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
@@ -107,25 +109,43 @@ function TemplatesTab() {
   };
 
   const save = async () => {
-    if (!form.name.trim()) return;
-    if (selectedId) {
-      await updateDoc(doc(db, "leaveTemplates", selectedId), form);
-    } else {
-      const ref_ = await addDoc(collection(db, "leaveTemplates"), {
-        companyId: profile.companyId,
-        ...form,
-        monthlyRules: standardMonthlyRules(),
-        yearlyRules: standardYearlyRules(),
-        createdAt: serverTimestamp(),
-      });
-      setSelectedId(ref_.id);
+    if (!form.name.trim()) {
+      toast.error("템플릿명을 입력해주세요.");
+      return;
+    }
+    try {
+      if (selectedId) {
+        await updateDoc(doc(db, "leaveTemplates", selectedId), form);
+        toast.success("저장되었습니다");
+      } else {
+        const monthlyRules = standardMonthlyRules();
+        const yearlyRules = standardYearlyRules();
+        const ref_ = await addDoc(collection(db, "leaveTemplates"), {
+          companyId: profile.companyId,
+          ...form,
+          monthlyRules,
+          yearlyRules,
+          createdAt: serverTimestamp(),
+        });
+        setSelectedId(ref_.id);
+        setForm((f) => ({ ...f, monthlyRules, yearlyRules }));
+        toast.success("저장되었습니다. 근속월규칙/근속연도규칙 탭에서 세부 조정을 할 수 있습니다.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(`저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }
   };
   const remove = async () => {
     if (!selectedId) return;
     if (!(await confirm("이 휴가템플릿을 삭제하시겠습니까?", "delete"))) return;
-    await deleteDoc(doc(db, "leaveTemplates", selectedId));
-    setPanelOpen(false);
+    try {
+      await deleteDoc(doc(db, "leaveTemplates", selectedId));
+      toast.success("삭제되었습니다");
+      setPanelOpen(false);
+    } catch (err) {
+      toast.error(`삭제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
   };
 
   const exportCsv = () => downloadCsv("휴가템플릿", ["사업자", "템플릿명", "숨김여부"], rows.map((t) => [entityName(t.businessEntityId), t.name, t.visibility]));

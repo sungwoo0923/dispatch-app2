@@ -25,13 +25,11 @@ export default function DraggableTh({ columnKey, onMove, className = "", childre
         const fromKey = e.dataTransfer.getData("text/plain");
         if (fromKey) onMove(fromKey, columnKey);
       }}
-      className={`cursor-move select-none whitespace-nowrap ${dragOver ? "bg-primary-light/60" : ""} ${className}`}
+      className={`relative cursor-move select-none whitespace-nowrap ${dragOver ? "bg-primary-light/60" : ""} ${className}`}
       title="끌어서 순서를 바꿀 수 있습니다"
     >
-      <span className="inline-flex items-center gap-1">
-        <GripVertical size={11} className="shrink-0 text-slate-300" />
-        {children}
-      </span>
+      <GripVertical size={11} className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 shrink-0 text-slate-300" />
+      {children}
     </th>
   );
 }
