@@ -9,9 +9,9 @@ function Row({ label, value, strong, negative }) {
   const display =
     typeof value === "number" ? `${negative && value > 0 ? "-" : ""}${value.toLocaleString()}원` : value;
   return (
-    <div className={`flex items-center justify-between py-1.5 text-sm ${strong ? "font-semibold text-ink" : "text-muted"}`}>
+    <div className={`flex items-center justify-between py-1.5 text-sm ${strong ? "font-bold text-ink" : "font-medium text-muted"}`}>
       <span>{label}</span>
-      <span className={strong ? "text-ink" : ""}>{display}</span>
+      <span className={strong ? "text-ink" : "font-semibold text-ink"}>{display}</span>
     </div>
   );
 }
@@ -48,13 +48,16 @@ export default function PayslipDetail() {
       </Link>
 
       <Card className="p-5 text-center">
-        <p className="text-xs text-muted">실수령액</p>
-        <p className="mt-1 text-2xl font-bold text-ink">{payroll.netPay?.toLocaleString()}원</p>
-        <p className="mt-2 text-xs text-muted">{payroll.month}</p>
+        <span className="inline-block rounded-full bg-ink px-3 py-1 text-xs font-semibold text-white">실수령액</span>
+        <p className="mt-2 text-3xl font-extrabold text-ink">{payroll.netPay?.toLocaleString()}원</p>
       </Card>
 
       <Card className="p-5">
-        <p className="mb-2 text-sm font-semibold text-ink">지급내역</p>
+        <Row label="근무기간" value={payroll.month} strong />
+      </Card>
+
+      <Card className="p-5">
+        <p className="mb-2 text-sm font-bold text-ink">지급내역 {payroll.grossPay?.toLocaleString()}원</p>
         <Row label="기본급" value={payroll.base} />
         <Row label="연장수당" value={payroll.overtimePay} />
         <Row label="주휴수당" value={payroll.weeklyAllowance} />

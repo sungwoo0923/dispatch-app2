@@ -461,7 +461,7 @@ export default function Home() {
           <p className="text-xs text-muted">불러오는 중...</p>
         ) : workSite ? (
           <div className="space-y-1.5 text-sm text-muted">
-            <p className="text-ink">{workSite.name}</p>
+            <p className="text-base font-bold text-ink">{workSite.name}</p>
             <div className="flex items-center gap-1.5">
               <Navigation size={14} />
               {distance != null ? (

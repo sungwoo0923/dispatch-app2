@@ -111,28 +111,28 @@ export default function WorkInfoPage() {
           )}
         </div>
         <div className="space-y-1">
-          <p className="text-sm text-ink">{workSite?.name || "배정된 근무지가 없습니다"}</p>
-          {vendor && <p className="text-xs text-muted">{vendor.name}</p>}
+          <p className="text-base font-bold text-ink">{workSite?.name || "배정된 근무지가 없습니다"}</p>
+          {vendor && <p className="text-sm font-medium text-muted">{vendor.name}</p>}
         </div>
 
-        <div className="mt-4 rounded-xl bg-slate-50 p-4">
-          <p className="mb-2 text-xs font-semibold text-muted">급여정보</p>
-          <div className="space-y-1.5 text-xs">
+        <div className="mt-4 rounded-xl border border-rose-100 bg-rose-50/40 p-4">
+          <p className="mb-2 text-xs font-bold text-muted">급여정보</p>
+          <div className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted">예금주</span>
-              <span className="text-ink">{profile?.name || "-"}</span>
+              <span className="font-semibold text-ink">{profile?.name || "-"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted">은행</span>
-              <span className="text-ink">{profile?.bankName || "-"}</span>
+              <span className="font-semibold text-ink">{profile?.bankName || "-"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted">계좌번호</span>
-              <span className="text-ink">{profile?.bankAccount || "-"}</span>
+              <span className="font-semibold text-ink">{profile?.bankAccount || "-"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted">주소</span>
-              <span className="text-ink">{workSite?.address || "-"}</span>
+              <span className="font-semibold text-ink">{workSite?.address || "-"}</span>
             </div>
           </div>
         </div>
@@ -145,8 +145,8 @@ export default function WorkInfoPage() {
             to={to}
             className={`flex flex-col items-center justify-center gap-2 rounded-2xl ${bg} p-4 text-center text-white shadow-card`}
           >
-            <Icon size={22} />
-            <p className="text-xs font-semibold">{label}</p>
+            <Icon size={24} />
+            <p className="text-sm font-bold">{label}</p>
           </Link>
         ))}
       </div>
