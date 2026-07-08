@@ -9,6 +9,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
+import ApprovalBox from "../components/ApprovalBox";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
 const STATUS_LABEL = {
@@ -129,32 +130,13 @@ export default function ResignationPage() {
 
       <Card className="p-5">
         <p className="mb-3 text-xs font-semibold text-ink">결재라인</p>
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="mb-1.5 text-[11px] text-muted">신청인</p>
-            {req.employeeSignatureDataUrl ? (
-              <img src={req.employeeSignatureDataUrl} alt="신청인 서명" className="mx-auto h-12 rounded-lg border border-slate-200 bg-white" />
-            ) : (
-              <p className="text-[11px] text-warning">서명 필요</p>
-            )}
-          </div>
-          <div>
-            <p className="mb-1.5 text-[11px] text-muted">담당</p>
-            {req.managerSignatureDataUrl ? (
-              <img src={req.managerSignatureDataUrl} alt="담당 서명" className="mx-auto h-12 rounded-lg border border-slate-200 bg-white" />
-            ) : (
-              <p className="text-[11px] text-muted">대기중</p>
-            )}
-          </div>
-          <div>
-            <p className="mb-1.5 text-[11px] text-muted">대표</p>
-            {req.ceoSignatureDataUrl ? (
-              <img src={req.ceoSignatureDataUrl} alt="대표 서명" className="mx-auto h-12 rounded-lg border border-slate-200 bg-white" />
-            ) : (
-              <p className="text-[11px] text-muted">대기중</p>
-            )}
-          </div>
-        </div>
+        <ApprovalBox
+          steps={[
+            { role: "신청인", name: req.employeeName, signatureDataUrl: req.employeeSignatureDataUrl, result: req.employeeSignatureDataUrl ? "approved" : null },
+            { role: "담당", name: req.managerName, signatureDataUrl: req.managerSignatureDataUrl, result: req.managerSignatureDataUrl ? "approved" : null },
+            { role: "대표", name: req.ceoName, signatureDataUrl: req.ceoSignatureDataUrl, result: req.ceoSignatureDataUrl ? "approved" : null },
+          ]}
+        />
       </Card>
 
       {req.status === "employee_pending" && (
@@ -182,6 +164,23 @@ export default function ResignationPage() {
         }
       >
         <div className="space-y-3">
+          <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-ink">
+            <p className="text-center text-sm font-bold">사 직 서 (원)</p>
+            <div className="space-y-1 text-[11px] text-muted">
+              <p>성명: {req.employeeName} · 직책: {req.position || "-"}</p>
+              <p>근무지: {req.siteName || "-"}</p>
+              <p>입사일자: {req.hireDate ? formatDate(req.hireDate) : "-"} · 퇴사일자: {req.resignDate ? formatDate(req.resignDate) : "-"}</p>
+            </div>
+            <p>본인은 상기와 같은 내용으로 퇴사하고자 하오니 허락하여 주시기 바랍니다. 아울러 퇴직에 따른 아래 조항을 성실히 준수할 것을 서약합니다.</p>
+            <p className="text-center font-semibold">- 준 수 사 항 -</p>
+            <p>
+              1. 본인은 퇴사에 따른 사무 인수인계를 철저히 하여 퇴사 시까지 직무책임과 임무를 완수합니다.<br />
+              2. 재직 시 업무상 지득한 회사의 제반 비밀사항을 타인에게 일체 누설하지 않겠습니다.<br />
+              3. 차용금, 지급공구 및 비품, 기타 회사비품 등 반환물품(금품)은 퇴직일 전일까지 반환하겠습니다.<br />
+              4. 기타 회사와 관련한 제반 사항은 회사규정에 의거 퇴사일 전일까지 처리하겠습니다.<br />
+              5. 만일 본인이 상기 사항을 위반하였을 때에는 이유 여하를 막론하고 서약에 의거 민.형사상의 책임과 손해배상 의무를 지겠습니다.
+            </p>
+          </div>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">퇴사사유</span>
             <textarea
@@ -191,7 +190,7 @@ export default function ResignationPage() {
               onChange={(e) => setReason(e.target.value)}
             />
           </label>
-          <p className="text-xs text-ink">신청인: {profile?.name}</p>
+          <p className="text-xs text-ink">위 내용을 모두 확인했으며, 아래 서명으로 신청합니다. 신청인: {profile?.name}</p>
           <SignaturePad ref={padRef} />
         </div>
       </Modal>

@@ -92,6 +92,34 @@ function nl2br(v) {
   return esc(v).replace(/\n/g, "<br/>");
 }
 
+// 결재라인 인쇄용 위젯 — 컬럼 헤더는 "결재자" 같은 일반 명칭이 아니라 실제
+// 결재 역할(담당/대표 등)을 표기하고, 서명이 완료된 단계에는 승인/반려 도장을
+// 겹쳐 찍는다. src/components/ApprovalBox.jsx의 화면용 위젯과 동일한 규칙.
+function approvalBoxHtml(steps) {
+  const cells = steps
+    .map(
+      (s) => `
+    <td style="width:74px;border:1px solid #ccc;padding:0;vertical-align:top;">
+      <div style="background:#f4f4f4;border-bottom:1px solid #ccc;padding:3px 0;font-size:10px;font-weight:700;">${esc(s.role)}</div>
+      <div style="position:relative;height:52px;display:flex;align-items:center;justify-content:center;">
+        ${s.signatureDataUrl ? `<img src="${esc(s.signatureDataUrl)}" style="max-height:32px;max-width:88%;" />` : "&nbsp;"}
+        ${
+          s.result
+            ? `<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-12deg);width:34px;height:34px;border:2px solid ${
+                s.result === "approved" ? "#dc2626" : "#94a3b8"
+              };border-radius:50%;color:${s.result === "approved" ? "#dc2626" : "#94a3b8"};font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">${
+                s.result === "approved" ? "승인" : "반려"
+              }</span>`
+            : ""
+        }
+      </div>
+      <div style="border-top:1px solid #eee;padding:2px 0;font-size:9px;color:#666;">${esc(s.name || "")}</div>
+    </td>`
+    )
+    .join("");
+  return `<table style="border-collapse:collapse;display:inline-table;"><tr><td style="width:40px;border:1px solid #ccc;background:#f4f4f4;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;">결재</td>${cells}</tr></table>`;
+}
+
 const PAGE_STYLE = `
   * { box-sizing: border-box; }
   body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #111; margin: 0; padding: 24px 28px; font-size: 12.5px; line-height: 1.6; }
@@ -173,15 +201,13 @@ export function buildResignationHtml({
   ceoSignatureDataUrl,
   ceoName,
 }) {
-  const sigCell = (url) => (url ? `<img src="${esc(url)}" style="height:36px;vertical-align:middle;" />` : "&nbsp;");
   const body = `
     <table class="no-border" style="margin-bottom:6px;">
-      <tr><td></td><td style="text-align:right;width:220px;">
-        <table style="width:220px;">
-          <tr><td style="width:60px;">결재</td><td>담당</td><td>대표</td></tr>
-          <tr><td>&nbsp;</td><td>${sigCell(managerSignatureDataUrl)}</td><td>${sigCell(ceoSignatureDataUrl)}</td></tr>
-          <tr><td>&nbsp;</td><td style="font-size:10px;color:#666;">${esc(managerName || "")}</td><td style="font-size:10px;color:#666;">${esc(ceoName || "")}</td></tr>
-        </table>
+      <tr><td></td><td style="text-align:right;">
+        ${approvalBoxHtml([
+          { role: "담당", name: managerName, signatureDataUrl: managerSignatureDataUrl, result: managerSignatureDataUrl ? "approved" : null },
+          { role: "대표", name: ceoName, signatureDataUrl: ceoSignatureDataUrl, result: ceoSignatureDataUrl ? "approved" : null },
+        ])}
       </td></tr>
     </table>
     <h1>사 직 서 (원)</h1>
@@ -202,11 +228,11 @@ export function buildResignationHtml({
       4. 기타 회사와 관련한 제반 사항은 회사규정에 의거 퇴사일 전일까지 처리하겠습니다.<br/>
       5. 만일 본인이 상기 사항을 위반하였을 때에는 이유 여하를 막론하고 서약에 의거 민.형사상의 책임과 손해배상 의무를 지겠습니다.
     </p>
-    <p style="text-align:center;margin-top:36px;">신청인 : ${
+    <p style="text-align:center;margin-top:36px;">신청인 : ${Array.from(employeeName || "-").map(esc).join("&nbsp;")} <span style="position:relative;display:inline-block;min-width:56px;">${
       employeeSignatureDataUrl
-        ? `<img src="${esc(employeeSignatureDataUrl)}" style="height:40px;vertical-align:middle;" />`
-        : `<span class="blank-line" style="min-width:160px;">&nbsp;</span> (서명)`
-    }</p>`;
+        ? `<img src="${esc(employeeSignatureDataUrl)}" style="position:absolute;left:50%;bottom:100%;transform:translateX(-50%);height:32px;" />`
+        : ""
+    }(서명)</span></p>`;
   return wrapDoc("사직서", body);
 }
 
