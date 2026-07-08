@@ -6,7 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
-import Modal from "../components/Modal";
+import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey } from "../utils/dateUtils";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
@@ -214,7 +214,7 @@ export default function LeaveManagement() {
         </div>
       </Panel>
 
-      <Modal open={registerOpen} onClose={() => setRegisterOpen(false)} title="휴가 대상자 등록" size="lg" footer={<><Button variant="outline" onClick={() => setRegisterOpen(false)}>취소</Button><Button onClick={registerTargets} disabled={checked.size === 0}>등록</Button></>}>
+      <SidePanel open={registerOpen} onClose={() => setRegisterOpen(false)} title="휴가 대상자 등록" footer={<><Button variant="outline" onClick={() => setRegisterOpen(false)}>취소</Button><Button onClick={registerTargets} disabled={checked.size === 0}>등록</Button></>}>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <label className="block">
@@ -282,7 +282,7 @@ export default function LeaveManagement() {
           </div>
           <p className="text-[11px] text-muted">휴가대상자를 선택하고 일괄 등록 및 취소할 수 있습니다.</p>
         </div>
-      </Modal>
+      </SidePanel>
     </div>
   );
 }
