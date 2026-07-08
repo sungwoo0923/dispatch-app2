@@ -4,6 +4,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Menu, X, LogOut, CalendarCheck2, ChevronDown, DoorOpen, FileWarning } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useNavBadges } from "../hooks/useNavBadges";
 import Breadcrumb from "../components/Breadcrumb";
 import BuildInfo from "../components/BuildInfo";
 import { NAV, SUPER_ADMIN_NAV_ITEM } from "./navConfig";
@@ -13,7 +14,17 @@ const itemClass = ({ isActive }) =>
     isActive ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"
   }`;
 
-function NavItems({ items, onClick }) {
+// 카톡 안읽음 숫자처럼, 파란 원 안에 흰 굵은 숫자로 표시한다.
+function NavBadge({ count }) {
+  if (!count) return null;
+  return (
+    <span className="ml-1.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function NavItems({ items, onClick, badgeCounts }) {
   const location = useLocation();
   const [openMenu, setOpenMenu] = useState(
     () => items.find((n) => n.children?.some((c) => location.pathname.startsWith(c.to)))?.to ?? null
@@ -26,13 +37,15 @@ function NavItems({ items, onClick }) {
           return (
             <NavLink key={to} to={to} end={end} onClick={onClick} className={itemClass}>
               <Icon size={18} />
-              {label}
+              <span className="flex-1">{label}</span>
+              <NavBadge count={badgeCounts?.[to]} />
             </NavLink>
           );
         }
 
         const isOpen = openMenu === to;
         const isChildActive = children.some((c) => location.pathname === c.to);
+        const groupCount = children.reduce((sum, c) => sum + (badgeCounts?.[c.to] || 0), 0);
         return (
           <div key={to}>
             <button
@@ -44,6 +57,7 @@ function NavItems({ items, onClick }) {
             >
               <Icon size={18} />
               <span className="flex-1 text-left">{label}</span>
+              <NavBadge count={groupCount} />
               <ChevronDown size={16} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
             </button>
 
@@ -56,12 +70,13 @@ function NavItems({ items, onClick }) {
                     end
                     onClick={onClick}
                     className={({ isActive }) =>
-                      `block rounded-lg px-3 py-1.5 text-sm ${
+                      `flex items-center rounded-lg px-3 py-1.5 text-sm ${
                         isActive ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"
                       }`
                     }
                   >
-                    {child.label}
+                    <span className="flex-1">{child.label}</span>
+                    <NavBadge count={badgeCounts?.[child.to]} />
                   </NavLink>
                 ))}
               </div>
@@ -74,12 +89,21 @@ function NavItems({ items, onClick }) {
 }
 
 export default function AdminLayout() {
-  const { profile, company, logout, isSuperAdmin } = useAuth();
+  const { user, profile, company, logout, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [earlyLeaveCount, setEarlyLeaveCount] = useState(0);
   const [resignationCount, setResignationCount] = useState(0);
   const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
+  const { badgeCounts, markSeen } = useNavBadges(profile?.companyId, user?.uid);
+
+  // 사이드바에서 배지가 붙은 메뉴로 이동하면(더블클릭 없이 클릭 한 번으로도)
+  // 그 메뉴는 이 관리자 계정 기준으로 "확인함" 처리한다.
+  useEffect(() => {
+    markSeen(location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -119,7 +143,7 @@ export default function AdminLayout() {
           </div>
         )}
         <div className="flex-1 overflow-y-auto py-2">
-          <NavItems items={navItems} />
+          <NavItems items={navItems} badgeCounts={badgeCounts} />
         </div>
         <button
           onClick={logout}
@@ -139,7 +163,7 @@ export default function AdminLayout() {
                 <X size={20} />
               </button>
             </div>
-            <NavItems items={navItems} onClick={() => setMobileOpen(false)} />
+            <NavItems items={navItems} badgeCounts={badgeCounts} onClick={() => setMobileOpen(false)} />
             <button
               onClick={logout}
               className="mx-3 mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-muted hover:bg-slate-50"

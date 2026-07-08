@@ -43,6 +43,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // 사이드바 메뉴별 "안읽음 배지" 확인 시각 — 관리자 계정별로 자기 것만
+    // 읽고 쓸 수 있다 (다른 관리자가 봤다고 내 배지가 사라지면 안 되므로).
+    match /adminReadState/{uid} {
+      allow read, write: if isSelf(uid);
+    }
+
     match /companies/{companyId} {
       allow get: if true; // invite-code lookup during employee signup, before auth exists
       allow list: if isSuperAdmin(); // 플랫폼 관리 > 회사 개설 신청 목록
