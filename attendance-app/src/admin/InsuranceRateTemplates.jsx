@@ -156,10 +156,10 @@ export default function InsuranceRateTemplates() {
                       onClick={() => selectMaster(m)}
                       className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedMasterId === m.id ? "bg-primary-light/40" : ""}`}
                     >
-                      <td className="px-3 py-2 text-muted">{i + 1}</td>
-                      <td className="px-3 py-2 text-muted">{entityName(m.businessEntityId)}</td>
+                      <td className="px-3 py-2 text-ink">{i + 1}</td>
+                      <td className="px-3 py-2 text-ink">{entityName(m.businessEntityId)}</td>
                       <td className="px-3 py-2 text-ink">{m.name}</td>
-                      <td className="px-3 py-2 text-muted">{m.visibility}</td>
+                      <td className="px-3 py-2 text-ink">{m.visibility}</td>
                     </tr>
                   ))}
                   {masters.length === 0 && (
@@ -252,10 +252,10 @@ export default function InsuranceRateTemplates() {
                         onClick={() => selectElement(el)}
                         className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedElementId === el.id ? "bg-primary-light/40" : ""}`}
                       >
-                        <td className="px-3 py-2 text-muted">{i + 1}</td>
+                        <td className="px-3 py-2 text-ink">{i + 1}</td>
                         <td className="px-3 py-2 text-ink">{el.rateType}</td>
-                        <td className="px-3 py-2 text-muted">{el.ratePercent}</td>
-                        <td className="px-3 py-2 text-muted">{el.insuranceApplicable}</td>
+                        <td className="px-3 py-2 text-ink">{el.ratePercent}</td>
+                        <td className="px-3 py-2 text-ink">{el.insuranceApplicable}</td>
                       </tr>
                     ))
                   ) : (

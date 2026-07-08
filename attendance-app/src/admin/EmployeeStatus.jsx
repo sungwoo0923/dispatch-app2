@@ -341,19 +341,19 @@ export default function EmployeeStatus() {
                   className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
                   onDoubleClick={() => openEdit(emp)}
                 >
-                  <td className="px-4 py-3 text-muted">{(page - 1) * pageSize + i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
                   </td>
                   <td className="px-4 py-3 text-ink">{emp.name}</td>
-                  <td className="px-4 py-3 text-muted">{entityName_(emp.businessEntityId)}</td>
-                  <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-4 py-3 text-muted">{emp.phone || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.lastWorkDate ? formatDate(emp.lastWorkDate) : "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.changeReason || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{entityName_(emp.businessEntityId)}</td>
+                  <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-4 py-3 text-ink">{emp.phone || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.lastWorkDate ? formatDate(emp.lastWorkDate) : "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.changeReason || "-"}</td>
                 </tr>
               ))}
               {pageRows.length === 0 && (

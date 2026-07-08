@@ -228,20 +228,20 @@ export default function Vendors() {
             <tbody>
               {rows.map((v, i) => (
                 <tr key={v.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => select(v)}>
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => select(v)}>
                       상세
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(v.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(v.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{v.name}</td>
-                  <td className="px-3 py-2.5 text-muted">{v.regNumber || "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">{v.managerName || "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">{v.managerPhone || "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">{v.ceoName || "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">{v.registeredAt ? formatDate(v.registeredAt) : "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">{v.insuranceYN || "사용"}</td>
+                  <td className="px-3 py-2.5 text-ink">{v.regNumber || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{v.managerName || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{v.managerPhone || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{v.ceoName || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{v.registeredAt ? formatDate(v.registeredAt) : "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{v.insuranceYN || "사용"}</td>
                   <td className="px-3 py-2.5">
                     {v.sealImageUrl ? <Badge tone="success">등록</Badge> : <Badge tone="muted">미등록</Badge>}
                   </td>

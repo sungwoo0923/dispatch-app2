@@ -128,10 +128,10 @@ export default function LeaveTemplates() {
             <tbody>
               {rows.map((t, i) => (
                 <tr key={t.id} onClick={() => select(t)} className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedId === t.id ? "bg-primary-light/40" : ""}`}>
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(t.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(t.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{t.name}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.visibility}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.visibility}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

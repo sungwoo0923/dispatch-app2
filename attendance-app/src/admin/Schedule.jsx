@@ -877,7 +877,7 @@ export default function Schedule() {
                         <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
                         <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{s.name}</td>
                         {visibleScheduleColumns.map((c) => (
-                          <td key={c.key} className="px-4 py-3 text-muted">
+                          <td key={c.key} className="px-4 py-3 text-ink">
                             {c.render(row)}
                           </td>
                         ))}
@@ -940,7 +940,7 @@ export default function Schedule() {
                   <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
                   <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{row.schedule.name}</td>
                   {visibleScheduleColumns.map((c) => (
-                    <td key={c.key} className="px-4 py-3 text-muted">
+                    <td key={c.key} className="px-4 py-3 text-ink">
                       {c.render(row)}
                     </td>
                   ))}
@@ -984,9 +984,9 @@ export default function Schedule() {
                   className="border-b border-slate-50 last:border-0"
                   onContextMenu={(e) => openRowMenu(e, "leave", row)}
                 >
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{i + 1}</td>
                   {visibleLeaveColumns.map((c) => (
-                    <td key={c.key} className="px-4 py-3 text-muted">
+                    <td key={c.key} className="px-4 py-3 text-ink">
                       {c.render(row)}
                     </td>
                   ))}
@@ -1030,9 +1030,9 @@ export default function Schedule() {
                   className="border-b border-slate-50 last:border-0"
                   onContextMenu={(e) => openRowMenu(e, "resigned", emp)}
                 >
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{i + 1}</td>
                   {visibleResignedColumns.map((c) => (
-                    <td key={c.key} className="px-4 py-3 text-muted">
+                    <td key={c.key} className="px-4 py-3 text-ink">
                       {c.render(emp)}
                     </td>
                   ))}
@@ -1280,30 +1280,30 @@ export default function Schedule() {
                       <td className="px-3 py-2">
                         <input type="checkbox" checked={bulkSelected.has(emp.id)} onChange={() => toggleBulkSelected(emp.id)} />
                       </td>
-                      <td className="px-3 py-2 text-muted">{i + 1}</td>
+                      <td className="px-3 py-2 text-ink">{i + 1}</td>
                       <td className="px-3 py-2 text-ink">{emp.name}</td>
-                      <td className="px-3 py-2 text-muted">{emp.phone}</td>
-                      <td className="px-3 py-2 text-muted">{emp.gender || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.employmentStatus === "휴직" ? "Y" : "N"}</td>
-                      <td className="px-3 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
-                      <td className="px-3 py-2 text-muted">{companyName}</td>
-                      <td className="px-3 py-2 text-muted">{vendorName_(emp.vendorId)}</td>
-                      <td className="px-3 py-2 text-muted">{emp.workLocation || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.shiftType || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.employmentType || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.note || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.team || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.position || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
-                      <td className="px-3 py-2 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
-                      <td className="px-3 py-2 text-muted">{emp.contractTemplateName || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.resignTemplateName || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.nationality || "-"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.country || "-"}</td>
-                      <td className="px-3 py-2 text-muted">Y</td>
-                      <td className="px-3 py-2 text-muted">{emp.insuranceApplied === "Y" ? "Y" : "N"}</td>
-                      <td className="px-3 py-2 text-muted">{emp.payType || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.phone}</td>
+                      <td className="px-3 py-2 text-ink">{emp.gender || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.employmentStatus === "휴직" ? "Y" : "N"}</td>
+                      <td className="px-3 py-2 text-ink">{siteName_(emp.workSiteId)}</td>
+                      <td className="px-3 py-2 text-ink">{companyName}</td>
+                      <td className="px-3 py-2 text-ink">{vendorName_(emp.vendorId)}</td>
+                      <td className="px-3 py-2 text-ink">{emp.workLocation || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.shiftType || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.employmentType || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.note || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.team || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.position || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{shiftTemplateName_(emp.shiftTemplateId)}</td>
+                      <td className="px-3 py-2 text-ink">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
+                      <td className="px-3 py-2 text-ink">{emp.contractTemplateName || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.resignTemplateName || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.nationality || "-"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.country || "-"}</td>
+                      <td className="px-3 py-2 text-ink">Y</td>
+                      <td className="px-3 py-2 text-ink">{emp.insuranceApplied === "Y" ? "Y" : "N"}</td>
+                      <td className="px-3 py-2 text-ink">{emp.payType || "-"}</td>
                     </tr>
                   ))}
                 {!bulkSearched && (

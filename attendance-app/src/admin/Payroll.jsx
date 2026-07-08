@@ -804,25 +804,25 @@ export default function Payroll() {
                     <td className="px-4 py-3">
                       <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
                     </td>
-                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{emp.name}</td>
-                    <td className="px-4 py-3 text-muted">{emp.shiftType || "-"}</td>
-                    <td className="px-4 py-3 text-muted">{emp.employmentType || "-"}</td>
-                    <td className="px-4 py-3 text-muted">{emp.team || "-"}</td>
-                    <td className="px-4 py-3 text-muted">{emp.position || "-"}</td>
-                    <td className="px-4 py-3 text-muted">{emp.insuranceApplied || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.shiftType || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.employmentType || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.team || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.position || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.insuranceApplied || "-"}</td>
                     {filters.showDailyHours === "Y" && (
-                      <td className="max-w-[220px] truncate px-4 py-3 text-[11px] text-muted" title={dailyHoursFor(emp.id)}>
+                      <td className="max-w-[220px] truncate px-4 py-3 text-[11px] text-ink" title={dailyHoursFor(emp.id)}>
                         {dailyHoursFor(emp.id) || "-"}
                       </td>
                     )}
                     {filters.showTemplateInfo === "포함" && (
-                      <td className="px-4 py-3 text-[11px] text-muted">
+                      <td className="px-4 py-3 text-[11px] text-ink">
                         {p?.periodType ? PERIOD_LABELS[p.periodType] : "-"} · {p?.wageType === "hourly" ? "시급" : "월급"}
                       </td>
                     )}
-                    <td className="px-4 py-3 text-muted">{p ? Number(p.grossPay || 0).toLocaleString() + "원" : "-"}</td>
-                    <td className="px-4 py-3 text-muted">{p ? Number(p.deductions?.total || 0).toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3 text-ink">{p ? Number(p.grossPay || 0).toLocaleString() + "원" : "-"}</td>
+                    <td className="px-4 py-3 text-ink">{p ? Number(p.deductions?.total || 0).toLocaleString() + "원" : "-"}</td>
                     <td className="px-4 py-3 font-medium text-ink">{p ? Number(p.netPay || 0).toLocaleString() + "원" : "-"}</td>
                     <td className="px-4 py-3">
                       {p ? (

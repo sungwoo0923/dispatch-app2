@@ -177,12 +177,12 @@ export default function Devices() {
                         onClick={() => select(d)}
                         className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedId === d.id ? "bg-primary-light/40" : ""}`}
                       >
-                        <td className="px-3 py-2.5 text-muted">{i + 1}</td>
-                        <td className="px-3 py-2.5 text-muted">{d.type}</td>
+                        <td className="px-3 py-2.5 text-ink">{i + 1}</td>
+                        <td className="px-3 py-2.5 text-ink">{d.type}</td>
                         <td className="px-3 py-2.5 text-ink">{d.code}</td>
-                        <td className="px-3 py-2.5 text-muted">{d.password || "-"}</td>
-                        <td className="px-3 py-2.5 text-muted">{d.deviceName || "-"}</td>
-                        <td className="px-3 py-2.5 text-muted">{link ? siteName(link.siteId) : "-"}</td>
+                        <td className="px-3 py-2.5 text-ink">{d.password || "-"}</td>
+                        <td className="px-3 py-2.5 text-ink">{d.deviceName || "-"}</td>
+                        <td className="px-3 py-2.5 text-ink">{link ? siteName(link.siteId) : "-"}</td>
                       </tr>
                     );
                   })}

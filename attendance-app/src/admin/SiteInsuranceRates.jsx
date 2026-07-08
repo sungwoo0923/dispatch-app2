@@ -247,16 +247,16 @@ export default function SiteInsuranceRates() {
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelected(a.id)} />
                   </td>
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{i + 1}</td>
                   <td className="px-4 py-3">
                     <button className="text-xs text-primary hover:underline" onClick={() => setViewing(a)}>
                       상세
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-muted">{companyName}</td>
+                  <td className="px-4 py-3 text-ink">{companyName}</td>
                   <td className="px-4 py-3 text-ink">{a.siteName}</td>
-                  <td className="px-4 py-3 text-muted">{a.templateName}</td>
-                  <td className="px-4 py-3 text-muted">
+                  <td className="px-4 py-3 text-ink">{a.templateName}</td>
+                  <td className="px-4 py-3 text-ink">
                     <span className="inline-flex items-center gap-1">
                       <Percent size={12} />
                       {(a.rateItems || []).length > 0
@@ -264,7 +264,7 @@ export default function SiteInsuranceRates() {
                         : "-"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-muted">{a.effectiveDate}</td>
+                  <td className="px-4 py-3 text-ink">{a.effectiveDate}</td>
                 </tr>
               ))}
               {sorted.length === 0 && (

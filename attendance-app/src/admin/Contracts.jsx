@@ -470,7 +470,7 @@ export default function Contracts() {
             <tbody>
               {pageRows.map(({ emp, contract }, i) => (
                 <tr key={emp.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="px-2 py-2 text-muted">{(page - 1) * pageSize + i + 1}</td>
+                  <td className="px-2 py-2 text-ink">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
                   </td>
@@ -491,26 +491,26 @@ export default function Contracts() {
                     </button>
                   </td>
                   <td className="px-2 py-2 text-ink">{emp.name}</td>
-                  <td className="px-2 py-2 text-muted">{entityName_(emp.businessEntityId)}</td>
-                  <td className="px-2 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-2 py-2 text-muted">{emp.phone || "-"}</td>
-                  <td className="px-2 py-2 text-muted">{emp.nationality || "내국인"}</td>
-                  <td className="px-2 py-2 text-muted">{emp.gender || "-"}</td>
-                  <td className="px-2 py-2 text-muted">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
-                  <td className="px-2 py-2 text-muted">{contract?.cycle || "-"}</td>
-                  <td className="px-2 py-2 text-muted">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
-                  <td className="px-2 py-2 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-2 py-2 text-muted">{emp.shiftType || "-"}</td>
-                  <td className="px-2 py-2 text-muted">{emp.employmentType || "-"}</td>
-                  <td className="px-2 py-2 text-muted">{emp.team || "-"}</td>
-                  <td className="px-2 py-2 text-muted">{emp.position || "-"}</td>
-                  <td className="px-2 py-2 text-muted">계약 / {emp.resignTemplateName || "-"}</td>
-                  <td className="px-2 py-2 text-muted">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
+                  <td className="px-2 py-2 text-ink">{entityName_(emp.businessEntityId)}</td>
+                  <td className="px-2 py-2 text-ink">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-2 py-2 text-ink">{emp.phone || "-"}</td>
+                  <td className="px-2 py-2 text-ink">{emp.nationality || "내국인"}</td>
+                  <td className="px-2 py-2 text-ink">{emp.gender || "-"}</td>
+                  <td className="px-2 py-2 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
+                  <td className="px-2 py-2 text-ink">{contract?.cycle || "-"}</td>
+                  <td className="px-2 py-2 text-ink">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
+                  <td className="px-2 py-2 text-ink">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-2 py-2 text-ink">{emp.shiftType || "-"}</td>
+                  <td className="px-2 py-2 text-ink">{emp.employmentType || "-"}</td>
+                  <td className="px-2 py-2 text-ink">{emp.team || "-"}</td>
+                  <td className="px-2 py-2 text-ink">{emp.position || "-"}</td>
+                  <td className="px-2 py-2 text-ink">계약 / {emp.resignTemplateName || "-"}</td>
+                  <td className="px-2 py-2 text-ink">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
                   <td className="px-2 py-2">
                     <Badge tone={CONTRACT_STATUS_TONE[contractStatus(contract)]}>{contractStatus(contract)}</Badge>
                   </td>
-                  <td className="px-2 py-2 text-muted">{shiftTemplateName_(emp.shiftTemplateId)}</td>
-                  <td className="px-2 py-2 text-muted">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
+                  <td className="px-2 py-2 text-ink">{shiftTemplateName_(emp.shiftTemplateId)}</td>
+                  <td className="px-2 py-2 text-ink">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
                 </tr>
               ))}
               {pageRows.length === 0 && (

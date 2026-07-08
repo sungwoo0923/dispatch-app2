@@ -96,11 +96,11 @@ export function LeaveMonthlyStats() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.emp.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2 text-muted">{vendors.find((v) => v.id === r.emp.vendorId)?.name || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{vendors.find((v) => v.id === r.emp.vendorId)?.name || "-"}</td>
                   <td className="px-3 py-2 text-ink">{r.emp.name}</td>
-                  <td className="px-3 py-2 text-muted">{r.emp.phone || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{r.emp.phone || "-"}</td>
                   {cols.map((c) => (
-                    <td key={c} className="px-2 py-2 text-center text-muted">
+                    <td key={c} className="px-2 py-2 text-center text-ink">
                       {r.perCol[c] || ""}
                     </td>
                   ))}
@@ -196,13 +196,13 @@ export function LeaveAnnualStats() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.emp.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2 text-muted">-</td>
-                  <td className="px-3 py-2 text-muted">{workSites.find((s) => s.id === r.emp.workSiteId)?.name || "-"}</td>
-                  <td className="px-3 py-2 text-muted">{vendors.find((v) => v.id === r.emp.vendorId)?.name || "-"}</td>
+                  <td className="px-3 py-2 text-ink">-</td>
+                  <td className="px-3 py-2 text-ink">{workSites.find((s) => s.id === r.emp.workSiteId)?.name || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{vendors.find((v) => v.id === r.emp.vendorId)?.name || "-"}</td>
                   <td className="px-3 py-2 text-ink">{r.emp.name}</td>
-                  <td className="px-3 py-2 text-muted">{r.emp.phone || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{r.emp.phone || "-"}</td>
                   {cols.map((c) => (
-                    <td key={c} className="px-2 py-2 text-center text-muted">
+                    <td key={c} className="px-2 py-2 text-center text-ink">
                       {r.perCol[c] || ""}
                     </td>
                   ))}

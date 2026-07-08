@@ -980,7 +980,7 @@ export default function EmployeeList() {
                   {visibleEmployeeColumns.map((c) => (
                     <td
                       key={c.key}
-                      className="px-4 py-3 text-muted"
+                      className="px-4 py-3 text-ink"
                       onDoubleClick={c.interactive ? (e) => e.stopPropagation() : undefined}
                     >
                       {c.render(emp)}
@@ -1057,12 +1057,12 @@ export default function EmployeeList() {
                 .slice(0, 20)
                 .map((req, i) => (
                   <tr key={req.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
-                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{req.name}</td>
-                    <td className="px-4 py-3 text-muted">{req.currentSiteName || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{req.currentSiteName || "-"}</td>
                     <td className="px-4 py-3 text-ink">{req.requestedSiteName || "-"}</td>
-                    <td className="px-4 py-3 text-muted">{req.requestedVendorName || "-"}</td>
-                    <td className="px-4 py-3 text-muted">{req.reason || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{req.requestedVendorName || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{req.reason || "-"}</td>
                     <td className="px-4 py-3">
                       {req.status === "pending" ? (
                         <Badge tone="warning">승인대기</Badge>
@@ -1116,13 +1116,13 @@ export default function EmployeeList() {
                 .slice(0, 20)
                 .map((log, i) => (
                   <tr key={log.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
-                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{log.kind}</td>
-                    <td className="px-4 py-3 text-muted">{log.detail}</td>
+                    <td className="px-4 py-3 text-ink">{log.detail}</td>
                     <td className="px-4 py-3">
                       <Badge tone="success">{log.status}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-muted">{log.createdByName}</td>
+                    <td className="px-4 py-3 text-ink">{log.createdByName}</td>
                   </tr>
                 ))}
               {changeLogs.length === 0 && (
@@ -1154,7 +1154,7 @@ export default function EmployeeList() {
                 {pending.map((p) => (
                   <tr key={p.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
                     <td className="px-4 py-3 text-ink">{p.name}</td>
-                    <td className="px-4 py-3 text-muted">{p.phone}</td>
+                    <td className="px-4 py-3 text-ink">{p.phone}</td>
                     <td className="px-4 py-3 font-mono text-primary">{p.id}</td>
                     <td className="px-4 py-3">
                       <button
@@ -1987,9 +1987,9 @@ export default function EmployeeList() {
               <tbody>
                 {templatePickerResults.map((r, i) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
-                    <td className="px-3 py-2 text-muted">{i + 1}</td>
+                    <td className="px-3 py-2 text-ink">{i + 1}</td>
                     <td className="px-3 py-2 text-ink">{r.templateName}</td>
-                    <td className="px-3 py-2 text-muted">{r.visibility === "숨김" ? "미사용" : "사용"}</td>
+                    <td className="px-3 py-2 text-ink">{r.visibility === "숨김" ? "미사용" : "사용"}</td>
                     <td className="px-3 py-2">
                       <button
                         type="button"
@@ -2083,8 +2083,8 @@ export default function EmployeeList() {
                               />
                             </td>
                             <td className="px-3 py-2 text-ink">{e.name}</td>
-                            <td className="px-3 py-2 text-muted">{e.phone}</td>
-                            <td className="px-3 py-2 text-muted">{vendorName_(e.vendorId)}</td>
+                            <td className="px-3 py-2 text-ink">{e.phone}</td>
+                            <td className="px-3 py-2 text-ink">{vendorName_(e.vendorId)}</td>
                           </tr>
                         ))}
                     </tbody>

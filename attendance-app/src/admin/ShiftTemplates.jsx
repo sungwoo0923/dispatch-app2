@@ -236,16 +236,16 @@ export default function ShiftTemplates() {
             <tbody>
               {rows.map((t, i) => (
                 <tr key={t.id} onDoubleClick={() => openEdit(t)} className="odd:bg-white even:bg-slate-50/50 cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100">
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => openEdit(t)}>
                       상세
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(t.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(t.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{t.name}</td>
-                  <td className="px-3 py-2.5 text-muted">{fmtCreatedAt(t.createdAt)}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.workTimeType || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{fmtCreatedAt(t.createdAt)}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.workTimeType || "-"}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex flex-nowrap justify-center gap-1">
                       {WEEKDAYS.map((w) => {
@@ -264,8 +264,8 @@ export default function ShiftTemplates() {
                       })}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{summarizeSchedule(t.weekdays)}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.visibility || "보임"}</td>
+                  <td className="px-3 py-2.5 text-ink">{summarizeSchedule(t.weekdays)}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.visibility || "보임"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
@@ -574,7 +574,7 @@ function RangeListTab({ form, setForm, field, title, onSave }) {
           <tbody>
             {list.map((r, i) => (
               <tr key={i} className="border-b border-slate-50 last:border-0">
-                <td className="px-3 py-2 text-muted">{i + 1}</td>
+                <td className="px-3 py-2 text-ink">{i + 1}</td>
                 <td className="px-3 py-2 text-ink">
                   {r.from} 부터 {r.to} 까지
                 </td>
@@ -652,7 +652,7 @@ function ThresholdListTab({ form, setForm, field, fromLabel, toLabel, onSave }) 
           <tbody>
             {list.map((r, i) => (
               <tr key={i} className="border-b border-slate-50 last:border-0">
-                <td className="px-3 py-2 text-muted">{i + 1}</td>
+                <td className="px-3 py-2 text-ink">{i + 1}</td>
                 <td className="px-3 py-2 text-ink">
                   {r.from}
                   {fromLabel} {r.to}

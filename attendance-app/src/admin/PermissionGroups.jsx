@@ -196,7 +196,7 @@ export default function PermissionGroups() {
                       onClick={() => select(g)}
                       className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedId === g.id ? "bg-primary-light/40" : ""}`}
                     >
-                      <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                      <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                       <td className="px-3 py-2.5 text-ink">{g.name}</td>
                     </tr>
                   ))}
@@ -260,9 +260,9 @@ export default function PermissionGroups() {
                           <input type="checkbox" checked={checked.has(c.key)} onChange={() => toggleCombo(c.key)} />
                         </td>
                         <td className="px-3 py-2.5 text-ink">{name}</td>
-                        <td className="px-3 py-2.5 text-muted">{entityName(c.site?.businessEntityId)}</td>
-                        <td className="px-3 py-2.5 text-muted">{c.site?.name || "-"}</td>
-                        <td className="px-3 py-2.5 text-muted">{c.vendor?.name || "-"}</td>
+                        <td className="px-3 py-2.5 text-ink">{entityName(c.site?.businessEntityId)}</td>
+                        <td className="px-3 py-2.5 text-ink">{c.site?.name || "-"}</td>
+                        <td className="px-3 py-2.5 text-ink">{c.vendor?.name || "-"}</td>
                       </tr>
                     ))}
                   {(!selectedId || combos.length === 0) && (

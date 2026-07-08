@@ -253,19 +253,19 @@ export default function LeaveApprovals() {
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={selected.has(lv.id)} onChange={() => toggleSelected(lv.id)} />
                   </td>
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
-                  <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-4 py-3 text-ink">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-4 py-3">
                     <Badge tone={STATUS_TONE[STATUS_MAP[lv.status] || "승인대기"]}>{STATUS_MAP[lv.status] || "승인대기"}</Badge>
                   </td>
                   <td className="px-4 py-3 text-ink">{lv.name}</td>
-                  <td className="px-4 py-3 text-muted">{formatDate(lv.startDate)}</td>
-                  <td className="px-4 py-3 text-muted">{lv.type}</td>
-                  <td className="px-4 py-3 text-muted">{lv.days || 1}</td>
-                  <td className="px-4 py-3 text-muted">{lv.reason || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{lv.adminNote || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.phone || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{formatDate(lv.startDate)}</td>
+                  <td className="px-4 py-3 text-ink">{lv.type}</td>
+                  <td className="px-4 py-3 text-ink">{lv.days || 1}</td>
+                  <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{lv.adminNote || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.phone || "-"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

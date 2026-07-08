@@ -176,8 +176,8 @@ function RankManager({ label, collectionName, presetOptions, items, companyId })
                     selectedId === item.id ? "bg-primary-light/50" : ""
                   }`}
                 >
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
-                  <td className="px-3 py-2.5 text-muted">관리자</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">관리자</td>
                   <td className="px-3 py-2.5 text-ink">{item.name}</td>
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-1">

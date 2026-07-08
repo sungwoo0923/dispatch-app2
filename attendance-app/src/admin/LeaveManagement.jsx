@@ -190,14 +190,14 @@ export default function LeaveManagement() {
                     <td className="px-4 py-3">
                       <input type="checkbox" checked={checked.has(e.id)} onChange={() => toggleChecked(e.id)} />
                     </td>
-                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{e.name}</td>
-                    <td className="px-4 py-3 text-muted">{vendorName_(e.vendorId)}</td>
-                    <td className="px-4 py-3 text-muted">{siteName_(e.workSiteId)}</td>
-                    <td className="px-4 py-3 text-muted">{e.hireDate ? formatDate(e.hireDate) : "-"}</td>
-                    <td className="px-4 py-3 text-muted">{u.generated}</td>
-                    <td className="px-4 py-3 text-muted">{u.used}</td>
-                    <td className="px-4 py-3 text-muted">{u.remaining}</td>
+                    <td className="px-4 py-3 text-ink">{vendorName_(e.vendorId)}</td>
+                    <td className="px-4 py-3 text-ink">{siteName_(e.workSiteId)}</td>
+                    <td className="px-4 py-3 text-ink">{e.hireDate ? formatDate(e.hireDate) : "-"}</td>
+                    <td className="px-4 py-3 text-ink">{u.generated}</td>
+                    <td className="px-4 py-3 text-ink">{u.used}</td>
+                    <td className="px-4 py-3 text-ink">{u.remaining}</td>
                   </tr>
                 );
               })}
@@ -262,11 +262,11 @@ export default function LeaveManagement() {
                       <input type="checkbox" checked={checked.has(e.id)} onChange={() => toggleChecked(e.id)} />
                     </td>
                     <td className="px-3 py-2 text-ink">{e.name}</td>
-                    <td className="px-3 py-2 text-muted">{e.phone || "-"}</td>
-                    <td className="px-3 py-2 text-muted">{siteName_(e.workSiteId)}</td>
-                    <td className="px-3 py-2 text-muted">{vendorName_(e.vendorId)}</td>
-                    <td className="px-3 py-2 text-muted">{e.shiftType || "-"}</td>
-                    <td className="px-3 py-2 text-muted">{e.employmentType || "-"}</td>
+                    <td className="px-3 py-2 text-ink">{e.phone || "-"}</td>
+                    <td className="px-3 py-2 text-ink">{siteName_(e.workSiteId)}</td>
+                    <td className="px-3 py-2 text-ink">{vendorName_(e.vendorId)}</td>
+                    <td className="px-3 py-2 text-ink">{e.shiftType || "-"}</td>
+                    <td className="px-3 py-2 text-ink">{e.employmentType || "-"}</td>
                   </tr>
                 ))}
                 {registerCandidates.length === 0 && (

@@ -586,7 +586,7 @@ export default function AttendanceBoard() {
                         <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
                         <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{r.name}</td>
                         {visibleAttendanceColumns.map((c) => (
-                          <td key={c.key} className="px-4 py-3 text-muted">
+                          <td key={c.key} className="px-4 py-3 text-ink">
                             {c.render(row)}
                           </td>
                         ))}
@@ -622,12 +622,12 @@ export default function AttendanceBoard() {
               <tbody>
                 {leaves.map((lv, i) => (
                   <tr key={lv.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-4 py-3 text-muted">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{lv.type}</td>
-                    <td className="px-4 py-3 text-muted">{lv.reason || "-"}</td>
-                    <td className="px-4 py-3 text-muted">{lv.name}</td>
-                    <td className="px-4 py-3 text-muted">{employeeByUid.get(lv.uid)?.phone || "-"}</td>
-                    <td className="px-4 py-3 text-muted">
+                    <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{lv.name}</td>
+                    <td className="px-4 py-3 text-ink">{employeeByUid.get(lv.uid)?.phone || "-"}</td>
+                    <td className="px-4 py-3 text-ink">
                       {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
                     </td>
                   </tr>
@@ -665,14 +665,14 @@ export default function AttendanceBoard() {
                   .sort((a, b) => (b.editedAt?.seconds || 0) - (a.editedAt?.seconds || 0))
                   .map((e, i) => (
                     <tr key={e.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3 text-muted">{i + 1}</td>
+                      <td className="px-4 py-3 text-ink">{i + 1}</td>
                       <td className="px-4 py-3 text-ink">{e.name}</td>
-                      <td className="px-4 py-3 text-muted">{formatDate(e.date)}</td>
-                      <td className="px-4 py-3 text-muted">{e.field}</td>
-                      <td className="px-4 py-3 text-muted">{e.oldValue}</td>
-                      <td className="px-4 py-3 text-muted">{e.newValue}</td>
-                      <td className="px-4 py-3 text-muted">{e.reason}</td>
-                      <td className="px-4 py-3 text-muted">
+                      <td className="px-4 py-3 text-ink">{formatDate(e.date)}</td>
+                      <td className="px-4 py-3 text-ink">{e.field}</td>
+                      <td className="px-4 py-3 text-ink">{e.oldValue}</td>
+                      <td className="px-4 py-3 text-ink">{e.newValue}</td>
+                      <td className="px-4 py-3 text-ink">{e.reason}</td>
+                      <td className="px-4 py-3 text-ink">
                         {e.editedAt?.toDate ? e.editedAt.toDate().toLocaleString("ko-KR") : "-"}
                       </td>
                     </tr>

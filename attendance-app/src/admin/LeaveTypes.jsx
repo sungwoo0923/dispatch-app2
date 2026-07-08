@@ -98,11 +98,11 @@ export default function LeaveTypes() {
                   <td className="px-3 py-2.5">
                     <input type="checkbox" checked={checked.has(t.id)} onChange={() => toggle(t.id)} />
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(t.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(t.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{t.name}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.days}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.paid}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.days}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.paid}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-muted hover:text-primary" onClick={() => move(i, -1)}>
                       <ArrowUp size={13} />

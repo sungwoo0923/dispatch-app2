@@ -108,11 +108,11 @@ export default function SiteLeaveSettings() {
             <tbody>
               {rows.map(([siteId, list], i) => (
                 <tr key={siteId} onClick={() => setSelectedSiteId(siteId)} className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedSiteId === siteId ? "bg-primary-light/40" : ""}`}>
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5 text-primary">상세</td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(workSites.find((s) => s.id === siteId)?.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(workSites.find((s) => s.id === siteId)?.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{siteName(siteId)}</td>
-                  <td className="px-3 py-2.5 text-muted">
+                  <td className="px-3 py-2.5 text-ink">
                     {list.length ? list.map((s) => `[${s.effectiveFrom}] ${templateName(s.templateId)} / ${s.criteriaType}`).join(", ") : "-"}
                   </td>
                 </tr>
@@ -146,11 +146,11 @@ export default function SiteLeaveSettings() {
                 <tbody>
                   {siteSettings.map((s, i) => (
                     <tr key={s.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-2 text-muted">{i + 1}</td>
+                      <td className="px-3 py-2 text-ink">{i + 1}</td>
                       <td className="px-3 py-2 text-ink">{templateName(s.templateId)}</td>
-                      <td className="px-3 py-2 text-muted">{s.criteriaType}</td>
-                      <td className="px-3 py-2 text-muted">{formatDate(s.effectiveFrom)}</td>
-                      <td className="px-3 py-2 text-muted">{s.effectiveTo}</td>
+                      <td className="px-3 py-2 text-ink">{s.criteriaType}</td>
+                      <td className="px-3 py-2 text-ink">{formatDate(s.effectiveFrom)}</td>
+                      <td className="px-3 py-2 text-ink">{s.effectiveTo}</td>
                       <td className="px-3 py-2">
                         <button className="text-muted hover:text-danger" onClick={() => remove(s.id)}>
                           <Trash2 size={14} />

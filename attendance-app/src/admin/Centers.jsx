@@ -211,18 +211,18 @@ export default function Centers() {
             <tbody>
               {rows.map((s, i) => (
                 <tr key={s.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => select(s)}>
                       상세
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(s.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(s.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{s.name}</td>
-                  <td className="px-3 py-2.5 text-muted">{s.address || "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">Y</td>
-                  <td className="px-3 py-2.5 text-muted">{s.contractYN === "사용" ? "Y" : "N"}</td>
-                  <td className="px-3 py-2.5 text-muted">{s.faceYN || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{s.address || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">Y</td>
+                  <td className="px-3 py-2.5 text-ink">{s.contractYN === "사용" ? "Y" : "N"}</td>
+                  <td className="px-3 py-2.5 text-ink">{s.faceYN || "-"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
@@ -468,7 +468,7 @@ function VendorsTab({ companyId, site, entityName }) {
                   <td className="px-3 py-2">
                     <input type="checkbox" checked={checkedAvailable.has(v.id)} onChange={() => toggle(checkedAvailable, setCheckedAvailable, v.id)} />
                   </td>
-                  <td className="px-3 py-2 text-muted">{entityName(v.businessEntityId)}</td>
+                  <td className="px-3 py-2 text-ink">{entityName(v.businessEntityId)}</td>
                   <td className="px-3 py-2 text-ink">{v.name}</td>
                 </tr>
               ))}
@@ -511,7 +511,7 @@ function VendorsTab({ companyId, site, entityName }) {
                   <td className="px-3 py-2">
                     <input type="checkbox" checked={checkedLinked.has(vendor.id)} onChange={() => toggle(checkedLinked, setCheckedLinked, vendor.id)} />
                   </td>
-                  <td className="px-3 py-2 text-muted">{entityName(vendor.businessEntityId)}</td>
+                  <td className="px-3 py-2 text-ink">{entityName(vendor.businessEntityId)}</td>
                   <td className="px-3 py-2 text-ink">{vendor.name}</td>
                 </tr>
               ))}
@@ -608,7 +608,7 @@ function OrderedList({ companyId, siteId, collectionName, title, fieldLabel }) {
                 <td className="px-2 py-2">
                   <input type="checkbox" checked={checked.has(it.id)} onChange={() => toggleChecked(it.id)} />
                 </td>
-                <td className="px-2 py-2 text-muted">{i + 1}</td>
+                <td className="px-2 py-2 text-ink">{i + 1}</td>
                 <td className="px-2 py-2 text-ink">{it.name}</td>
                 <td className="px-2 py-2">
                   <button className="text-muted hover:text-primary" onClick={() => move(i, -1)}>
@@ -697,7 +697,7 @@ function HolidaysTab({ companyId, siteId }) {
           <tbody>
             {holidays.map((h, i) => (
               <tr key={h.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-3 py-2 text-muted">{i + 1}</td>
+                <td className="px-3 py-2 text-ink">{i + 1}</td>
                 <td className="px-3 py-2 text-ink">{h.date}</td>
                 <td className="px-3 py-2">
                   <button className="text-muted hover:text-danger" onClick={() => remove(h.id)}>

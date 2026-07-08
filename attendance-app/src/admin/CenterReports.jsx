@@ -396,7 +396,7 @@ export default function CenterReports() {
             <tbody>
               {rows.map((t, i) => (
                 <tr key={t.id} onDoubleClick={() => openEdit(t)} className="odd:bg-white even:bg-slate-50/50 border-b border-slate-50 last:border-0 hover:bg-slate-100 cursor-pointer">
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => openEdit(t)}>
                       상세
@@ -407,14 +407,14 @@ export default function CenterReports() {
                       보기
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(t.businessEntityId)}</td>
-                  <td className="px-3 py-2.5 text-muted">{siteName(t.siteId)}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.docType}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(t.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{siteName(t.siteId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.docType}</td>
                   <td className="px-3 py-2.5 text-ink">{t.templateName}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.reportFormat || "-"}</td>
-                  <td className="px-3 py-2.5 text-muted">{fmtCreatedAt(t.createdAt)}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.visibility}</td>
-                  <td className="px-3 py-2.5 text-muted">기본형</td>
+                  <td className="px-3 py-2.5 text-ink">{t.reportFormat || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{fmtCreatedAt(t.createdAt)}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.visibility}</td>
+                  <td className="px-3 py-2.5 text-ink">기본형</td>
                 </tr>
               ))}
               {rows.length === 0 && (

@@ -150,11 +150,11 @@ export default function BusinessEntities() {
                       onClick={() => select(e)}
                       className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedId === e.id ? "bg-primary-light/40" : ""}`}
                     >
-                      <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                      <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                       <td className="px-3 py-2.5 text-ink">{e.name}</td>
-                      <td className="px-3 py-2.5 text-muted">{e.regNumber}</td>
-                      <td className="px-3 py-2.5 text-muted">{e.phone || "-"}</td>
-                      <td className="px-3 py-2.5 text-muted">{e.address || "-"}</td>
+                      <td className="px-3 py-2.5 text-ink">{e.regNumber}</td>
+                      <td className="px-3 py-2.5 text-ink">{e.phone || "-"}</td>
+                      <td className="px-3 py-2.5 text-ink">{e.address || "-"}</td>
                     </tr>
                   ))}
                   {rows.length === 0 && (

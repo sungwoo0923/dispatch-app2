@@ -244,7 +244,7 @@ export default function AdminAccounts() {
             <tbody>
               {filtered.map((a, i) => (
                 <tr key={a.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="px-3 py-3 text-muted">{i + 1}</td>
+                  <td className="px-3 py-3 text-ink">{i + 1}</td>
                   <td className="px-3 py-3">
                     <button className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-primary hover:bg-primary-light" onClick={() => openEdit(a)}>
                       상세
@@ -257,14 +257,14 @@ export default function AdminAccounts() {
                       <ShieldCheck size={13} /> {authOf(a)}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-muted">{a.phone}</td>
-                  <td className="px-3 py-3 text-muted">{a.team || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{a.position || "-"}</td>
-                  <td className="px-3 py-3 text-muted">{groupName_(a.groupId)}</td>
+                  <td className="px-3 py-3 text-ink">{a.phone}</td>
+                  <td className="px-3 py-3 text-ink">{a.team || "-"}</td>
+                  <td className="px-3 py-3 text-ink">{a.position || "-"}</td>
+                  <td className="px-3 py-3 text-ink">{groupName_(a.groupId)}</td>
                   <td className="px-3 py-3">
                     <Badge tone={a.approved === false ? "warning" : "success"}>{a.approved === false ? "대기" : "승인"}</Badge>
                   </td>
-                  <td className="px-3 py-3 text-muted">
+                  <td className="px-3 py-3 text-ink">
                     {a.lastLoginAt?.seconds ? formatDate(new Date(a.lastLoginAt.seconds * 1000).toISOString().slice(0, 10)) : "-"}
                   </td>
                   <td className="px-3 py-3">

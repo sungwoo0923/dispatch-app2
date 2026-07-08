@@ -152,17 +152,17 @@ export default function LeaveUsageStatus() {
             <tbody>
               {rows.map(({ leave: lv, emp }, i) => (
                 <tr key={lv.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{i + 1}</td>
                   <td className="px-4 py-3 text-ink">{lv.name}</td>
-                  <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-4 py-3 text-muted">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
-                  <td className="px-4 py-3 text-muted">{formatDate(lv.startDate)}</td>
-                  <td className="px-4 py-3 text-muted">{lv.type}</td>
-                  <td className="px-4 py-3 text-muted">{lv.paid || "유급"}</td>
-                  <td className="px-4 py-3 text-muted">{lv.days || 1}</td>
-                  <td className="px-4 py-3 text-muted">{lv.reason || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.phone || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-4 py-3 text-ink">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
+                  <td className="px-4 py-3 text-ink">{formatDate(lv.startDate)}</td>
+                  <td className="px-4 py-3 text-ink">{lv.type}</td>
+                  <td className="px-4 py-3 text-ink">{lv.paid || "유급"}</td>
+                  <td className="px-4 py-3 text-ink">{lv.days || 1}</td>
+                  <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.phone || "-"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

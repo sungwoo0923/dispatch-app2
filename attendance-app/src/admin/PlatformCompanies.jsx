@@ -161,7 +161,7 @@ export default function PlatformCompanies() {
                 <td className="px-3 py-2.5">{c.applicant?.name || "-"}</td>
                 <td className="px-3 py-2.5">{c.applicant?.phone || "-"}</td>
                 <td className="px-3 py-2.5">{c.applicant?.email || "-"}</td>
-                <td className="px-3 py-2.5 text-muted">{formatDate(c.createdAt)}</td>
+                <td className="px-3 py-2.5 text-ink">{formatDate(c.createdAt)}</td>
                 <td className="px-3 py-2.5">
                   <Badge tone={STATUS_TONE[c.status] || "muted"}>{STATUS_LABEL[c.status] || c.status}</Badge>
                 </td>

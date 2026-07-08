@@ -378,25 +378,25 @@ export default function SafetyTrainings() {
             <tbody>
               {rows.map(({ record: r, emp }, i) => (
                 <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
-                  <td className="px-4 py-3 text-muted">{formatDate(r.date)}</td>
+                  <td className="px-4 py-3 text-ink">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{formatDate(r.date)}</td>
                   <td className="px-4 py-3">
                     <button className="text-primary hover:underline" onClick={() => setViewing({ ...r, emp })}>
                       {r.name}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-muted">{companyName}</td>
-                  <td className="px-4 py-3 text-muted">{r.siteName || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{vendors.find((v) => v.id === emp.vendorId)?.name || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{formatDate(r.date)}</td>
-                  <td className="px-4 py-3 text-muted">{emp.shiftType || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.employmentType || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.phone || "-"}</td>
-                  <td className="px-4 py-3 text-muted">{emp.gender || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{companyName}</td>
+                  <td className="px-4 py-3 text-ink">{r.siteName || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{vendors.find((v) => v.id === emp.vendorId)?.name || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{formatDate(r.date)}</td>
+                  <td className="px-4 py-3 text-ink">{emp.shiftType || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.employmentType || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.phone || "-"}</td>
+                  <td className="px-4 py-3 text-ink">{emp.gender || "-"}</td>
                   <td className="px-4 py-3">
                     {r.safetySignature ? <Badge tone="success">Y</Badge> : <Badge tone="warning">N</Badge>}
                   </td>
-                  <td className="px-4 py-3 text-muted">{r.safetySignedAt ? formatTime(r.safetySignedAt) : "-"}</td>
+                  <td className="px-4 py-3 text-ink">{r.safetySignedAt ? formatTime(r.safetySignedAt) : "-"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

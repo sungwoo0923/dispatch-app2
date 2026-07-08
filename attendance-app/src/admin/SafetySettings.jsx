@@ -273,23 +273,23 @@ export default function SafetySettings() {
             <tbody>
               {rows.map((s, i) => (
                 <tr key={s.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => openDetail(s)}>
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => openDetail(s)}>
                       상세
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{entityName_(s.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName_(s.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{s.name}</td>
                   <td className="px-3 py-2.5">
                     <Badge tone={s.safetyManaged ? "success" : "muted"}>{s.safetyManaged ? "Y" : "N"}</Badge>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">
+                  <td className="px-3 py-2.5 text-ink">
                     {managersFor(s.id)
                       .map((m) => `[${s.name}]총괄책임자 : ${m.adminName}`)
                       .join(", ") || "-"}
                   </td>
-                  <td className="px-3 py-2.5 text-muted">
+                  <td className="px-3 py-2.5 text-ink">
                     {reportsFor(s.id)
                       .map((r) => `[${formatDate(r.effectiveDate)}]${r.templateName}`)
                       .join(", ") || "-"}
@@ -391,18 +391,18 @@ export default function SafetySettings() {
                         const admin = admins.find((a) => a.id === m.adminUid);
                         return (
                           <tr key={m.id} className="border-b border-slate-50 last:border-0">
-                            <td className="px-2 py-2 text-muted">{i + 1}</td>
+                            <td className="px-2 py-2 text-ink">{i + 1}</td>
                             <td className="px-2 py-2">
                               <input type="checkbox" checked={managerChecked.has(m.id)} onChange={() => toggleManagerChecked(m.id)} />
                             </td>
-                            <td className="px-2 py-2 text-muted">{m.effectiveDate ? formatDate(m.effectiveDate) : "-"}</td>
-                            <td className="px-2 py-2 text-muted">{m.role}</td>
-                            <td className="px-2 py-2 text-muted">{m.adminEmail || "-"}</td>
+                            <td className="px-2 py-2 text-ink">{m.effectiveDate ? formatDate(m.effectiveDate) : "-"}</td>
+                            <td className="px-2 py-2 text-ink">{m.role}</td>
+                            <td className="px-2 py-2 text-ink">{m.adminEmail || "-"}</td>
                             <td className="px-2 py-2 text-ink">{m.adminName}</td>
                             <td className="px-2 py-2">
                               {admin?.signatureDataUrl ? <Badge tone="success">등록</Badge> : <Badge tone="muted">미등록</Badge>}
                             </td>
-                            <td className="px-2 py-2 text-muted">정상</td>
+                            <td className="px-2 py-2 text-ink">정상</td>
                           </tr>
                         );
                       })}
@@ -503,7 +503,7 @@ export default function SafetySettings() {
                     <tbody>
                       {reportsFor(selectedId).map((r, i) => (
                         <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                          <td className="px-2 py-2 text-muted">{i + 1}</td>
+                          <td className="px-2 py-2 text-ink">{i + 1}</td>
                           <td className="px-2 py-2">
                             <input type="checkbox" checked={reportChecked.has(r.id)} onChange={() => toggleReportChecked(r.id)} />
                           </td>
@@ -513,8 +513,8 @@ export default function SafetySettings() {
                             </button>
                           </td>
                           <td className="px-2 py-2 text-ink">{r.templateName}</td>
-                          <td className="px-2 py-2 text-muted">{r.effectiveDate ? formatDate(r.effectiveDate) : "-"}</td>
-                          <td className="px-2 py-2 text-muted">{r.effectiveEndDate || "9999-12-31"}</td>
+                          <td className="px-2 py-2 text-ink">{r.effectiveDate ? formatDate(r.effectiveDate) : "-"}</td>
+                          <td className="px-2 py-2 text-ink">{r.effectiveEndDate || "9999-12-31"}</td>
                         </tr>
                       ))}
                       {reportsFor(selectedId).length === 0 && (

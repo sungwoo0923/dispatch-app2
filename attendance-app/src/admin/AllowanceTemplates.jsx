@@ -242,27 +242,27 @@ export default function AllowanceTemplates() {
             <tbody>
               {rows.map((t, i) => (
                 <tr key={t.id} onDoubleClick={() => openEdit(t)} className="odd:bg-white even:bg-slate-50/50 cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100">
-                  <td className="px-3 py-2.5 text-muted">{i + 1}</td>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => openEdit(t)}>
                       상세
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-muted">{entityName(t.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(t.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{t.name}</td>
-                  <td className="px-3 py-2.5 text-muted">{fmtCreatedAt(t.createdAt)}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.payType}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.hourlyWage || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.dailyWage || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.overtimeWage || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.holidayWage || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.holidayOvertimeWage || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.weeklyAllowanceRate || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.weeklyAllowanceHours || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.weeklyAllowanceMaxHours || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.dailyEtcAllowance || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{Number(t.mealAllowance || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-muted">{t.visibility || "보임"}</td>
+                  <td className="px-3 py-2.5 text-ink">{fmtCreatedAt(t.createdAt)}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.payType}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.hourlyWage || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.dailyWage || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.overtimeWage || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.holidayWage || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.holidayOvertimeWage || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.weeklyAllowanceRate || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.weeklyAllowanceHours || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.weeklyAllowanceMaxHours || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.dailyEtcAllowance || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{Number(t.mealAllowance || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-ink">{t.visibility || "보임"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

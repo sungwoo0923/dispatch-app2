@@ -282,18 +282,18 @@ function AttendanceCountTab({ profile, lookups }) {
           <tbody>
             {rows.map(({ emp, present, late }, i) => (
               <tr key={emp.id} className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 text-muted">{i + 1}</td>
-                <td className="px-4 py-3 text-muted">{lookups.companyName}</td>
-                <td className="px-4 py-3 text-muted">{siteName_(emp.workSiteId)}</td>
-                <td className="px-4 py-3 text-muted">{vendorName_(emp.vendorId)}</td>
-                <td className="px-4 py-3 text-muted">{emp.shiftType || "-"}</td>
-                <td className="px-4 py-3 text-muted">{emp.employmentType || "-"}</td>
+                <td className="px-4 py-3 text-ink">{i + 1}</td>
+                <td className="px-4 py-3 text-ink">{lookups.companyName}</td>
+                <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
+                <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
+                <td className="px-4 py-3 text-ink">{emp.shiftType || "-"}</td>
+                <td className="px-4 py-3 text-ink">{emp.employmentType || "-"}</td>
                 <td className="px-4 py-3 text-ink">{emp.name}</td>
-                <td className="px-4 py-3 text-muted">{emp.phone}</td>
-                <td className="px-4 py-3 text-muted">{emp.team || "-"}</td>
-                <td className="px-4 py-3 text-muted">{emp.position || "-"}</td>
+                <td className="px-4 py-3 text-ink">{emp.phone}</td>
+                <td className="px-4 py-3 text-ink">{emp.team || "-"}</td>
+                <td className="px-4 py-3 text-ink">{emp.position || "-"}</td>
                 <td className="px-4 py-3 font-medium text-ink">{present}</td>
-                <td className="px-4 py-3 text-muted">{late}</td>
+                <td className="px-4 py-3 text-ink">{late}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -511,15 +511,15 @@ function MonthlyGridTab({ profile, lookups }) {
               return (
                 <tr key={emp.id} className="border-b border-slate-50 last:border-0">
                   <td className="sticky left-0 bg-white px-3 py-2 text-ink">{lookups.companyName}</td>
-                  <td className="px-3 py-2 text-muted">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-3 py-2 text-muted">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-3 py-2 text-muted">{emp.shiftType || "-"}</td>
-                  <td className="px-3 py-2 text-muted">{emp.employmentType || "-"}</td>
-                  <td className="px-3 py-2 text-muted">{emp.team || "-"}</td>
-                  <td className="px-3 py-2 text-muted">{emp.position || "-"}</td>
-                  <td className="px-3 py-2 text-muted">{emp.insuranceApplied || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-3 py-2 text-ink">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-3 py-2 text-ink">{emp.shiftType || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{emp.employmentType || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{emp.team || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{emp.position || "-"}</td>
+                  <td className="px-3 py-2 text-ink">{emp.insuranceApplied || "-"}</td>
                   <td className="px-3 py-2 text-ink">{emp.name}</td>
-                  <td className="px-3 py-2 text-muted">{emp.phone}</td>
+                  <td className="px-3 py-2 text-ink">{emp.phone}</td>
                   {marks.map((m, i) => (
                     <td key={i} className={`px-2 py-2 text-center ${m ? "text-primary font-medium" : "text-slate-300"}`}>
                       {m ? 1 : 0}
@@ -716,9 +716,9 @@ function SiteAggregateTab({ profile, lookups }) {
             {groups.map((g) => (
               <tr key={g.key} className="border-b border-slate-50 last:border-0">
                 <td className="sticky left-0 bg-white px-3 py-2 text-ink">{lookups.companyName}</td>
-                <td className="px-3 py-2 text-muted">{siteName_(g.siteId)}</td>
-                <td className="px-3 py-2 text-muted">{vendorName_(g.vendorId)}</td>
-                <td className="px-3 py-2 text-muted">{g.shiftType || "-"}</td>
+                <td className="px-3 py-2 text-ink">{siteName_(g.siteId)}</td>
+                <td className="px-3 py-2 text-ink">{vendorName_(g.vendorId)}</td>
+                <td className="px-3 py-2 text-ink">{g.shiftType || "-"}</td>
                 {g.counts.map((c, i) => (
                   <td key={i} className="px-2 py-2 text-center">
                     {c}

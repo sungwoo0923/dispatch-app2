@@ -110,15 +110,15 @@ export default function Documents() {
             <tbody>
               {sorted.map((d, i) => (
                 <tr key={d.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{i + 1}</td>
                   <td className="px-4 py-3 text-ink">{d.employeeName}</td>
-                  <td className="px-4 py-3 text-muted">{d.docType}</td>
+                  <td className="px-4 py-3 text-ink">{d.docType}</td>
                   <td className="px-4 py-3">
                     <a href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
                       <FileText size={14} /> {d.fileName}
                     </a>
                   </td>
-                  <td className="px-4 py-3 text-muted">
+                  <td className="px-4 py-3 text-ink">
                     {d.uploadedAt?.toDate ? formatDate(d.uploadedAt.toDate().toISOString().slice(0, 10)) : "-"}
                   </td>
                   <td className="px-4 py-3">
