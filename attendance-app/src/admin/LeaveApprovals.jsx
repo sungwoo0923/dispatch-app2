@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { CalendarClock, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -88,8 +88,19 @@ export default function LeaveApprovals() {
   const toggleSelectAll = () => setSelected((s) => (s.size === rows.length ? new Set() : new Set(rows.map((r) => r.leave.id))));
 
   const applyStatus = async () => {
+    const nextStatus = STATUS_MAP_REV[statusAction];
     for (const id of selected) {
-      await updateDoc(doc(db, "leaves", id), { status: STATUS_MAP_REV[statusAction], adminNote: note || null });
+      await updateDoc(doc(db, "leaves", id), { status: nextStatus, adminNote: note || null });
+      const lv = leaves.find((l) => l.id === id);
+      if (!lv || nextStatus === "pending") continue;
+      await addDoc(collection(db, "notifications"), {
+        companyId: profile.companyId,
+        uid: lv.uid,
+        title: nextStatus === "approved" ? `${lv.type} 신청이 승인되었습니다` : `${lv.type} 신청이 반려되었습니다`,
+        message: nextStatus === "rejected" ? note || "" : "",
+        read: false,
+        createdAt: serverTimestamp(),
+      });
     }
     setSelected(new Set());
     setNote("");

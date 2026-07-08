@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Menu, X, LogOut, CalendarCheck2, ChevronDown } from "lucide-react";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { Menu, X, LogOut, CalendarCheck2, ChevronDown, DoorOpen } from "lucide-react";
+import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Breadcrumb from "../components/Breadcrumb";
 import BuildInfo from "../components/BuildInfo";
@@ -73,8 +75,24 @@ function NavItems({ items, onClick }) {
 
 export default function AdminLayout() {
   const { profile, company, logout, isSuperAdmin } = useAuth();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [earlyLeaveCount, setEarlyLeaveCount] = useState(0);
   const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(
+      query(
+        collection(db, "leaves"),
+        where("companyId", "==", profile.companyId),
+        where("type", "==", "조퇴"),
+        where("status", "==", "pending")
+      ),
+      (snap) => setEarlyLeaveCount(snap.size)
+    );
+    return () => unsub();
+  }, [profile?.companyId]);
 
   return (
     <div className="flex min-h-screen bg-surface">
@@ -130,8 +148,19 @@ export default function AdminLayout() {
             <Menu size={22} />
           </button>
           <p className="text-sm font-medium text-ink">관리자 대시보드</p>
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
-            {profile?.name?.[0] || "K"}
+          <div className="flex items-center gap-3">
+            {earlyLeaveCount > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/leaves")}
+                className="flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20"
+              >
+                <DoorOpen size={14} /> 조퇴요청 {earlyLeaveCount}건이 있습니다
+              </button>
+            )}
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
+              {profile?.name?.[0] || "K"}
+            </div>
           </div>
         </header>
         <Breadcrumb />

@@ -40,6 +40,9 @@ export function calcLeaveBalance({ hireDate, leaves = [], today = toDateKey() })
   for (const lv of leaves) {
     if (lv.status === "rejected") continue;
     if (lv.startDate < yearStart) continue;
+    // 조퇴는 반나절 이상 자리를 비우는 휴가와 달리 근무일 자체는 출근한 것으로
+    // 처리되므로 연차/월차 잔여일수에서 차감하지 않는다.
+    if (lv.type === "조퇴") continue;
 
     const days = businessDaysBetween(lv.startDate, lv.endDate);
 

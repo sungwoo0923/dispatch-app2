@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import {
   MapPin,
   Navigation,
@@ -10,6 +23,9 @@ import {
   Sparkles,
   LogIn,
   LogOut,
+  DoorOpen,
+  Bell,
+  X,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -44,6 +60,11 @@ export default function Home() {
   const [tipIndex, setTipIndex] = useState(0);
   const [showChecklist, setShowChecklist] = useState(false);
   const [checklist, setChecklist] = useState({ contract: false, safety: false });
+  const [earlyLeaveOpen, setEarlyLeaveOpen] = useState(false);
+  const [earlyLeaveReason, setEarlyLeaveReason] = useState("");
+  const [earlyLeaveSaving, setEarlyLeaveSaving] = useState(false);
+  const [myEarlyLeaveToday, setMyEarlyLeaveToday] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const [showOnboarding, setShowOnboarding] = useState(
     () => typeof window !== "undefined" && !window.localStorage.getItem(ONBOARDING_DISMISSED_KEY)
   );
@@ -96,6 +117,31 @@ export default function Home() {
       setPendingContracts(snap.docs.filter((d) => d.data().status !== "signed").length);
     });
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      query(
+        collection(db, "leaves"),
+        where("uid", "==", user.uid),
+        where("type", "==", "조퇴"),
+        where("startDate", "==", toDateKey())
+      ),
+      (snap) => setMyEarlyLeaveToday(snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null)
+    );
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      query(collection(db, "notifications"), where("uid", "==", user.uid), where("read", "==", false)),
+      (snap) => setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [user]);
+
+  const dismissNotification = (id) => updateDoc(doc(db, "notifications", id), { read: true });
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -165,6 +211,32 @@ export default function Home() {
     setShowOnboarding(false);
   };
 
+  const submitEarlyLeave = async (e) => {
+    e.preventDefault();
+    if (!earlyLeaveReason.trim()) return;
+    setEarlyLeaveSaving(true);
+    try {
+      await addDoc(collection(db, "leaves"), {
+        uid: user.uid,
+        name: profile.name,
+        companyId: profile.companyId,
+        type: "조퇴",
+        startDate: toDateKey(),
+        endDate: toDateKey(),
+        reason: earlyLeaveReason,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      toast.success("조퇴 신청이 접수되었습니다");
+      setEarlyLeaveOpen(false);
+      setEarlyLeaveReason("");
+    } catch {
+      toast.error("조퇴 신청에 실패했습니다.");
+    } finally {
+      setEarlyLeaveSaving(false);
+    }
+  };
+
   const ampm = now.getHours() < 12 ? "오전" : "오후";
   const hour12 = now.getHours() % 12 || 12;
   const timeStr = `${String(hour12).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -217,7 +289,49 @@ export default function Home() {
             <span className="text-[11px] font-medium tracking-wide opacity-80">OUT</span>
           </button>
         </div>
+
+        {checkedIn && !checkedOut && (
+          <div className="mt-3">
+            {myEarlyLeaveToday ? (
+              <div className="flex items-center justify-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs">
+                <DoorOpen size={14} className="text-muted" />
+                {myEarlyLeaveToday.status === "pending" && <span className="font-medium text-warning">조퇴 승인대기 중</span>}
+                {myEarlyLeaveToday.status === "approved" && <span className="font-medium text-success">조퇴 승인완료</span>}
+                {myEarlyLeaveToday.status === "rejected" && (
+                  <span className="font-medium text-danger">
+                    조퇴 반려됨{myEarlyLeaveToday.adminNote ? ` · ${myEarlyLeaveToday.adminNote}` : ""}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEarlyLeaveOpen(true)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-xs font-medium text-muted hover:bg-slate-50"
+              >
+                <DoorOpen size={14} /> 조퇴 신청
+              </button>
+            )}
+          </div>
+        )}
       </Card>
+
+      {notifications.length > 0 && (
+        <div className="space-y-2">
+          {notifications.map((n) => (
+            <Card key={n.id} className="flex items-start gap-3 border border-primary/20 bg-primary-light/40 p-4">
+              <Bell size={16} className="mt-0.5 shrink-0 text-primary" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-ink">{n.title}</p>
+                {n.message && <p className="mt-0.5 text-xs text-muted">{n.message}</p>}
+              </div>
+              <button type="button" className="shrink-0 text-muted hover:text-ink" onClick={() => dismissNotification(n.id)}>
+                <X size={14} />
+              </button>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Card className="bg-rose-50 p-5">
         <p className="mb-1 text-xs font-semibold text-rose-500">오늘도 안전하게!</p>
@@ -340,6 +454,36 @@ export default function Home() {
             </div>
           </label>
         </div>
+      </Modal>
+
+      <Modal
+        open={earlyLeaveOpen}
+        onClose={() => setEarlyLeaveOpen(false)}
+        title="조퇴 신청"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEarlyLeaveOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={submitEarlyLeave} disabled={!earlyLeaveReason.trim() || earlyLeaveSaving}>
+              {earlyLeaveSaving ? "신청 중..." : "신청하기"}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={submitEarlyLeave} className="space-y-3">
+          <p className="text-xs text-muted">사유를 입력하면 관리자에게 조퇴요청이 전달됩니다. 승인/반려 결과는 알림으로 안내됩니다.</p>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">사유</span>
+            <textarea
+              autoFocus
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              rows={3}
+              value={earlyLeaveReason}
+              onChange={(e) => setEarlyLeaveReason(e.target.value)}
+            />
+          </label>
+        </form>
       </Modal>
     </div>
   );
