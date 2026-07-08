@@ -7,6 +7,8 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import Modal from "../components/Modal";
+import ApprovalBox from "../components/ApprovalBox";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey, addDays } from "../utils/dateUtils";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
@@ -41,6 +43,7 @@ export default function LeaveApprovals() {
   const [selected, setSelected] = useState(() => new Set());
   const [statusAction, setStatusAction] = useState("승인완료");
   const [note, setNote] = useState("");
+  const [detailView, setDetailView] = useState(null); // { leave, emp }
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -250,7 +253,12 @@ export default function LeaveApprovals() {
             </thead>
             <tbody>
               {rows.map(({ leave: lv, emp }, i) => (
-                <tr key={lv.id} className="border-b border-slate-50 last:border-0">
+                <tr
+                  key={lv.id}
+                  onDoubleClick={() => setDetailView({ leave: lv, emp })}
+                  title="더블클릭하여 휴가신청서 미리보기"
+                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                >
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={selected.has(lv.id)} onChange={() => toggleSelected(lv.id)} />
                   </td>
@@ -280,6 +288,59 @@ export default function LeaveApprovals() {
           </table>
         </div>
       </Panel>
+
+      <Modal
+        open={Boolean(detailView)}
+        onClose={() => setDetailView(null)}
+        title="휴가신청서"
+        footer={<Button onClick={() => setDetailView(null)}>닫기</Button>}
+      >
+        {detailView && (
+          <div className="space-y-3">
+            <div className="space-y-1.5 text-sm text-ink">
+              <div className="flex justify-between border-b border-slate-50 py-1.5">
+                <span className="text-xs text-muted">이름</span>
+                <span>{detailView.leave.name}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-50 py-1.5">
+                <span className="text-xs text-muted">근무지</span>
+                <span>{siteName_(detailView.emp.workSiteId)}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-50 py-1.5">
+                <span className="text-xs text-muted">휴가유형</span>
+                <span>{detailView.leave.type}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-50 py-1.5">
+                <span className="text-xs text-muted">휴가일자</span>
+                <span>{formatDate(detailView.leave.startDate)} ({detailView.leave.days || 1}일)</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-50 py-1.5">
+                <span className="text-xs text-muted">사유</span>
+                <span>{detailView.leave.reason || "-"}</span>
+              </div>
+              {detailView.leave.adminNote && (
+                <div className="flex justify-between border-b border-slate-50 py-1.5">
+                  <span className="text-xs text-muted">관리자비고</span>
+                  <span>{detailView.leave.adminNote}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-center pt-1">
+              <ApprovalBox
+                steps={[
+                  {
+                    role: "결재",
+                    name: "",
+                    signatureDataUrl: null,
+                    result:
+                      detailView.leave.status === "approved" ? "approved" : detailView.leave.status === "rejected" ? "rejected" : null,
+                  },
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

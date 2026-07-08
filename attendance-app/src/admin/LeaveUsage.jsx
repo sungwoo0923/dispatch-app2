@@ -6,6 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import Modal from "../components/Modal";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey, addDays } from "../utils/dateUtils";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS } from "../constants/hr";
@@ -88,6 +89,7 @@ const EMPTY_FILTERS = { siteId: "", vendorId: "", shiftType: "", employmentType:
 function UsageListTab({ employees, workSites, vendors, leaves }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [range, setRange] = useState({ start: addDays(toDateKey(), -90), end: toDateKey() });
+  const [detailUid, setDetailUid] = useState(null);
 
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
@@ -207,7 +209,12 @@ function UsageListTab({ employees, workSites, vendors, leaves }) {
           </thead>
           <tbody>
             {rows.map(({ leave: lv, emp }, i) => (
-              <tr key={lv.id} className="border-b border-slate-50 last:border-0">
+              <tr
+                key={lv.id}
+                onDoubleClick={() => setDetailUid(emp.id)}
+                title="더블클릭하여 휴가현황 요약보기"
+                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+              >
                 <td className="px-4 py-3 text-ink">{i + 1}</td>
                 <td className="px-4 py-3 text-ink">{lv.name}</td>
                 <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
@@ -231,6 +238,41 @@ function UsageListTab({ employees, workSites, vendors, leaves }) {
           </tbody>
         </table>
       </div>
+
+      <Modal
+        open={Boolean(detailUid)}
+        onClose={() => setDetailUid(null)}
+        title="근로자 휴가현황 요약"
+        footer={<Button onClick={() => setDetailUid(null)}>닫기</Button>}
+      >
+        {detailUid &&
+          (() => {
+            const emp = employeeByUid.get(detailUid);
+            const used = leaves.filter((l) => l.uid === detailUid).reduce((sum, l) => sum + (l.days || 1), 0);
+            const generated = 2; // 휴가 발생 산정 엔진 연동 전까지의 임시값 (근로자휴가관리와 동일한 기준)
+            const remaining = Math.max(generated - used, 0);
+            return (
+              <div className="space-y-3 text-center">
+                <p className="text-sm font-semibold text-ink">{emp?.name}</p>
+                <p className="text-xs text-muted">{siteName_(emp?.workSiteId)} · {vendorName_(emp?.vendorId)}</p>
+                <div className="grid grid-cols-3 gap-2 pt-2">
+                  <div className="rounded-xl border border-slate-100 p-3">
+                    <p className="text-[11px] text-muted">총 휴가발생일수</p>
+                    <p className="mt-1 text-lg font-bold text-ink">{generated}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 p-3">
+                    <p className="text-[11px] text-muted">사용일수</p>
+                    <p className="mt-1 text-lg font-bold text-ink">{used}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 p-3">
+                    <p className="text-[11px] text-muted">잔여일수</p>
+                    <p className="mt-1 text-lg font-bold text-primary">{remaining}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+      </Modal>
     </div>
   );
 }
