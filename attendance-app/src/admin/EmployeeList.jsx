@@ -541,37 +541,41 @@ export default function EmployeeList() {
   const submitRegister = async (e) => {
     e.preventDefault();
 
-    if (editingUid) {
-      const payload = Object.fromEntries(REGISTER_FIELD_KEYS.map((k) => [k, registerForm[k]]));
-      if (photoFile) {
-        payload.photoUrl = await uploadEmployeePhoto({ companyId: profile.companyId, uid: editingUid, file: photoFile });
+    try {
+      if (editingUid) {
+        const payload = Object.fromEntries(REGISTER_FIELD_KEYS.map((k) => [k, registerForm[k]]));
+        if (photoFile) {
+          payload.photoUrl = await uploadEmployeePhoto({ companyId: profile.companyId, uid: editingUid, file: photoFile });
+        }
+        await updateDoc(doc(db, "users", editingUid), payload);
+        for (const { docType, file } of stagedDocs) {
+          await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
+        }
+        toast.success("수정되었습니다");
+        closeRegisterModal();
+        return;
       }
-      await updateDoc(doc(db, "users", editingUid), payload);
-      for (const { docType, file } of stagedDocs) {
-        await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
-      }
-      toast.success("수정되었습니다");
-      closeRegisterModal();
-      return;
-    }
 
-    const code = manualCode || generateInviteCode(7);
-    let photoUrl = "";
-    if (photoFile) {
-      photoUrl = await uploadPendingEmployeePhoto({ companyId: profile.companyId, pendingCode: code, file: photoFile });
+      const code = manualCode || generateInviteCode(7);
+      let photoUrl = "";
+      if (photoFile) {
+        photoUrl = await uploadPendingEmployeePhoto({ companyId: profile.companyId, pendingCode: code, file: photoFile });
+      }
+      await setDoc(doc(db, "pendingEmployees", code), {
+        companyId: profile.companyId,
+        ...registerForm,
+        photoUrl,
+        employmentStatus: "재직",
+        createdAt: serverTimestamp(),
+      });
+      for (const { docType, file } of stagedDocs) {
+        await uploadPendingEmployeeDocument({ companyId: profile.companyId, pendingCode: code, employeeName: registerForm.name, docType, file });
+      }
+      toast.success("저장되었습니다");
+      setIssuedCode(code);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다. ${err?.code || err?.message || "다시 시도해주세요."}`);
     }
-    await setDoc(doc(db, "pendingEmployees", code), {
-      companyId: profile.companyId,
-      ...registerForm,
-      photoUrl,
-      employmentStatus: "재직",
-      createdAt: serverTimestamp(),
-    });
-    for (const { docType, file } of stagedDocs) {
-      await uploadPendingEmployeeDocument({ companyId: profile.companyId, pendingCode: code, employeeName: registerForm.name, docType, file });
-    }
-    toast.success("저장되었습니다");
-    setIssuedCode(code);
   };
 
   const addStagedDoc = () => {

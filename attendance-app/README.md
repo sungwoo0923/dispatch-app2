@@ -21,9 +21,12 @@ cp .env.example .env.local
 1. https://console.firebase.google.com 에서 **새 프로젝트**를 생성합니다 (배차앱과 다른 프로젝트여야 함).
 2. Authentication → 로그인 방법 → **이메일/비밀번호** 사용 설정
 3. Firestore Database → 생성 (production 모드)
-4. 프로젝트 설정 → 일반 → "내 앱"에서 웹 앱 추가 → 표시되는 설정값을 `.env.local`에 채워 넣습니다.
-5. `.firebaserc`의 `REPLACE_WITH_NEW_FIREBASE_PROJECT_ID`를 실제 프로젝트 ID로 변경합니다.
-6. 규칙/인덱스 배포: `npx firebase deploy --only firestore:rules,firestore:indexes`
+4. **Storage → 시작하기로 버킷을 생성합니다.** (서류/도장/프로필사진 업로드에 필수. 이 단계를 건너뛰면 업로드 시 브라우저 콘솔에 CORS 오류/400 오류가 발생합니다.)
+5. 프로젝트 설정 → 일반 → "내 앱"에서 웹 앱 추가 → 표시되는 설정값을 `.env.local`에 채워 넣습니다.
+6. `.firebaserc`의 `REPLACE_WITH_NEW_FIREBASE_PROJECT_ID`를 실제 프로젝트 ID로 변경합니다.
+7. 규칙/인덱스 배포 (Firestore와 Storage 규칙을 **둘 다** 배포해야 서류함이 정상 동작합니다):
+   `npx firebase deploy --only firestore:rules,firestore:indexes,storage:rules`
+   이후 `firestore.rules`나 `storage.rules`를 수정할 때마다 이 명령을 다시 실행해 최신 규칙을 반영해야 합니다.
 
 실제 프로젝트를 아직 만들지 않았다면 `.env.local`의 `VITE_USE_EMULATOR=true` 상태로 두고 아래 로컬 에뮬레이터로 개발할 수 있습니다.
 

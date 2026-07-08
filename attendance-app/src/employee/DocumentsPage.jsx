@@ -7,9 +7,11 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { DOCUMENT_TYPE_OPTIONS, uploadEmployeeDocument, deleteEmployeeDocument } from "../utils/documents";
+import { useToast } from "../hooks/useToast";
 
 export default function DocumentsPage() {
   const { user, profile } = useAuth();
+  const toast = useToast();
   const [documents, setDocuments] = useState([]);
   const [open, setOpen] = useState(false);
   const [docType, setDocType] = useState(DOCUMENT_TYPE_OPTIONS[0]);
@@ -28,16 +30,22 @@ export default function DocumentsPage() {
     e.preventDefault();
     if (!file) return;
     setUploading(true);
-    await uploadEmployeeDocument({
-      companyId: profile.companyId,
-      uid: user.uid,
-      employeeName: profile.name,
-      docType,
-      file,
-    });
-    setUploading(false);
-    setOpen(false);
-    setFile(null);
+    try {
+      await uploadEmployeeDocument({
+        companyId: profile.companyId,
+        uid: user.uid,
+        employeeName: profile.name,
+        docType,
+        file,
+      });
+      setOpen(false);
+      setFile(null);
+      toast.success("서류가 업로드되었습니다");
+    } catch (err) {
+      toast.error(`업로드에 실패했습니다. ${err?.code || err?.message || "다시 시도해주세요."}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -61,7 +69,14 @@ export default function DocumentsPage() {
               <p className="text-xs text-muted">{d.fileName}</p>
             </div>
           </a>
-          <button className="text-muted hover:text-danger" onClick={() => deleteEmployeeDocument(d)}>
+          <button
+            className="text-muted hover:text-danger"
+            onClick={() =>
+              deleteEmployeeDocument(d)
+                .then(() => toast.success("삭제되었습니다"))
+                .catch(() => toast.error("삭제에 실패했습니다."))
+            }
+          >
             <Trash2 size={16} />
           </button>
         </Card>

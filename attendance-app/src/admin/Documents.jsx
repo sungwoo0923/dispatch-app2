@@ -9,9 +9,11 @@ import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import { DOCUMENT_TYPE_OPTIONS, uploadEmployeeDocument, deleteEmployeeDocument } from "../utils/documents";
 import { formatDate } from "../utils/dateUtils";
+import { useToast } from "../hooks/useToast";
 
 export default function Documents() {
   const { profile } = useAuth();
+  const toast = useToast();
   const [employees, setEmployees] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [filterUid, setFilterUid] = useState("");
@@ -44,18 +46,24 @@ export default function Documents() {
     e.preventDefault();
     if (!file || !form.uid) return;
     setUploading(true);
-    const emp = employees.find((x) => x.id === form.uid);
-    await uploadEmployeeDocument({
-      companyId: profile.companyId,
-      uid: form.uid,
-      employeeName: emp?.name || "",
-      docType: form.docType,
-      file,
-    });
-    setUploading(false);
-    setOpen(false);
-    setFile(null);
-    setForm({ uid: "", docType: DOCUMENT_TYPE_OPTIONS[0] });
+    try {
+      const emp = employees.find((x) => x.id === form.uid);
+      await uploadEmployeeDocument({
+        companyId: profile.companyId,
+        uid: form.uid,
+        employeeName: emp?.name || "",
+        docType: form.docType,
+        file,
+      });
+      setOpen(false);
+      setFile(null);
+      setForm({ uid: "", docType: DOCUMENT_TYPE_OPTIONS[0] });
+      toast.success("서류가 업로드되었습니다");
+    } catch (err) {
+      toast.error(`업로드에 실패했습니다. ${err?.code || err?.message || "다시 시도해주세요."}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -114,7 +122,15 @@ export default function Documents() {
                     {d.uploadedAt?.toDate ? formatDate(d.uploadedAt.toDate().toISOString().slice(0, 10)) : "-"}
                   </td>
                   <td className="px-4 py-3">
-                    <button className="text-muted hover:text-danger" title="삭제" onClick={() => deleteEmployeeDocument(d)}>
+                    <button
+                      className="text-muted hover:text-danger"
+                      title="삭제"
+                      onClick={() =>
+                        deleteEmployeeDocument(d)
+                          .then(() => toast.success("삭제되었습니다"))
+                          .catch(() => toast.error("삭제에 실패했습니다."))
+                      }
+                    >
                       <Trash2 size={16} />
                     </button>
                   </td>
