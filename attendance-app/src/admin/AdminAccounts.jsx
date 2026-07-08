@@ -14,6 +14,7 @@ import { generateInviteCode } from "../utils/ids";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate } from "../utils/dateUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
+import SmsButton from "../components/SmsButton";
 
 const AUTH_OPTIONS = ["사이트관리자", "그룹관리자"];
 
@@ -257,7 +258,7 @@ export default function AdminAccounts() {
                       <ShieldCheck size={13} /> {authOf(a)}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-ink">{a.phone}</td>
+                  <td className="px-3 py-3 text-ink"><span className="inline-flex items-center gap-1">{a.phone}<SmsButton phone={a.phone} /></span></td>
                   <td className="px-3 py-3 text-ink">{a.team || "-"}</td>
                   <td className="px-3 py-3 text-ink">{a.position || "-"}</td>
                   <td className="px-3 py-3 text-ink">{groupName_(a.groupId)}</td>

@@ -7,6 +7,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 import { downloadCsv } from "../utils/exportCsv";
+import SmsButton from "../components/SmsButton";
 
 function buildRows(period, yearMonth, employees, vendors, workSites, leaves) {
   const [year, month] = yearMonth.split("-").map(Number);
@@ -98,7 +99,7 @@ export function LeaveMonthlyStats() {
                 <tr key={r.emp.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-3 py-2 text-ink">{vendors.find((v) => v.id === r.emp.vendorId)?.name || "-"}</td>
                   <td className="px-3 py-2 text-ink">{r.emp.name}</td>
-                  <td className="px-3 py-2 text-ink">{r.emp.phone || "-"}</td>
+                  <td className="px-3 py-2 text-ink"><span className="inline-flex items-center gap-1">{r.emp.phone || "-"}<SmsButton phone={r.emp.phone} /></span></td>
                   {cols.map((c) => (
                     <td key={c} className="px-2 py-2 text-center text-ink">
                       {r.perCol[c] || ""}

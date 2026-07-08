@@ -9,6 +9,7 @@ import Panel from "../components/Panel";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey, addDays } from "../utils/dateUtils";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS } from "../constants/hr";
+import SmsButton from "../components/SmsButton";
 
 const EMPTY_FILTERS = { siteId: "", vendorId: "", shiftType: "", employmentType: "", name: "", phone: "" };
 
@@ -162,7 +163,7 @@ export default function LeaveUsageStatus() {
                   <td className="px-4 py-3 text-ink">{lv.paid || "유급"}</td>
                   <td className="px-4 py-3 text-ink">{lv.days || 1}</td>
                   <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
-                  <td className="px-4 py-3 text-ink">{emp.phone || "-"}</td>
+                  <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone || "-"}<SmsButton phone={emp.phone} /></span></td>
                 </tr>
               ))}
               {rows.length === 0 && (

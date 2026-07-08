@@ -15,6 +15,7 @@ import { usePagination } from "../hooks/usePagination";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
 import { formatDate } from "../utils/dateUtils";
+import SmsButton from "../components/SmsButton";
 
 const STATUS_TONE = { 재직: "success", 휴직: "warning", 퇴사: "danger" };
 const SEARCH_FIELD_OPTIONS = [
@@ -349,7 +350,7 @@ export default function EmployeeStatus() {
                   <td className="px-4 py-3 text-ink">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-4 py-3 text-ink">{emp.phone || "-"}</td>
+                  <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone || "-"}<SmsButton phone={emp.phone} /></span></td>
                   <td className="px-4 py-3 text-ink">{emp.lastWorkDate ? formatDate(emp.lastWorkDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>

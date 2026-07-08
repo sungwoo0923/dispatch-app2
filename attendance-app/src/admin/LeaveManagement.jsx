@@ -10,6 +10,7 @@ import Modal from "../components/Modal";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey } from "../utils/dateUtils";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
+import SmsButton from "../components/SmsButton";
 
 const EMPTY_FILTERS = { siteId: "", vendorId: "", shiftType: "", employmentType: "", team: "", position: "", nationality: "", country: "", name: "", phone: "" };
 
@@ -262,7 +263,7 @@ export default function LeaveManagement() {
                       <input type="checkbox" checked={checked.has(e.id)} onChange={() => toggleChecked(e.id)} />
                     </td>
                     <td className="px-3 py-2 text-ink">{e.name}</td>
-                    <td className="px-3 py-2 text-ink">{e.phone || "-"}</td>
+                    <td className="px-3 py-2 text-ink"><span className="inline-flex items-center gap-1">{e.phone || "-"}<SmsButton phone={e.phone} /></span></td>
                     <td className="px-3 py-2 text-ink">{siteName_(e.workSiteId)}</td>
                     <td className="px-3 py-2 text-ink">{vendorName_(e.vendorId)}</td>
                     <td className="px-3 py-2 text-ink">{e.shiftType || "-"}</td>

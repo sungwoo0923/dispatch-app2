@@ -10,6 +10,7 @@ import Panel from "../components/Panel";
 import Button from "../components/Button";
 import Badge from "../components/Badge";
 import Modal from "../components/Modal";
+import SmsButton from "../components/SmsButton";
 
 const STATUS_LABEL = { pending: "승인대기", approved: "승인됨", rejected: "거절됨", suspended: "탈퇴처리됨" };
 const STATUS_TONE = { pending: "warning", approved: "success", rejected: "danger", suspended: "danger" };
@@ -159,7 +160,7 @@ export default function PlatformCompanies() {
                   {copiedId === c.id && <span className="ml-1.5 text-xs text-primary">복사됨</span>}
                 </td>
                 <td className="px-3 py-2.5">{c.applicant?.name || "-"}</td>
-                <td className="px-3 py-2.5">{c.applicant?.phone || "-"}</td>
+                <td className="px-3 py-2.5"><span className="inline-flex items-center gap-1">{c.applicant?.phone || "-"}<SmsButton phone={c.applicant?.phone} /></span></td>
                 <td className="px-3 py-2.5">{c.applicant?.email || "-"}</td>
                 <td className="px-3 py-2.5 text-ink">{formatDate(c.createdAt)}</td>
                 <td className="px-3 py-2.5">

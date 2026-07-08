@@ -7,6 +7,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 import { downloadCsv } from "../utils/exportCsv";
+import SmsButton from "../components/SmsButton";
 
 const EMPTY_FORM = {
   name: "",
@@ -153,7 +154,7 @@ export default function BusinessEntities() {
                       <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                       <td className="px-3 py-2.5 text-ink">{e.name}</td>
                       <td className="px-3 py-2.5 text-ink">{e.regNumber}</td>
-                      <td className="px-3 py-2.5 text-ink">{e.phone || "-"}</td>
+                      <td className="px-3 py-2.5 text-ink"><span className="inline-flex items-center gap-1">{e.phone || "-"}<SmsButton phone={e.phone} /></span></td>
                       <td className="px-3 py-2.5 text-ink">{e.address || "-"}</td>
                     </tr>
                   ))}

@@ -16,6 +16,7 @@ import {
   NATIONALITY_OPTIONS,
   COUNTRY_OPTIONS,
 } from "../constants/hr";
+import SmsButton from "../components/SmsButton";
 
 const EMPTY_FILTERS = {
   siteId: "",
@@ -391,7 +392,7 @@ export default function SafetyTrainings() {
                   <td className="px-4 py-3 text-ink">{formatDate(r.date)}</td>
                   <td className="px-4 py-3 text-ink">{emp.shiftType || "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.employmentType || "-"}</td>
-                  <td className="px-4 py-3 text-ink">{emp.phone || "-"}</td>
+                  <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone || "-"}<SmsButton phone={emp.phone} /></span></td>
                   <td className="px-4 py-3 text-ink">{emp.gender || "-"}</td>
                   <td className="px-4 py-3">
                     {r.safetySignature ? <Badge tone="success">Y</Badge> : <Badge tone="warning">N</Badge>}

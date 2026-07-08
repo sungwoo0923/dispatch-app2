@@ -19,6 +19,7 @@ import {
   NATIONALITY_OPTIONS,
   COUNTRY_OPTIONS,
 } from "../constants/hr";
+import SmsButton from "../components/SmsButton";
 
 const VIEW_OPTIONS = ["출근현황", "휴무현황", "수정현황"];
 const EDIT_STATUS_OPTIONS = ["출근", "지각", "조퇴", "출근전", "결근"];
@@ -626,7 +627,7 @@ export default function AttendanceBoard() {
                     <td className="px-4 py-3 text-ink">{lv.type}</td>
                     <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
                     <td className="px-4 py-3 text-ink">{lv.name}</td>
-                    <td className="px-4 py-3 text-ink">{employeeByUid.get(lv.uid)?.phone || "-"}</td>
+                    <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{employeeByUid.get(lv.uid)?.phone || "-"}<SmsButton phone={employeeByUid.get(lv.uid)?.phone} /></span></td>
                     <td className="px-4 py-3 text-ink">
                       {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
                     </td>

@@ -48,6 +48,7 @@ import {
   NATIONALITY_OPTIONS,
   COUNTRY_OPTIONS,
 } from "../constants/hr";
+import SmsButton from "../components/SmsButton";
 
 const STATUS_OPTIONS = ["대기", "출근확정", "출근확정취소", "출근취소"];
 const STATUS_TONE = { 대기: "muted", 출근확정: "success", 출근확정취소: "warning", 출근취소: "danger" };
@@ -1282,7 +1283,7 @@ export default function Schedule() {
                       </td>
                       <td className="px-3 py-2 text-ink">{i + 1}</td>
                       <td className="px-3 py-2 text-ink">{emp.name}</td>
-                      <td className="px-3 py-2 text-ink">{emp.phone}</td>
+                      <td className="px-3 py-2 text-ink"><span className="inline-flex items-center gap-1">{emp.phone}<SmsButton phone={emp.phone} /></span></td>
                       <td className="px-3 py-2 text-ink">{emp.gender || "-"}</td>
                       <td className="px-3 py-2 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
                       <td className="px-3 py-2 text-ink">{emp.employmentStatus === "휴직" ? "Y" : "N"}</td>

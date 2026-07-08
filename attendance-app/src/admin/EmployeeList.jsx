@@ -52,6 +52,7 @@ import {
 } from "../utils/documents";
 import { openAddressSearch } from "../utils/daumPostcode";
 import { openReportPreview } from "../utils/reportTemplates";
+import SmsButton from "../components/SmsButton";
 
 const REG_TABS = ["시간템플릿", "수당템플릿", "계약", "계약종료", "첨부서류", "기본 불러오기"];
 
@@ -1154,7 +1155,7 @@ export default function EmployeeList() {
                 {pending.map((p) => (
                   <tr key={p.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
                     <td className="px-4 py-3 text-ink">{p.name}</td>
-                    <td className="px-4 py-3 text-ink">{p.phone}</td>
+                    <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{p.phone}<SmsButton phone={p.phone} /></span></td>
                     <td className="px-4 py-3 font-mono text-primary">{p.id}</td>
                     <td className="px-4 py-3">
                       <button
@@ -2083,7 +2084,7 @@ export default function EmployeeList() {
                               />
                             </td>
                             <td className="px-3 py-2 text-ink">{e.name}</td>
-                            <td className="px-3 py-2 text-ink">{e.phone}</td>
+                            <td className="px-3 py-2 text-ink"><span className="inline-flex items-center gap-1">{e.phone}<SmsButton phone={e.phone} /></span></td>
                             <td className="px-3 py-2 text-ink">{vendorName_(e.vendorId)}</td>
                           </tr>
                         ))}

@@ -9,6 +9,7 @@ import Panel from "../components/Panel";
 import { toMonthKey, toDateKey } from "../utils/dateUtils";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS } from "../constants/hr";
+import SmsButton from "../components/SmsButton";
 
 const TABS = [
   { key: "summary", label: "요약" },
@@ -289,7 +290,7 @@ function AttendanceCountTab({ profile, lookups }) {
                 <td className="px-4 py-3 text-ink">{emp.shiftType || "-"}</td>
                 <td className="px-4 py-3 text-ink">{emp.employmentType || "-"}</td>
                 <td className="px-4 py-3 text-ink">{emp.name}</td>
-                <td className="px-4 py-3 text-ink">{emp.phone}</td>
+                <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone}<SmsButton phone={emp.phone} /></span></td>
                 <td className="px-4 py-3 text-ink">{emp.team || "-"}</td>
                 <td className="px-4 py-3 text-ink">{emp.position || "-"}</td>
                 <td className="px-4 py-3 font-medium text-ink">{present}</td>
@@ -519,7 +520,7 @@ function MonthlyGridTab({ profile, lookups }) {
                   <td className="px-3 py-2 text-ink">{emp.position || "-"}</td>
                   <td className="px-3 py-2 text-ink">{emp.insuranceApplied || "-"}</td>
                   <td className="px-3 py-2 text-ink">{emp.name}</td>
-                  <td className="px-3 py-2 text-ink">{emp.phone}</td>
+                  <td className="px-3 py-2 text-ink"><span className="inline-flex items-center gap-1">{emp.phone}<SmsButton phone={emp.phone} /></span></td>
                   {marks.map((m, i) => (
                     <td key={i} className={`px-2 py-2 text-center ${m ? "text-primary font-medium" : "text-slate-300"}`}>
                       {m ? 1 : 0}

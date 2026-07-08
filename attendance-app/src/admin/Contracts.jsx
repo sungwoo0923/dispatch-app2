@@ -29,6 +29,7 @@ import { buildDefaultContract } from "../utils/contractTemplate";
 import { NATIONALITY_OPTIONS, SHIFT_TYPE_OPTIONS, EMPLOYMENT_TYPE_OPTIONS, TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
 import { formatDate, calculateAge } from "../utils/dateUtils";
 import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
+import SmsButton from "../components/SmsButton";
 
 const CYCLE_OPTIONS = ["1년", "6개월", "3개월", "기간의 정함 없음"];
 
@@ -115,6 +116,17 @@ export default function Contracts() {
       .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0] || null;
 
   const rows = useMemo(() => employees.map((emp) => ({ emp, contract: latestContractFor(emp.id) })), [employees, contracts]);
+
+  // 문자 버튼의 기본 문구는 서명 상태에 맞춰 자동으로 달라진다 — 실무에서
+  // 문자를 보내는 목적이 대부분 "서명대기(=아직 근로자 서명 전)" 알림이기
+  // 때문에, 그 상태에서는 서명 재촉 문구를 기본으로 채워준다.
+  const smsMessageFor = (emp, contract) => {
+    const status = contractStatus(contract);
+    if (status === "서명대기" || status === "발송대기") {
+      return `[${companyName || "회사"}] ${emp.name}님, 근로계약서 서명이 아직 완료되지 않았습니다. KP-work 앱에서 계약서를 확인하고 서명해주세요.`;
+    }
+    return `[${companyName || "회사"}] ${emp.name}님, 안녕하세요.`;
+  };
 
   const filteredRows = useMemo(() => {
     const a = applied;
@@ -493,7 +505,12 @@ export default function Contracts() {
                   <td className="px-2 py-2 text-ink">{emp.name}</td>
                   <td className="px-2 py-2 text-ink">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-2 py-2 text-ink">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-2 py-2 text-ink">{emp.phone || "-"}</td>
+                  <td className="px-2 py-2 text-ink">
+                    <span className="inline-flex items-center gap-1">
+                      {emp.phone || "-"}
+                      <SmsButton phone={emp.phone} message={smsMessageFor(emp, contract)} />
+                    </span>
+                  </td>
                   <td className="px-2 py-2 text-ink">{emp.nationality || "내국인"}</td>
                   <td className="px-2 py-2 text-ink">{emp.gender || "-"}</td>
                   <td className="px-2 py-2 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
