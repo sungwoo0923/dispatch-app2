@@ -647,16 +647,14 @@ export default function EmployeeList() {
       return;
     }
 
+    // 사진/첨부서류 업로드(Storage)는 근로자 정보 저장(Firestore) 자체와는 별개의
+    // 실패 지점이다. Storage 설정 문제로 업로드만 실패해도 이미 저장된 핵심 정보까지
+    // "저장 실패"로 오인하지 않도록, 핵심 저장을 먼저 끝내고 업로드는 뒤에 분리해서
+    // 처리하며 실패해도 별도의 경고 토스트만 띄운다.
     try {
       if (editingUid) {
         const payload = Object.fromEntries(REGISTER_FIELD_KEYS.map((k) => [k, registerForm[k]]));
-        if (photoFile) {
-          payload.photoUrl = await uploadEmployeePhoto({ companyId: profile.companyId, uid: editingUid, file: photoFile });
-        }
         await updateDoc(doc(db, "users", editingUid), payload);
-        for (const { docType, file } of stagedDocs) {
-          await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
-        }
         if (editingOriginal) {
           for (const [key, label] of Object.entries(CHANGE_LOG_FIELD_LABELS)) {
             const before = editingOriginal[key] ?? "";
@@ -668,28 +666,49 @@ export default function EmployeeList() {
         }
         toast.success("수정되었습니다");
         closeRegisterModal();
+
+        try {
+          if (photoFile) {
+            const photoUrl = await uploadEmployeePhoto({ companyId: profile.companyId, uid: editingUid, file: photoFile });
+            await updateDoc(doc(db, "users", editingUid), { photoUrl });
+          }
+          for (const { docType, file } of stagedDocs) {
+            await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
+          }
+        } catch (uploadErr) {
+          console.error(uploadErr);
+          toast.error(`근로자 정보는 저장되었지만 사진/서류 업로드에 실패했습니다. (${uploadErr?.code || uploadErr?.message || "오류"})`);
+        }
         return;
       }
 
       const code = manualCode || generateInviteCode(7);
-      let photoUrl = "";
-      if (photoFile) {
-        photoUrl = await uploadPendingEmployeePhoto({ companyId: profile.companyId, pendingCode: code, file: photoFile });
-      }
       await setDoc(doc(db, "pendingEmployees", code), {
         companyId: profile.companyId,
         ...registerForm,
-        photoUrl,
+        photoUrl: "",
         employmentStatus: "재직",
         createdAt: serverTimestamp(),
       });
-      for (const { docType, file } of stagedDocs) {
-        await uploadPendingEmployeeDocument({ companyId: profile.companyId, pendingCode: code, employeeName: registerForm.name, docType, file });
-      }
       toast.success("저장되었습니다");
       setIssuedCode(code);
+
+      try {
+        let photoUrl = "";
+        if (photoFile) {
+          photoUrl = await uploadPendingEmployeePhoto({ companyId: profile.companyId, pendingCode: code, file: photoFile });
+          await setDoc(doc(db, "pendingEmployees", code), { photoUrl }, { merge: true });
+        }
+        for (const { docType, file } of stagedDocs) {
+          await uploadPendingEmployeeDocument({ companyId: profile.companyId, pendingCode: code, employeeName: registerForm.name, docType, file });
+        }
+      } catch (uploadErr) {
+        console.error(uploadErr);
+        toast.error(`근로자 정보는 저장되었지만 사진/서류 업로드에 실패했습니다. (${uploadErr?.code || uploadErr?.message || "오류"})`);
+      }
     } catch (err) {
-      toast.error(`저장에 실패했습니다. ${err?.code || err?.message || "다시 시도해주세요."}`);
+      console.error(err);
+      toast.error(`저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }
   };
 
@@ -756,8 +775,13 @@ export default function EmployeeList() {
         createdAt: serverTimestamp(),
       });
       toast.success("사직서가 발송되었습니다");
-    } catch {
-      toast.error("사직서 발송에 실패했습니다.");
+    } catch (e) {
+      console.error(e);
+      toast.error(
+        e?.code === "permission-denied"
+          ? "사직서 발송에 실패했습니다. (권한 오류: Firestore 보안규칙이 아직 배포되지 않았을 수 있습니다)"
+          : `사직서 발송에 실패했습니다. (${e?.code || e?.message || "알 수 없는 오류"})`
+      );
     }
   };
 
