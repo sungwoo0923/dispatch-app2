@@ -5,6 +5,7 @@ import App from "./App.jsx";
 import { AuthProvider } from "./hooks/useAuth.jsx";
 import { ConfirmProvider } from "./hooks/useConfirm.jsx";
 import { ToastProvider } from "./hooks/useToast.jsx";
+import UpdateBanner from "./components/UpdateBanner.jsx";
 import "./index.css";
 
 createRoot(document.getElementById("root")).render(
@@ -13,6 +14,7 @@ createRoot(document.getElementById("root")).render(
       <AuthProvider>
         <ToastProvider>
           <ConfirmProvider>
+            <UpdateBanner />
             <App />
           </ConfirmProvider>
         </ToastProvider>

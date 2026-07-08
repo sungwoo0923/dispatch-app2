@@ -21,7 +21,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt" (not "autoUpdate") so a deployed update waits for the user
+      // to click the UpdateBanner's "업데이트" button instead of silently
+      // self-reloading in the background. We register the SW ourselves via
+      // `virtual:pwa-register` (see src/hooks/useAppUpdate.js) so we can
+      // drive that banner — the default auto-injected script has no hook
+      // for it, so a deployed update was invisible until the user manually
+      // closed and reopened the app.
+      registerType: "prompt",
+      injectRegister: false,
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: false, // manifest.json is hand-authored in public/
       workbox: {
