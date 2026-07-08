@@ -309,6 +309,23 @@ export default function AttendanceBoard() {
   return (
     <div className="space-y-6">
       <Panel icon={ClipboardCheck} title="출근현황">
+        <Card className="mb-4 p-0">
+          <div className="flex flex-nowrap overflow-x-auto overscroll-x-contain border-b border-slate-100">
+            {VIEW_OPTIONS.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`shrink-0 px-4 py-3 text-sm font-medium ${
+                  view === v ? "bg-primary-dark text-white" : "text-muted hover:bg-slate-50"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </Card>
+
         <Card className="mb-4 space-y-3 p-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <label className="block">
@@ -481,25 +498,15 @@ export default function AttendanceBoard() {
           </div>
         </Card>
 
-        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
-          <p className="text-xs font-medium text-muted">
-            출근현황 {rows.length}
-            <span className="ml-2 text-[11px] text-danger">'{lateCount}' 지각</span>
-            <span className="ml-1 text-[11px] text-warning">'{earlyLeaveCount}' 조퇴</span>
-          </p>
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            value={view}
-            onChange={(e) => setView(e.target.value)}
-          >
-            {VIEW_OPTIONS.map((v) => (
-              <option key={v}>{v}</option>
-            ))}
-          </select>
-        </div>
-
         {view === "출근현황" && (
           <>
+            <div className="mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+              <p className="text-xs font-medium text-muted">
+                출근현황 {rows.length}
+                <span className="ml-2 text-[11px] text-danger">'{lateCount}' 지각</span>
+                <span className="ml-1 text-[11px] text-warning">'{earlyLeaveCount}' 조퇴</span>
+              </p>
+            </div>
             <Card className="mb-3 flex flex-wrap items-end gap-2 p-3">
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium text-muted">출근시간/퇴근시간</span>

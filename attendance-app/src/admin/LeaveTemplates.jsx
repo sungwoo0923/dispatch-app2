@@ -3,9 +3,11 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { CalendarRange, Plus, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
 
 const TABS = [
@@ -18,14 +20,27 @@ const EMPTY_FORM = { businessEntityId: "", name: "", cycleStartMonth: "1월", cy
 const MONTHS = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
 const DAYS = Array.from({ length: 31 }, (_, i) => `${i + 1}일`);
 
+// 근로기준법 기준 표준 연차 발생 규칙 — 1년 미만 근속자는 매월 1일씩(최대 11일),
+// 1년 이상은 15일에서 시작해 2년마다 1일씩 가산되어 최대 25일까지 늘어난다.
+// 관리자가 상세화면을 처음 열 때(아직 규칙이 비어있을 때) 기본값으로 채워두고,
+// 필요하면 직접 수정/삭제할 수 있게 한다.
+const standardMonthlyRules = () => Array.from({ length: 11 }, (_, i) => ({ key: `month_${i + 1}`, days: 1 }));
+const standardYearlyRules = () =>
+  Array.from({ length: 21 }, (_, i) => {
+    const year = i + 1;
+    return { key: `year_${year}`, days: Math.min(15 + Math.floor((year - 1) / 2), 25) };
+  });
+
 export default function LeaveTemplates() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const [entities, setEntities] = useState([]);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("info");
   const [form, setForm] = useState(EMPTY_FORM);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -46,11 +61,18 @@ export default function LeaveTemplates() {
     setSelectedId(null);
     setForm(EMPTY_FORM);
     setTab("info");
+    setPanelOpen(true);
   };
   const select = (t) => {
     setSelectedId(t.id);
-    setForm({ ...EMPTY_FORM, ...t, monthlyRules: t.monthlyRules || [], yearlyRules: t.yearlyRules || [] });
+    setForm({
+      ...EMPTY_FORM,
+      ...t,
+      monthlyRules: t.monthlyRules?.length ? t.monthlyRules : standardMonthlyRules(),
+      yearlyRules: t.yearlyRules?.length ? t.yearlyRules : standardYearlyRules(),
+    });
     setTab("info");
+    setPanelOpen(true);
   };
 
   const save = async () => {
@@ -58,14 +80,21 @@ export default function LeaveTemplates() {
     if (selectedId) {
       await updateDoc(doc(db, "leaveTemplates", selectedId), form);
     } else {
-      const ref_ = await addDoc(collection(db, "leaveTemplates"), { companyId: profile.companyId, ...form, createdAt: serverTimestamp() });
+      const ref_ = await addDoc(collection(db, "leaveTemplates"), {
+        companyId: profile.companyId,
+        ...form,
+        monthlyRules: standardMonthlyRules(),
+        yearlyRules: standardYearlyRules(),
+        createdAt: serverTimestamp(),
+      });
       setSelectedId(ref_.id);
     }
   };
   const remove = async () => {
     if (!selectedId) return;
+    if (!(await confirm("이 휴가템플릿을 삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "leaveTemplates", selectedId));
-    startNew();
+    setPanelOpen(false);
   };
 
   const exportCsv = () => downloadCsv("휴가템플릿", ["사업자", "템플릿명", "숨김여부"], rows.map((t) => [entityName(t.businessEntityId), t.name, t.visibility]));
@@ -77,7 +106,7 @@ export default function LeaveTemplates() {
       let k = key;
       let n = 1;
       while (usedKeys.has(k)) k = `${key}_${n++}`;
-      next.push({ key: k, label: field === "monthlyRules" ? `${next.length + 1}` : `${next.length + 1}`, days: 1 });
+      next.push({ key: k, days: 1 });
       return { ...f, [field]: next };
     });
   };
@@ -115,7 +144,7 @@ export default function LeaveTemplates() {
             </Button>
           </div>
         </div>
-        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
+        <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
           <table className="w-full min-w-[520px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
@@ -127,7 +156,7 @@ export default function LeaveTemplates() {
             </thead>
             <tbody>
               {rows.map((t, i) => (
-                <tr key={t.id} onClick={() => select(t)} className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedId === t.id ? "bg-primary-light/40" : ""}`}>
+                <tr key={t.id} onClick={() => select(t)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50">
                   <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5 text-ink">{entityName(t.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{t.name}</td>
@@ -144,96 +173,106 @@ export default function LeaveTemplates() {
             </tbody>
           </table>
         </div>
-
-        <Card className="p-0">
-          <div className="flex flex-col lg:flex-row">
-            <div className="border-b border-slate-100 p-4 lg:w-40 lg:border-b-0 lg:border-r">
-              <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">{form.name || "신규 템플릿"}</div>
-              <div className="flex flex-row gap-1 overflow-x-auto overscroll-x-contain lg:flex-col">
-                {TABS.map((t) => (
-                  <button key={t.key} onClick={() => setTab(t.key)} className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex-1 p-4">
-              {tab === "info" && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
-                      <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.businessEntityId} onChange={(e) => setForm((f) => ({ ...f, businessEntityId: e.target.value }))}>
-                        <option value="">선택</option>
-                        {entities.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명 *</span>
-                      <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-                    </label>
-                  </div>
-                  <div>
-                    <span className="mb-1.5 block text-xs font-medium text-muted">집계시작일 *</span>
-                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
-                      <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.cycleStartMonth} onChange={(e) => setForm((f) => ({ ...f, cycleStartMonth: e.target.value }))}>
-                        {MONTHS.map((m) => (
-                          <option key={m}>{m}</option>
-                        ))}
-                      </select>
-                      <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.cycleStartDay} onChange={(e) => setForm((f) => ({ ...f, cycleStartDay: e.target.value }))}>
-                        {DAYS.map((d) => (
-                          <option key={d}>{d}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-muted">메모</span>
-                    <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.memo} onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} />
-                  </label>
-                  <div>
-                    <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
-                    <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
-                      {["숨김", "보임"].map((v) => (
-                        <label key={v} className="flex items-center gap-1.5">
-                          <input type="radio" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
-                          {v}
-                        </label>
-                      ))}
-                      <Button size="sm" variant="outline" onClick={save}>
-                        적용
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
-                    <Button variant="outline" onClick={remove} disabled={!selectedId}>
-                      삭제
-                    </Button>
-                    <Button onClick={save}>저장</Button>
-                  </div>
-                  <p className="text-[11px] text-muted">사업자에 대한 휴가 템플릿을 만듭니다. 여러 센터에 적용시킬 수 있습니다. 휴가 템플릿명, 근속월규칙, 근속연도규칙을 설정할 수 있습니다. 회계시작일을 설정할수 있습니다.</p>
-                </div>
-              )}
-              {tab === "monthly" && (
-                <RuleTab title="근속월규칙" unitLabel="근속월수" list={form.monthlyRules} setForm={setForm} field="monthlyRules" addRule={() => addRule("monthlyRules", "month")} onSave={save} />
-              )}
-              {tab === "yearly" && (
-                <RuleTab title="근속연도규칙" unitLabel="근속연수" list={form.yearlyRules} setForm={setForm} field="yearlyRules" addRule={() => addRule("yearlyRules", "year")} onSave={save} />
-              )}
-            </div>
-          </div>
-        </Card>
       </Panel>
+
+      <SidePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title={`휴가템플릿 > ${selectedId ? "상세" : "신규"}`}
+        footer={
+          <>
+            {selectedId && (
+              <Button variant="outline" onClick={remove}>
+                삭제
+              </Button>
+            )}
+            <Button onClick={save}>저장</Button>
+          </>
+        }
+      >
+        <div className="flex flex-col lg:flex-row lg:gap-5">
+          <div className="mb-4 lg:mb-0 lg:w-40 lg:shrink-0">
+            <div className="mb-3 rounded-xl bg-primary-light/40 px-3 py-2 text-center text-sm font-semibold text-primary">{form.name || "신규 템플릿"}</div>
+            <div className="flex flex-row gap-1 overflow-x-auto overscroll-x-contain lg:flex-col">
+              {(selectedId ? TABS : TABS.slice(0, 1)).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`shrink-0 rounded-lg px-3 py-2 text-center text-sm font-medium ${tab === t.key ? "bg-primary-light text-primary" : "text-muted hover:bg-slate-50"}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {!selectedId && <p className="mt-2 text-[11px] text-muted">먼저 저장하면 근속월규칙/근속연도규칙을 설정할 수 있습니다.</p>}
+          </div>
+          <div className="flex-1">
+            {tab === "info" && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
+                    <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.businessEntityId} onChange={(e) => setForm((f) => ({ ...f, businessEntityId: e.target.value }))}>
+                      <option value="">선택</option>
+                      {entities.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명 *</span>
+                    <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                  </label>
+                </div>
+                <div>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">집계시작일 *</span>
+                  <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+                    <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.cycleStartMonth} onChange={(e) => setForm((f) => ({ ...f, cycleStartMonth: e.target.value }))}>
+                      {MONTHS.map((m) => (
+                        <option key={m}>{m}</option>
+                      ))}
+                    </select>
+                    <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.cycleStartDay} onChange={(e) => setForm((f) => ({ ...f, cycleStartDay: e.target.value }))}>
+                      {DAYS.map((d) => (
+                        <option key={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">메모</span>
+                  <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={form.memo} onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} />
+                </label>
+                <div>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
+                  <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
+                    {["숨김", "보임"].map((v) => (
+                      <label key={v} className="flex items-center gap-1.5">
+                        <input type="radio" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
+                        {v}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted">사업자에 대한 휴가 템플릿을 만듭니다. 여러 센터에 적용시킬 수 있습니다. 저장 후 근속월규칙/근속연도규칙 탭에서 근속 기간별 휴가발생일수를 설정할 수 있습니다 (근로기준법 기준값이 자동으로 채워집니다).</p>
+              </div>
+            )}
+            {tab === "monthly" && selectedId && (
+              <RuleTab title="근속월규칙" unitSuffix="개월" list={form.monthlyRules} setForm={setForm} field="monthlyRules" addRule={() => addRule("monthlyRules", "month")} />
+            )}
+            {tab === "yearly" && selectedId && (
+              <RuleTab title="근속연도규칙" unitSuffix="년" list={form.yearlyRules} setForm={setForm} field="yearlyRules" addRule={() => addRule("yearlyRules", "year")} />
+            )}
+          </div>
+        </div>
+      </SidePanel>
     </div>
   );
 }
 
-function RuleTab({ title, unitLabel, list, setForm, field, addRule, onSave }) {
+function RuleTab({ title, unitSuffix, list, setForm, field, addRule }) {
   const [checked, setChecked] = useState(() => new Set());
 
   const toggle = (idx) =>
@@ -269,7 +308,7 @@ function RuleTab({ title, unitLabel, list, setForm, field, addRule, onSave }) {
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
               <th className="w-8 px-3 py-2"></th>
-              <th className="px-3 py-2 font-semibold">{unitLabel}</th>
+              <th className="px-3 py-2 font-semibold">근속{unitSuffix}</th>
               <th className="px-3 py-2 font-semibold">휴가발생일수</th>
             </tr>
           </thead>
@@ -279,9 +318,21 @@ function RuleTab({ title, unitLabel, list, setForm, field, addRule, onSave }) {
                 <td className="px-3 py-2">
                   <input type="checkbox" checked={checked.has(i)} onChange={() => toggle(i)} />
                 </td>
-                <td className="px-3 py-2 text-ink">{i + 1}</td>
+                <td className="px-3 py-2 text-ink">
+                  {i + 1}
+                  {unitSuffix}
+                </td>
                 <td className="px-3 py-2">
-                  <input type="number" step="0.5" className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" value={r.days} onChange={(e) => setDays(i, Number(e.target.value))} />
+                  <div className="flex items-center justify-center gap-1">
+                    <input
+                      type="number"
+                      step="0.5"
+                      className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                      value={r.days}
+                      onChange={(e) => setDays(i, Number(e.target.value))}
+                    />
+                    <span className="text-xs text-muted">일</span>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -295,12 +346,7 @@ function RuleTab({ title, unitLabel, list, setForm, field, addRule, onSave }) {
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-muted">근로기준법에 따른 근속 {unitLabel === "근속월수" ? "월" : "연도"} 규칙으로 세팅 되어있습니다. 수정해야될 경우 항목 삭제 후 추가할 수 있습니다.</p>
-      <div className="flex justify-end">
-        <Button size="sm" onClick={onSave}>
-          저장
-        </Button>
-      </div>
+      <p className="text-[11px] text-muted">근로기준법에 따른 근속{unitSuffix} 규칙으로 기본 세팅되어 있습니다. 수정이 필요하면 항목을 삭제 후 다시 추가할 수 있습니다.</p>
     </div>
   );
 }
