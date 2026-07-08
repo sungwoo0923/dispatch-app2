@@ -72,25 +72,13 @@ function NavItems({ items, onClick }) {
 }
 
 export default function AdminLayout() {
-  const { profile, company, logout, isSuperAdmin, activeCompanyId, setActiveCompanyId } = useAuth();
+  const { profile, company, logout, isSuperAdmin } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
 
   return (
     <div className="flex min-h-screen bg-surface">
-      {isSuperAdmin && activeCompanyId && (
-        <div className="fixed inset-x-0 top-0 z-[60] flex flex-wrap items-center justify-center gap-2 bg-warning px-4 py-2 text-center text-xs font-medium text-white">
-          지금 다른 회사({company?.name || activeCompanyId})의 데이터를 보고 있습니다. 내 회사 데이터가 아닙니다.
-          <button
-            type="button"
-            onClick={() => setActiveCompanyId(null)}
-            className="rounded-lg bg-white/20 px-2.5 py-1 font-semibold hover:bg-white/30"
-          >
-            내 회사로 돌아가기
-          </button>
-        </div>
-      )}
-      <aside className={`hidden w-60 shrink-0 border-r border-slate-100 bg-white md:flex md:flex-col ${isSuperAdmin && activeCompanyId ? "mt-9" : ""}`}>
+      <aside className="hidden w-60 shrink-0 border-r border-slate-100 bg-white md:flex md:flex-col">
         <div className="flex items-center gap-2 px-5 py-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white">
             <CalendarCheck2 size={18} />
@@ -136,7 +124,7 @@ export default function AdminLayout() {
         </div>
       )}
 
-      <div className={`flex min-h-screen min-w-0 flex-1 flex-col ${isSuperAdmin && activeCompanyId ? "mt-9" : ""}`}>
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3.5 md:px-8">
           <button className="md:hidden" onClick={() => setMobileOpen(true)}>
             <Menu size={22} />

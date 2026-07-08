@@ -22,6 +22,7 @@ import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey } from "../utils/dateUtils";
 import { openReportPreview } from "../utils/reportTemplates";
 import { SAFETY_MANAGER_ROLES } from "../utils/safety";
+import { useToast } from "../hooks/useToast";
 
 const TABS = [
   { key: "settings", label: "안전관리설정" },
@@ -34,6 +35,7 @@ const EMPTY_REPORT_FORM = { reportId: "", effectiveDate: toDateKey() };
 
 export default function SafetySettings() {
   const { profile } = useAuth();
+  const toast = useToast();
   const [entities, setEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [admins, setAdmins] = useState([]);
@@ -150,23 +152,34 @@ export default function SafetySettings() {
 
   const addSiteReport = async () => {
     const template = safetyTemplates.find((t) => t.id === reportForm.reportId);
-    if (!template || !selectedId) return;
-    await addDoc(collection(db, "siteSafetyReports"), {
-      companyId: profile.companyId,
-      siteId: selectedId,
-      siteName: selectedSite?.name || "",
-      reportId: template.id,
-      templateName: template.templateName,
-      effectiveDate: reportForm.effectiveDate,
-      effectiveEndDate: "9999-12-31",
-      createdAt: serverTimestamp(),
-    });
-    setReportForm({ ...EMPTY_REPORT_FORM, effectiveDate: toDateKey() });
+    if (!template) return toast.error("안전교육 템플릿을 선택해주세요.");
+    if (!selectedId) return toast.error("센터를 먼저 선택해주세요.");
+    try {
+      await addDoc(collection(db, "siteSafetyReports"), {
+        companyId: profile.companyId,
+        siteId: selectedId,
+        siteName: selectedSite?.name || "",
+        reportId: template.id,
+        templateName: template.templateName,
+        effectiveDate: reportForm.effectiveDate,
+        effectiveEndDate: "9999-12-31",
+        createdAt: serverTimestamp(),
+      });
+      setReportForm({ ...EMPTY_REPORT_FORM, effectiveDate: toDateKey() });
+      toast.success("안전교육리포트가 등록되었습니다");
+    } catch {
+      toast.error("등록에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const removeSiteReports = async () => {
-    for (const id of reportChecked) await deleteDoc(doc(db, "siteSafetyReports", id));
-    setReportChecked(new Set());
+    try {
+      for (const id of reportChecked) await deleteDoc(doc(db, "siteSafetyReports", id));
+      setReportChecked(new Set());
+      toast.success("삭제되었습니다");
+    } catch {
+      toast.error("삭제에 실패했습니다. 다시 시도해주세요.");
+    }
   };
 
   const previewSiteReport = (siteReport) => {

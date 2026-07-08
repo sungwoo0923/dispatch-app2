@@ -897,11 +897,11 @@ export default function EmployeeList() {
           <table className="w-full min-w-[2400px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="sticky left-0 z-20 w-10 bg-primary-light px-2 py-3 font-semibold">
+                <th className="sticky left-0 z-20 w-10 min-w-10 max-w-10 bg-primary-light px-2 py-3 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="sticky left-10 z-20 w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
-                <th className="sticky left-24 z-20 w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
+                <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
+                <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
                 {visibleEmployeeColumns.map((c) => (
                   <DraggableTh key={c.key} columnKey={c.key} onMove={moveEmployeeColumn} className="px-4 py-3 font-semibold">
                     {c.label}
@@ -919,15 +919,15 @@ export default function EmployeeList() {
                   className="cursor-pointer border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50 hover:bg-slate-100"
                 >
                   <td
-                    className={`sticky left-0 z-10 w-10 px-2 py-3 ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
+                    className={`sticky left-0 z-10 w-10 min-w-10 max-w-10 px-2 py-3 ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
                     onDoubleClick={(e) => e.stopPropagation()}
                   >
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
                   </td>
-                  <td className={`sticky left-10 z-10 w-14 px-2 py-3 text-muted ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>
+                  <td className={`sticky left-10 z-10 w-14 min-w-14 max-w-14 px-2 py-3 text-muted ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>
                     {(page - 1) * pageSize + i + 1}
                   </td>
-                  <td className={`sticky left-24 z-10 w-28 px-2 py-3 text-ink ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>{emp.name}</td>
+                  <td className={`sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis px-2 py-3 text-ink ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>{emp.name}</td>
                   {visibleEmployeeColumns.map((c) => (
                     <td
                       key={c.key}

@@ -26,19 +26,25 @@ input, select, textarea {
   }
 
   /* 컬럼명이 화이트 배경에 묻혀 구분이 안 되는 문제를 막기 위해 모든 표의
-     헤더 셀에 앱 톤(연한 블루)의 배경색을 기본으로 깐다. */
+     헤더 셀에 앱 톤(연한 블루)의 배경색을 기본으로 깐다. 고정(sticky) 컬럼은
+     이 배경을 불투명한 값으로 각자 다시 지정하므로, 나머지 헤더도 반투명이 아닌
+     동일한 불투명 톤을 써야 이어지는 색이 끊겨 보이지 않는다. */
   table thead th {
-    @apply bg-primary-light/70 text-ink font-semibold;
+    @apply bg-primary-light text-ink font-semibold;
   }
 
   /* 모든 표의 컬럼명과 그 안의 내용은 항상 가운데 정렬한다. text-align만으로는
-     th/td 안의 inline-flex 래퍼(드래그 아이콘, 뱃지 등)가 여전히 왼쪽 정렬되므로
-     justify-content까지 함께 맞춰준다. */
+     th/td 안의 inline-flex 래퍼(드래그 아이콘, 뱃지 등)와 <select>가 여전히
+     왼쪽 정렬되므로 justify-content/text-align-last까지 함께 맞춰준다. */
   table th, table td {
     text-align: center;
   }
   table th > *, table td > * {
     justify-content: center;
+  }
+  table select {
+    text-align: center;
+    text-align-last: center;
   }
 }
 

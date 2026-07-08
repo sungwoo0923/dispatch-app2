@@ -745,15 +745,15 @@ export default function Schedule() {
               <table className="w-full min-w-[980px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="sticky left-0 z-20 w-10 bg-primary-light px-2 py-3 font-semibold">
+                    <th className="sticky left-0 z-20 w-10 min-w-10 max-w-10 bg-primary-light px-2 py-3 font-semibold">
                       <input
                         type="checkbox"
                         checked={confirmedRows.length > 0 && confirmedRows.every(({ schedule: s }) => selected.has(s.id))}
                         onChange={() => toggleSelectAllIn(confirmedRows)}
                       />
                     </th>
-                    <th className="sticky left-10 z-20 w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
-                    <th className="sticky left-24 z-20 w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
+                    <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
+                    <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
                     {visibleScheduleColumns.map((c) => (
                       <DraggableTh key={c.key} columnKey={c.key} onMove={moveScheduleColumn} className="px-4 py-3 font-semibold">
                         {c.label}
@@ -766,11 +766,11 @@ export default function Schedule() {
                     const { schedule: s } = row;
                     return (
                       <tr key={s.id} className="border-b border-slate-50 last:border-0">
-                        <td className="sticky left-0 z-10 w-10 bg-white px-2 py-3">
+                        <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3">
                           <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
                         </td>
-                        <td className="sticky left-10 z-10 w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
-                        <td className="sticky left-24 z-10 w-28 bg-white px-2 py-3 text-ink">{s.name}</td>
+                        <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
+                        <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{s.name}</td>
                         {visibleScheduleColumns.map((c) => (
                           <td key={c.key} className="px-4 py-3 text-muted">
                             {c.render(row)}
@@ -806,15 +806,15 @@ export default function Schedule() {
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="sticky left-0 z-20 w-10 bg-primary-light px-2 py-3 font-semibold">
+                <th className="sticky left-0 z-20 w-10 min-w-10 max-w-10 bg-primary-light px-2 py-3 font-semibold">
                   <input
                     type="checkbox"
                     checked={pendingRows.length > 0 && pendingRows.every(({ schedule: s }) => selected.has(s.id))}
                     onChange={() => toggleSelectAllIn(pendingRows)}
                   />
                 </th>
-                <th className="sticky left-10 z-20 w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
-                <th className="sticky left-24 z-20 w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
+                <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
+                <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
                 {visibleScheduleColumns.map((c) => (
                   <DraggableTh key={c.key} columnKey={c.key} onMove={moveScheduleColumn} className="px-4 py-3 font-semibold">
                     {c.label}
@@ -825,11 +825,11 @@ export default function Schedule() {
             <tbody>
               {pendingRows.map((row, i) => (
                 <tr key={row.schedule.id} className="border-b border-slate-50 last:border-0">
-                  <td className="sticky left-0 z-10 w-10 bg-white px-2 py-3">
+                  <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3">
                     <input type="checkbox" checked={selected.has(row.schedule.id)} onChange={() => toggleSelected(row.schedule.id)} />
                   </td>
-                  <td className="sticky left-10 z-10 w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
-                  <td className="sticky left-24 z-10 w-28 bg-white px-2 py-3 text-ink">{row.schedule.name}</td>
+                  <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
+                  <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{row.schedule.name}</td>
                   {visibleScheduleColumns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-muted">
                       {c.render(row)}
