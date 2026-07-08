@@ -114,7 +114,8 @@ service cloud.firestore {
     match /leaves/{leaveId} {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() &&
+        (request.resource.data.uid == request.auth.uid || isAdminOf(request.resource.data.companyId));
       allow update: if isSignedIn() &&
         (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'pending'));
     }
