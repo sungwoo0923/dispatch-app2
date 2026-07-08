@@ -19,8 +19,8 @@ import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import AddressSearchModal from "../components/AddressSearchModal";
 import { downloadCsv } from "../utils/exportCsv";
-import { openAddressSearch } from "../utils/daumPostcode";
 
 const MAX_SITES = 10;
 
@@ -54,6 +54,7 @@ export default function Centers() {
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("info");
   const [info, setInfo] = useState(EMPTY_INFO);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -93,11 +94,6 @@ export default function Centers() {
   const goStep = (dir) => {
     const next = TABS[tabIndex + dir];
     if (next && (selectedId || next.key === "info")) setTab(next.key);
-  };
-
-  const searchAddress = async () => {
-    const result = await openAddressSearch();
-    if (result) setInfo((f) => ({ ...f, address: result.address }));
   };
 
   const removeSite = async () => {
@@ -332,7 +328,7 @@ export default function Centers() {
                           value={info.address}
                           placeholder="주소검색 버튼으로 입력하세요"
                         />
-                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={searchAddress}>
+                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setAddressModalOpen(true)}>
                           <Search size={13} /> 주소검색
                         </Button>
                       </div>
@@ -380,8 +376,8 @@ export default function Centers() {
                     </label>
                   </div>
                   <p className="text-[11px] text-muted">
-                    위도/경도가 설정되어 있어야 근로자 모바일 앱에서 반경 내 자동/수동 출근이 정상 동작합니다. 지도(예: 구글맵)에서
-                    센터 위치를 우클릭하면 좌표를 확인할 수 있습니다.
+                    "주소검색"으로 주소를 검색하면 위도/경도가 자동으로 입력됩니다. 위도/경도가 설정되어 있어야 근로자 모바일
+                    앱에서 반경 내 자동/수동 출근이 정상 동작합니다. 필요 시 아래 값을 직접 수정할 수도 있습니다.
                   </p>
                   <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
                     {selectedId && (
@@ -426,6 +422,13 @@ export default function Centers() {
           </div>
         </Card>
       </Panel>
+
+      <AddressSearchModal
+        open={addressModalOpen}
+        onClose={() => setAddressModalOpen(false)}
+        title="센터 출근지 설정"
+        onApply={(result) => setInfo((f) => ({ ...f, address: result.address, lat: result.lat, lng: result.lng }))}
+      />
     </div>
   );
 }
