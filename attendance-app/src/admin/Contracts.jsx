@@ -30,6 +30,9 @@ import { NATIONALITY_OPTIONS, SHIFT_TYPE_OPTIONS, EMPLOYMENT_TYPE_OPTIONS, TEAM_
 import { formatDate, calculateAge } from "../utils/dateUtils";
 import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
 import SmsButton from "../components/SmsButton";
+import ResignationApprovals from "./ResignationApprovals";
+
+const TOP_TABS = ["계약서", "사직서"];
 
 const CYCLE_OPTIONS = ["1년", "6개월", "3개월", "기간의 정함 없음"];
 
@@ -65,6 +68,7 @@ export default function Contracts() {
   const [draft, setDraft] = useState(emptyDraft());
   const [applied, setApplied] = useState(emptyDraft());
   const [selected, setSelected] = useState(() => new Set());
+  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get("tab") === "resignation" ? "사직서" : "계약서"));
 
   const [signTarget, setSignTarget] = useState(null); // { emp, contract, content }
   const [docView, setDocView] = useState(null); // { emp, contract }
@@ -339,7 +343,22 @@ export default function Contracts() {
 
   return (
     <div className="space-y-6">
-      <Panel icon={FileSignature} title="서명계약조회">
+      <Panel icon={FileSignature} title="계약관리">
+        <div className="mb-4 flex flex-nowrap overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100 bg-white">
+          {TOP_TABS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`shrink-0 px-4 py-3 text-sm font-medium ${tab === t ? "bg-primary-dark text-white" : "text-muted hover:bg-slate-50"}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        {tab === "사직서" && <ResignationApprovals />}
+        {tab === "계약서" && (
+        <>
         <div className="space-y-3">
           <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
             <FilterDropdown
@@ -549,6 +568,8 @@ export default function Contracts() {
           changePageSize={changePageSize}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
         />
+        </>
+        )}
       </Panel>
 
       <Modal

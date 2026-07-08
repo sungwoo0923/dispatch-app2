@@ -170,7 +170,7 @@ export default function AdminLayout() {
             {resignationCount > 0 && (
               <button
                 type="button"
-                onClick={() => navigate("/employees/resignations")}
+                onClick={() => navigate("/employees/contracts?tab=resignation")}
                 className="flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20"
               >
                 <FileWarning size={14} /> 사직서 결재대기 {resignationCount}건이 있습니다

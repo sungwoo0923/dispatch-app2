@@ -22,8 +22,7 @@ export const NAV = [
     icon: Users,
     children: [
       { to: "/employees", label: "근로자 목록" },
-      { to: "/employees/contracts", label: "계약서" },
-      { to: "/employees/resignations", label: "사직서처리" },
+      { to: "/employees/contracts", label: "계약관리" },
       { to: "/employees/documents", label: "서류함" },
       { to: "/employees/status", label: "입퇴사현황" },
     ],
