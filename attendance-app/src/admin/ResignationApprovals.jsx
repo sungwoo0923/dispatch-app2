@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { PenLine, FileText } from "lucide-react";
+import { PenLine, FileText, Trash2, ChevronDown } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
@@ -16,6 +17,8 @@ const STATUS_LABEL = {
   employee_pending: ["근로자 서명대기", "muted"],
   submitted: ["담당 결재대기", "warning"],
   manager_signed: ["대표 결재대기", "warning"],
+  on_hold: ["보류", "muted"],
+  rejected: ["반려", "danger"],
   completed: ["처리완료", "success"],
 };
 
@@ -24,11 +27,14 @@ const STATUS_LABEL = {
 // 전문과 결재결과 도장이 찍힌 미리보기가 뜨도록 한다.
 export default function ResignationApprovals() {
   const { profile } = useAuth();
+  const confirm = useConfirm();
   const toast = useToast();
   const [rows, setRows] = useState([]);
   const [signTarget, setSignTarget] = useState(null); // { req, stage: "manager" | "ceo" }
   const [previewMode, setPreviewMode] = useState(false);
+  const [noteText, setNoteText] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
   const padRef = useRef(null);
 
   useEffect(() => {
@@ -40,7 +46,8 @@ export default function ResignationApprovals() {
     return () => unsub();
   }, [profile?.companyId]);
 
-  const sorted = [...rows].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  const active = rows.filter((r) => !r.deleted).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  const deleted = rows.filter((r) => r.deleted).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   const isCeo = profile?.position === "대표";
 
   const previewReq = (req) =>
@@ -64,6 +71,7 @@ export default function ResignationApprovals() {
     const stage = req.status === "submitted" ? "manager" : "ceo";
     setSignTarget({ req, stage });
     setPreviewMode(true);
+    setNoteText("");
   };
 
   const submitApprovalSignature = async () => {
@@ -106,12 +114,115 @@ export default function ResignationApprovals() {
     }
   };
 
+  const submitHoldOrReject = async (status) => {
+    if (!signTarget) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "resignationRequests", signTarget.req.id), {
+        status,
+        adminNote: noteText || "",
+        processedBy: profile.name,
+      });
+      await addDoc(collection(db, "notifications"), {
+        companyId: profile.companyId,
+        uid: signTarget.req.uid,
+        title: status === "rejected" ? "사직서가 반려되었습니다" : "사직서 처리가 보류되었습니다",
+        message: noteText || "",
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      toast.success(status === "rejected" ? "반려 처리되었습니다" : "보류 처리되었습니다");
+      setSignTarget(null);
+    } catch (err) {
+      toast.error(`처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeRequest = async (req) => {
+    if (!(await confirm(`${req.employeeName}님의 사직서를 삭제하시겠습니까? 삭제하면 근로자 앱에서도 함께 사라집니다.`, "delete"))) return;
+    try {
+      await updateDoc(doc(db, "resignationRequests", req.id), {
+        deleted: true,
+        deletedAt: formatDate(new Date().toISOString().slice(0, 10)),
+        deletedBy: profile.name,
+      });
+      toast.success("삭제되었습니다");
+    } catch (err) {
+      toast.error(`삭제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
+  };
+
+  const renderRow = (req, i) => {
+    const [label, tone] = STATUS_LABEL[req.status] || ["-", "muted"];
+    return (
+      <tr
+        key={req.id}
+        onDoubleClick={() => previewReq(req)}
+        title="더블클릭하여 사직서 미리보기"
+        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+      >
+        <td className="px-3 py-3 text-ink">{i + 1}</td>
+        <td className="px-3 py-3 text-ink">{req.employeeName}</td>
+        <td className="px-3 py-3 text-ink">{req.siteName || "-"}</td>
+        <td className="px-3 py-3 text-ink">{req.resignDate ? formatDate(req.resignDate) : "-"}</td>
+        <td className="px-3 py-3 text-ink">{req.reason || "-"}</td>
+        <td className="px-3 py-3">
+          <Badge tone={tone}>{label}</Badge>
+        </td>
+        <td className="px-3 py-3">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              previewReq(req);
+            }}
+          >
+            <FileText size={13} /> 보기
+          </button>
+        </td>
+        <td className="px-3 py-3">
+          {!req.deleted && canSign(req) ? (
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                openSign(req);
+              }}
+            >
+              <PenLine size={13} /> 결재
+            </Button>
+          ) : (
+            <span className="text-xs text-muted">-</span>
+          )}
+        </td>
+        <td className="px-3 py-3">
+          {!req.deleted && (
+            <button
+              type="button"
+              className="text-muted hover:text-danger"
+              title="삭제"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeRequest(req);
+              }}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div>
       <p className="mb-4 text-xs text-muted">발송된 사직서의 서명·결재 진행 상황을 확인합니다. 행을 더블클릭하면 사직서 전문과 결재결과를 미리볼 수 있습니다.</p>
-      <div className="mb-2 text-xs font-medium text-muted">목록 {sorted.length}</div>
+      <div className="mb-2 text-xs font-medium text-muted">목록 {active.length}</div>
       <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
-        <table className="w-full min-w-[760px] text-center text-sm">
+        <table className="w-full min-w-[820px] text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-muted">
               <th className="px-3 py-3 font-semibold">순번</th>
@@ -122,59 +233,14 @@ export default function ResignationApprovals() {
               <th className="px-3 py-3 font-semibold">상태</th>
               <th className="px-3 py-3 font-semibold">미리보기</th>
               <th className="px-3 py-3 font-semibold">결재</th>
+              <th className="px-3 py-3 font-semibold">삭제</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((req, i) => {
-              const [label, tone] = STATUS_LABEL[req.status] || ["-", "muted"];
-              return (
-                <tr
-                  key={req.id}
-                  onDoubleClick={() => previewReq(req)}
-                  title="더블클릭하여 사직서 미리보기"
-                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
-                >
-                  <td className="px-3 py-3 text-ink">{i + 1}</td>
-                  <td className="px-3 py-3 text-ink">{req.employeeName}</td>
-                  <td className="px-3 py-3 text-ink">{req.siteName || "-"}</td>
-                  <td className="px-3 py-3 text-ink">{req.resignDate ? formatDate(req.resignDate) : "-"}</td>
-                  <td className="px-3 py-3 text-ink">{req.reason || "-"}</td>
-                  <td className="px-3 py-3">
-                    <Badge tone={tone}>{label}</Badge>
-                  </td>
-                  <td className="px-3 py-3">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        previewReq(req);
-                      }}
-                    >
-                      <FileText size={13} /> 보기
-                    </button>
-                  </td>
-                  <td className="px-3 py-3">
-                    {canSign(req) ? (
-                      <Button
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openSign(req);
-                        }}
-                      >
-                        <PenLine size={13} /> 결재
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted">-</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {sorted.length === 0 && (
+            {active.map((req, i) => renderRow(req, i))}
+            {active.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-xs text-muted">
+                <td colSpan={9} className="px-3 py-6 text-center text-xs text-muted">
                   발송된 사직서가 없습니다.
                 </td>
               </tr>
@@ -183,6 +249,63 @@ export default function ResignationApprovals() {
         </table>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setShowDeleted((v) => !v)}
+        className="mt-6 flex w-full items-center gap-2 border-t border-slate-100 pt-4 text-sm font-semibold text-muted"
+      >
+        <ChevronDown size={16} className={`transition-transform ${showDeleted ? "rotate-180" : ""}`} />
+        삭제된 사직서 ({deleted.length}건)
+      </button>
+      {showDeleted && (
+        <div className="-mx-4 mt-2 overflow-x-auto overscroll-x-contain md:-mx-5">
+          <table className="w-full min-w-[760px] text-center text-sm opacity-70">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-3 py-3 font-semibold">순번</th>
+                <th className="px-3 py-3 font-semibold">이름</th>
+                <th className="px-3 py-3 font-semibold">근무지</th>
+                <th className="px-3 py-3 font-semibold">퇴사예정일</th>
+                <th className="px-3 py-3 font-semibold">퇴사사유</th>
+                <th className="px-3 py-3 font-semibold">상태</th>
+                <th className="px-3 py-3 font-semibold">미리보기</th>
+                <th className="px-3 py-3 font-semibold">삭제일</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deleted.map((req, i) => {
+                const [label, tone] = STATUS_LABEL[req.status] || ["-", "muted"];
+                return (
+                  <tr key={req.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-3 text-ink">{i + 1}</td>
+                    <td className="px-3 py-3 text-ink">{req.employeeName}</td>
+                    <td className="px-3 py-3 text-ink">{req.siteName || "-"}</td>
+                    <td className="px-3 py-3 text-ink">{req.resignDate ? formatDate(req.resignDate) : "-"}</td>
+                    <td className="px-3 py-3 text-ink">{req.reason || "-"}</td>
+                    <td className="px-3 py-3">
+                      <Badge tone={tone}>{label}</Badge>
+                    </td>
+                    <td className="px-3 py-3">
+                      <button type="button" className="inline-flex items-center gap-1 text-primary hover:underline" onClick={() => previewReq(req)}>
+                        <FileText size={13} /> 보기
+                      </button>
+                    </td>
+                    <td className="px-3 py-3 text-ink">{req.deletedAt || "-"}</td>
+                  </tr>
+                );
+              })}
+              {deleted.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-3 py-6 text-center text-xs text-muted">
+                    삭제된 사직서가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <Modal
         open={Boolean(signTarget)}
         onClose={() => setSignTarget(null)}
@@ -190,15 +313,18 @@ export default function ResignationApprovals() {
         footer={
           previewMode ? (
             <Button className="w-full" onClick={() => setPreviewMode(false)}>
-              내용 확인 완료 · 서명하기
+              내용 확인 완료 · 결재 진행
             </Button>
           ) : (
             <>
-              <Button variant="outline" onClick={() => padRef.current?.clear()}>
-                다시그리기
+              <Button variant="outline" onClick={() => submitHoldOrReject("on_hold")} disabled={saving}>
+                보류
+              </Button>
+              <Button variant="danger" onClick={() => submitHoldOrReject("rejected")} disabled={saving}>
+                반려
               </Button>
               <Button className="flex-1" onClick={submitApprovalSignature} disabled={saving}>
-                {saving ? "처리 중..." : "결재 완료"}
+                {saving ? "처리 중..." : "승인(서명)"}
               </Button>
             </>
           )
@@ -207,8 +333,32 @@ export default function ResignationApprovals() {
         {signTarget && (
           <div className="space-y-3">
             {previewMode ? (
-              <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-ink">
-                <p className="text-center text-sm font-bold">사 직 서 (원)</p>
+              <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-ink">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-bold">사 직 서 (원)</p>
+                  <ApprovalBox
+                    steps={[
+                      {
+                        role: "신청인",
+                        name: signTarget.req.employeeName,
+                        signatureDataUrl: signTarget.req.employeeSignatureDataUrl,
+                        result: signTarget.req.employeeSignatureDataUrl ? "approved" : null,
+                      },
+                      {
+                        role: "담당",
+                        name: signTarget.req.managerName,
+                        signatureDataUrl: signTarget.req.managerSignatureDataUrl,
+                        result: signTarget.req.managerSignatureDataUrl ? "approved" : null,
+                      },
+                      {
+                        role: "대표",
+                        name: signTarget.req.ceoName,
+                        signatureDataUrl: signTarget.req.ceoSignatureDataUrl,
+                        result: signTarget.req.ceoSignatureDataUrl ? "approved" : null,
+                      },
+                    ]}
+                  />
+                </div>
                 <p>
                   성명: {signTarget.req.employeeName} · 직책: {signTarget.req.position || "-"}
                 </p>
@@ -222,35 +372,23 @@ export default function ResignationApprovals() {
                   본인은 상기와 같은 내용으로 퇴사하고자 하오니 허락하여 주시기 바랍니다. 아울러 퇴직에 따른 아래
                   조항을 성실히 준수할 것을 서약합니다.
                 </p>
-                <ApprovalBox
-                  steps={[
-                    {
-                      role: "신청인",
-                      name: signTarget.req.employeeName,
-                      signatureDataUrl: signTarget.req.employeeSignatureDataUrl,
-                      result: signTarget.req.employeeSignatureDataUrl ? "approved" : null,
-                    },
-                    {
-                      role: "담당",
-                      name: signTarget.req.managerName,
-                      signatureDataUrl: signTarget.req.managerSignatureDataUrl,
-                      result: signTarget.req.managerSignatureDataUrl ? "approved" : null,
-                    },
-                    {
-                      role: "대표",
-                      name: signTarget.req.ceoName,
-                      signatureDataUrl: signTarget.req.ceoSignatureDataUrl,
-                      result: signTarget.req.ceoSignatureDataUrl ? "approved" : null,
-                    },
-                  ]}
-                />
               </div>
             ) : (
               <>
                 <p className="text-sm text-ink">
                   {signTarget.req.employeeName}님의 사직서에 {signTarget.stage === "ceo" ? "대표" : "담당"}로서 결재
-                  서명합니다.
+                  합니다. 승인은 서명이 필요하고, 반려/보류는 사유만 남기면 됩니다.
                 </p>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">반려/보류 사유 (승인 시에는 불필요)</span>
+                  <textarea
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    rows={2}
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                  />
+                </label>
+                <p className="mb-1 text-xs font-medium text-muted">승인 서명</p>
                 <SignaturePad ref={padRef} />
               </>
             )}

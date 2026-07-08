@@ -10,9 +10,10 @@ import Button from "../components/Button";
 import Panel from "../components/Panel";
 import SidePanel from "../components/SidePanel";
 import { uploadSafetyMaterialFile } from "../utils/safety";
+import { SAFETY_TOPIC_TEMPLATES } from "../utils/safetyTemplates";
 import { formatDate } from "../utils/dateUtils";
 
-const EMPTY_FORM = { title: "", type: "text", content: "" };
+const EMPTY_FORM = { title: "", type: "text", content: "", topicKey: "" };
 
 export default function SafetyMaterials() {
   const { profile } = useAuth();
@@ -191,15 +192,40 @@ export default function SafetyMaterials() {
             </div>
           </div>
           {form.type === "text" ? (
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">지침 내용 *</span>
-              <textarea
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                rows={10}
-                value={form.content}
-                onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-              />
-            </label>
+            <>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">교육 주제 (선택 시 기본 양식 자동 입력)</span>
+                <select
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={form.topicKey}
+                  onChange={(e) => {
+                    const t = SAFETY_TOPIC_TEMPLATES.find((x) => x.key === e.target.value);
+                    setForm((f) => ({
+                      ...f,
+                      topicKey: e.target.value,
+                      title: t ? t.title : f.title,
+                      content: t ? t.content : f.content,
+                    }));
+                  }}
+                >
+                  <option value="">직접 작성</option>
+                  {SAFETY_TOPIC_TEMPLATES.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.topic}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">지침 내용 *</span>
+                <textarea
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  rows={10}
+                  value={form.content}
+                  onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+                />
+              </label>
+            </>
           ) : (
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">영상 파일 *</span>

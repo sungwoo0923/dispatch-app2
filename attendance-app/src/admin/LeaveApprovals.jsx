@@ -297,6 +297,20 @@ export default function LeaveApprovals() {
       >
         {detailView && (
           <div className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-bold text-ink">휴가신청서</p>
+              <ApprovalBox
+                steps={[
+                  {
+                    role: "결재",
+                    name: "",
+                    signatureDataUrl: null,
+                    result:
+                      detailView.leave.status === "approved" ? "approved" : detailView.leave.status === "rejected" ? "rejected" : null,
+                  },
+                ]}
+              />
+            </div>
             <div className="space-y-1.5 text-sm text-ink">
               <div className="flex justify-between border-b border-slate-50 py-1.5">
                 <span className="text-xs text-muted">이름</span>
@@ -324,19 +338,6 @@ export default function LeaveApprovals() {
                   <span>{detailView.leave.adminNote}</span>
                 </div>
               )}
-            </div>
-            <div className="flex justify-center pt-1">
-              <ApprovalBox
-                steps={[
-                  {
-                    role: "결재",
-                    name: "",
-                    signatureDataUrl: null,
-                    result:
-                      detailView.leave.status === "approved" ? "approved" : detailView.leave.status === "rejected" ? "rejected" : null,
-                  },
-                ]}
-              />
             </div>
           </div>
         )}

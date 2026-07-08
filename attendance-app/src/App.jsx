@@ -56,6 +56,7 @@ import ContractDetail from "./employee/ContractDetail";
 import ResignationPage from "./employee/ResignationPage";
 import DocumentsPage from "./employee/DocumentsPage";
 import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
+import SafetyArchivePage from "./employee/SafetyArchivePage";
 import BoardPage from "./employee/BoardPage";
 import { PENDING_INVITE_KEY, SUPER_ADMIN_PICK_COMPANY_KEY } from "./constants/session";
 
@@ -174,6 +175,7 @@ export default function App() {
         <Route path="resignation" element={<ResignationPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="safety" element={<SafetyTrainingsPage />} />
+        <Route path="safety/archive" element={<SafetyArchivePage />} />
         <Route path="board" element={<BoardPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

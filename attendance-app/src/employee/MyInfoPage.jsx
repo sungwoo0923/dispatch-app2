@@ -8,6 +8,7 @@ import BuildInfo from "../components/BuildInfo";
 const ITEMS = [
   { to: "/documents", label: "서류함", icon: FolderOpen },
   { to: "/safety", label: "안전교육", icon: ShieldCheck },
+  { to: "/safety/archive", label: "안전교육자료", icon: ShieldCheck },
 ];
 
 export default function MyInfoPage() {

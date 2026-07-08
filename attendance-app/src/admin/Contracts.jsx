@@ -468,44 +468,44 @@ export default function Contracts() {
         </p>
 
         <div className="-mx-4 mt-2 overflow-x-auto overscroll-x-contain md:-mx-5">
-          <table className="w-full min-w-[1700px] text-center text-xs">
+          <table className="w-full min-w-[1900px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
-                <th className="px-2 py-2 font-semibold">순번</th>
-                <th className="px-2 py-2 font-semibold">
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="px-2 py-2 font-semibold">계약서</th>
-                <th className="px-2 py-2 font-semibold">상세</th>
-                <th className="px-2 py-2 font-semibold">이름</th>
-                <th className="px-2 py-2 font-semibold">사업자</th>
-                <th className="px-2 py-2 font-semibold">센터</th>
-                <th className="px-2 py-2 font-semibold">전화번호</th>
-                <th className="px-2 py-2 font-semibold">외/내국인</th>
-                <th className="px-2 py-2 font-semibold">성별</th>
-                <th className="px-2 py-2 font-semibold">나이</th>
-                <th className="px-2 py-2 font-semibold">계약주기</th>
-                <th className="px-2 py-2 font-semibold">계약일자</th>
-                <th className="px-2 py-2 font-semibold">소속업체</th>
-                <th className="px-2 py-2 font-semibold">근무구분</th>
-                <th className="px-2 py-2 font-semibold">근무형태</th>
-                <th className="px-2 py-2 font-semibold">부서</th>
-                <th className="px-2 py-2 font-semibold">직급</th>
-                <th className="px-2 py-2 font-semibold">계약/사직서</th>
-                <th className="px-2 py-2 font-semibold">계약서유형</th>
-                <th className="px-2 py-2 font-semibold">계약</th>
-                <th className="px-2 py-2 font-semibold">시간템플릿</th>
-                <th className="px-2 py-2 font-semibold">수당템플릿</th>
+                <th className="px-3 py-2.5 font-semibold">계약서</th>
+                <th className="px-3 py-2.5 font-semibold">상세</th>
+                <th className="px-3 py-2.5 font-semibold">이름</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">센터</th>
+                <th className="px-3 py-2.5 font-semibold">전화번호</th>
+                <th className="px-3 py-2.5 font-semibold">외/내국인</th>
+                <th className="px-3 py-2.5 font-semibold">성별</th>
+                <th className="px-3 py-2.5 font-semibold">나이</th>
+                <th className="px-3 py-2.5 font-semibold">계약주기</th>
+                <th className="px-3 py-2.5 font-semibold">계약일자</th>
+                <th className="px-3 py-2.5 font-semibold">소속업체</th>
+                <th className="px-3 py-2.5 font-semibold">근무구분</th>
+                <th className="px-3 py-2.5 font-semibold">근무형태</th>
+                <th className="px-3 py-2.5 font-semibold">부서</th>
+                <th className="px-3 py-2.5 font-semibold">직급</th>
+                <th className="px-3 py-2.5 font-semibold">계약/사직서</th>
+                <th className="px-3 py-2.5 font-semibold">계약서유형</th>
+                <th className="px-3 py-2.5 font-semibold">계약</th>
+                <th className="px-3 py-2.5 font-semibold">시간템플릿</th>
+                <th className="px-3 py-2.5 font-semibold">수당템플릿</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map(({ emp, contract }, i) => (
                 <tr key={emp.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="px-2 py-2 text-ink">{(page - 1) * pageSize + i + 1}</td>
-                  <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 py-2.5 text-ink">{(page - 1) * pageSize + i + 1}</td>
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2.5">
                     <button
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                       onClick={() => openView(emp, contract)}
@@ -513,7 +513,7 @@ export default function Contracts() {
                       <Eye size={14} /> 보기
                     </button>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2.5">
                     <button
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                       onClick={() => setDetailView({ emp, contract })}
@@ -521,32 +521,32 @@ export default function Contracts() {
                       <FileText size={14} /> 상세
                     </button>
                   </td>
-                  <td className="px-2 py-2 text-ink">{emp.name}</td>
-                  <td className="px-2 py-2 text-ink">{entityName_(emp.businessEntityId)}</td>
-                  <td className="px-2 py-2 text-ink">{siteName_(emp.workSiteId)}</td>
-                  <td className="px-2 py-2 text-ink">
+                  <td className="px-3 py-2.5 text-ink">{emp.name}</td>
+                  <td className="px-3 py-2.5 text-ink">{entityName_(emp.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-3 py-2.5 text-ink">
                     <span className="inline-flex items-center gap-1">
                       {emp.phone || "-"}
                       <SmsButton phone={emp.phone} message={smsMessageFor(emp, contract)} />
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-ink">{emp.nationality || "내국인"}</td>
-                  <td className="px-2 py-2 text-ink">{emp.gender || "-"}</td>
-                  <td className="px-2 py-2 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
-                  <td className="px-2 py-2 text-ink">{contract?.cycle || "-"}</td>
-                  <td className="px-2 py-2 text-ink">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
-                  <td className="px-2 py-2 text-ink">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-2 py-2 text-ink">{emp.shiftType || "-"}</td>
-                  <td className="px-2 py-2 text-ink">{emp.employmentType || "-"}</td>
-                  <td className="px-2 py-2 text-ink">{emp.team || "-"}</td>
-                  <td className="px-2 py-2 text-ink">{emp.position || "-"}</td>
-                  <td className="px-2 py-2 text-ink">계약 / {emp.resignTemplateName || "-"}</td>
-                  <td className="px-2 py-2 text-ink">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2.5 text-ink">{emp.nationality || "내국인"}</td>
+                  <td className="px-3 py-2.5 text-ink">{emp.gender || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{contract?.cycle || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{vendorName_(emp.vendorId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{emp.shiftType || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{emp.employmentType || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{emp.team || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{emp.position || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">계약 / {emp.resignTemplateName || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">{contract?.title || emp.contractTemplateName || "표준근로계약서"}</td>
+                  <td className="px-3 py-2.5">
                     <Badge tone={CONTRACT_STATUS_TONE[contractStatus(contract)]}>{contractStatus(contract)}</Badge>
                   </td>
-                  <td className="px-2 py-2 text-ink">{shiftTemplateName_(emp.shiftTemplateId)}</td>
-                  <td className="px-2 py-2 text-ink">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{shiftTemplateName_(emp.shiftTemplateId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{allowanceTemplateName_(emp.allowanceTemplateId)}</td>
                 </tr>
               ))}
               {pageRows.length === 0 && (

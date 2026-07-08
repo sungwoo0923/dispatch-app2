@@ -202,14 +202,12 @@ export function buildResignationHtml({
   ceoName,
 }) {
   const body = `
-    <table class="no-border" style="margin-bottom:6px;">
-      <tr><td></td><td style="text-align:right;">
-        ${approvalBoxHtml([
-          { role: "담당", name: managerName, signatureDataUrl: managerSignatureDataUrl, result: managerSignatureDataUrl ? "approved" : null },
-          { role: "대표", name: ceoName, signatureDataUrl: ceoSignatureDataUrl, result: ceoSignatureDataUrl ? "approved" : null },
-        ])}
-      </td></tr>
-    </table>
+    <div style="text-align:right;margin-bottom:6px;overflow:visible;">
+      ${approvalBoxHtml([
+        { role: "담당", name: managerName, signatureDataUrl: managerSignatureDataUrl, result: managerSignatureDataUrl ? "approved" : null },
+        { role: "대표", name: ceoName, signatureDataUrl: ceoSignatureDataUrl, result: ceoSignatureDataUrl ? "approved" : null },
+      ])}
+    </div>
     <h1>사 직 서 (원)</h1>
     <table>
       <tr><td style="width:110px;">성명</td><td>${esc(employeeName || "-")}</td><td style="width:110px;">직책</td><td>${esc(position || "-")}</td></tr>
@@ -230,7 +228,7 @@ export function buildResignationHtml({
     </p>
     <p style="text-align:center;margin-top:36px;">신청인 : ${Array.from(employeeName || "-").map(esc).join("&nbsp;")} <span style="position:relative;display:inline-block;min-width:56px;">${
       employeeSignatureDataUrl
-        ? `<img src="${esc(employeeSignatureDataUrl)}" style="position:absolute;left:50%;bottom:100%;transform:translateX(-50%);height:32px;" />`
+        ? `<img src="${esc(employeeSignatureDataUrl)}" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);height:36px;" />`
         : ""
     }(서명)</span></p>`;
   return wrapDoc("사직서", body);

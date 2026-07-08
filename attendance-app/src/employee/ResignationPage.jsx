@@ -16,6 +16,8 @@ const STATUS_LABEL = {
   employee_pending: ["서명 필요", "warning"],
   submitted: ["담당 결재 대기", "warning"],
   manager_signed: ["대표 결재 대기", "warning"],
+  on_hold: ["보류", "muted"],
+  rejected: ["반려", "danger"],
   completed: ["처리완료", "success"],
 };
 
@@ -32,9 +34,10 @@ export default function ResignationPage() {
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(
-      query(collection(db, "resignationRequests"), where("uid", "==", user.uid), orderBy("createdAt", "desc"), limit(1)),
+      query(collection(db, "resignationRequests"), where("uid", "==", user.uid), orderBy("createdAt", "desc"), limit(5)),
       (snap) => {
-        setReq(snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null);
+        const active = snap.docs.map((d) => ({ id: d.id, ...d.data() })).find((r) => !r.deleted);
+        setReq(active || null);
         setLoading(false);
       },
       () => setLoading(false)
@@ -125,6 +128,11 @@ export default function ResignationPage() {
         </div>
         {req.status !== "employee_pending" && (
           <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-muted">퇴사사유: {req.reason || "-"}</p>
+        )}
+        {(req.status === "rejected" || req.status === "on_hold") && req.adminNote && (
+          <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs text-danger">
+            {req.status === "rejected" ? "반려사유" : "보류사유"}: {req.adminNote}
+          </p>
         )}
       </Card>
 
