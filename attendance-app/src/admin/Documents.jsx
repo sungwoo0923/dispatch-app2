@@ -1,15 +1,33 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Upload, Trash2, FileText } from "lucide-react";
+import { Upload, Trash2, FileText, Download } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import FilePreviewModal from "../components/FilePreviewModal";
 import { DOCUMENT_TYPE_OPTIONS, uploadEmployeeDocument, deleteEmployeeDocument } from "../utils/documents";
 import { formatDate } from "../utils/dateUtils";
 import { useToast } from "../hooks/useToast";
+
+async function downloadFile(url, fileName) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = fileName || "file";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(url, "_blank");
+  }
+}
 
 export default function Documents() {
   const { profile } = useAuth();
@@ -17,6 +35,7 @@ export default function Documents() {
   const [employees, setEmployees] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [filterUid, setFilterUid] = useState("");
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ uid: "", docType: DOCUMENT_TYPE_OPTIONS[0] });
@@ -104,6 +123,7 @@ export default function Documents() {
                 <th className="px-4 py-3 font-semibold">문서종류</th>
                 <th className="px-4 py-3 font-semibold">파일명</th>
                 <th className="px-4 py-3 font-semibold">업로드일</th>
+                <th className="px-4 py-3 font-semibold">다운로드</th>
                 <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
@@ -114,12 +134,26 @@ export default function Documents() {
                   <td className="px-4 py-3 text-ink">{d.employeeName}</td>
                   <td className="px-4 py-3 text-ink">{d.docType}</td>
                   <td className="px-4 py-3">
-                    <a href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewDoc(d)}
+                      className="flex items-center gap-1.5 text-primary hover:underline"
+                    >
                       <FileText size={14} /> {d.fileName}
-                    </a>
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-ink">
                     {d.uploadedAt?.toDate ? formatDate(d.uploadedAt.toDate().toISOString().slice(0, 10)) : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      className="text-muted hover:text-primary"
+                      title="다운로드"
+                      onClick={() => downloadFile(d.url, d.fileName)}
+                    >
+                      <Download size={16} />
+                    </button>
                   </td>
                   <td className="px-4 py-3">
                     <button
@@ -138,7 +172,7 @@ export default function Documents() {
               ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
                     업로드된 서류가 없습니다.
                   </td>
                 </tr>
@@ -203,6 +237,13 @@ export default function Documents() {
           </label>
         </form>
       </Modal>
+
+      <FilePreviewModal
+        open={Boolean(previewDoc)}
+        onClose={() => setPreviewDoc(null)}
+        url={previewDoc?.url}
+        fileName={previewDoc?.fileName}
+      />
     </div>
   );
 }
