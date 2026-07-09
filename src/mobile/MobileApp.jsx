@@ -911,6 +911,15 @@ const clearNotifs = () => {
   // (이후 새로 등록되는 오더만 알림 발생)
 };
 
+const clearSelectedNotifs = (ids) => {
+  setNotifications(prev => {
+    const idSet = new Set(ids);
+    const next = prev.filter(n => !idSet.has(n.id));
+    try { localStorage.setItem("mobileNotifs", JSON.stringify(next)); } catch {}
+    return next;
+  });
+};
+
 // 🔔 alarmEnabled → ref 동기화
 useEffect(() => {
   alarmEnabledRef.current = alarmEnabled;
@@ -2872,6 +2881,7 @@ const title =
     onClose={() => setShowNotifPanel(false)}
     onMarkAllRead={markAllRead}
     onClear={clearNotifs}
+    onClearSelected={clearSelectedNotifs}
     alarmEnabled={alarmEnabled}
     onToggleAlarm={toggleAlarm}
     orders={orders}
@@ -4397,8 +4407,25 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
     </div>
   );
 });
-function NotificationPanel({ notifications, onClose, onMarkAllRead, onClear, alarmEnabled, onToggleAlarm, orders }) {
+function NotificationPanel({ notifications, onClose, onMarkAllRead, onClear, onClearSelected, alarmEnabled, onToggleAlarm, orders }) {
   const [expanded, setExpanded] = useState(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
+
+  const deleteSelected = () => {
+    onClearSelected?.(Array.from(selectedIds));
+    exitSelectMode();
+  };
 
   const fmtDate = (iso) => {
     if (!iso) return "";
@@ -4434,30 +4461,51 @@ function NotificationPanel({ notifications, onClose, onMarkAllRead, onClear, ala
       >
         {/* 패널 헤더 */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <span className="font-bold text-[15px] text-gray-800">알림</span>
-          <div className="flex items-center gap-3">
-            {/* 알림 on/off 토글 */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[12px] text-gray-500">알림</span>
-              <button
-                onClick={onToggleAlarm}
-                className={`relative w-10 h-5 rounded-full transition-colors ${alarmEnabled ? "bg-emerald-500" : "bg-gray-300"}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${alarmEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
-            </div>
-            {notifications.length > 0 && (
-              <button onClick={onMarkAllRead} className="text-[12px] text-blue-500 font-semibold">전체읽음</button>
-            )}
-            {notifications.length > 0 && (
-              <button onClick={onClear} className="text-[12px] text-gray-400">전체삭제</button>
-            )}
-            <button onClick={onClose} className="text-gray-400 ml-1">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
+          {selectMode ? (
+            <>
+              <span className="font-bold text-[15px] text-gray-800">{selectedIds.size}개 선택</span>
+              <div className="flex items-center gap-3">
+                <button onClick={exitSelectMode} className="text-[12px] text-gray-400">취소</button>
+                <button
+                  onClick={deleteSelected}
+                  disabled={selectedIds.size === 0}
+                  className={`text-[12px] font-semibold ${selectedIds.size === 0 ? "text-gray-300" : "text-red-500"}`}
+                >
+                  삭제
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="font-bold text-[15px] text-gray-800">알림</span>
+              <div className="flex items-center gap-3">
+                {/* 알림 on/off 토글 */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[12px] text-gray-500">알림</span>
+                  <button
+                    onClick={onToggleAlarm}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${alarmEnabled ? "bg-emerald-500" : "bg-gray-300"}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${alarmEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+                {notifications.length > 0 && (
+                  <button onClick={onMarkAllRead} className="text-[12px] text-blue-500 font-semibold">전체읽음</button>
+                )}
+                {notifications.length > 0 && (
+                  <button onClick={() => setSelectMode(true)} className="text-[12px] text-gray-400">선택삭제</button>
+                )}
+                {notifications.length > 0 && (
+                  <button onClick={onClear} className="text-[12px] text-gray-400">전체삭제</button>
+                )}
+                <button onClick={onClose} className="text-gray-400 ml-1">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* 알림 리스트 */}
@@ -4478,11 +4526,18 @@ function NotificationPanel({ notifications, onClose, onMarkAllRead, onClear, ala
                 <div key={notif.id} className={`border-b border-gray-50 last:border-b-0 ${!notif.read ? "bg-blue-50/40" : "bg-white"}`}>
                   <button
                     className="w-full text-left px-4 py-3 active:bg-gray-50 transition"
-                    onClick={() => setExpanded(isExp ? null : notif.id)}
+                    onClick={() => selectMode ? toggleSelect(notif.id) : setExpanded(isExp ? null : notif.id)}
                   >
                     <div className="flex items-start gap-2.5">
-                      {!notif.read && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />}
-                      {notif.read && <div className="w-1.5 h-1.5 shrink-0" />}
+                      {selectMode && (
+                        <div className={`w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${selectedIds.has(notif.id) ? "bg-blue-500 border-blue-500" : "border-gray-300"}`}>
+                          {selectedIds.has(notif.id) && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                          )}
+                        </div>
+                      )}
+                      {!selectMode && !notif.read && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />}
+                      {!selectMode && notif.read && <div className="w-1.5 h-1.5 shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${typeStyle[notif.type] || "bg-gray-100 text-gray-600"}`}>
