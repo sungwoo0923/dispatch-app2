@@ -6,7 +6,7 @@ import Card from "./Card";
 // throughout the reference guide — one enclosing box per screen holding the
 // filter row and result list/table together, instead of separate floating
 // cards.
-export default function Panel({ icon: Icon, title, actions, children, defaultCollapsed = false }) {
+export default function Panel({ icon: Icon, title, actions, children, defaultCollapsed = false, highlight = false }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
@@ -15,10 +15,10 @@ export default function Panel({ icon: Icon, title, actions, children, defaultCol
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
-          className="flex shrink-0 items-center gap-2 text-sm font-semibold text-ink"
+          className={`flex shrink-0 items-center gap-2 text-sm font-semibold ${highlight ? "animate-pulse text-primary" : "text-ink"}`}
         >
           {Icon && (
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary-light text-primary">
+            <span className={`flex h-6 w-6 items-center justify-center rounded-md ${highlight ? "bg-primary text-white" : "bg-primary-light text-primary"}`}>
               <Icon size={13} />
             </span>
           )}

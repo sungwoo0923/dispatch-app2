@@ -13,7 +13,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera, SlidersHorizontal, ArrowUpDown } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -168,7 +168,7 @@ function SectionHeader({ children }) {
 }
 
 export default function EmployeeList() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const [employees, setEmployees] = useState([]);
@@ -200,6 +200,33 @@ export default function EmployeeList() {
   const [photoSaved, setPhotoSaved] = useState(false);
 
   const [filters, setFilters] = useState({ siteId: "", vendorId: "", status: "", search: "" });
+  // 성별/사업자/고용구분/부서/직급/국적 등은 필터바에 각각 개별 드롭다운으로
+  // 늘어놓으면 너무 복잡해 보인다는 요청에 따라, 하나의 "상세필터" 버튼 안에
+  // 모아 한 번에 여러 조건을 조합해 걸 수 있게 한다(필터바 자체는 그대로 유지).
+  const [advFilters, setAdvFilters] = useState({
+    gender: "",
+    businessEntityId: "",
+    employmentType: "",
+    team: "",
+    position: "",
+    nationality: "",
+  });
+  const [advFilterOpen, setAdvFilterOpen] = useState(false);
+  const advFilterCount = Object.values(advFilters).filter(Boolean).length;
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sort, setSort] = useState({ key: "", dir: "asc" });
+  const advFilterRef = useRef(null);
+  const sortRef = useRef(null);
+
+  useEffect(() => {
+    if (!advFilterOpen && !sortOpen) return;
+    const onDocClick = (e) => {
+      if (advFilterOpen && advFilterRef.current && !advFilterRef.current.contains(e.target)) setAdvFilterOpen(false);
+      if (sortOpen && sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [advFilterOpen, sortOpen]);
   const [selected, setSelected] = useState(() => new Set());
   const [listAction, setListAction] = useState("선택");
 
@@ -207,6 +234,12 @@ export default function EmployeeList() {
   const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [changeLogs, setChangeLogs] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
+  // 배정변경요청/기본정보수정요청/가입대기 패널은 항상 접힌 채로 시작하고,
+  // 새 항목이 오면 자동으로 펼쳐지지 않고 헤더가 깜빡이기만 한다 — 관리자가
+  // 직접 펼쳐보거나 "확인" 버튼을 눌러야 깜빡임이 멈춘다. 이 읽음 시점은
+  // 사이드바 배지(adminReadState/{uid}.<navPath>)와는 별도 필드로 저장해야
+  // 사이드바 배지가 즉시 사라진 뒤에도 패널의 깜빡임은 남아있을 수 있다.
+  const [panelReadState, setPanelReadState] = useState({});
   const [infoChangeRequests, setInfoChangeRequests] = useState([]);
   const [businessEntities, setBusinessEntities] = useState([]);
   const [centerReports, setCenterReports] = useState([]);
@@ -226,6 +259,21 @@ export default function EmployeeList() {
   const [quickForm, setQuickForm] = useState({ name: "", phone: "" });
 
   const [templateForm, setTemplateForm] = useState({ kind: "시간템플릿", templateId: "", effectiveDate: toDateKey(), deleteMode: false, bulkMode: false });
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(doc(db, "adminReadState", user.uid), (snap) => setPanelReadState(snap.data() || {}));
+    return () => unsub();
+  }, [user?.uid]);
+
+  const panelHasNew = (key, items) => {
+    const lastSeen = panelReadState[key]?.seconds || 0;
+    return items.some((d) => (d.createdAt?.seconds || 0) > lastSeen);
+  };
+  const ackPanel = (key) => {
+    if (!user?.uid) return;
+    setDoc(doc(db, "adminReadState", user.uid), { [key]: serverTimestamp() }, { merge: true });
+  };
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -452,15 +500,28 @@ export default function EmployeeList() {
   } = useColumnPrefs("employeeList", employeeColumns);
 
   const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
+    const rows = employees.filter((emp) => {
       if (emp.deleted) return false;
       if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
       if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
       if (filters.status && (emp.employmentStatus || "재직") !== filters.status) return false;
       if (filters.search && !`${emp.name}${emp.phone}`.includes(filters.search)) return false;
+      if (advFilters.gender && emp.gender !== advFilters.gender) return false;
+      if (advFilters.businessEntityId && emp.businessEntityId !== advFilters.businessEntityId) return false;
+      if (advFilters.employmentType && emp.employmentType !== advFilters.employmentType) return false;
+      if (advFilters.team && emp.team !== advFilters.team) return false;
+      if (advFilters.position && emp.position !== advFilters.position) return false;
+      if (advFilters.nationality && emp.nationality !== advFilters.nationality) return false;
       return true;
     });
-  }, [employees, filters]);
+    if (!sort.key) return rows;
+    const dir = sort.dir === "desc" ? -1 : 1;
+    return [...rows].sort((a, b) => {
+      const av = a[sort.key] || "";
+      const bv = b[sort.key] || "";
+      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+    });
+  }, [employees, filters, advFilters, sort]);
 
   const { pageRows, page, pageCount, pageSize, total, setPage, changePageSize, PAGE_SIZE_OPTIONS } = usePagination(filteredEmployees, 10);
 
@@ -1081,6 +1142,119 @@ export default function EmployeeList() {
               placeholder="검색어 입력"
             />
           </label>
+          <div className="relative shrink-0" ref={advFilterRef}>
+            <Button
+              variant="outline"
+              onClick={() => setAdvFilterOpen((v) => !v)}
+              className={advFilterCount ? "border-primary text-primary" : ""}
+            >
+              <SlidersHorizontal size={15} /> 상세필터
+              {advFilterCount > 0 && <span className="rounded-full bg-primary px-1.5 text-xs text-white">{advFilterCount}</span>}
+            </Button>
+            {advFilterOpen && (
+              <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[320px] rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">성별</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                      value={advFilters.gender}
+                      onChange={(e) => setAdvFilters((f) => ({ ...f, gender: e.target.value }))}
+                    >
+                      <option value="">전체</option>
+                      <option value="남">남</option>
+                      <option value="여">여</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">외/내국인</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                      value={advFilters.nationality}
+                      onChange={(e) => setAdvFilters((f) => ({ ...f, nationality: e.target.value }))}
+                    >
+                      <option value="">전체</option>
+                      {NATIONALITY_OPTIONS.map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">사업자</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                      value={advFilters.businessEntityId}
+                      onChange={(e) => setAdvFilters((f) => ({ ...f, businessEntityId: e.target.value }))}
+                    >
+                      <option value="">전체</option>
+                      {businessEntities.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">고용구분</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                      value={advFilters.employmentType}
+                      onChange={(e) => setAdvFilters((f) => ({ ...f, employmentType: e.target.value }))}
+                    >
+                      <option value="">전체</option>
+                      {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                        <option key={t}>{t}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">부서</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                      value={advFilters.team}
+                      onChange={(e) => setAdvFilters((f) => ({ ...f, team: e.target.value }))}
+                    >
+                      <option value="">전체</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">직급</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                      value={advFilters.position}
+                      onChange={(e) => setAdvFilters((f) => ({ ...f, position: e.target.value }))}
+                    >
+                      <option value="">전체</option>
+                      {positions.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-muted hover:text-danger"
+                    onClick={() =>
+                      setAdvFilters({ gender: "", businessEntityId: "", employmentType: "", team: "", position: "", nationality: "" })
+                    }
+                  >
+                    초기화
+                  </button>
+                  <Button size="sm" onClick={() => setAdvFilterOpen(false)}>
+                    적용
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </Card>
 
         <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
@@ -1098,6 +1272,60 @@ export default function EmployeeList() {
             <Button size="sm" variant="outline" onClick={() => window.alert(`${selected.size || 0}명에게 SMS를 발송했습니다.`)} disabled={selected.size === 0}>
               <Send size={13} /> SMS발송
             </Button>
+            <div className="relative shrink-0" ref={sortRef}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSortOpen((v) => !v)}
+                className={sort.key ? "border-primary text-primary" : ""}
+              >
+                <ArrowUpDown size={13} /> 정렬
+              </Button>
+              {sortOpen && (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                  <label className="mb-2 block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">정렬 기준</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                      value={sort.key}
+                      onChange={(e) => setSort((s) => ({ ...s, key: e.target.value }))}
+                    >
+                      <option value="">기본순서</option>
+                      <option value="name">이름</option>
+                      <option value="hireDate">입사일자</option>
+                      <option value="team">부서</option>
+                      <option value="position">직급</option>
+                      <option value="employmentStatus">재직상태</option>
+                    </select>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${sort.dir === "asc" ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted"}`}
+                      onClick={() => setSort((s) => ({ ...s, dir: "asc" }))}
+                    >
+                      오름차순
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${sort.dir === "desc" ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted"}`}
+                      onClick={() => setSort((s) => ({ ...s, dir: "desc" }))}
+                    >
+                      내림차순
+                    </button>
+                  </div>
+                  {sort.key && (
+                    <button
+                      type="button"
+                      className="mt-2 w-full text-center text-xs font-medium text-muted hover:text-danger"
+                      onClick={() => setSort({ key: "", dir: "asc" })}
+                    >
+                      정렬 해제
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             <ColumnVisibilityButton columns={employeeColumnsOrdered} hidden={hiddenEmployeeColumns} toggleColumn={toggleEmployeeColumn} />
           </div>
         </div>
@@ -1232,6 +1460,15 @@ export default function EmployeeList() {
       <Panel
         icon={ArrowLeftRight}
         title={`배정변경 요청 (승인대기 ${changeRequests.filter((r) => r.status === "pending").length}건)`}
+        defaultCollapsed
+        highlight={panelHasNew("panel_assignmentChangeRequests", changeRequests)}
+        actions={
+          panelHasNew("panel_assignmentChangeRequests", changeRequests) ? (
+            <Button size="sm" variant="outline" onClick={() => ackPanel("panel_assignmentChangeRequests")}>
+              <Check size={13} /> 확인
+            </Button>
+          ) : null
+        }
       >
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">
@@ -1300,7 +1537,19 @@ export default function EmployeeList() {
         </div>
       </Panel>
 
-      <Panel icon={UserPlus} title={`기본정보 수정요청 (승인대기 ${infoChangeRequests.filter((r) => r.status === "pending").length}건)`}>
+      <Panel
+        icon={UserPlus}
+        title={`기본정보 수정요청 (승인대기 ${infoChangeRequests.filter((r) => r.status === "pending").length}건)`}
+        defaultCollapsed
+        highlight={panelHasNew("panel_infoChangeRequests", infoChangeRequests)}
+        actions={
+          panelHasNew("panel_infoChangeRequests", infoChangeRequests) ? (
+            <Button size="sm" variant="outline" onClick={() => ackPanel("panel_infoChangeRequests")}>
+              <Check size={13} /> 확인
+            </Button>
+          ) : null
+        }
+      >
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
@@ -1377,7 +1626,7 @@ export default function EmployeeList() {
         </div>
       </Panel>
 
-      <Panel icon={History} title={`변경이력 (${changeLogs.length}건)`}>
+      <Panel icon={History} title={`변경이력 (${changeLogs.length}건)`} defaultCollapsed>
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
@@ -1423,7 +1672,19 @@ export default function EmployeeList() {
       </Panel>
 
       {pending.length > 0 && (
-        <Panel icon={UserPlus} title={`가입 대기 중 (${pending.length}건)`}>
+        <Panel
+          icon={UserPlus}
+          title={`가입 대기 중 (${pending.length}건)`}
+          defaultCollapsed
+          highlight={panelHasNew("panel_pendingEmployees", pending)}
+          actions={
+            panelHasNew("panel_pendingEmployees", pending) ? (
+              <Button size="sm" variant="outline" onClick={() => ackPanel("panel_pendingEmployees")}>
+                <Check size={13} /> 확인
+              </Button>
+            ) : null
+          }
+        >
           <p className="mb-2 text-xs text-muted">아직 앱에서 가입코드 입력 전인 근로자입니다.</p>
           <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
             <table className="w-full min-w-[560px] text-center text-sm">
