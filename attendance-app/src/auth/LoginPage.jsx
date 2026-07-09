@@ -48,7 +48,6 @@ export default function LoginPage() {
                 onChange={(e) => setPhone(normalizePhone(e.target.value).slice(0, 11))}
                 placeholder="대시(-) 없이 숫자만 입력"
                 inputMode="numeric"
-                maxLength={11}
                 required
               />
               <User size={16} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300" />

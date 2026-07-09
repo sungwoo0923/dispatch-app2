@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { collection, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { ShieldCheck, FileText, Video, PlayCircle } from "lucide-react";
+import { ShieldCheck, FileText, Video } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -95,21 +95,19 @@ export default function SafetyTrainingsPage() {
   );
 }
 
-// 관리자가 등록한 안전교육자료(지침/영상)를 근로자가 반드시 확인 후 서명해야
-// 이수 처리되는 섹션. 지침은 끝까지 스크롤해야, 영상은 끝까지 시청해야
-// "서명하기" 버튼이 열린다 — 건너뛰기로 이수 처리를 우회할 수 없게 한다.
+// 관리자가 등록한 안전교육자료(지침/영상)를 근로자가 확인 후 서명하면
+// 이수 처리되는 섹션. 예전에는 끝까지 스크롤/시청해야만 서명칸이 열리게
+// 막아뒀는데, 모바일(특히 iOS)에서 중첩 스크롤 영역이 제대로 동작하지
+// 않아 끝까지 내려도 서명칸이 안 뜨는 문제가 있었다 — 서명/제출 버튼은
+// 스크롤 진행과 상관없이 항상 눌러 제출할 수 있게 뒀다.
 function MandatoryMaterials() {
   const { user, profile } = useAuth();
   const toast = useToast();
   const [materials, setMaterials] = useState([]);
   const [myCompletions, setMyCompletions] = useState([]);
   const [viewing, setViewing] = useState(null);
-  const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const padRef = useRef(null);
-  const scrollRef = useRef(null);
-  const videoRef = useRef(null);
-  const maxWatchedRef = useRef(0);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -127,28 +125,7 @@ function MandatoryMaterials() {
   const completedIds = new Set(myCompletions.map((c) => c.materialId));
   const pending = materials.filter((m) => !completedIds.has(m.id));
 
-  const openMaterial = (m) => {
-    setViewing(m);
-    setConfirmed(false);
-    maxWatchedRef.current = 0;
-  };
-
-  const handleScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 8) setConfirmed(true);
-  };
-
-  const handleTimeUpdate = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.currentTime > maxWatchedRef.current + 0.5) {
-      // 되감기 없이 앞으로 건너뛰려는 시도를 막는다 — 지금까지 본 지점으로 되돌린다.
-      v.currentTime = maxWatchedRef.current;
-      return;
-    }
-    maxWatchedRef.current = Math.max(maxWatchedRef.current, v.currentTime);
-  };
+  const openMaterial = (m) => setViewing(m);
 
   const submitCompletion = async () => {
     if (!padRef.current || padRef.current.isEmpty() || !viewing) return;
@@ -202,46 +179,29 @@ function MandatoryMaterials() {
         onClose={() => setViewing(null)}
         title={viewing?.title}
         footer={
-          confirmed ? (
-            <Button className="w-full" onClick={submitCompletion} disabled={saving}>
+          <>
+            <Button variant="outline" onClick={() => setViewing(null)}>
+              취소
+            </Button>
+            <Button className="flex-1" onClick={submitCompletion} disabled={saving}>
               {saving ? "제출 중..." : "서명 후 이수완료"}
             </Button>
-          ) : (
-            <p className="w-full text-center text-xs text-muted">
-              {viewing?.type === "video" ? "영상을 끝까지 시청하면 서명할 수 있습니다." : "끝까지 스크롤하면 서명할 수 있습니다."}
-            </p>
-          )
+          </>
         }
       >
         {viewing && (
           <div className="space-y-3">
             {viewing.type === "video" ? (
-              <video
-                ref={videoRef}
-                src={viewing.videoUrl}
-                controls
-                controlsList="nofastforward"
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={() => setConfirmed(true)}
-                className="w-full rounded-xl bg-black"
-              />
+              <video src={viewing.videoUrl} controls className="w-full rounded-xl bg-black" />
             ) : (
-              <div
-                ref={scrollRef}
-                onScroll={handleScroll}
-                className="max-h-72 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-ink"
-              >
+              <div className="max-h-72 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-ink">
                 {viewing.content}
               </div>
             )}
-            {confirmed && (
-              <div>
-                <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-muted">
-                  <PlayCircle size={13} /> 확인 완료 · 서명해주세요
-                </p>
-                <SignaturePad ref={padRef} />
-              </div>
-            )}
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted">서명</p>
+              <SignaturePad ref={padRef} />
+            </div>
           </div>
         )}
       </Modal>

@@ -143,7 +143,6 @@ export default function EmployeeSignupPage() {
               onChange={updatePhone}
               placeholder="대시(-) 없이 숫자만 입력"
               inputMode="numeric"
-              maxLength={11}
             />
           </>
         )}
