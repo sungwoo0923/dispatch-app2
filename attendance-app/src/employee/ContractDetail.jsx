@@ -87,13 +87,18 @@ export default function ContractDetail() {
       </div>
 
       <div className="flex flex-nowrap gap-2">
-        <Button className="flex-1" size="lg" onClick={() => setSigning(true)}>
-          <PenLine size={16} /> {contract.employeeSignatureDataUrl ? "재서명" : "서명하기"}
-        </Button>
+        {!contract.employeeSignatureDataUrl && (
+          <Button className="flex-1" size="lg" onClick={() => setSigning(true)}>
+            <PenLine size={16} /> 서명하기
+          </Button>
+        )}
         <Button className="flex-1" size="lg" variant="outline" onClick={downloadContract}>
           <Download size={16} /> 다운로드
         </Button>
       </div>
+      {contract.employeeSignatureDataUrl && (
+        <p className="text-center text-xs text-muted">서명이 완료되어 더 이상 수정할 수 없습니다.</p>
+      )}
 
       <Modal
         open={signing}

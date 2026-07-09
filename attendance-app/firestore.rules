@@ -370,10 +370,14 @@ service cloud.firestore {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
       allow create: if isAdminOf(request.resource.data.companyId);
-      // 근로자는 자신의 계약서라면 언제든 (재)서명할 수 있어야 하므로 status
-      // 제약 없이 허용한다 — 회사 측 서명/도장은 관리자만 갱신할 수 있다.
+      // 근로자는 자신의 계약서에 아직 서명이 없을 때 딱 한 번만 서명할 수
+      // 있다 — 이미 서명한 뒤에는 재서명(수정)이 불가능해야 하므로, 서명
+      // 필드가 비어있는 경우에만 본인 문서 갱신을 허용한다. 회사 측
+      // 서명/도장 적용 등은 관리자가 언제든 갱신할 수 있다.
       allow update: if isSignedIn() &&
-        (isAdminOf(resource.data.companyId) || resource.data.uid == request.auth.uid);
+        (isAdminOf(resource.data.companyId) ||
+          (resource.data.uid == request.auth.uid &&
+            (!('employeeSignatureDataUrl' in resource.data) || resource.data.employeeSignatureDataUrl == null)));
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
