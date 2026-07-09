@@ -26,7 +26,14 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
+    // 일부 인앱 브라우저(카카오톡 등)에서 인증 영속성 저장소가 막혀있으면
+    // onAuthStateChanged가 영영 안 불릴 수 있다 — 그러면 loading이 계속
+    // true로 남아 로딩화면에서 멈춘다. 일정 시간 안에 응답이 없으면
+    // 로그아웃 상태로 간주해 로그인화면을 보여준다(무한로딩보다는 낫고,
+    // 로그인 자체는 이 지연과 무관하게 동작한다).
+    const stuckTimer = setTimeout(() => setLoading((prev) => (prev ? false : prev)), 8000);
     const unsubAuth = onAuthStateChanged(auth, (u) => {
+      clearTimeout(stuckTimer);
       setUser(u);
       if (!u) {
         setProfile(null);
@@ -37,7 +44,10 @@ export function AuthProvider({ children }) {
         updateDoc(doc(db, "users", u.uid), { lastLoginAt: serverTimestamp() }).catch(() => {});
       }
     });
-    return () => unsubAuth();
+    return () => {
+      clearTimeout(stuckTimer);
+      unsubAuth();
+    };
   }, []);
 
   useEffect(() => {

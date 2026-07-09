@@ -1,6 +1,13 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
+import {
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence,
+  connectAuthEmulator,
+} from "firebase/auth";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 
 const firebaseConfig = {
@@ -44,7 +51,15 @@ export const app = initializeApp(
 // justify the tradeoff. Plain in-memory cache avoids both failure modes.
 export const db = getFirestore(app);
 
-export const auth = getAuth(app);
+// getAuth(app) commits to indexedDB-based persistence, which some in-app
+// browsers (e.g. KakaoTalk's embedded webview) either block or hang on
+// indefinitely — onAuthStateChanged then never fires and the app is stuck on
+// the loading screen forever (Safari/Chrome work fine since indexedDB is
+// unrestricted there). initializeAuth() with a persistence list instead
+// probes each option and falls back to the next one it can actually use.
+export const auth = initializeAuth(app, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+});
 export const storage = getStorage(app);
 
 if (useEmulator) {

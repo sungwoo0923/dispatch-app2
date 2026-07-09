@@ -100,17 +100,12 @@ export default function ContractDetail() {
         onClose={() => setSigning(false)}
         title="서명"
         footer={
-          <>
-            <Button variant="outline" onClick={() => setSigning(false)}>
-              취소
-            </Button>
-            <Button onClick={submitSignature} disabled={saving}>
-              {saving ? "저장 중..." : "서명 저장"}
-            </Button>
-          </>
+          <Button variant="outline" onClick={() => setSigning(false)}>
+            취소
+          </Button>
         }
       >
-        <SignaturePad ref={padRef} />
+        <SignaturePad ref={padRef} onSave={submitSignature} saving={saving} />
       </Modal>
     </div>
   );

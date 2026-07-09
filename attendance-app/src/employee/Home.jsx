@@ -541,16 +541,7 @@ export default function Home() {
         onClose={() => setShowChecklist(false)}
         title={`서류작성 (${docStep + 1}/${requiredDocs.length}) · ${currentDocKey ? DOC_META[currentDocKey].title : ""}`}
         footer={
-          docRead[currentDocKey] ? (
-            <>
-              <Button variant="outline" onClick={() => padRef.current?.clear()}>
-                다시그리기
-              </Button>
-              <Button className="flex-1" onClick={submitDocSignature} disabled={savingSignature}>
-                {savingSignature ? "제출 중..." : docStep + 1 < requiredDocs.length ? "서명 후 다음 서류" : "서명 후 출근완료"}
-              </Button>
-            </>
-          ) : (
+          docRead[currentDocKey] ? null : (
             <Button className="w-full" onClick={markDocRead}>
               내용을 확인했습니다
             </Button>
@@ -566,7 +557,7 @@ export default function Home() {
             {docRead[currentDocKey] && (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-muted">서명</p>
-                <SignaturePad ref={padRef} />
+                <SignaturePad ref={padRef} onSave={submitDocSignature} saving={savingSignature} />
               </div>
             )}
           </div>

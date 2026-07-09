@@ -38,7 +38,10 @@ export default function EmployeeLayout() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-1/2 z-40 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-100 bg-white px-1 py-2 shadow-[0_-2px_10px_rgba(15,23,42,0.06)]">
+      <nav
+        id="employee-bottom-nav"
+        className="fixed bottom-0 left-1/2 z-40 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-100 bg-white px-1 py-2 shadow-[0_-2px_10px_rgba(15,23,42,0.06)]"
+      >
         {TABS.map(({ to, label, icon: Icon, end, center }) => {
           const isActive =
             to === "/work-info"

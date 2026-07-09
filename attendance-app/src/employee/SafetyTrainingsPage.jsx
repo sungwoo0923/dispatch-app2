@@ -78,18 +78,13 @@ export default function SafetyTrainingsPage() {
         onClose={() => setSigning(null)}
         title="안전교육 서명"
         footer={
-          <>
-            <Button variant="outline" onClick={() => setSigning(null)}>
-              취소
-            </Button>
-            <Button onClick={submitSignature} disabled={saving}>
-              {saving ? "제출 중..." : "서명 제출"}
-            </Button>
-          </>
+          <Button variant="outline" onClick={() => setSigning(null)}>
+            취소
+          </Button>
         }
       >
         <p className="mb-3 text-sm text-ink">{signing && formatDate(signing.date)} 안전교육 서명</p>
-        <SignaturePad ref={padRef} />
+        <SignaturePad ref={padRef} onSave={submitSignature} saving={saving} />
       </Modal>
     </div>
   );
@@ -179,14 +174,9 @@ function MandatoryMaterials() {
         onClose={() => setViewing(null)}
         title={viewing?.title}
         footer={
-          <>
-            <Button variant="outline" onClick={() => setViewing(null)}>
-              취소
-            </Button>
-            <Button className="flex-1" onClick={submitCompletion} disabled={saving}>
-              {saving ? "제출 중..." : "서명 후 이수완료"}
-            </Button>
-          </>
+          <Button variant="outline" onClick={() => setViewing(null)}>
+            취소
+          </Button>
         }
       >
         {viewing && (
@@ -200,7 +190,7 @@ function MandatoryMaterials() {
             )}
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted">서명</p>
-              <SignaturePad ref={padRef} />
+              <SignaturePad ref={padRef} onSave={submitCompletion} saving={saving} />
             </div>
           </div>
         )}

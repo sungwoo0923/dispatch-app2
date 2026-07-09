@@ -28,20 +28,28 @@ export default function Modal({ open, onClose, title, children, footer, size = "
     body.style.position = "fixed";
     body.style.top = `-${scrollY}px`;
     body.style.width = "100%";
+    // 하단 앱 탭바(EmployeeLayout의 fixed nav)는 모달과 별개의 fixed 요소라
+    // z-index만으로는 항상 안전하게 모달 아래로 깔리지 않는다 — 특히
+    // iOS Safari에서는 뷰포트 높이 계산(vh) 차이 때문에 모달 바닥이 실제
+    // 화면 하단까지 닿지 않는 경우가 있어, 그 틈으로 앱 탭바가 그대로
+    // 비치면서 취소/제출 버튼을 가려버렸다. body에 표시를 남겨 모달이 열려
+    //있는 동안엔 탭바 자체를 숨긴다(index.css 참고).
+    body.dataset.modalOpen = "true";
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       body.style.overflow = prev.overflow;
       body.style.position = prev.position;
       body.style.top = prev.top;
       body.style.width = prev.width;
+      delete body.dataset.modalOpen;
       window.scrollTo(0, scrollY);
     };
   }, [open, onClose]);
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4">
-      <div className={`flex w-full ${SIZES[size]} max-h-[90vh] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}>
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4">
+      <div className={`flex w-full ${SIZES[size]} max-h-[85dvh] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}>
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
           <h3 className="text-base font-semibold text-ink">{title}</h3>
           <button onClick={onClose} className="text-muted hover:text-ink">
@@ -51,7 +59,14 @@ export default function Modal({ open, onClose, title, children, footer, size = "
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4" style={{ WebkitOverflowScrolling: "touch" }}>
           {children}
         </div>
-        {footer && <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-4">{footer}</div>}
+        {footer && (
+          <div
+            className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-4"
+            style={{ paddingBottom: "max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))" }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -158,14 +158,9 @@ export default function ResignationPage() {
         onClose={() => setSigning(false)}
         title="사직서 서명"
         footer={
-          <>
-            <Button variant="outline" onClick={() => setSigning(false)}>
-              취소
-            </Button>
-            <Button onClick={submitSignature} disabled={saving}>
-              {saving ? "제출 중..." : "제출"}
-            </Button>
-          </>
+          <Button variant="outline" onClick={() => setSigning(false)}>
+            취소
+          </Button>
         }
       >
         <div className="space-y-3">
@@ -196,7 +191,7 @@ export default function ResignationPage() {
             />
           </label>
           <p className="text-xs text-ink">위 내용을 모두 확인했으며, 아래 서명으로 신청합니다. 신청인: {profile?.name}</p>
-          <SignaturePad ref={padRef} />
+          <SignaturePad ref={padRef} onSave={submitSignature} saving={saving} />
         </div>
       </Modal>
     </div>
