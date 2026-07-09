@@ -14,7 +14,7 @@ import {
 
 // PC/모바일 공용 — 관리자 "내 정보"와 직원 "내정보"에서 동일하게 쓴다.
 // 등록은 이 기기(브라우저)에만 저장되므로, 기기를 바꾸면 다시 등록해야 한다.
-export default function BiometricSettingsCard({ uid, label, className = "" }) {
+export default function BiometricSettingsCard({ uid, label, className = "", onChange }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [supported, setSupported] = useState(true);
@@ -32,6 +32,7 @@ export default function BiometricSettingsCard({ uid, label, className = "" }) {
       await registerBiometric(uid, label);
       setRegistered(true);
       setMethod("biometric");
+      onChange?.();
       toast.success("이 기기에 생체인증이 등록되었습니다");
     } catch {
       toast.error("등록에 실패했습니다. 취소했거나 이 기기/브라우저가 지원하지 않을 수 있습니다.");
@@ -45,12 +46,14 @@ export default function BiometricSettingsCard({ uid, label, className = "" }) {
     removeBiometric(uid);
     setRegistered(false);
     setMethod("password");
+    onChange?.();
     toast.success("생체인증이 해제되었습니다");
   };
 
   const choose = (m) => {
     setLoginMethod(uid, m);
     setMethod(m);
+    onChange?.();
   };
 
   return (

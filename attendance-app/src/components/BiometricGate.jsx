@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { Fingerprint } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { hasBiometricRegistered, getLoginMethod, verifyBiometric } from "../utils/biometricAuth";
+import { shouldLockInsteadOfSignOut, verifyBiometric, BIOMETRIC_SESSION_KEY } from "../utils/biometricAuth";
 import Button from "./Button";
-
-const SESSION_KEY = "kpwork_biometric_verified_uid";
 
 // 앱을 다시 열 때(탭/앱 껐다 켜기) 이 기기에 생체인증이 등록되어 있고
 // "다음부터 생체인증으로 로그인"이 켜져 있으면, 실제 라우트를 그리기 전에
@@ -12,8 +10,8 @@ const SESSION_KEY = "kpwork_biometric_verified_uid";
 // sessionStorage로 건너뛴다 — 탭을 완전히 새로 열 때만 다시 잠긴다.
 export default function BiometricGate({ children }) {
   const { user, logout } = useAuth();
-  const shouldLock = Boolean(user && hasBiometricRegistered(user.uid) && getLoginMethod(user.uid) === "biometric");
-  const [unlocked, setUnlocked] = useState(() => !shouldLock || sessionStorage.getItem(SESSION_KEY) === user?.uid);
+  const shouldLock = shouldLockInsteadOfSignOut(user?.uid);
+  const [unlocked, setUnlocked] = useState(() => !shouldLock || sessionStorage.getItem(BIOMETRIC_SESSION_KEY) === user?.uid);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
 
@@ -23,7 +21,7 @@ export default function BiometricGate({ children }) {
     try {
       const ok = await verifyBiometric(user.uid);
       if (ok) {
-        sessionStorage.setItem(SESSION_KEY, user.uid);
+        sessionStorage.setItem(BIOMETRIC_SESSION_KEY, user.uid);
         setUnlocked(true);
       } else {
         setError("생체인증에 실패했습니다. 다시 시도해주세요.");

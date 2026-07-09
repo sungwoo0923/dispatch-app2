@@ -5,6 +5,20 @@
 // 필요해 범위 밖이며, 여기서는 기기별 로컬 잠금 해제로 동작한다.
 const CRED_KEY_PREFIX = "kpwork_biometric_cred_";
 const METHOD_KEY_PREFIX = "kpwork_login_method_";
+export const BIOMETRIC_SESSION_KEY = "kpwork_biometric_verified_uid";
+
+export function shouldLockInsteadOfSignOut(uid) {
+  return Boolean(uid && hasBiometricRegistered(uid) && getLoginMethod(uid) === "biometric");
+}
+
+// 카카오톡처럼: 생체인증을 설정해둔 상태에서 "로그아웃"은 실제로 서버 세션을
+// 끊지 않고 그냥 다시 잠그기만 한다 — 그래야 다음에 앱을 열었을 때 비밀번호
+// 입력 화면이 아니라 곧바로 Face ID/지문 화면이 뜬다(실제 로그아웃을 해버리면
+// 세션 자체가 없어져서 생체인증으로 복귀할 방법이 없다). 남이 주워도 지문/
+// Face ID 없이는 못 들어가니 보안 수준은 동일하다.
+export function lockDevice() {
+  sessionStorage.removeItem(BIOMETRIC_SESSION_KEY);
+}
 
 export function isBiometricSupported() {
   return typeof window !== "undefined" && !!window.PublicKeyCredential && !!navigator.credentials;

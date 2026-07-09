@@ -13,12 +13,21 @@ export default function Modal({ open, onClose, title, children, footer, size = "
   // 자체가 줄어들어 문제가 없었음). window.visualViewport는 키보드가 올라오면
   // 실제로 보이는 높이를 정확히 반영하므로, 그 값을 모달 높이에 직접 반영해
   // 키보드 위로 밀어올린다.
-  const [vh, setVh] = useState(() => (typeof window !== "undefined" && window.visualViewport ? window.visualViewport.height : null));
+  //
+  // height만 반영했더니 다른 문제가 생겼다 — iOS가 포커스된 입력칸을 보이게
+  // 하려고 화면(visual viewport)을 위로 스크롤시키면, visualViewport.offsetTop이
+  // 0보다 커지는데 모달은 top:0(레이아웃 뷰포트 기준)에 고정되어 있어서 실제
+  // 눈에 보이는 화면 밖(위)으로 밀려나 버렸다. offsetTop도 함께 추적해서 top
+  // 위치 자체를 그만큼 내려줘야 실제 보이는 화면과 항상 일치한다.
+  const [viewport, setViewport] = useState(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return { height: null, top: 0 };
+    return { height: window.visualViewport.height, top: window.visualViewport.offsetTop };
+  });
 
   useEffect(() => {
     if (!open || typeof window === "undefined" || !window.visualViewport) return;
     const vv = window.visualViewport;
-    const update = () => setVh(vv.height);
+    const update = () => setViewport({ height: vv.height, top: vv.offsetTop });
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
@@ -70,8 +79,8 @@ export default function Modal({ open, onClose, title, children, footer, size = "
   if (!open) return null;
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
-      style={{ height: vh ? `${vh}px` : "100dvh" }}
+      className="fixed inset-x-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
+      style={{ top: viewport.top, height: viewport.height ? `${viewport.height}px` : "100dvh" }}
     >
       <div
         className={`flex w-full ${SIZES[size]} max-h-[85%] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}

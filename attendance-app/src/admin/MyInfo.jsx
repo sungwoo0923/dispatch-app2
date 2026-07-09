@@ -10,6 +10,7 @@ import Button from "../components/Button";
 import Panel from "../components/Panel";
 import Badge from "../components/Badge";
 import BiometricSettingsCard from "../components/BiometricSettingsCard";
+import { shouldLockInsteadOfSignOut, lockDevice } from "../utils/biometricAuth";
 import { formatPhoneNumber } from "../utils/phoneAuth";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
 
@@ -31,6 +32,7 @@ export default function MyInfo() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ phone: profile?.phone || "", team: profile?.team || "", position: profile?.position || "" });
   const [error, setError] = useState("");
+  const [, bumpBiometric] = useState(0);
 
   const copyCode = () => {
     if (!company?.id) return;
@@ -58,7 +60,13 @@ export default function MyInfo() {
   };
 
   const doLogout = async () => {
-    if (!(await confirm("로그아웃 하시겠습니까?", "delete"))) return;
+    const lockOnly = shouldLockInsteadOfSignOut(user?.uid);
+    if (!(await confirm(lockOnly ? "잠금 하시겠습니까?" : "로그아웃 하시겠습니까?", "delete"))) return;
+    if (lockOnly) {
+      lockDevice();
+      window.location.href = "/";
+      return;
+    }
     await logout();
     navigate("/");
   };
@@ -161,7 +169,7 @@ export default function MyInfo() {
         </div>
 
         <div className="mt-5 border-t border-slate-100 pt-5">
-          <BiometricSettingsCard uid={user.uid} label={profile?.name} />
+          <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
         </div>
 
         <div className="mt-5 flex flex-nowrap items-center justify-between border-t border-slate-100 pt-5">
@@ -169,7 +177,7 @@ export default function MyInfo() {
             <PenLine size={13} /> 내 전자서명 관리하기
           </button>
           <Button variant="danger" size="sm" onClick={doLogout}>
-            <LogOut size={13} /> 로그아웃
+            <LogOut size={13} /> {shouldLockInsteadOfSignOut(user?.uid) ? "잠금" : "로그아웃"}
           </Button>
         </div>
       </Panel>

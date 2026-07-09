@@ -10,6 +10,7 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import BuildInfo from "../components/BuildInfo";
 import BiometricSettingsCard from "../components/BiometricSettingsCard";
+import { shouldLockInsteadOfSignOut, lockDevice } from "../utils/biometricAuth";
 import { BANK_OPTIONS } from "../constants/hr";
 import { formatResidentNumber } from "../utils/phoneAuth";
 import { openAddressSearch } from "../utils/daumPostcode";
@@ -49,6 +50,7 @@ export default function MyInfoPage() {
   const [requestForm, setRequestForm] = useState(EMPTY_BASIC);
   const [requestReason, setRequestReason] = useState("");
   const [requesting, setRequesting] = useState(false);
+  const [, bumpBiometric] = useState(0);
 
   // 관리자용 근로자등록 화면의 "KP-Work 앱에 가입을 하지 않은 지원자만
   // 입력합니다" 카드와 동일한 필드 — 이미 가입한 근로자는 여기서 본인이
@@ -252,7 +254,7 @@ export default function MyInfoPage() {
       </Card>
 
       <Card className="p-4">
-        <BiometricSettingsCard uid={user.uid} label={profile?.name} />
+        <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
       </Card>
 
       {ITEMS.map(({ to, label, icon: Icon }) => (
@@ -269,8 +271,19 @@ export default function MyInfoPage() {
         </Link>
       ))}
 
-      <Button variant="outline" className="w-full" onClick={logout}>
-        <LogOut size={16} /> 로그아웃
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => {
+          if (shouldLockInsteadOfSignOut(user?.uid)) {
+            lockDevice();
+            window.location.href = "/";
+          } else {
+            logout();
+          }
+        }}
+      >
+        <LogOut size={16} /> {shouldLockInsteadOfSignOut(user?.uid) ? "잠금" : "로그아웃"}
       </Button>
       <BuildInfo className="pt-2" />
 
