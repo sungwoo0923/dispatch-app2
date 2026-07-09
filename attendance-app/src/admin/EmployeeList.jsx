@@ -13,7 +13,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera, SlidersHorizontal, ArrowUpDown } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera, SlidersHorizontal, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -28,6 +28,7 @@ import SidePanel from "../components/SidePanel";
 import Pagination from "../components/Pagination";
 import DraggableTh from "../components/DraggableTh";
 import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
+import SortMenuButton from "../components/SortMenuButton";
 import { usePagination } from "../hooks/usePagination";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import {
@@ -55,6 +56,30 @@ import { openReportPreview } from "../utils/reportTemplates";
 import SmsButton from "../components/SmsButton";
 
 const REG_TABS = ["시간템플릿", "수당템플릿", "계약", "계약종료", "첨부서류", "기본 불러오기"];
+
+// 재직/휴직/퇴사가 얼핏 봐도 구분되도록 드롭다운 자체를 상태별로 다르게
+// 칠한다. 퇴사/휴직은 재직과 똑같이 생기면 표에서 섞여 보여 헷갈리기 쉽다.
+const EMPLOYMENT_STATUS_SELECT_CLS = {
+  재직: "border-primary/30 bg-primary-light text-primary",
+  휴직: "border-slate-300 bg-slate-100 text-slate-600",
+  퇴사: "border-danger/30 bg-red-50 text-danger",
+};
+
+const SORTABLE_EMPLOYEE_COLUMNS = new Set([
+  "entity",
+  "site",
+  "gender",
+  "vendor",
+  "shiftType",
+  "employmentType",
+  "team",
+  "position",
+  "nationality",
+  "employmentStatus",
+  "hireDate",
+  "resignDate",
+  "payType",
+]);
 
 // 근로자가 내정보 > 기본정보 수정요청에서 보내는 필드 — ID(externalId)는
 // 항상 잠겨있어 근로자가 바꿀 수 없으므로 여기에 포함하지 않는다.
@@ -150,6 +175,7 @@ const CHANGE_LOG_FIELD_LABELS = {
   payType: "지급구분",
   team: "부서",
   position: "직급",
+  employmentStatus: "재직상태",
   insuranceApplied: "4대보험 적용",
   residentNumberFront: "주민번호",
   address: "주소",
@@ -213,20 +239,17 @@ export default function EmployeeList() {
   });
   const [advFilterOpen, setAdvFilterOpen] = useState(false);
   const advFilterCount = Object.values(advFilters).filter(Boolean).length;
-  const [sortOpen, setSortOpen] = useState(false);
   const [sort, setSort] = useState({ key: "", dir: "asc" });
   const advFilterRef = useRef(null);
-  const sortRef = useRef(null);
 
   useEffect(() => {
-    if (!advFilterOpen && !sortOpen) return;
+    if (!advFilterOpen) return;
     const onDocClick = (e) => {
-      if (advFilterOpen && advFilterRef.current && !advFilterRef.current.contains(e.target)) setAdvFilterOpen(false);
-      if (sortOpen && sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false);
+      if (advFilterRef.current && !advFilterRef.current.contains(e.target)) setAdvFilterOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, [advFilterOpen, sortOpen]);
+  }, [advFilterOpen]);
   const [selected, setSelected] = useState(() => new Set());
   const [listAction, setListAction] = useState("선택");
 
@@ -389,7 +412,7 @@ export default function EmployeeList() {
       label: "근무구분",
       interactive: true,
       render: (emp) => (
-        <select className={selectCls} value={emp.shiftType || ""} onChange={(e) => updateField(emp.id, "shiftType", e.target.value)}>
+        <select className={selectCls} value={emp.shiftType || ""} onChange={(e) => updateFieldWithConfirm(emp.id, "shiftType", e.target.value)}>
           <option value="">-</option>
           {SHIFT_TYPE_OPTIONS.map((s) => (
             <option key={s}>{s}</option>
@@ -402,7 +425,7 @@ export default function EmployeeList() {
       label: "고용구분",
       interactive: true,
       render: (emp) => (
-        <select className={selectCls} value={emp.employmentType || ""} onChange={(e) => updateField(emp.id, "employmentType", e.target.value)}>
+        <select className={selectCls} value={emp.employmentType || ""} onChange={(e) => updateFieldWithConfirm(emp.id, "employmentType", e.target.value)}>
           <option value="">-</option>
           {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
             <option key={t}>{t}</option>
@@ -416,7 +439,7 @@ export default function EmployeeList() {
       label: "부서",
       interactive: true,
       render: (emp) => (
-        <select className={selectCls} value={emp.team || ""} onChange={(e) => updateField(emp.id, "team", e.target.value)}>
+        <select className={selectCls} value={emp.team || ""} onChange={(e) => updateFieldWithConfirm(emp.id, "team", e.target.value)}>
           <option value="">-</option>
           {departments.map((d) => (
             <option key={d.id} value={d.name}>
@@ -431,7 +454,7 @@ export default function EmployeeList() {
       label: "직급",
       interactive: true,
       render: (emp) => (
-        <select className={selectCls} value={emp.position || ""} onChange={(e) => updateField(emp.id, "position", e.target.value)}>
+        <select className={selectCls} value={emp.position || ""} onChange={(e) => updateFieldWithConfirm(emp.id, "position", e.target.value)}>
           <option value="">-</option>
           {positions.map((p) => (
             <option key={p.id} value={p.name}>
@@ -452,7 +475,11 @@ export default function EmployeeList() {
       label: "재직상태",
       interactive: true,
       render: (emp) => (
-        <select className={selectCls} value={emp.employmentStatus || "재직"} onChange={(e) => updateField(emp.id, "employmentStatus", e.target.value)}>
+        <select
+          className={`${selectCls} font-medium ${EMPLOYMENT_STATUS_SELECT_CLS[emp.employmentStatus || "재직"] || ""}`}
+          value={emp.employmentStatus || "재직"}
+          onChange={(e) => updateFieldWithConfirm(emp.id, "employmentStatus", e.target.value)}
+        >
           {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
             <option key={s}>{s}</option>
           ))}
@@ -499,6 +526,26 @@ export default function EmployeeList() {
     columns: employeeColumnsOrdered,
   } = useColumnPrefs("employeeList", employeeColumns);
 
+  // 정렬 기준(id 참조 컬럼은 화면에 보이는 이름으로 정렬해야 의미가 있다 —
+  // 예를 들어 "사업자"는 businessEntityId가 아니라 사업자명 기준으로 정렬).
+  const EMPLOYEE_SORT_ACCESSORS = {
+    name: (e) => e.name || "",
+    entity: (e) => entityName_(e.businessEntityId),
+    site: (e) => siteName_(e.workSiteId),
+    gender: (e) => e.gender || "",
+    vendor: (e) => vendorName_(e.vendorId),
+    shiftType: (e) => e.shiftType || "",
+    employmentType: (e) => e.employmentType || "",
+    team: (e) => e.team || "",
+    position: (e) => e.position || "",
+    nationality: (e) => e.nationality || "",
+    employmentStatus: (e) => e.employmentStatus || "재직",
+    hireDate: (e) => e.hireDate || "",
+    resignDate: (e) => e.resignDate || "",
+    payType: (e) => e.payType || "",
+  };
+  const STATUS_SORT_PRIORITY = { 재직: 0, 휴직: 1, 퇴사: 2 };
+
   const filteredEmployees = useMemo(() => {
     const rows = employees.filter((emp) => {
       if (emp.deleted) return false;
@@ -514,14 +561,23 @@ export default function EmployeeList() {
       if (advFilters.nationality && emp.nationality !== advFilters.nationality) return false;
       return true;
     });
-    if (!sort.key) return rows;
+    if (!sort.key) {
+      // 기본 정렬: 등록된 순서(원래 목록 순서)는 그대로 유지하면서, 재직 →
+      // 휴직 → 퇴사 순으로 그룹만 묶는다(Array.sort는 안정 정렬이라 그룹 내
+      // 순서는 바뀌지 않는다).
+      return [...rows].sort(
+        (a, b) =>
+          (STATUS_SORT_PRIORITY[a.employmentStatus || "재직"] ?? 1) - (STATUS_SORT_PRIORITY[b.employmentStatus || "재직"] ?? 1)
+      );
+    }
+    const accessor = EMPLOYEE_SORT_ACCESSORS[sort.key] || ((e) => e[sort.key] || "");
     const dir = sort.dir === "desc" ? -1 : 1;
     return [...rows].sort((a, b) => {
-      const av = a[sort.key] || "";
-      const bv = b[sort.key] || "";
+      const av = accessor(a);
+      const bv = accessor(b);
       return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
     });
-  }, [employees, filters, advFilters, sort]);
+  }, [employees, filters, advFilters, sort, businessEntities, workSites, vendors]);
 
   const { pageRows, page, pageCount, pageSize, total, setPage, changePageSize, PAGE_SIZE_OPTIONS } = usePagination(filteredEmployees, 10);
 
@@ -577,6 +633,30 @@ export default function EmployeeList() {
     logFieldChange(uid, field, before, value);
   };
 
+  // 목록 표의 드롭다운(부서/직급/근무구분/고용구분/재직상태 등)은 실수로
+  // 스치듯 클릭해도 바로 반영돼버리면 위험하므로, 무엇을 무엇으로 바꾸는지
+  // 보여주는 확인창을 거치게 한다. 재직상태를 퇴사로 바꾸는 경우는 SidePanel의
+  // 퇴직처리 버튼과 동일한 문구/동작(퇴사일자 함께 기록)을 그대로 재사용한다.
+  const updateFieldWithConfirm = async (uid, field, value) => {
+    const emp = employees.find((e) => e.id === uid);
+    const before = emp?.[field];
+    if (before === value) return;
+    const label = CHANGE_LOG_FIELD_LABELS[field] || field;
+
+    if (field === "employmentStatus" && value === "퇴사") {
+      const resignDate = toDateKey();
+      if (!(await confirm(`${emp?.name} 근로자를 ${formatDate(resignDate)}자로 퇴직처리 하시겠습니까?`, "delete"))) return;
+      await updateDoc(doc(db, "users", uid), { employmentStatus: "퇴사", resignDate });
+      logFieldChange(uid, "employmentStatus", before, value);
+      toast.success("퇴직처리 되었습니다");
+      return;
+    }
+
+    if (!(await confirm(`${emp?.name}님의 ${label}을(를) "${before || "없음"}"에서 "${value || "없음"}"(으)로 변경하시겠습니까?`, "edit")))
+      return;
+    updateField(uid, field, value);
+  };
+
   const approveChangeRequest = async (req) => {
     await updateDoc(doc(db, "users", req.uid), {
       workSiteId: req.requestedSiteId || null,
@@ -614,8 +694,21 @@ export default function EmployeeList() {
 
   const deleteEmployee = async (emp) => {
     if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
-    await updateDoc(doc(db, "users", emp.id), { deleted: true });
+    await updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: serverTimestamp() });
     toast.success("삭제되었습니다");
+  };
+
+  const deleteSelectedEmployees = async () => {
+    const targets = filteredEmployees.filter((emp) => selected.has(emp.id));
+    if (targets.length === 0) return;
+    if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
+    try {
+      await Promise.all(targets.map((emp) => updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: serverTimestamp() })));
+      toast.success(`${targets.length}명 삭제되었습니다`);
+      setSelected(new Set());
+    } catch (err) {
+      toast.error(`삭제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
   };
 
   const deleteChangeRequest = async (req) => {
@@ -1272,60 +1365,29 @@ export default function EmployeeList() {
             <Button size="sm" variant="outline" onClick={() => window.alert(`${selected.size || 0}명에게 SMS를 발송했습니다.`)} disabled={selected.size === 0}>
               <Send size={13} /> SMS발송
             </Button>
-            <div className="relative shrink-0" ref={sortRef}>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSortOpen((v) => !v)}
-                className={sort.key ? "border-primary text-primary" : ""}
-              >
-                <ArrowUpDown size={13} /> 정렬
-              </Button>
-              {sortOpen && (
-                <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-                  <label className="mb-2 block">
-                    <span className="mb-1 block text-[11px] font-medium text-muted">정렬 기준</span>
-                    <select
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                      value={sort.key}
-                      onChange={(e) => setSort((s) => ({ ...s, key: e.target.value }))}
-                    >
-                      <option value="">기본순서</option>
-                      <option value="name">이름</option>
-                      <option value="hireDate">입사일자</option>
-                      <option value="team">부서</option>
-                      <option value="position">직급</option>
-                      <option value="employmentStatus">재직상태</option>
-                    </select>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${sort.dir === "asc" ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted"}`}
-                      onClick={() => setSort((s) => ({ ...s, dir: "asc" }))}
-                    >
-                      오름차순
-                    </button>
-                    <button
-                      type="button"
-                      className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${sort.dir === "desc" ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted"}`}
-                      onClick={() => setSort((s) => ({ ...s, dir: "desc" }))}
-                    >
-                      내림차순
-                    </button>
-                  </div>
-                  {sort.key && (
-                    <button
-                      type="button"
-                      className="mt-2 w-full text-center text-xs font-medium text-muted hover:text-danger"
-                      onClick={() => setSort({ key: "", dir: "asc" })}
-                    >
-                      정렬 해제
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            <Button size="sm" variant="danger" onClick={deleteSelectedEmployees} disabled={selected.size === 0}>
+              <Trash2 size={13} /> 삭제
+            </Button>
+            <SortMenuButton
+              sort={sort}
+              setSort={setSort}
+              options={[
+                { value: "name", label: "이름" },
+                { value: "entity", label: "사업자" },
+                { value: "site", label: "센터" },
+                { value: "gender", label: "성별" },
+                { value: "vendor", label: "소속업체" },
+                { value: "shiftType", label: "근무구분" },
+                { value: "employmentType", label: "고용구분" },
+                { value: "team", label: "부서" },
+                { value: "position", label: "직급" },
+                { value: "nationality", label: "외/내국인" },
+                { value: "employmentStatus", label: "재직상태" },
+                { value: "hireDate", label: "입사일자" },
+                { value: "resignDate", label: "퇴사일" },
+                { value: "payType", label: "급여" },
+              ]}
+            />
             <ColumnVisibilityButton columns={employeeColumnsOrdered} hidden={hiddenEmployeeColumns} toggleColumn={toggleEmployeeColumn} />
           </div>
         </div>
@@ -1374,33 +1436,59 @@ export default function EmployeeList() {
                   <input type="checkbox" checked={selected.size > 0 && selected.size === filteredEmployees.length} onChange={toggleSelectAll} />
                 </th>
                 <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
-                <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
+                <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setSort((s) => ({ key: "name", dir: s.key === "name" && s.dir === "asc" ? "desc" : "asc" }))}
+                    className="inline-flex items-center gap-1 hover:text-ink"
+                  >
+                    이름
+                    {sort.key === "name" ? (
+                      sort.dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                    ) : (
+                      <ChevronsUpDown size={12} className="text-slate-300" />
+                    )}
+                  </button>
+                </th>
                 {visibleEmployeeColumns.map((c) => (
-                  <DraggableTh key={c.key} columnKey={c.key} onMove={moveEmployeeColumn} className="px-4 py-3 font-semibold">
+                  <DraggableTh
+                    key={c.key}
+                    columnKey={c.key}
+                    onMove={moveEmployeeColumn}
+                    className="px-4 py-3 font-semibold"
+                    sortKey={SORTABLE_EMPLOYEE_COLUMNS.has(c.key) ? c.key : undefined}
+                    sort={sort}
+                    onSort={setSort}
+                  >
                     {c.label}
                   </DraggableTh>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((emp, i) => (
+              {pageRows.map((emp, i) => {
+                const isSelected = selected.has(emp.id);
+                const stickyBg = isSelected ? "bg-primary-light" : i % 2 === 0 ? "bg-white" : "bg-slate-50";
+                return (
                 <tr
                   key={emp.id}
                   onDoubleClick={() => openEditEmployee(emp)}
                   onContextMenu={(e) => openRowMenu(e, emp)}
                   title="더블클릭하여 수정 · 우클릭하여 복사"
-                  className="cursor-pointer border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50 hover:bg-slate-100"
+                  className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${
+                    isSelected ? "bg-primary-light/60" : "odd:bg-white even:bg-slate-50/50"
+                  }`}
                 >
                   <td
-                    className={`sticky left-0 z-10 w-10 min-w-10 max-w-10 px-2 py-3 ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
+                    className={`sticky left-0 z-10 w-10 min-w-10 max-w-10 px-2 py-3 ${stickyBg}`}
                     onDoubleClick={(e) => e.stopPropagation()}
                   >
-                    <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
+                    <input type="checkbox" checked={isSelected} onChange={() => toggleSelected(emp.id)} />
                   </td>
-                  <td className={`sticky left-10 z-10 w-14 min-w-14 max-w-14 px-2 py-3 text-muted ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>
+                  <td className={`sticky left-10 z-10 w-14 min-w-14 max-w-14 px-2 py-3 text-muted ${stickyBg}`}>
                     {(page - 1) * pageSize + i + 1}
                   </td>
-                  <td className={`sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis px-2 py-3 text-ink ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>{emp.name}</td>
+                  <td className={`sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis px-2 py-3 text-ink ${stickyBg}`}>{emp.name}</td>
                   {visibleEmployeeColumns.map((c) => (
                     <td
                       key={c.key}
@@ -1411,7 +1499,8 @@ export default function EmployeeList() {
                     </td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
               {pageRows.length === 0 && (
                 <tr>
                   <td colSpan={visibleEmployeeColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
