@@ -834,11 +834,17 @@ const upsertPlace = async (place) => {
       const newPhone = (place.담당자번호 || "").trim();
       if (newName) {
         const alreadyExists = existingContacts.some(c => (c.name || "").trim() === newName);
-        if (!alreadyExists) {
-          mergedContacts = [...existingContacts, { name: newName, phone: newPhone, isPrimary: existingContacts.length === 0 }];
-        } else {
+        if (alreadyExists) {
           // 이미 있는 담당자면 연락처만 업데이트
           mergedContacts = existingContacts.map(c => (c.name || "").trim() === newName ? { ...c, phone: newPhone } : c);
+        } else if (existingContacts.length <= 1) {
+          // 담당자가 1명뿐인 상태에서 이름을 바꾼 것은 신규 담당자 추가가 아니라
+          // 그 담당자 정보를 수정한 것 — 대표 담당자를 그대로 교체한다.
+          // (그렇지 않으면 이전 담당자가 primary로 남아 수정한 값이 무시되고 예전 값으로 되돌아간다)
+          const prev = existingContacts[0];
+          mergedContacts = [{ ...(prev || {}), name: newName, phone: newPhone, isPrimary: true }];
+        } else {
+          mergedContacts = [...existingContacts, { name: newName, phone: newPhone, isPrimary: existingContacts.length === 0 }];
         }
       } else {
         mergedContacts = existingContacts;
@@ -41927,7 +41933,7 @@ React.useEffect(() => {
 
       {/* 하차지거래처 수정 팝업 */}
       {editPlaceModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditPlaceModal(null)}>
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
               <h3 className="text-white font-bold text-[15px]">하차지 수정 — {editPlaceModal.업체명}</h3>
