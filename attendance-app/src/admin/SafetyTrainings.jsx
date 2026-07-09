@@ -8,6 +8,7 @@ import Badge from "../components/Badge";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import SortableTh from "../components/SortableTh";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, addDays, formatTime, formatDate } from "../utils/dateUtils";
 import {
@@ -90,7 +91,23 @@ export default function SafetyTrainings() {
     [workSites]
   );
 
+  const [sort, setSort] = useState({ key: "date", dir: "desc" });
+  const SAFETY_SORT_ACCESSORS = {
+    date: (row) => row.record?.date || "",
+    name: (row) => row.record?.name || "",
+    company: () => companyName,
+    site: (row) => row.record?.siteName || "",
+    vendor: (row) => vendors.find((v) => v.id === row.emp?.vendorId)?.name || "",
+    shiftType: (row) => row.emp?.shiftType || "",
+    employmentType: (row) => row.emp?.employmentType || "",
+    gender: (row) => row.emp?.gender || "",
+    trained: (row) => (row.record?.safetySignature ? "Y" : "N"),
+    trainedAt: (row) => row.record?.safetySignedAt || "",
+  };
+
   const rows = useMemo(() => {
+    const accessor = SAFETY_SORT_ACCESSORS[sort.key] || ((row) => row.record?.date || "");
+    const dir = sort.dir === "desc" ? -1 : 1;
     return records
       .filter((r) => r.status === "출근" && r.siteId && managedSiteIds.has(r.siteId))
       .map((r) => ({ record: r, emp: employeeByUid.get(r.uid) }))
@@ -113,8 +130,12 @@ export default function SafetyTrainings() {
         if (filters.trainedYN === "N") return !record.safetySignature;
         return true;
       })
-      .sort((a, b) => (b.record.date || "").localeCompare(a.record.date || ""));
-  }, [records, managedSiteIds, employeeByUid, filters]);
+      .sort((x, y) => {
+        const av = accessor(x);
+        const bv = accessor(y);
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+      });
+  }, [records, managedSiteIds, employeeByUid, filters, sort, vendors, companyName]);
 
   const exportCsv = () => {
     const headers = ["일자", "이름", "사업자", "센터", "소속업체", "근무일자", "근무구분", "근무형태", "전화번호", "성별", "안전교육여부", "안전교육일시"];
@@ -362,18 +383,18 @@ export default function SafetyTrainings() {
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="px-4 py-3 font-semibold">순번</th>
-                <th className="px-4 py-3 font-semibold">일자</th>
-                <th className="px-4 py-3 font-semibold">이름</th>
-                <th className="px-4 py-3 font-semibold">사업자</th>
-                <th className="px-4 py-3 font-semibold">센터</th>
-                <th className="px-4 py-3 font-semibold">소속업체</th>
+                <SortableTh sortKey="date" sort={sort} onSort={setSort}>일자</SortableTh>
+                <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
+                <SortableTh sortKey="company" sort={sort} onSort={setSort}>사업자</SortableTh>
+                <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
+                <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
                 <th className="px-4 py-3 font-semibold">근무일자</th>
-                <th className="px-4 py-3 font-semibold">근무구분</th>
-                <th className="px-4 py-3 font-semibold">근무형태</th>
+                <SortableTh sortKey="shiftType" sort={sort} onSort={setSort}>근무구분</SortableTh>
+                <SortableTh sortKey="employmentType" sort={sort} onSort={setSort}>근무형태</SortableTh>
                 <th className="px-4 py-3 font-semibold">전화번호</th>
-                <th className="px-4 py-3 font-semibold">성별</th>
-                <th className="px-4 py-3 font-semibold">안전교육여부</th>
-                <th className="px-4 py-3 font-semibold">안전교육일시</th>
+                <SortableTh sortKey="gender" sort={sort} onSort={setSort}>성별</SortableTh>
+                <SortableTh sortKey="trained" sort={sort} onSort={setSort}>안전교육여부</SortableTh>
+                <SortableTh sortKey="trainedAt" sort={sort} onSort={setSort}>안전교육일시</SortableTh>
               </tr>
             </thead>
             <tbody>

@@ -210,21 +210,90 @@ export default function Schedule() {
     return true;
   };
 
+  // 컬럼명을 클릭해 정렬할 때, id 참조 컬럼(센터/소속업체 등)이나 계약서
+  // 조회처럼 별도 조회가 필요한 값은 화면에 보이는 값 기준으로 정렬해야
+  // 의미가 있으므로 특별 처리하고 나머지는 emp/schedule/leave 필드를
+  // 그대로 사용한다.
+  const scheduleRowSortValue = (row, key) => {
+    switch (key) {
+      case "site":
+        return siteName_(row.emp?.workSiteId) || row.schedule?.siteName || "";
+      case "vendor":
+        return vendorName_(row.emp?.vendorId);
+      case "company":
+        return companyName;
+      case "date":
+        return row.schedule?.date || "";
+      case "time":
+        return row.schedule?.startTime || "";
+      case "status":
+        return row.schedule?.status || "대기";
+      case "shiftTemplate":
+        return shiftTemplateName_(row.emp?.shiftTemplateId);
+      case "allowanceTemplate":
+        return allowanceTemplateName_(row.emp?.allowanceTemplateId);
+      case "contractCycle":
+        return latestContractFor(row.emp?.id)?.cycle || "";
+      case "contractStartDate":
+        return latestContractFor(row.emp?.id)?.startDate || "";
+      case "contractWritten":
+        return contractStatus(latestContractFor(row.emp?.id));
+      case "signatureStatus":
+        return latestContractFor(row.emp?.id)?.employeeSignatureDataUrl ? "Y" : "N";
+      default:
+        return row.emp?.[key] ?? "";
+    }
+  };
+  const sortRows = (list, sort, valueOf) => {
+    if (!sort.key) return list;
+    const dir = sort.dir === "desc" ? -1 : 1;
+    return [...list].sort((a, b) => {
+      const av = valueOf(a, sort.key);
+      const bv = valueOf(b, sort.key);
+      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+    });
+  };
+
+  const [scheduleSort, setScheduleSort] = useState({ key: "date", dir: "asc" });
+  const [leaveSort, setLeaveSort] = useState({ key: "period", dir: "asc" });
+  const [resignedSort, setResignedSort] = useState({ key: "name", dir: "asc" });
+
   const rows = useMemo(() => {
-    return schedules
+    const list = schedules
       .map((s) => ({ schedule: s, emp: employeeByUid.get(s.uid) }))
       .filter(({ emp }) => Boolean(emp))
-      .filter(({ emp }) => matchesFilters(emp, filters))
-      .sort((a, b) => a.schedule.date.localeCompare(b.schedule.date));
-  }, [schedules, employeeByUid, filters]);
+      .filter(({ emp }) => matchesFilters(emp, filters));
+    return sortRows(list, scheduleSort, scheduleRowSortValue);
+  }, [schedules, employeeByUid, filters, scheduleSort]);
 
   // 스케줄 인원 현황은 "확정된" 근무만 모아두는 카드다 — 대기/취소 상태 건은
   // 각자의 카드(대기/휴무/퇴사)에만 나타나야 하며 여기 중복으로 잡히면 안 된다.
   const confirmedRows = useMemo(() => rows.filter(({ schedule: s }) => s.status === "출근확정"), [rows]);
   const pendingRows = useMemo(() => rows.filter(({ schedule: s }) => (s.status || "대기") === "대기"), [rows]);
 
+  const leaveRowSortValue = (row, key) => {
+    switch (key) {
+      case "name":
+        return row.emp?.name || "";
+      case "site":
+        return siteName_(row.emp?.workSiteId);
+      case "vendor":
+        return vendorName_(row.emp?.vendorId);
+      case "company":
+        return companyName;
+      case "type":
+        return row.leave?.type || "";
+      case "period":
+        return row.leave?.startDate || "";
+      case "reason":
+        return row.leave?.reason || "";
+      default:
+        return row.emp?.[key] ?? "";
+    }
+  };
+
   const leaveRows = useMemo(() => {
-    return leaves
+    const list = leaves
       .filter((lv) => lv.status === "approved")
       .map((lv) => ({ leave: lv, emp: employeeByUid.get(lv.uid) }))
       .filter(({ emp }) => Boolean(emp))
@@ -232,14 +301,33 @@ export default function Schedule() {
         if (range.start && (leave.endDate || leave.startDate) < range.start) return false;
         if (range.end && leave.startDate > range.end) return false;
         return matchesFilters(emp, filters);
-      })
-      .sort((a, b) => a.leave.startDate.localeCompare(b.leave.startDate));
-  }, [leaves, employeeByUid, filters, range]);
+      });
+    return sortRows(list, leaveSort, leaveRowSortValue);
+  }, [leaves, employeeByUid, filters, range, leaveSort]);
 
-  const resignedRows = useMemo(
-    () => employees.filter((emp) => emp.employmentStatus === "퇴사" && matchesFilters(emp, filters)),
-    [employees, filters]
-  );
+  const resignedRowSortValue = (emp, key) => {
+    switch (key) {
+      case "site":
+        return siteName_(emp.workSiteId);
+      case "vendor":
+        return vendorName_(emp.vendorId);
+      case "company":
+        return companyName;
+      case "furlough":
+        return emp.employmentStatus === "휴직" ? "Y" : "N";
+      case "shiftTemplate":
+        return shiftTemplateName_(emp.shiftTemplateId);
+      case "allowanceTemplate":
+        return allowanceTemplateName_(emp.allowanceTemplateId);
+      default:
+        return emp[key] ?? "";
+    }
+  };
+
+  const resignedRows = useMemo(() => {
+    const list = employees.filter((emp) => emp.employmentStatus === "퇴사" && matchesFilters(emp, filters));
+    return sortRows(list, resignedSort, resignedRowSortValue);
+  }, [employees, filters, resignedSort]);
 
   const scheduleColumns = [
     { key: "company", label: "사업자", render: () => companyName },
@@ -369,7 +457,11 @@ export default function Schedule() {
   };
 
   const runBulkSearch = () => {
-    setBulkResults(employees.filter((emp) => matchesFilters(emp, bulkFilters)));
+    // 출근자등록은 실제로 배정할 근무자를 고르는 화면이므로, 퇴사 처리되었거나
+    // 탈퇴(삭제)된 근로자는 검색 결과에 나오지 않아야 한다.
+    setBulkResults(
+      employees.filter((emp) => !emp.deleted && emp.employmentStatus !== "퇴사" && matchesFilters(emp, bulkFilters))
+    );
     setBulkSearched(true);
     setBulkSelected(new Set());
   };
@@ -972,7 +1064,15 @@ export default function Schedule() {
                     <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
                     <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
                     {visibleScheduleColumns.map((c) => (
-                      <DraggableTh key={c.key} columnKey={c.key} onMove={moveScheduleColumn} className="px-4 py-3 font-semibold">
+                      <DraggableTh
+                        key={c.key}
+                        columnKey={c.key}
+                        onMove={moveScheduleColumn}
+                        className="px-4 py-3 font-semibold"
+                        sortKey={c.key}
+                        sort={scheduleSort}
+                        onSort={setScheduleSort}
+                      >
                         {c.label}
                       </DraggableTh>
                     ))}
@@ -984,7 +1084,7 @@ export default function Schedule() {
                     return (
                       <tr
                         key={s.id}
-                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                        className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${selected.has(s.id) ? "bg-primary-light/60" : ""}`}
                         title="더블클릭하여 수정 · 우클릭하여 상태변경"
                         onDoubleClick={() => openScheduleEdit(s)}
                         onContextMenu={(e) => openRowMenu(e, "confirmed", row)}
@@ -1049,7 +1149,7 @@ export default function Schedule() {
               {pendingRows.map((row, i) => (
                 <tr
                   key={row.schedule.id}
-                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                  className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${selected.has(row.schedule.id) ? "bg-primary-light/60" : ""}`}
                   title="더블클릭하여 수정 · 우클릭하여 상태변경"
                   onDoubleClick={() => openScheduleEdit(row.schedule)}
                   onContextMenu={(e) => openRowMenu(e, "pending", row)}
@@ -1091,7 +1191,15 @@ export default function Schedule() {
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="px-4 py-3 font-semibold">순번</th>
                 {visibleLeaveColumns.map((c) => (
-                  <DraggableTh key={c.key} columnKey={c.key} onMove={moveLeaveColumn} className="px-4 py-3 font-semibold">
+                  <DraggableTh
+                    key={c.key}
+                    columnKey={c.key}
+                    onMove={moveLeaveColumn}
+                    className="px-4 py-3 font-semibold"
+                    sortKey={c.key}
+                    sort={leaveSort}
+                    onSort={setLeaveSort}
+                  >
                     {c.label}
                   </DraggableTh>
                 ))}
@@ -1137,7 +1245,15 @@ export default function Schedule() {
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="px-4 py-3 font-semibold">순번</th>
                 {visibleResignedColumns.map((c) => (
-                  <DraggableTh key={c.key} columnKey={c.key} onMove={moveResignedColumn} className="px-4 py-3 font-semibold">
+                  <DraggableTh
+                    key={c.key}
+                    columnKey={c.key}
+                    onMove={moveResignedColumn}
+                    className="px-4 py-3 font-semibold"
+                    sortKey={c.key}
+                    sort={resignedSort}
+                    onSort={setResignedSort}
+                  >
                     {c.label}
                   </DraggableTh>
                 ))}

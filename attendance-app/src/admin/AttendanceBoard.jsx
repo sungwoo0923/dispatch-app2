@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil } from "lucide-react";
+import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -121,7 +121,27 @@ export default function AttendanceBoard() {
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
 
+  const [sort, setSort] = useState({ key: "date", dir: "asc" });
+  const ATTENDANCE_SORT_ACCESSORS = {
+    name: (row) => row.emp?.name || "",
+    team: (row) => row.emp?.team || "",
+    position: (row) => row.emp?.position || "",
+    checkIn: (row) => row.record?.checkInTime || "",
+    checkOut: (row) => row.record?.checkOutTime || "",
+    date: (row) => row.record?.date || "",
+    company: () => companyName,
+    site: (row) => row.record?.siteName || siteName_(row.emp?.workSiteId),
+    shiftType: (row) => row.emp?.shiftType || "",
+    employmentType: (row) => row.emp?.employmentType || "",
+    gender: (row) => row.emp?.gender || "",
+    nationality: (row) => row.emp?.nationality || "",
+    country: (row) => row.emp?.country || "",
+    status: (row) => row.record?.status || "미출근",
+  };
+
   const rows = useMemo(() => {
+    const accessor = ATTENDANCE_SORT_ACCESSORS[sort.key] || ((row) => row.record?.date || "");
+    const dir = sort.dir === "desc" ? -1 : 1;
     return attendance
       .map((a) => ({ record: a, emp: employeeByUid.get(a.uid) }))
       .filter(({ emp }) => Boolean(emp))
@@ -138,8 +158,12 @@ export default function AttendanceBoard() {
         if (filters.phone && !emp.phone?.includes(filters.phone)) return false;
         return true;
       })
-      .sort((a, b) => a.record.date.localeCompare(b.record.date));
-  }, [attendance, employeeByUid, filters]);
+      .sort((x, y) => {
+        const av = accessor(x);
+        const bv = accessor(y);
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+      });
+  }, [attendance, employeeByUid, filters, sort]);
 
   const attendanceColumns = [
     { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
@@ -570,9 +594,30 @@ export default function AttendanceBoard() {
                       <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
                     </th>
                     <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
-                    <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">이름</th>
+                    <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setSort((s) => ({ key: "name", dir: s.key === "name" && s.dir === "asc" ? "desc" : "asc" }))}
+                        className="inline-flex items-center gap-1 hover:text-ink"
+                      >
+                        이름
+                        {sort.key === "name" ? (
+                          sort.dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                        ) : (
+                          <ChevronsUpDown size={12} className="text-slate-300" />
+                        )}
+                      </button>
+                    </th>
                     {visibleAttendanceColumns.map((c) => (
-                      <DraggableTh key={c.key} columnKey={c.key} onMove={moveAttendanceColumn} className="px-4 py-3 font-semibold">
+                      <DraggableTh
+                        key={c.key}
+                        columnKey={c.key}
+                        onMove={moveAttendanceColumn}
+                        className="px-4 py-3 font-semibold"
+                        sortKey={c.key}
+                        sort={sort}
+                        onSort={setSort}
+                      >
                         {c.label}
                       </DraggableTh>
                     ))}
@@ -586,7 +631,7 @@ export default function AttendanceBoard() {
                         key={r.id}
                         onDoubleClick={() => openDetail(row)}
                         title="더블클릭하여 상세보기"
-                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                        className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${selected.has(r.id) ? "bg-primary-light/60" : ""}`}
                       >
                         <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3" onDoubleClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelected(r.id)} />
