@@ -261,6 +261,16 @@ export default function Home() {
           supervisorName = manager.adminName || sigSnap.data().name || "";
         }
       }
+      // 담당자 개인서명이 등록되어 있지 않아도 안전교육 확인란은 비워두지
+      // 않는다 — 회사가 업로드해둔 인감/직인(businessEntities.stampUrl)을
+      // 대신 찍어, 발송되는 안전교육 서명 기록에 항상 회사 확인이 남게 한다.
+      if (!supervisorSignature && profile?.businessEntityId) {
+        const entitySnap = await getDoc(doc(db, "businessEntities", profile.businessEntityId));
+        if (entitySnap.exists()) {
+          supervisorSignature = entitySnap.data().stampUrl || null;
+          supervisorName = supervisorName || entitySnap.data().name || "";
+        }
+      }
       extra = {
         ...extra,
         safetySignature: signatures.safety,
