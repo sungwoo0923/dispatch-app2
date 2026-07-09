@@ -271,7 +271,16 @@ export default function ResignationApprovals() {
   return (
     <div>
       <p className="mb-4 text-xs text-muted">발송된 사직서의 서명·결재 진행 상황을 확인합니다. 행을 더블클릭하면 사직서 전문과 결재결과를 미리볼 수 있습니다.</p>
-      <div className="mb-2 text-xs font-medium text-muted">목록 {active.length}</div>
+      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
+        <span>목록 {active.length}</span>
+        <span className="text-slate-300">·</span>
+        <span className="text-warning">
+          진행중 {active.filter((r) => !["completed", "rejected", "on_hold"].includes(computeResignationStatus(r))).length}
+        </span>
+        <span className="text-muted">보류 {active.filter((r) => computeResignationStatus(r) === "on_hold").length}</span>
+        <span className="text-danger">반려 {active.filter((r) => computeResignationStatus(r) === "rejected").length}</span>
+        <span className="text-primary">완료 {active.filter((r) => computeResignationStatus(r) === "completed").length}</span>
+      </div>
       <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
         <table className="w-full min-w-[820px] text-center text-sm">
           <thead>

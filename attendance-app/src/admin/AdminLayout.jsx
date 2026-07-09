@@ -122,7 +122,12 @@ export default function AdminLayout() {
   useEffect(() => {
     if (!profile?.companyId) return;
     const unsub = onSnapshot(query(collection(db, "resignationRequests"), where("companyId", "==", profile.companyId)), (snap) =>
-      setResignationCount(snap.docs.filter((d) => ["submitted", "manager_signed"].includes(d.data().status)).length)
+      setResignationCount(
+        snap.docs.filter((d) => {
+          const data = d.data();
+          return !data.deleted && ["submitted", "manager_signed", "ceo_pending"].includes(data.status);
+        }).length
+      )
     );
     return () => unsub();
   }, [profile?.companyId]);

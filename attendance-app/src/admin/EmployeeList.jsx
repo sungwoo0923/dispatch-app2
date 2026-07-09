@@ -1351,7 +1351,13 @@ export default function EmployeeList() {
         </Card>
 
         <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
-          <p className="text-xs font-medium text-muted">목록 {filteredEmployees.length}건</p>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
+            <span>목록 {filteredEmployees.length}건</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-primary">재직 {filteredEmployees.filter((e) => (e.employmentStatus || "재직") === "재직").length}</span>
+            <span className="text-slate-500">휴직 {filteredEmployees.filter((e) => e.employmentStatus === "휴직").length}</span>
+            <span className="text-danger">퇴사 {filteredEmployees.filter((e) => e.employmentStatus === "퇴사").length}</span>
+          </p>
           <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
             <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={listAction} onChange={(e) => setListAction(e.target.value)}>
               <option>선택</option>

@@ -302,7 +302,13 @@ export default function EmployeeStatus() {
           </div>
         </div>
 
-        <p className="mt-4 text-xs font-medium text-muted">목록 {total}건</p>
+        <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
+          <span>목록 {total}건</span>
+          <span className="text-slate-300">·</span>
+          <span className="text-primary">재직 {filtered.filter((e) => (e.employmentStatus || "재직") === "재직").length}</span>
+          <span className="text-slate-500">휴직 {filtered.filter((e) => e.employmentStatus === "휴직").length}</span>
+          <span className="text-danger">퇴사 {filtered.filter((e) => e.employmentStatus === "퇴사").length}</span>
+        </p>
 
         <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain rounded-xl bg-slate-50 p-3">
           <span className="shrink-0 text-xs font-medium text-muted">퇴사일지정</span>

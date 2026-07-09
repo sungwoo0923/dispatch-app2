@@ -490,7 +490,13 @@ export default function Contracts() {
         </div>
 
         <div className="mt-4 flex flex-nowrap items-center justify-between gap-2">
-          <p className="text-xs font-medium text-muted">목록 {total}건</p>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
+            <span>목록 {total}건</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-muted">미발송 {filteredRows.filter((r) => contractStatus(r.contract) === "미발송" || contractStatus(r.contract) === "발송대기").length}</span>
+            <span className="text-warning">대기 {filteredRows.filter((r) => contractStatus(r.contract) === "서명대기").length}</span>
+            <span className="text-primary">완료 {filteredRows.filter((r) => contractStatus(r.contract) === "서명완료").length}</span>
+          </p>
           <div className="flex flex-nowrap items-center gap-2">
             <Button size="sm" onClick={autoSend}>
               <Send size={14} /> 자동발송

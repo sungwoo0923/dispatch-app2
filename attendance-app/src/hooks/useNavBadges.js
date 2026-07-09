@@ -17,7 +17,7 @@ const BADGE_SOURCES = {
     { collection: "infoChangeRequests", filter: (d) => d.status === "pending" },
   ],
   "/employees/contracts": [
-    { collection: "resignationRequests", filter: (d) => ["submitted", "manager_signed", "ceo_pending"].includes(d.status) },
+    { collection: "resignationRequests", filter: (d) => !d.deleted && ["submitted", "manager_signed", "ceo_pending"].includes(d.status) },
   ],
   "/leaves": [{ collection: "leaves", filter: (d) => d.status === "pending" }],
   "/employees/inquiries": [
