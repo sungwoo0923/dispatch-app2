@@ -40730,6 +40730,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       등급변경일: d.등급변경일 || null,
       메모: d.메모 || "",
       updatedAt: d.updatedAt || null,
+      // 담당자가 2명 이상인 문서를 수정 팝업에서 저장할 때, 대표(주 담당자)를
+      // 정확히 교체하려면 원본 contacts 배열이 필요해 별도로 보관해둔다
+      _rawContacts: Array.isArray(d.contacts) ? d.contacts : [],
     };
   };
 
@@ -40914,7 +40917,23 @@ React.useEffect(() => {
     // _id가 한 번도 전달되지 않았다. 그 결과 매번 업체명으로 문서를 다시 찾는 폴백
     // 경로를 타게 되어, 같은 업체명의 문서가 여러 개면 엉뚱한 문서를 수정/조회하게
     // 되고, 방금 수정한 문서는 그대로 남아 있다가 실시간 리스너로 되돌아와 보였다.
-    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id });
+    //
+    // 담당자가 2명 이상인 문서라면 upsertPlace의 이름-매칭 병합 로직은 바뀐 이름을
+    // "새 담당자 추가"로 오인해 기존 대표 담당자를 그대로 남겨버린다. 이 팝업은
+    // 대표 담당자 1명만 수정하는 화면이므로, contacts 배열을 직접 구성해 대표
+    // 담당자를 명시적으로 교체함으로써 그 모호함을 아예 없앤다.
+    const rawContacts = Array.isArray(editPlaceModal._rawContacts) ? editPlaceModal._rawContacts : [];
+    const newName = (editPlaceModal.담당자 || "").trim();
+    const newPhone = (editPlaceModal.담당자번호 || "").trim();
+    let contacts;
+    if (rawContacts.length === 0) {
+      contacts = newName ? [{ name: newName, phone: newPhone, isPrimary: true }] : [];
+    } else {
+      const primaryIdx = rawContacts.findIndex(c => c.isPrimary);
+      const idx = primaryIdx >= 0 ? primaryIdx : 0;
+      contacts = rawContacts.map((c, i) => i === idx ? { ...c, name: newName, phone: newPhone, isPrimary: true } : c);
+    }
+    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts });
     setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal } : r));
     setEditPlaceModal(null);
     showAlert("수정 완료");
