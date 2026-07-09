@@ -40910,7 +40910,11 @@ React.useEffect(() => {
     if (!editPlaceModal) return;
     const id = editPlaceModal.id || editPlaceModal.업체명;
     if (!id) return;
-    await upsertPlace?.({ ...editPlaceModal, id });
+    // upsertPlace는 place._id로 대상 문서를 찾는데, editPlaceModal은 .id만 갖고 있어
+    // _id가 한 번도 전달되지 않았다. 그 결과 매번 업체명으로 문서를 다시 찾는 폴백
+    // 경로를 타게 되어, 같은 업체명의 문서가 여러 개면 엉뚱한 문서를 수정/조회하게
+    // 되고, 방금 수정한 문서는 그대로 남아 있다가 실시간 리스너로 되돌아와 보였다.
+    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id });
     setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal } : r));
     setEditPlaceModal(null);
     showAlert("수정 완료");
