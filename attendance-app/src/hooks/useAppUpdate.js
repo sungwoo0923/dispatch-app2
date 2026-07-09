@@ -8,6 +8,7 @@ import { registerSW } from "virtual:pwa-register";
 // "업데이트"를 누르면 새 서비스워커를 활성화한 뒤 새로고침한다.
 let needRefresh = false;
 let updateSW = null;
+let swRegistration = null;
 const listeners = new Set();
 
 function setNeedRefresh(value) {
@@ -22,6 +23,7 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator) {
     },
     onRegisteredSW(_url, registration) {
       if (!registration) return;
+      swRegistration = registration;
       // 카카오톡 인앱 브라우저/일반 브라우저 탭/홈 화면에 설치한 아이콘은
       // 각자 독립된 서비스워커 캐시를 갖기 때문에, 어느 한 곳에서 열었을
       // 때 새 버전이 배포됐는지 "그 자리에서 바로" 확인해야 나머지 경로도
@@ -48,5 +50,35 @@ export function useAppUpdate() {
   }, []);
   const applyUpdate = () => updateSW?.(true);
   const dismiss = () => setNeedRefresh(false);
-  return { needRefresh: state, applyUpdate, dismiss };
+
+  // "업데이트 확인" 버튼을 직접 눌렀을 때 쓰는 함수 — 서버에 새 서비스워커가
+  // 있는지 바로 확인해보고, 있으면 { hasUpdate: true }, 없으면(=지금이 최신
+  // 버전) { hasUpdate: false }를 알려준다. 새 서비스워커 설치는 시간이 좀
+  // 걸리므로 updatefound/설치완료 이벤트를 기다리되, 새 버전이 아예 없는
+  // 경우엔 그 이벤트 자체가 안 뜨므로 일정 시간 후엔 "최신 버전"으로 판단한다.
+  const checkForUpdate = () => {
+    if (needRefresh) return Promise.resolve({ hasUpdate: true });
+    if (!swRegistration) return Promise.resolve({ hasUpdate: false });
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (hasUpdate) => {
+        if (settled) return;
+        settled = true;
+        swRegistration.removeEventListener("updatefound", onUpdateFound);
+        resolve({ hasUpdate });
+      };
+      const onUpdateFound = () => {
+        const installing = swRegistration.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", () => {
+          if (installing.state === "installed") finish(true);
+        });
+      };
+      swRegistration.addEventListener("updatefound", onUpdateFound);
+      swRegistration.update().catch(() => finish(false));
+      setTimeout(() => finish(needRefresh), 4000);
+    });
+  };
+
+  return { needRefresh: state, applyUpdate, dismiss, checkForUpdate };
 }
