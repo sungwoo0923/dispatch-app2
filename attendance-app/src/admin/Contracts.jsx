@@ -17,6 +17,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
+import SortableTh from "../components/SortableTh";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
@@ -67,6 +68,7 @@ export default function Contracts() {
 
   const [draft, setDraft] = useState(emptyDraft());
   const [applied, setApplied] = useState(emptyDraft());
+  const [sort, setSort] = useState({ key: "name", dir: "asc" });
   const [selected, setSelected] = useState(() => new Set());
   const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get("tab") === "resignation" ? "사직서" : "계약서"));
 
@@ -132,8 +134,28 @@ export default function Contracts() {
     return `[${companyName || "회사"}] ${emp.name}님, 안녕하세요.`;
   };
 
+  // id 참조 컬럼(사업자/센터/소속업체 등)은 화면에 보이는 이름 기준으로
+  // 정렬해야 의미가 있다.
+  const CONTRACT_SORT_ACCESSORS = {
+    name: (r) => r.emp.name || "",
+    entity: (r) => entityName_(r.emp.businessEntityId),
+    site: (r) => siteName_(r.emp.workSiteId),
+    nationality: (r) => r.emp.nationality || "내국인",
+    gender: (r) => r.emp.gender || "",
+    vendor: (r) => vendorName_(r.emp.vendorId),
+    shiftType: (r) => r.emp.shiftType || "",
+    employmentType: (r) => r.emp.employmentType || "",
+    team: (r) => r.emp.team || "",
+    position: (r) => r.emp.position || "",
+    cycle: (r) => r.contract?.cycle || "",
+    startDate: (r) => r.contract?.startDate || "",
+    status: (r) => contractStatus(r.contract),
+  };
+
   const filteredRows = useMemo(() => {
     const a = applied;
+    const accessor = CONTRACT_SORT_ACCESSORS[sort.key] || ((r) => r.emp.name || "");
+    const dir = sort.dir === "desc" ? -1 : 1;
     return rows
       .filter((r) => !a.entityIds.length || a.entityIds.includes(r.emp.businessEntityId))
       .filter((r) => !a.siteIds.length || a.siteIds.includes(r.emp.workSiteId))
@@ -148,8 +170,12 @@ export default function Contracts() {
         const v = (r.emp[a.searchField] || "").toString().toLowerCase();
         return v.includes(a.searchText.trim().toLowerCase());
       })
-      .sort((x, y) => (x.emp.name || "").localeCompare(y.emp.name || ""));
-  }, [rows, applied]);
+      .sort((x, y) => {
+        const av = accessor(x);
+        const bv = accessor(y);
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+      });
+  }, [rows, applied, sort, businessEntities, workSites, vendors]);
 
   const { pageRows, page, pageCount, pageSize, total, setPage, changePageSize, PAGE_SIZE_OPTIONS } = usePagination(filteredRows, 10);
 
@@ -497,30 +523,35 @@ export default function Contracts() {
                 </th>
                 <th className="px-3 py-2.5 font-semibold">계약서</th>
                 <th className="px-3 py-2.5 font-semibold">상세</th>
-                <th className="px-3 py-2.5 font-semibold">이름</th>
-                <th className="px-3 py-2.5 font-semibold">사업자</th>
-                <th className="px-3 py-2.5 font-semibold">센터</th>
+                <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
+                <SortableTh sortKey="entity" sort={sort} onSort={setSort}>사업자</SortableTh>
+                <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
                 <th className="px-3 py-2.5 font-semibold">전화번호</th>
-                <th className="px-3 py-2.5 font-semibold">외/내국인</th>
-                <th className="px-3 py-2.5 font-semibold">성별</th>
+                <SortableTh sortKey="nationality" sort={sort} onSort={setSort}>외/내국인</SortableTh>
+                <SortableTh sortKey="gender" sort={sort} onSort={setSort}>성별</SortableTh>
                 <th className="px-3 py-2.5 font-semibold">나이</th>
-                <th className="px-3 py-2.5 font-semibold">계약주기</th>
-                <th className="px-3 py-2.5 font-semibold">계약일자</th>
-                <th className="px-3 py-2.5 font-semibold">소속업체</th>
-                <th className="px-3 py-2.5 font-semibold">근무구분</th>
-                <th className="px-3 py-2.5 font-semibold">근무형태</th>
-                <th className="px-3 py-2.5 font-semibold">부서</th>
-                <th className="px-3 py-2.5 font-semibold">직급</th>
+                <SortableTh sortKey="cycle" sort={sort} onSort={setSort}>계약주기</SortableTh>
+                <SortableTh sortKey="startDate" sort={sort} onSort={setSort}>계약일자</SortableTh>
+                <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
+                <SortableTh sortKey="shiftType" sort={sort} onSort={setSort}>근무구분</SortableTh>
+                <SortableTh sortKey="employmentType" sort={sort} onSort={setSort}>근무형태</SortableTh>
+                <SortableTh sortKey="team" sort={sort} onSort={setSort}>부서</SortableTh>
+                <SortableTh sortKey="position" sort={sort} onSort={setSort}>직급</SortableTh>
                 <th className="px-3 py-2.5 font-semibold">계약/사직서</th>
                 <th className="px-3 py-2.5 font-semibold">계약서유형</th>
-                <th className="px-3 py-2.5 font-semibold">계약</th>
+                <SortableTh sortKey="status" sort={sort} onSort={setSort}>계약</SortableTh>
                 <th className="px-3 py-2.5 font-semibold">시간템플릿</th>
                 <th className="px-3 py-2.5 font-semibold">수당템플릿</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map(({ emp, contract }, i) => (
-                <tr key={emp.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                <tr
+                  key={emp.id}
+                  className={`border-b border-slate-50 last:border-0 hover:bg-slate-100 ${
+                    selected.has(emp.id) ? "bg-primary-light/60" : emp.deleted ? "bg-slate-50/80" : ""
+                  }`}
+                >
                   <td className="px-3 py-2.5 text-ink">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
@@ -541,7 +572,12 @@ export default function Contracts() {
                       <FileText size={14} /> 상세
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-ink">{emp.name}</td>
+                  <td className="px-3 py-2.5 text-ink">
+                    <span className="inline-flex items-center gap-1.5">
+                      {emp.name}
+                      {emp.deleted && <Badge tone="danger">삭제됨</Badge>}
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-ink">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-3 py-2.5 text-ink">

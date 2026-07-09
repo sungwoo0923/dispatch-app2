@@ -11,6 +11,7 @@ import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import FilterDropdown from "../components/FilterDropdown";
 import Pagination from "../components/Pagination";
+import SortableTh from "../components/SortableTh";
 import { usePagination } from "../hooks/usePagination";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
@@ -83,8 +84,22 @@ export default function EmployeeStatus() {
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
 
+  const [sort, setSort] = useState({ key: "hireDate", dir: "desc" });
+  const STATUS_SORT_ACCESSORS = {
+    name: (e) => e.name || "",
+    entity: (e) => entityName_(e.businessEntityId),
+    site: (e) => siteName_(e.workSiteId),
+    vendor: (e) => vendorName_(e.vendorId),
+    nationality: (e) => e.nationality || "내국인",
+    hireDate: (e) => e.hireDate || "",
+    resignDate: (e) => e.resignDate || "",
+    employmentStatus: (e) => e.employmentStatus || "재직",
+  };
+
   const filtered = useMemo(() => {
     const a = applied;
+    const accessor = STATUS_SORT_ACCESSORS[sort.key] || ((e) => e.hireDate || "");
+    const dir = sort.dir === "desc" ? -1 : 1;
     return employees
       .filter((e) => !a.entityIds.length || a.entityIds.includes(e.businessEntityId))
       .filter((e) => !a.siteIds.length || a.siteIds.includes(e.workSiteId))
@@ -98,8 +113,12 @@ export default function EmployeeStatus() {
       })
       .filter((e) => !a.periodFrom || (e[a.periodField] && e[a.periodField] >= a.periodFrom))
       .filter((e) => !a.periodTo || (e[a.periodField] && e[a.periodField] <= a.periodTo))
-      .sort((a2, b2) => (b2.hireDate || "").localeCompare(a2.hireDate || ""));
-  }, [employees, applied]);
+      .sort((x, y) => {
+        const av = accessor(x);
+        const bv = accessor(y);
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+      });
+  }, [employees, applied, sort]);
 
   const { pageRows, page, pageCount, pageSize, total, setPage, changePageSize, PAGE_SIZE_OPTIONS } = usePagination(filtered, 10);
 
@@ -324,14 +343,14 @@ export default function EmployeeStatus() {
                 <th className="px-3 py-3 font-semibold">
                   <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
                 </th>
-                <th className="px-4 py-3 font-semibold">이름</th>
-                <th className="px-4 py-3 font-semibold">사업자</th>
-                <th className="px-4 py-3 font-semibold">센터</th>
-                <th className="px-4 py-3 font-semibold">소속업체</th>
+                <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
+                <SortableTh sortKey="entity" sort={sort} onSort={setSort}>사업자</SortableTh>
+                <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
+                <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
                 <th className="px-4 py-3 font-semibold">전화번호</th>
                 <th className="px-4 py-3 font-semibold">마지막근무일</th>
-                <th className="px-4 py-3 font-semibold">입사일자</th>
-                <th className="px-4 py-3 font-semibold">퇴사일자</th>
+                <SortableTh sortKey="hireDate" sort={sort} onSort={setSort}>입사일자</SortableTh>
+                <SortableTh sortKey="resignDate" sort={sort} onSort={setSort}>퇴사일자</SortableTh>
                 <th className="px-4 py-3 font-semibold">변경사유</th>
               </tr>
             </thead>
@@ -339,7 +358,9 @@ export default function EmployeeStatus() {
               {pageRows.map((emp, i) => (
                 <tr
                   key={emp.id}
-                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                  className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${
+                    selected.has(emp.id) ? "bg-primary-light/60" : ""
+                  }`}
                   onDoubleClick={() => openEdit(emp)}
                 >
                   <td className="px-4 py-3 text-ink">{(page - 1) * pageSize + i + 1}</td>
