@@ -41,7 +41,11 @@ import LeaveManagement from "./admin/LeaveManagement";
 import LeaveUsage from "./admin/LeaveUsage";
 import Payroll from "./admin/Payroll";
 import SiteInsuranceRates from "./admin/SiteInsuranceRates";
-import Stats from "./admin/Stats";
+import StatsSummary from "./admin/StatsSummary";
+import StatsAttendanceCount from "./admin/StatsAttendanceCount";
+import StatsMonthlyGrid from "./admin/StatsMonthlyGrid";
+import StatsMonthlyTimeGrid from "./admin/StatsMonthlyTimeGrid";
+import StatsSiteAggregate from "./admin/StatsSiteAggregate";
 import EmployeeLayout from "./employee/EmployeeLayout";
 import Home from "./employee/Home";
 import AttendanceHistory from "./employee/AttendanceHistory";
@@ -141,7 +145,11 @@ export default function App() {
           <Route path="safety/materials" element={<SafetyMaterials />} />
           <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/settings" element={<SiteInsuranceRates />} />
-          <Route path="stats" element={<Stats />} />
+          <Route path="stats" element={<StatsSummary />} />
+          <Route path="stats/attendance-count" element={<StatsAttendanceCount />} />
+          <Route path="stats/monthly-grid" element={<StatsMonthlyGrid />} />
+          <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
+          <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
           <Route path="board" element={<Board />} />
           <Route path="settings/admins" element={<AdminAccounts />} />
           <Route path="settings/org" element={<OrgSettings />} />

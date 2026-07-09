@@ -67,7 +67,18 @@ export const NAV = [
       { to: "/payroll/settings", label: "센터별 정산설정" },
     ],
   },
-  { to: "/stats", label: "통계", icon: BarChart3 },
+  {
+    to: "/stats",
+    label: "통계",
+    icon: BarChart3,
+    children: [
+      { to: "/stats", label: "오늘 현황" },
+      { to: "/stats/attendance-count", label: "근로자별출근집계" },
+      { to: "/stats/monthly-grid", label: "근로자별월별출근집계" },
+      { to: "/stats/monthly-time", label: "근로자별월별출퇴근시간집계" },
+      { to: "/stats/site-aggregate", label: "센터별집계" },
+    ],
+  },
   { to: "/board", label: "게시판", icon: MessageSquare },
   {
     to: "/org/entities",
