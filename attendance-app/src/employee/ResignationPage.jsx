@@ -11,11 +11,13 @@ import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
 import ApprovalBox from "../components/ApprovalBox";
 import { toDateKey, formatDate } from "../utils/dateUtils";
+import { getManagerResult, getCeoResult, computeResignationStatus } from "../utils/resignationStatus";
 
 const STATUS_LABEL = {
   employee_pending: ["서명 필요", "warning"],
   submitted: ["담당 결재 대기", "warning"],
   manager_signed: ["대표 결재 대기", "warning"],
+  ceo_pending: ["결재 진행중", "warning"],
   on_hold: ["보류", "muted"],
   rejected: ["반려", "danger"],
   completed: ["처리완료", "success"],
@@ -85,7 +87,8 @@ export default function ResignationPage() {
     );
   }
 
-  const [label, tone] = STATUS_LABEL[req.status] || ["-", "muted"];
+  const derivedStatus = computeResignationStatus(req);
+  const [label, tone] = STATUS_LABEL[derivedStatus] || ["-", "muted"];
 
   return (
     <div className="space-y-4 px-4 pt-4">
@@ -129,22 +132,25 @@ export default function ResignationPage() {
         {req.status !== "employee_pending" && (
           <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-muted">퇴사사유: {req.reason || "-"}</p>
         )}
-        {(req.status === "rejected" || req.status === "on_hold") && req.adminNote && (
-          <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs text-danger">
-            {req.status === "rejected" ? "반려사유" : "보류사유"}: {req.adminNote}
-          </p>
+        {req.managerNote && getManagerResult(req) === "rejected" && (
+          <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs text-danger">담당 반려사유: {req.managerNote}</p>
+        )}
+        {req.ceoNote && getCeoResult(req) === "rejected" && (
+          <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs text-danger">대표 반려사유: {req.ceoNote}</p>
         )}
       </Card>
 
       <Card className="p-5">
-        <p className="mb-3 text-xs font-semibold text-ink">결재라인</p>
-        <ApprovalBox
-          steps={[
-            { role: "신청인", name: req.employeeName, signatureDataUrl: req.employeeSignatureDataUrl, result: req.employeeSignatureDataUrl ? "approved" : null },
-            { role: "담당", name: req.managerName, signatureDataUrl: req.managerSignatureDataUrl, result: req.managerSignatureDataUrl ? "approved" : null },
-            { role: "대표", name: req.ceoName, signatureDataUrl: req.ceoSignatureDataUrl, result: req.ceoSignatureDataUrl ? "approved" : null },
-          ]}
-        />
+        <p className="mb-3 text-center text-xs font-semibold text-ink">결재라인</p>
+        <div className="flex justify-center">
+          <ApprovalBox
+            steps={[
+              { role: "신청인", name: req.employeeName, signatureDataUrl: req.employeeSignatureDataUrl, result: req.employeeSignatureDataUrl ? "approved" : null },
+              { role: "담당", name: req.managerName, signatureDataUrl: getManagerResult(req) === "rejected" ? null : req.managerSignatureDataUrl, result: getManagerResult(req) },
+              { role: "대표", name: req.ceoName, signatureDataUrl: getCeoResult(req) === "rejected" ? null : req.ceoSignatureDataUrl, result: getCeoResult(req) },
+            ]}
+          />
+        </div>
       </Card>
 
       {req.status === "employee_pending" && (

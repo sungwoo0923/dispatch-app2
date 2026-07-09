@@ -8,11 +8,13 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import { formatDate } from "../utils/dateUtils";
 import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
+import { computeResignationStatus } from "../utils/resignationStatus";
 
 const RESIGNATION_STATUS_LABEL = {
   employee_pending: ["서명 필요", "warning"],
   submitted: ["담당 결재 대기", "warning"],
   manager_signed: ["대표 결재 대기", "warning"],
+  ceo_pending: ["결재 진행중", "warning"],
   on_hold: ["보류", "muted"],
   rejected: ["반려", "danger"],
   completed: ["처리완료", "success"],
@@ -59,8 +61,8 @@ export default function ContractsPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge tone={RESIGNATION_STATUS_LABEL[resignation.status]?.[1] || "muted"}>
-                {RESIGNATION_STATUS_LABEL[resignation.status]?.[0] || resignation.status}
+              <Badge tone={RESIGNATION_STATUS_LABEL[computeResignationStatus(resignation)]?.[1] || "muted"}>
+                {RESIGNATION_STATUS_LABEL[computeResignationStatus(resignation)]?.[0] || resignation.status}
               </Badge>
               <ChevronRight size={16} className="text-muted" />
             </div>

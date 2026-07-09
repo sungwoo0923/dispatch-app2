@@ -117,7 +117,7 @@ function approvalBoxHtml(steps) {
     </td>`
     )
     .join("");
-  return `<table style="border-collapse:collapse;display:inline-table;"><tr><td style="width:40px;border:1px solid #ccc;background:#f4f4f4;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;">결재</td>${cells}</tr></table>`;
+  return `<table style="border-collapse:collapse;display:inline-table;margin:0 auto;"><tr><td style="width:40px;border:1px solid #ccc;background:#f4f4f4;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;">결재</td>${cells}</tr></table>`;
 }
 
 const PAGE_STYLE = `
@@ -198,14 +198,17 @@ export function buildResignationHtml({
   employeeSignatureDataUrl,
   managerSignatureDataUrl,
   managerName,
+  managerResult,
   ceoSignatureDataUrl,
   ceoName,
+  ceoResult,
 }) {
   const body = `
-    <div style="text-align:right;margin-bottom:6px;overflow:visible;">
+    <div style="text-align:center;margin-bottom:6px;overflow:visible;">
       ${approvalBoxHtml([
-        { role: "담당", name: managerName, signatureDataUrl: managerSignatureDataUrl, result: managerSignatureDataUrl ? "approved" : null },
-        { role: "대표", name: ceoName, signatureDataUrl: ceoSignatureDataUrl, result: ceoSignatureDataUrl ? "approved" : null },
+        { role: "신청인", name: employeeName, signatureDataUrl: employeeSignatureDataUrl, result: employeeSignatureDataUrl ? "approved" : null },
+        { role: "담당", name: managerName, signatureDataUrl: managerResult === "rejected" ? null : managerSignatureDataUrl, result: managerResult || (managerSignatureDataUrl ? "approved" : null) },
+        { role: "대표", name: ceoName, signatureDataUrl: ceoResult === "rejected" ? null : ceoSignatureDataUrl, result: ceoResult || (ceoSignatureDataUrl ? "approved" : null) },
       ])}
     </div>
     <h1>사 직 서 (원)</h1>

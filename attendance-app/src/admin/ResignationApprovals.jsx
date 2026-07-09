@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { PenLine, FileText, Trash2, ChevronDown } from "lucide-react";
+import { PenLine, FileText, Trash2, ChevronDown, Eye } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -12,11 +12,20 @@ import SignaturePad from "../components/SignaturePad";
 import ApprovalBox from "../components/ApprovalBox";
 import { formatDate } from "../utils/dateUtils";
 import { openReportPreview } from "../utils/reportTemplates";
+import {
+  getManagerResult,
+  getCeoResult,
+  computeResignationStatus,
+  resignationActionStage,
+  canManagerActOnResignation,
+  canCeoActOnResignation,
+} from "../utils/resignationStatus";
 
 const STATUS_LABEL = {
   employee_pending: ["근로자 서명대기", "muted"],
   submitted: ["담당 결재대기", "warning"],
   manager_signed: ["대표 결재대기", "warning"],
+  ceo_pending: ["결재 진행중", "warning"],
   on_hold: ["보류", "muted"],
   rejected: ["반려", "danger"],
   completed: ["처리완료", "success"],
@@ -31,6 +40,7 @@ export default function ResignationApprovals() {
   const toast = useToast();
   const [rows, setRows] = useState([]);
   const [signTarget, setSignTarget] = useState(null); // { req, stage: "manager" | "ceo" }
+  const [viewTarget, setViewTarget] = useState(null); // 결재상황(읽기 전용)으로 보는 사직서
   const [previewMode, setPreviewMode] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -61,40 +71,77 @@ export default function ResignationApprovals() {
       employeeSignatureDataUrl: req.employeeSignatureDataUrl,
       managerSignatureDataUrl: req.managerSignatureDataUrl,
       managerName: req.managerName,
+      managerResult: getManagerResult(req),
       ceoSignatureDataUrl: req.ceoSignatureDataUrl,
       ceoName: req.ceoName,
+      ceoResult: getCeoResult(req),
     });
 
-  const canSign = (req) => req.status === "submitted" || (req.status === "manager_signed" && isCeo);
+  const actionStage = (req) => resignationActionStage(req, isCeo);
+
+  const approvalStepsFor = (req) => [
+    {
+      role: "신청인",
+      name: req.employeeName,
+      signatureDataUrl: req.employeeSignatureDataUrl,
+      result: req.employeeSignatureDataUrl ? "approved" : null,
+    },
+    {
+      role: "담당",
+      name: req.managerName,
+      signatureDataUrl: req.managerResult === "rejected" ? null : req.managerSignatureDataUrl,
+      result: getManagerResult(req),
+    },
+    {
+      role: "대표",
+      name: req.ceoName,
+      signatureDataUrl: req.ceoResult === "rejected" ? null : req.ceoSignatureDataUrl,
+      result: getCeoResult(req),
+    },
+  ];
 
   const openSign = (req) => {
-    const stage = req.status === "submitted" ? "manager" : "ceo";
+    const stage = actionStage(req);
+    if (!stage) return;
     setSignTarget({ req, stage });
     setPreviewMode(true);
     setNoteText("");
   };
 
-  const submitApprovalSignature = async () => {
-    if (!padRef.current || padRef.current.isEmpty() || !signTarget) return;
+  const submitDecision = async (result) => {
+    if (!signTarget) return;
+    if (result === "approved" && (!padRef.current || padRef.current.isEmpty())) {
+      toast.error("승인은 서명 후 진행할 수 있습니다");
+      return;
+    }
     setSaving(true);
     const { req, stage } = signTarget;
-    const signatureDataUrl = padRef.current.getDataUrl();
+    const signatureDataUrl = result === "approved" ? padRef.current.getDataUrl() : null;
+    const today = formatDate(new Date().toISOString().slice(0, 10));
+    const patch =
+      stage === "manager"
+        ? {
+            managerResult: result,
+            managerName: profile.name,
+            managerSignedAt: today,
+            managerNote: result === "rejected" ? noteText || "" : "",
+            managerSignatureDataUrl: signatureDataUrl,
+            managerDecisionCount: (req.managerDecisionCount || 0) + 1,
+          }
+        : {
+            ceoResult: result,
+            ceoName: profile.name,
+            ceoSignedAt: today,
+            ceoNote: result === "rejected" ? noteText || "" : "",
+            ceoSignatureDataUrl: signatureDataUrl,
+            ceoDecisionCount: (req.ceoDecisionCount || 0) + 1,
+          };
+    const merged = { ...req, ...patch };
+    const newStatus = computeResignationStatus(merged);
+    patch.status = newStatus;
     try {
-      if (stage === "manager") {
-        await updateDoc(doc(db, "resignationRequests", req.id), {
-          managerSignatureDataUrl: signatureDataUrl,
-          managerSignedAt: formatDate(new Date().toISOString().slice(0, 10)),
-          managerName: profile.name,
-          status: "manager_signed",
-        });
-        toast.success("담당 결재가 완료되었습니다");
-      } else {
-        await updateDoc(doc(db, "resignationRequests", req.id), {
-          ceoSignatureDataUrl: signatureDataUrl,
-          ceoSignedAt: formatDate(new Date().toISOString().slice(0, 10)),
-          ceoName: profile.name,
-          status: "completed",
-        });
+      await updateDoc(doc(db, "resignationRequests", req.id), patch);
+      if (newStatus === "completed" && req.status !== "completed") {
         await updateDoc(doc(db, "users", req.uid), { employmentStatus: "퇴사", resignDate: req.resignDate });
         await addDoc(collection(db, "notifications"), {
           companyId: profile.companyId,
@@ -104,37 +151,29 @@ export default function ResignationApprovals() {
           read: false,
           createdAt: serverTimestamp(),
         });
-        toast.success("대표 결재가 완료되어 퇴직처리 되었습니다");
+      } else if (newStatus === "rejected" && req.status !== "rejected") {
+        await addDoc(collection(db, "notifications"), {
+          companyId: profile.companyId,
+          uid: req.uid,
+          title: "사직서가 반려되었습니다",
+          message: stage === "ceo" ? req.ceoNote || noteText || "" : "대표 결재가 진행 중입니다.",
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      } else if (newStatus === "on_hold" && req.status !== "on_hold") {
+        await addDoc(collection(db, "notifications"), {
+          companyId: profile.companyId,
+          uid: req.uid,
+          title: "사직서 처리가 보류되었습니다",
+          message: noteText || "",
+          read: false,
+          createdAt: serverTimestamp(),
+        });
       }
+      toast.success(stage === "ceo" ? "대표 결재가 반영되었습니다" : "담당 결재가 반영되었습니다");
       setSignTarget(null);
     } catch (err) {
       toast.error(`결재 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const submitHoldOrReject = async (status) => {
-    if (!signTarget) return;
-    setSaving(true);
-    try {
-      await updateDoc(doc(db, "resignationRequests", signTarget.req.id), {
-        status,
-        adminNote: noteText || "",
-        processedBy: profile.name,
-      });
-      await addDoc(collection(db, "notifications"), {
-        companyId: profile.companyId,
-        uid: signTarget.req.uid,
-        title: status === "rejected" ? "사직서가 반려되었습니다" : "사직서 처리가 보류되었습니다",
-        message: noteText || "",
-        read: false,
-        createdAt: serverTimestamp(),
-      });
-      toast.success(status === "rejected" ? "반려 처리되었습니다" : "보류 처리되었습니다");
-      setSignTarget(null);
-    } catch (err) {
-      toast.error(`처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     } finally {
       setSaving(false);
     }
@@ -155,7 +194,8 @@ export default function ResignationApprovals() {
   };
 
   const renderRow = (req, i) => {
-    const [label, tone] = STATUS_LABEL[req.status] || ["-", "muted"];
+    const [label, tone] = STATUS_LABEL[computeResignationStatus(req)] || ["-", "muted"];
+    const stage = actionStage(req);
     return (
       <tr
         key={req.id}
@@ -184,7 +224,9 @@ export default function ResignationApprovals() {
           </button>
         </td>
         <td className="px-3 py-3">
-          {!req.deleted && canSign(req) ? (
+          {req.deleted ? (
+            <span className="text-xs text-muted">-</span>
+          ) : stage ? (
             <Button
               size="sm"
               onClick={(e) => {
@@ -195,7 +237,16 @@ export default function ResignationApprovals() {
               <PenLine size={13} /> 결재
             </Button>
           ) : (
-            <span className="text-xs text-muted">-</span>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewTarget(req);
+              }}
+            >
+              <Eye size={13} /> 결재상황
+            </button>
           )}
         </td>
         <td className="px-3 py-3">
@@ -274,7 +325,7 @@ export default function ResignationApprovals() {
             </thead>
             <tbody>
               {deleted.map((req, i) => {
-                const [label, tone] = STATUS_LABEL[req.status] || ["-", "muted"];
+                const [label, tone] = STATUS_LABEL[computeResignationStatus(req)] || ["-", "muted"];
                 return (
                   <tr key={req.id} className="border-b border-slate-50 last:border-0">
                     <td className="px-3 py-3 text-ink">{i + 1}</td>
@@ -317,13 +368,10 @@ export default function ResignationApprovals() {
             </Button>
           ) : (
             <>
-              <Button variant="outline" onClick={() => submitHoldOrReject("on_hold")} disabled={saving}>
-                보류
-              </Button>
-              <Button variant="danger" onClick={() => submitHoldOrReject("rejected")} disabled={saving}>
+              <Button variant="danger" onClick={() => submitDecision("rejected")} disabled={saving}>
                 반려
               </Button>
-              <Button className="flex-1" onClick={submitApprovalSignature} disabled={saving}>
+              <Button className="flex-1" onClick={() => submitDecision("approved")} disabled={saving}>
                 {saving ? "처리 중..." : "승인(서명)"}
               </Button>
             </>
@@ -333,31 +381,10 @@ export default function ResignationApprovals() {
         {signTarget && (
           <div className="space-y-3">
             {previewMode ? (
-              <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-ink">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-bold">사 직 서 (원)</p>
-                  <ApprovalBox
-                    steps={[
-                      {
-                        role: "신청인",
-                        name: signTarget.req.employeeName,
-                        signatureDataUrl: signTarget.req.employeeSignatureDataUrl,
-                        result: signTarget.req.employeeSignatureDataUrl ? "approved" : null,
-                      },
-                      {
-                        role: "담당",
-                        name: signTarget.req.managerName,
-                        signatureDataUrl: signTarget.req.managerSignatureDataUrl,
-                        result: signTarget.req.managerSignatureDataUrl ? "approved" : null,
-                      },
-                      {
-                        role: "대표",
-                        name: signTarget.req.ceoName,
-                        signatureDataUrl: signTarget.req.ceoSignatureDataUrl,
-                        result: signTarget.req.ceoSignatureDataUrl ? "approved" : null,
-                      },
-                    ]}
-                  />
+              <div className="max-h-80 space-y-3 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-ink">
+                <p className="text-center text-sm font-bold">사 직 서 (원)</p>
+                <div className="flex justify-center">
+                  <ApprovalBox steps={approvalStepsFor(signTarget.req)} />
                 </div>
                 <p>
                   성명: {signTarget.req.employeeName} · 직책: {signTarget.req.position || "-"}
@@ -377,10 +404,13 @@ export default function ResignationApprovals() {
               <>
                 <p className="text-sm text-ink">
                   {signTarget.req.employeeName}님의 사직서에 {signTarget.stage === "ceo" ? "대표" : "담당"}로서 결재
-                  합니다. 승인은 서명이 필요하고, 반려/보류는 사유만 남기면 됩니다.
+                  합니다. 승인은 서명이 필요하고, 반려는 사유만 남기면 됩니다.
+                  {(signTarget.stage === "manager" ? signTarget.req.managerDecisionCount : signTarget.req.ceoDecisionCount) ? (
+                    <span className="ml-1 font-medium text-warning">(수정 결재 · 마지막 1회)</span>
+                  ) : null}
                 </p>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">반려/보류 사유 (승인 시에는 불필요)</span>
+                  <span className="mb-1.5 block text-xs font-medium text-muted">반려 사유 (승인 시에는 불필요)</span>
                   <textarea
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     rows={2}
@@ -392,6 +422,50 @@ export default function ResignationApprovals() {
                 <SignaturePad ref={padRef} />
               </>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(viewTarget)}
+        onClose={() => setViewTarget(null)}
+        title="결재상황"
+        footer={
+          <Button variant="outline" className="w-full" onClick={() => setViewTarget(null)}>
+            닫기
+          </Button>
+        }
+      >
+        {viewTarget && (
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <ApprovalBox steps={approvalStepsFor(viewTarget)} />
+            </div>
+            <div className="flex items-center justify-center">
+              <Badge tone={(STATUS_LABEL[computeResignationStatus(viewTarget)] || ["-", "muted"])[1]}>
+                {(STATUS_LABEL[computeResignationStatus(viewTarget)] || ["-", "muted"])[0]}
+              </Badge>
+            </div>
+            <div className="space-y-2 rounded-xl bg-slate-50 p-3.5 text-xs text-ink">
+              <div className="flex items-center justify-between">
+                <span className="text-muted">담당</span>
+                <span>
+                  {viewTarget.managerName ? `${viewTarget.managerName} · ` : ""}
+                  {getManagerResult(viewTarget) === "rejected" ? "반려" : getManagerResult(viewTarget) === "approved" ? "승인" : "대기중"}
+                  {viewTarget.managerSignedAt ? ` (${formatDate(viewTarget.managerSignedAt)})` : ""}
+                </span>
+              </div>
+              {viewTarget.managerNote && <p className="text-danger">반려사유: {viewTarget.managerNote}</p>}
+              <div className="flex items-center justify-between">
+                <span className="text-muted">대표</span>
+                <span>
+                  {viewTarget.ceoName ? `${viewTarget.ceoName} · ` : ""}
+                  {getCeoResult(viewTarget) === "rejected" ? "반려" : getCeoResult(viewTarget) === "approved" ? "승인" : "대기중"}
+                  {viewTarget.ceoSignedAt ? ` (${formatDate(viewTarget.ceoSignedAt)})` : ""}
+                </span>
+              </div>
+              {viewTarget.ceoNote && <p className="text-danger">반려사유: {viewTarget.ceoNote}</p>}
+            </div>
           </div>
         )}
       </Modal>

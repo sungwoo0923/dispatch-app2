@@ -225,12 +225,32 @@ export default function Contracts() {
   const printSelected = () => window.print();
 
   const removeSelected = async () => {
-    const targets = filteredRows.filter((r) => selected.has(r.emp.id) && r.contract);
-    if (targets.length === 0) return;
-    if (!(await confirm(`선택된 ${targets.length}건의 계약서를 삭제하시겠습니까?`, "delete"))) return;
-    await Promise.all(targets.map((r) => deleteDoc(doc(db, "contracts", r.contract.id))));
-    toast.success("삭제되었습니다");
-    setSelected(new Set());
+    // selected는 체크박스 그대로(선택된 근로자 전체)를 담고 있는데, 예전엔
+    // 여기서 계약서가 실제로 존재하는 행만 걸러낸 뒤 그 개수로 확인창을
+    // 띄웠다 — 그래서 "4명 선택했는데 1건이라고 뜨고, 삭제도 하나도 안 되는"
+    // 것처럼 보였다(계약서가 아직 없는 근로자가 섞여 있으면 그만큼 조용히
+    // 빠지고, 삭제 중 하나라도 실패하면 전체가 에러 없이 멈췄다). 이제
+    // 확인창엔 실제 선택 개수를 그대로 보여주고, 계약서가 없는 건 제외
+    // 사실을 밝히며, 삭제 실패도 사용자에게 알린다.
+    const selectedRows = filteredRows.filter((r) => selected.has(r.emp.id));
+    const targets = selectedRows.filter((r) => r.contract);
+    if (selectedRows.length === 0) return;
+    if (targets.length === 0) {
+      toast.error("선택된 근로자 중 삭제할 계약서가 없습니다.");
+      return;
+    }
+    const skipped = selectedRows.length - targets.length;
+    const message =
+      `선택된 ${selectedRows.length}건 중 계약서가 있는 ${targets.length}건을 삭제하시겠습니까?` +
+      (skipped ? ` (계약서 없음 ${skipped}건 제외)` : "");
+    if (!(await confirm(message, "delete"))) return;
+    try {
+      await Promise.all(targets.map((r) => deleteDoc(doc(db, "contracts", r.contract.id))));
+      toast.success(`${targets.length}건 삭제되었습니다`);
+      setSelected(new Set());
+    } catch (err) {
+      toast.error(`삭제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
   };
 
   const buildContentFor = (emp, contract) =>

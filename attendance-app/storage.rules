@@ -2,6 +2,16 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    // 플랫폼 최고관리자(super admin)는 firestore.rules의 isSuperAdmin()과
+    // 완전히 동일한 기준(이메일)으로 어느 회사 데이터든 접근 가능해야 하는데,
+    // 여기서는 그 예외가 빠져 있었다 — 그래서 super admin이 다른 회사로
+    // 전환해서 안전교육자료/사진 등을 올리면 자기 자신의 admins/{uid}.companyId
+    // 와 대상 회사가 달라 매번 storage/unauthorized로 막혔다.
+    function isSuperAdmin() {
+      return request.auth != null &&
+        request.auth.token.email.lower() == 'sungwoo0923@nate.com';
+    }
+
     // Employee documents live at companies/{companyId}/employees/{uid}/{fileName}.
     // Cross-service read of the `admins` Firestore collection mirrors the
     // isAdminOf() pattern used in firestore.rules — checked with exists()
@@ -10,6 +20,7 @@ service firebase.storage {
       function isSelfOrCompanyAdmin() {
         return request.auth != null && (
           request.auth.uid == uid ||
+          isSuperAdmin() ||
           (
             firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
             firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId
@@ -25,9 +36,13 @@ service firebase.storage {
     // 가입코드(pendingCode) 기준 경로이므로 회사 관리자만 접근 가능.
     match /companies/{companyId}/pending/{pendingCode}/{fileName} {
       function isCompanyAdmin() {
-        return request.auth != null &&
-          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
-          firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+        return request.auth != null && (
+          isSuperAdmin() ||
+          (
+            firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+            firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId
+          )
+        );
       }
 
       allow read: if isCompanyAdmin();
@@ -38,9 +53,13 @@ service firebase.storage {
     // 상세에서 업로드하며, 전자문서의 갑(회사) 서명란에 표시된다.
     match /companies/{companyId}/entities/{entityId}/{fileName} {
       function isCompanyAdmin() {
-        return request.auth != null &&
-          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
-          firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+        return request.auth != null && (
+          isSuperAdmin() ||
+          (
+            firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+            firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId
+          )
+        );
       }
 
       allow read: if request.auth != null;
@@ -52,9 +71,13 @@ service firebase.storage {
     // 누구나(직원이 시청해야 하므로), 쓰기(업로드)는 회사 관리자만 가능하다.
     match /companies/{companyId}/safety-materials/{materialId}/{fileName} {
       function isCompanyAdmin() {
-        return request.auth != null &&
-          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
-          firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId;
+        return request.auth != null && (
+          isSuperAdmin() ||
+          (
+            firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+            firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.companyId == companyId
+          )
+        );
       }
 
       allow read: if request.auth != null;
