@@ -4441,7 +4441,9 @@ const filterPlaces = (q) => {
   const nq = normalizeKey(query);
   const nLower = query.toLowerCase();
 
-  return placeList
+  // 하차지거래처(placeList)뿐 아니라 기본거래처로 옮겨온 업체도 상/하차지명
+  // 자동완성에 나오고 주소/담당자/연락처가 그대로 채워지도록 mergedClients를 사용한다
+  return mergedClients
     .map((p) => {
       const name = p.업체명 || "";
       const nName = name.toLowerCase();
@@ -5569,7 +5571,10 @@ const checkClientGrade = (name, nextFocusId = null) => {
 const applyPlaceToForm = (place, type, nextFocusId = null) => {
   const contacts = (place.contacts || []).filter(c => c.name?.trim());
   const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
-  const primary = uniqueContacts.find(c => c.isPrimary) || uniqueContacts[0];
+  // 기본거래처로 옮겨온 업체는 contacts 배열이 없고 담당자/담당자번호 평면 필드만
+  // 있으므로, contacts가 비어 있으면 그 평면 필드로 대체한다
+  const primary = uniqueContacts.find(c => c.isPrimary) || uniqueContacts[0]
+    || (place.담당자 ? { name: place.담당자, phone: place.담당자번호 || "" } : null);
 
   if (type === "pickup") {
     setForm(prev => ({
@@ -13879,7 +13884,11 @@ const rtTableWrapRef = React.useRef(null);
 const mergedClients = React.useMemo(() => {
   const map = new Map();
   (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
-  (clients || []).forEach(c => { const k = (c.업체명||"").toLowerCase().replace(/\s+/g,""); if (k && !map.has(k)) map.set(k, { 업체명: c.업체명, 주소:"", 담당자:"", 담당자번호:"" }); });
+  (clients || []).forEach(c => {
+    const name = c.업체명 || c.거래처명 || "";
+    const k = name.toLowerCase().replace(/\s+/g,"");
+    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "" });
+  });
   return Array.from(map.values());
 }, [placeRows, clients]);
 const audioCtxRef = React.useRef(null);
@@ -22916,7 +22925,11 @@ React.useEffect(() => {
 const mergedClients = React.useMemo(() => {
   const map = new Map();
   (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
-  (clients || []).forEach(c => { const k = (c.업체명||"").toLowerCase().replace(/\s+/g,""); if (k && !map.has(k)) map.set(k, { 업체명: c.업체명, 주소:"", 담당자:"", 담당자번호:"" }); });
+  (clients || []).forEach(c => {
+    const name = c.업체명 || c.거래처명 || "";
+    const k = name.toLowerCase().replace(/\s+/g,"");
+    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "" });
+  });
   return Array.from(map.values());
 }, [placeRows, clients]);
 
@@ -23926,11 +23939,12 @@ const [clientOptions, setClientOptions] = React.useState([]);
   };
 
   // 🔵 자동완성 검색 함수 (FIX)
+  // 하차지거래처(places)뿐 아니라 기본거래처로 옮겨온 업체도 나오도록 mergedClients 사용
   const filterPlaces = (text) => {
     const q = String(text || "").trim().toLowerCase();
     if (!q) return [];
 
-    return (places || [])
+    return (mergedClients || [])
       .filter((p) =>
         String(p.업체명 || p.name || "")
           .toLowerCase()
@@ -34310,7 +34324,15 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const filterPlaces = (value) => {
     const v = (value || "").toLowerCase();
     if (!v) return [];
-    return (places || []).filter(p => String(p.업체명 || "").toLowerCase().includes(v));
+    // 하차지거래처(places)뿐 아니라 기본거래처로 옮겨온 업체도 나오도록 병합해서 검색
+    const map = new Map();
+    (places || []).forEach(p => { const k = (p.업체명 || "").toLowerCase().replace(/\s+/g, ""); if (k) map.set(k, p); });
+    (clients || []).forEach(c => {
+      const name = c.업체명 || c.거래처명 || "";
+      const k = name.toLowerCase().replace(/\s+/g, "");
+      if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "" });
+    });
+    return Array.from(map.values()).filter(p => String(p.업체명 || "").toLowerCase().includes(v));
   };
 
   const rankPlaces = (list, keyword) => {
@@ -40716,6 +40738,32 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
+// 첨부파일을 base64로 저장하기 전에 이미지면 압축하고, 그래도 Firestore 문서
+// 크기 한도(약 1MB)를 넘으면 저장 전에 미리 막는다 — 그냥 readAsDataURL만
+// 하면 휴대폰 사진 하나로도 쉽게 한도를 넘어 저장이 조용히 실패한다.
+const CLIENT_FILE_BASE64_LIMIT = 900_000;
+const compressClientImage = (file) => new Promise((resolve) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1400;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.8));
+    };
+    img.onerror = () => resolve(e.target.result);
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
 function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지" }) {
   const normalizePlaceRow = (d) => {
     const primary = Array.isArray(d.contacts) && d.contacts.length
@@ -40898,12 +40946,37 @@ React.useEffect(() => {
     showAlert("등록 완료");
   };
 
+  const handleClientFile = async (file) => {
+    if (!file) return;
+    let base64;
+    if (file.type.startsWith("image/")) {
+      base64 = await compressClientImage(file);
+    } else {
+      base64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+    }
+    if (base64.length > CLIENT_FILE_BASE64_LIMIT) {
+      showAlert(`파일이 너무 큽니다. 더 작은 파일을 사용하거나 이미지를 압축해서 다시 첨부해주세요.`);
+      return;
+    }
+    setEditClientModal(p => ({ ...p, 첨부파일Base64: base64, 첨부파일명: file.name, 첨부파일타입: file.type }));
+  };
+
   const saveEditClient = async () => {
     if (!editClientModal) return;
     const id = editClientModal.id || editClientModal.거래처명;
     if (!id) return;
     const { _dragOver, ...data } = editClientModal;
-    await upsertClient?.({ ...data, id });
+    try {
+      await upsertClient?.({ ...data, id });
+    } catch (e) {
+      console.error("saveEditClient 오류:", e);
+      showAlert("저장에 실패했습니다: " + (e?.message || "알 수 없는 오류"));
+      return;
+    }
     setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...data } : r));
     setEditClientModal(null);
     showAlert("수정 완료");
@@ -41083,9 +41156,11 @@ React.useEffect(() => {
         종목: existing?.종목 || "",
         id: p.업체명,
       });
+      // 기본거래처로 "이동"이지 "복사"가 아니므로, 옮긴 원본은 하차지거래처에서 제거한다
+      if (p.id) await removePlace(p.id);
       ok++;
     }
-    showAlert(`${ok}건이 기본 거래처로 추가되었습니다.`);
+    showAlert(`${ok}건이 기본 거래처로 이동되었습니다.`);
     setImportSelected([]);
     setImportQ("");
     setShowImportPopup(false);
@@ -41800,21 +41875,13 @@ React.useEffect(() => {
                       onDrop={(e) => {
                         e.preventDefault();
                         setEditClientModal(p => ({ ...p, _dragOver: false }));
-                        const file = e.dataTransfer.files[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (ev) => setEditClientModal(p => ({ ...p, 첨부파일Base64: ev.target.result, 첨부파일명: file.name, 첨부파일타입: file.type }));
-                        reader.readAsDataURL(file);
+                        handleClientFile(e.dataTransfer.files[0]);
                       }}
                       onClick={() => document.getElementById("clientFileInput").click()}
                     >
                       <input id="clientFileInput" type="file" accept="image/*,.pdf" className="hidden"
                         onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = (ev) => setEditClientModal(p => ({ ...p, 첨부파일Base64: ev.target.result, 첨부파일명: file.name, 첨부파일타입: file.type }));
-                          reader.readAsDataURL(file);
+                          handleClientFile(e.target.files[0]);
                           e.target.value = "";
                         }} />
                       {editClientModal.첨부파일Base64 ? (
