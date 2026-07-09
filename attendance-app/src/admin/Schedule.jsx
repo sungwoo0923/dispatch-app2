@@ -42,6 +42,7 @@ import { useToast } from "../hooks/useToast";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
+import { contractStatus } from "../utils/contractStatus";
 import {
   EMPLOYMENT_TYPE_OPTIONS,
   SHIFT_TYPE_OPTIONS,
@@ -79,6 +80,7 @@ export default function Schedule() {
   const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [leaves, setLeaves] = useState([]);
+  const [contracts, setContracts] = useState([]);
   const [open, setOpen] = useState(false);
 
   const [bulkFilters, setBulkFilters] = useState(EMPTY_FILTERS);
@@ -144,6 +146,10 @@ export default function Schedule() {
       query(collection(db, "leaves"), where("companyId", "==", profile.companyId)),
       (snap) => setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubContracts = onSnapshot(
+      query(collection(db, "contracts"), where("companyId", "==", profile.companyId)),
+      (snap) => setContracts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     return () => {
       unsubUsers();
       unsubSites();
@@ -153,6 +159,7 @@ export default function Schedule() {
       unsubTemplates();
       unsubAllowT();
       unsubLeaves();
+      unsubContracts();
     };
   }, [profile?.companyId]);
 
@@ -179,6 +186,8 @@ export default function Schedule() {
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
   const shiftTemplateName_ = (id) => shiftTemplates.find((t) => t.id === id)?.name || "-";
   const allowanceTemplateName_ = (id) => allowanceTemplates.find((t) => t.id === id)?.name || "-";
+  const latestContractFor = (uid) =>
+    contracts.filter((c) => c.uid === uid).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0] || null;
 
   const matchesFilters = (emp, f) => {
     if (!emp) return false;
@@ -238,7 +247,38 @@ export default function Schedule() {
     { key: "time", label: "근무시각", render: ({ schedule: s }) => `${s.startTime} ~ ${s.endTime}` },
     { key: "phone", label: "전화번호", render: ({ emp }) => emp.phone },
     { key: "gender", label: "성별", render: ({ emp }) => emp.gender || "-" },
+    { key: "age", label: "나이", render: ({ emp }) => calculateAge(emp.residentNumberFront) ?? "-" },
     { key: "vendor", label: "소속업체", render: ({ emp }) => vendorName_(emp.vendorId) },
+    { key: "shiftType", label: "근무구분", render: ({ emp }) => emp.shiftType || "-" },
+    { key: "employmentType", label: "근무형태", render: ({ emp }) => emp.employmentType || "-" },
+    { key: "workLocation", label: "근무위치", render: ({ emp }) => emp.workLocation || "-" },
+    { key: "note", label: "근무비고", render: ({ emp }) => emp.note || "-" },
+    { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
+    { key: "position", label: "직급", render: ({ emp }) => emp.position || "-" },
+    { key: "nationality", label: "외/내국인", render: ({ emp }) => emp.nationality || "-" },
+    { key: "country", label: "국적", render: ({ emp }) => emp.country || "-" },
+    { key: "signup", label: "회원가입", render: () => "Y" },
+    { key: "contractCycle", label: "계약주기", render: ({ emp }) => latestContractFor(emp.id)?.cycle || "-" },
+    {
+      key: "contractStartDate",
+      label: "계약시작일자",
+      render: ({ emp }) => {
+        const c = latestContractFor(emp.id);
+        return c?.startDate ? formatDate(c.startDate) : "-";
+      },
+    },
+    { key: "contractWritten", label: "계약서작성여부", render: ({ emp }) => contractStatus(latestContractFor(emp.id)) },
+    { key: "shiftTemplate", label: "시간템플릿", render: ({ emp }) => shiftTemplateName_(emp.shiftTemplateId) },
+    { key: "allowanceTemplate", label: "수당템플릿", render: ({ emp }) => allowanceTemplateName_(emp.allowanceTemplateId) },
+    { key: "contractTemplate", label: "계약서템플릿", render: ({ emp }) => emp.contractTemplateName || "-" },
+    { key: "resignTemplate", label: "사직서템플릿", render: ({ emp }) => emp.resignTemplateName || "-" },
+    { key: "insurance", label: "4대보험", render: ({ emp }) => (emp.insuranceApplied === "Y" ? "Y" : "N") },
+    { key: "employeeCode", label: "가입코드", render: ({ emp }) => emp.employeeCode || "-" },
+    {
+      key: "signatureStatus",
+      label: "전자서명여부",
+      render: ({ emp }) => (latestContractFor(emp.id)?.employeeSignatureDataUrl ? "Y" : "N"),
+    },
   ];
   const {
     visibleColumns: visibleScheduleColumns,
@@ -258,8 +298,17 @@ export default function Schedule() {
       label: "휴무기간",
       render: ({ leave }) => `${formatDate(leave.startDate)} ~ ${formatDate(leave.endDate || leave.startDate)}`,
     },
+    { key: "reason", label: "사유", render: ({ leave }) => leave.reason || "-" },
     { key: "phone", label: "전화번호", render: ({ emp }) => emp.phone },
+    { key: "gender", label: "성별", render: ({ emp }) => emp.gender || "-" },
+    { key: "age", label: "나이", render: ({ emp }) => calculateAge(emp.residentNumberFront) ?? "-" },
     { key: "vendor", label: "소속업체", render: ({ emp }) => vendorName_(emp.vendorId) },
+    { key: "shiftType", label: "근무구분", render: ({ emp }) => emp.shiftType || "-" },
+    { key: "employmentType", label: "근무형태", render: ({ emp }) => emp.employmentType || "-" },
+    { key: "workLocation", label: "근무위치", render: ({ emp }) => emp.workLocation || "-" },
+    { key: "note", label: "근무비고", render: ({ emp }) => emp.note || "-" },
+    { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
+    { key: "position", label: "직급", render: ({ emp }) => emp.position || "-" },
   ];
   const {
     visibleColumns: visibleLeaveColumns,
@@ -273,9 +322,28 @@ export default function Schedule() {
     { key: "name", label: "이름", render: (emp) => emp.name },
     { key: "company", label: "사업자", render: () => companyName },
     { key: "site", label: "센터", render: (emp) => siteName_(emp.workSiteId) },
-    { key: "resignDate", label: "퇴사일", render: (emp) => (emp.resignDate ? formatDate(emp.resignDate) : "-") },
     { key: "phone", label: "전화번호", render: (emp) => emp.phone },
+    { key: "gender", label: "성별", render: (emp) => emp.gender || "-" },
+    { key: "age", label: "나이", render: (emp) => calculateAge(emp.residentNumberFront) ?? "-" },
+    { key: "furlough", label: "휴면", render: (emp) => (emp.employmentStatus === "휴직" ? "Y" : "N") },
     { key: "vendor", label: "소속업체", render: (emp) => vendorName_(emp.vendorId) },
+    { key: "hireDate", label: "입사일", render: (emp) => (emp.hireDate ? formatDate(emp.hireDate) : "-") },
+    { key: "resignDate", label: "퇴사일", render: (emp) => (emp.resignDate ? formatDate(emp.resignDate) : "-") },
+    { key: "shiftType", label: "근무구분", render: (emp) => emp.shiftType || "-" },
+    { key: "employmentType", label: "근무형태", render: (emp) => emp.employmentType || "-" },
+    { key: "workLocation", label: "근무위치", render: (emp) => emp.workLocation || "-" },
+    { key: "note", label: "근무비고", render: (emp) => emp.note || "-" },
+    { key: "team", label: "부서", render: (emp) => emp.team || "-" },
+    { key: "position", label: "직급", render: (emp) => emp.position || "-" },
+    { key: "shiftTemplate", label: "시간템플릿", render: (emp) => shiftTemplateName_(emp.shiftTemplateId) },
+    { key: "allowanceTemplate", label: "수당템플릿", render: (emp) => allowanceTemplateName_(emp.allowanceTemplateId) },
+    { key: "contractTemplate", label: "계약서템플릿", render: (emp) => emp.contractTemplateName || "-" },
+    { key: "resignTemplate", label: "사직서템플릿", render: (emp) => emp.resignTemplateName || "-" },
+    { key: "nationality", label: "외/내국인", render: (emp) => emp.nationality || "-" },
+    { key: "country", label: "국적", render: (emp) => emp.country || "-" },
+    { key: "signup", label: "회원가입", render: () => "Y" },
+    { key: "insurance", label: "4대보험", render: (emp) => (emp.insuranceApplied === "Y" ? "Y" : "N") },
+    { key: "payType", label: "급여", render: (emp) => emp.payType || "-" },
   ];
   const {
     visibleColumns: visibleResignedColumns,

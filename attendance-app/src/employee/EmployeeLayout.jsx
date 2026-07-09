@@ -21,7 +21,10 @@ export default function EmployeeLayout() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
-      <header className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-2.5">
+      <header
+        className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-2.5"
+        style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.625rem)" }}
+      >
         <img src="/logo.png" alt="KP-Work" className="h-11 w-auto" />
         <div className="flex items-center gap-2.5">
           <div className="text-right">
@@ -41,6 +44,7 @@ export default function EmployeeLayout() {
       <nav
         id="employee-bottom-nav"
         className="fixed bottom-0 left-1/2 z-40 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-100 bg-white px-1 py-2 shadow-[0_-2px_10px_rgba(15,23,42,0.06)]"
+        style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
         {TABS.map(({ to, label, icon: Icon, end, center }) => {
           const isActive =
