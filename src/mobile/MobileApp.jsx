@@ -2878,7 +2878,7 @@ const title =
   />
 )}
 {/* 모바일 메신저 - 항상 마운트하여 unread count 추적, mobileVisible로 UI 표시 제어 */}
-<div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMobileMessenger ? "visible" : "hidden", pointerEvents: showMobileMessenger ? "auto" : "none" }}>
+<div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMobileMessenger ? "visible" : "hidden", pointerEvents: showMobileMessenger ? "auto" : "none", paddingTop: "env(safe-area-inset-top, 0px)" }}>
   <InternalMessenger
     user={user}
     userCompany={userCompany || localStorage.getItem("userCompany") || ""}
@@ -4327,7 +4327,7 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
       cardVersionB
         ? "bg-[#1B2B4B] py-3.5"
         : "bg-white border-b py-3"
-    }`} style={{ willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)" }}>
+    }`} style={{ willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}>
       <div className="w-12">
         {isListPage ? (
           <button
@@ -4430,7 +4430,7 @@ function NotificationPanel({ notifications, onClose, onMarkAllRead, onClear, ala
       <div
         className="bg-white w-full max-h-[80vh] flex flex-col shadow-2xl rounded-b-2xl border-b border-gray-100"
         onClick={e => e.stopPropagation()}
-        style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.13)" }}
+        style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.13)", paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         {/* 패널 헤더 */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -4644,7 +4644,7 @@ function MobileSideMenu({
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className={`absolute left-0 top-0 bottom-0 w-72 shadow-2xl flex flex-col ${
         dark ? "bg-[#1B2B4B] border-r border-white/10" : "bg-white border-r border-blue-100"
-      }`}>
+      }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
 
         {/* 헤더 */}
         <div className={`px-5 py-4 flex items-center justify-between ${
@@ -12108,8 +12108,6 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
     return date.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   };
 
-  const avatarLetter = myName.slice(0, 1).toUpperCase();
-
   const [hireDate, setHireDate] = useState("");
   const [hireDateSaving, setHireDateSaving] = useState(false);
   const [mySchedules, setMySchedules] = useState([]);
@@ -12228,9 +12226,6 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
       {/* 프로필 카드 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
-          <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white text-[22px] font-extrabold border-2 border-white/30">
-            {avatarLetter}
-          </div>
           <div>
             <div className="text-white text-[17px] font-extrabold tracking-tight">{myName}</div>
             {myRole && <div className="text-white/60 text-[12px] mt-0.5">{myRole}</div>}
