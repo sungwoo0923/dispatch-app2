@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   doc,
   getDoc,
@@ -93,7 +93,10 @@ export default function Home() {
   const [notifications, setNotifications] = useState([]);
   const [pendingResignation, setPendingResignation] = useState(false);
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0);
+  const [onboardingPrompt, setOnboardingPrompt] = useState(false);
+  const onboardingShownRef = useRef(false);
   const padRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000 * 30);
@@ -209,6 +212,19 @@ export default function Home() {
       if (!snap.empty) setLatestNotice({ id: snap.docs[0].id, ...snap.docs[0].data() });
     });
   }, [profile?.companyId]);
+
+  // 신규 가입 후 첫 접속(또는 미완료 항목이 남아있는 채로 다시 접속)했을 때,
+  // 근로계약서/안전교육을 배너로 조용히 보여주기만 하지 않고 곧바로 작성/
+  // 이수할 수 있도록 안내 팝업을 한 번 띄운다. 세션당 한 번만 자동으로
+  // 뜨고(계속 앱을 쓰는 동안 매번 뜨면 방해가 되므로), 버튼을 누르면 해당
+  // 화면으로 바로 이동한다.
+  useEffect(() => {
+    if (onboardingShownRef.current) return;
+    if (pendingContracts > 0 || pendingSafetyCount > 0) {
+      onboardingShownRef.current = true;
+      setOnboardingPrompt(true);
+    }
+  }, [pendingContracts, pendingSafetyCount]);
 
   const canCheckIn = todaySchedule?.status === "출근확정";
 
@@ -546,6 +562,47 @@ export default function Home() {
           <p className="mt-2 text-xs text-danger">위치 권한을 확인해주세요: {permissionError}</p>
         )}
       </Card>
+
+      <Modal
+        open={onboardingPrompt}
+        onClose={() => setOnboardingPrompt(false)}
+        title="완료해야 할 항목이 있습니다"
+        footer={
+          <Button variant="outline" className="w-full" onClick={() => setOnboardingPrompt(false)}>
+            나중에 하기
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink">아래 항목을 먼저 완료해주세요. 완료 전에는 출근 처리가 되지 않습니다.</p>
+          {pendingContracts > 0 && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light p-4 text-left"
+              onClick={() => {
+                setOnboardingPrompt(false);
+                navigate("/contracts");
+              }}
+            >
+              <FileSignature size={18} className="shrink-0 text-primary" />
+              <span className="flex-1 text-sm text-ink">근로계약서 서명하기</span>
+            </button>
+          )}
+          {pendingSafetyCount > 0 && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-xl border border-danger/20 bg-red-50 p-4 text-left"
+              onClick={() => {
+                setOnboardingPrompt(false);
+                navigate("/safety");
+              }}
+            >
+              <ShieldAlert size={18} className="shrink-0 text-danger" />
+              <span className="flex-1 text-sm text-ink">안전교육 이수하기 ({pendingSafetyCount}건)</span>
+            </button>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={showChecklist}
