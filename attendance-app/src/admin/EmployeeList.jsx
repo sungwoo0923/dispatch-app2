@@ -132,6 +132,7 @@ const EMPTY_REGISTER_FORM = {
   resignTemplateName: "",
   resignTemplateDate: toDateKey(),
   note: "",
+  autoSendContract: false,
 };
 
 // 편집 모드에서 users/{uid}로 저장할 필드만 골라내는 데 쓰는 화이트리스트 —
@@ -2491,6 +2492,21 @@ export default function EmployeeList() {
                     <p className="col-span-2 text-[11px] text-muted">
                       출근확정 시 여기서 선택한 템플릿으로 전자근로계약서가 자동 생성됩니다. 이미 계정이 있는 근로자는 템플릿 선택 시 즉시 발송할지 물어봅니다.
                     </p>
+                    {!editingUid && (
+                      <label className="col-span-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={registerForm.autoSendContract}
+                          onChange={(e) => setRegisterForm((f) => ({ ...f, autoSendContract: e.target.checked }))}
+                        />
+                        <span>
+                          <span className="font-medium text-ink">자동발송</span>
+                          <span className="ml-1.5 text-[11px] text-muted">
+                            체크하면 이 근로자가 모바일에 처음 로그인하는 즉시 회사 직인이 날인된 표준근로계약서가 자동으로 발송되어 바로 서명할 수 있습니다. 체크하지 않으면 계약관리에서 관리자가 직접 발송해야 합니다.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                   </div>
                 )}
                 {regTab === "계약종료" && (
