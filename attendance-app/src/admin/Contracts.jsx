@@ -11,7 +11,7 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { FileSignature, Trash2, Eye, Search, Download, Printer, Send, Stamp, FileText } from "lucide-react";
+import { FileSignature, Trash2, Eye, Search, Download, Printer, Send, Stamp, FileText, FileX, ChevronDown } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -28,7 +28,7 @@ import { usePagination } from "../hooks/usePagination";
 import { downloadCsv } from "../utils/exportCsv";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { NATIONALITY_OPTIONS, SHIFT_TYPE_OPTIONS, EMPLOYMENT_TYPE_OPTIONS, TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
-import { formatDate, calculateAge } from "../utils/dateUtils";
+import { formatDate, calculateAge, toDateKey } from "../utils/dateUtils";
 import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
 import SmsButton from "../components/SmsButton";
 import ResignationApprovals from "./ResignationApprovals";
@@ -70,6 +70,7 @@ export default function Contracts() {
   const [applied, setApplied] = useState(emptyDraft());
   const [sort, setSort] = useState({ key: "name", dir: "asc" });
   const [selected, setSelected] = useState(() => new Set());
+  const [showDeletedEmployees, setShowDeletedEmployees] = useState(false);
   const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get("tab") === "resignation" ? "사직서" : "계약서"));
 
   const [signTarget, setSignTarget] = useState(null); // { emp, contract, content }
@@ -121,7 +122,18 @@ export default function Contracts() {
       .filter((c) => c.uid === uid)
       .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0] || null;
 
-  const rows = useMemo(() => employees.map((emp) => ({ emp, contract: latestContractFor(emp.id) })), [employees, contracts]);
+  // 계약관리 자체의 "삭제" 버튼은 근로자를 이 목록에서 완전히 빼는 동작이고,
+  // 계약서만 지우는 것과는 다른 동작이다 — 삭제된 근로자는 활성 목록에서는
+  // 빠지되, 과거 계약 이력을 잃지 않도록 아래 "삭제된 근로자" 섹션에서
+  // 계속 조회할 수 있게 남겨둔다.
+  const rows = useMemo(
+    () => employees.filter((emp) => !emp.deleted).map((emp) => ({ emp, contract: latestContractFor(emp.id) })),
+    [employees, contracts]
+  );
+  const deletedRows = useMemo(
+    () => employees.filter((emp) => emp.deleted).map((emp) => ({ emp, contract: latestContractFor(emp.id) })),
+    [employees, contracts]
+  );
 
   // 문자 버튼의 기본 문구는 서명 상태에 맞춰 자동으로 달라진다 — 실무에서
   // 문자를 보내는 목적이 대부분 "서명대기(=아직 근로자 서명 전)" 알림이기
@@ -250,14 +262,9 @@ export default function Contracts() {
 
   const printSelected = () => window.print();
 
-  const removeSelected = async () => {
-    // selected는 체크박스 그대로(선택된 근로자 전체)를 담고 있는데, 예전엔
-    // 여기서 계약서가 실제로 존재하는 행만 걸러낸 뒤 그 개수로 확인창을
-    // 띄웠다 — 그래서 "4명 선택했는데 1건이라고 뜨고, 삭제도 하나도 안 되는"
-    // 것처럼 보였다(계약서가 아직 없는 근로자가 섞여 있으면 그만큼 조용히
-    // 빠지고, 삭제 중 하나라도 실패하면 전체가 에러 없이 멈췄다). 이제
-    // 확인창엔 실제 선택 개수를 그대로 보여주고, 계약서가 없는 건 제외
-    // 사실을 밝히며, 삭제 실패도 사용자에게 알린다.
+  // 계약서 문서만 지운다 — 근로자/행 자체는 목록에 그대로 남고 "미발송"
+  // 상태로 되돌아간다(재발송 가능).
+  const removeContractsOnly = async () => {
     const selectedRows = filteredRows.filter((r) => selected.has(r.emp.id));
     const targets = selectedRows.filter((r) => r.contract);
     if (selectedRows.length === 0) return;
@@ -267,12 +274,28 @@ export default function Contracts() {
     }
     const skipped = selectedRows.length - targets.length;
     const message =
-      `선택된 ${selectedRows.length}건 중 계약서가 있는 ${targets.length}건을 삭제하시겠습니까?` +
+      `선택된 ${selectedRows.length}건 중 계약서가 있는 ${targets.length}건의 계약서만 삭제하시겠습니까? (근로자는 목록에 남고 미발송 상태로 되돌아갑니다)` +
       (skipped ? ` (계약서 없음 ${skipped}건 제외)` : "");
     if (!(await confirm(message, "delete"))) return;
     try {
       await Promise.all(targets.map((r) => deleteDoc(doc(db, "contracts", r.contract.id))));
-      toast.success(`${targets.length}건 삭제되었습니다`);
+      toast.success(`${targets.length}건의 계약서가 삭제되었습니다`);
+      setSelected(new Set());
+    } catch (err) {
+      toast.error(`삭제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
+  };
+
+  // 목록 자체에서 근로자를 완전히 뺀다(근로자목록의 삭제와 동일하게
+  // users/{uid}.deleted를 세워 소프트 삭제). 계약 이력은 지워지지 않고
+  // 아래 "삭제된 근로자" 섹션에서 계속 확인할 수 있다.
+  const removeEmployeesSelected = async () => {
+    const targets = filteredRows.filter((r) => selected.has(r.emp.id));
+    if (targets.length === 0) return;
+    if (!(await confirm(`선택된 ${targets.length}명을 목록에서 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
+    try {
+      await Promise.all(targets.map((r) => updateDoc(doc(db, "users", r.emp.id), { deleted: true, deletedAt: toDateKey() })));
+      toast.success(`${targets.length}명 삭제되었습니다`);
       setSelected(new Set());
     } catch (err) {
       toast.error(`삭제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
@@ -501,8 +524,11 @@ export default function Contracts() {
             <Button size="sm" onClick={autoSend}>
               <Send size={14} /> 자동발송
             </Button>
-            <Button variant="danger" size="sm" onClick={removeSelected}>
+            <Button variant="danger" size="sm" onClick={removeEmployeesSelected}>
               <Trash2 size={14} /> 삭제
+            </Button>
+            <Button variant="outline" size="sm" onClick={removeContractsOnly}>
+              <FileX size={14} /> 계약서만 삭제
             </Button>
             <Button variant="outline" size="sm" onClick={downloadSelected}>
               <Download size={14} /> 다운로드
@@ -554,9 +580,7 @@ export default function Contracts() {
               {pageRows.map(({ emp, contract }, i) => (
                 <tr
                   key={emp.id}
-                  className={`border-b border-slate-50 last:border-0 hover:bg-slate-100 ${
-                    selected.has(emp.id) ? "bg-primary-light/60" : emp.deleted ? "bg-slate-50/80" : ""
-                  }`}
+                  className={`border-b border-slate-50 last:border-0 hover:bg-slate-100 ${selected.has(emp.id) ? "bg-primary-light/60" : ""}`}
                 >
                   <td className="px-3 py-2.5 text-ink">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -578,12 +602,7 @@ export default function Contracts() {
                       <FileText size={14} /> 상세
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-ink">
-                    <span className="inline-flex items-center gap-1.5">
-                      {emp.name}
-                      {emp.deleted && <Badge tone="danger">삭제됨</Badge>}
-                    </span>
-                  </td>
+                  <td className="px-3 py-2.5 text-ink">{emp.name}</td>
                   <td className="px-3 py-2.5 text-ink">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-3 py-2.5 text-ink">
@@ -630,6 +649,52 @@ export default function Contracts() {
           changePageSize={changePageSize}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
         />
+
+        <button
+          type="button"
+          onClick={() => setShowDeletedEmployees((v) => !v)}
+          className="mt-6 flex w-full items-center gap-2 border-t border-slate-100 pt-4 text-sm font-semibold text-muted"
+        >
+          <ChevronDown size={16} className={`transition-transform ${showDeletedEmployees ? "rotate-180" : ""}`} />
+          삭제된 근로자 ({deletedRows.length}건)
+        </button>
+        {showDeletedEmployees && (
+          <div className="-mx-4 mt-2 overflow-x-auto overscroll-x-contain md:-mx-5">
+            <table className="w-full min-w-[720px] text-center text-sm opacity-70">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs text-muted">
+                  <th className="px-3 py-2.5 font-semibold">순번</th>
+                  <th className="px-3 py-2.5 font-semibold">이름</th>
+                  <th className="px-3 py-2.5 font-semibold">센터</th>
+                  <th className="px-3 py-2.5 font-semibold">전화번호</th>
+                  <th className="px-3 py-2.5 font-semibold">계약</th>
+                  <th className="px-3 py-2.5 font-semibold">삭제일</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deletedRows.map(({ emp, contract }, i) => (
+                  <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2.5 text-ink">{i + 1}</td>
+                    <td className="px-3 py-2.5 text-ink">{emp.name}</td>
+                    <td className="px-3 py-2.5 text-ink">{siteName_(emp.workSiteId)}</td>
+                    <td className="px-3 py-2.5 text-ink">{emp.phone || "-"}</td>
+                    <td className="px-3 py-2.5">
+                      <Badge tone={CONTRACT_STATUS_TONE[contractStatus(contract)]}>{contractStatus(contract)}</Badge>
+                    </td>
+                    <td className="px-3 py-2.5 text-ink">{emp.deletedAt ? formatDate(emp.deletedAt) : "-"}</td>
+                  </tr>
+                ))}
+                {deletedRows.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-xs text-muted">
+                      삭제된 근로자가 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         </>
         )}
       </Panel>
