@@ -9,6 +9,7 @@ import { useToast } from "../hooks/useToast";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 import Badge from "../components/Badge";
+import BiometricSettingsCard from "../components/BiometricSettingsCard";
 import { formatPhoneNumber } from "../utils/phoneAuth";
 import { TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
 
@@ -157,6 +158,10 @@ export default function MyInfo() {
             </button>
           </div>
           {copied && <p className="mt-1 text-right text-xs text-primary">복사됨</p>}
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-5">
+          <BiometricSettingsCard uid={user.uid} label={profile?.name} />
         </div>
 
         <div className="mt-5 flex flex-nowrap items-center justify-between border-t border-slate-100 pt-5">

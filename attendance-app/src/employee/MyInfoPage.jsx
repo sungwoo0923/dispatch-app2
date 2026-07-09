@@ -9,6 +9,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import BuildInfo from "../components/BuildInfo";
+import BiometricSettingsCard from "../components/BiometricSettingsCard";
 import { BANK_OPTIONS } from "../constants/hr";
 import { formatResidentNumber } from "../utils/phoneAuth";
 import { openAddressSearch } from "../utils/daumPostcode";
@@ -248,6 +249,10 @@ export default function MyInfoPage() {
             {saving ? "저장 중..." : "저장"}
           </Button>
         )}
+      </Card>
+
+      <Card className="p-4">
+        <BiometricSettingsCard uid={user.uid} label={profile?.name} />
       </Card>
 
       {ITEMS.map(({ to, label, icon: Icon }) => (

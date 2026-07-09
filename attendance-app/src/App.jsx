@@ -58,6 +58,7 @@ import DocumentsPage from "./employee/DocumentsPage";
 import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
 import SafetyArchivePage from "./employee/SafetyArchivePage";
 import BoardPage from "./employee/BoardPage";
+import BiometricGate from "./components/BiometricGate";
 import { PENDING_INVITE_KEY, SUPER_ADMIN_PICK_COMPANY_KEY } from "./constants/session";
 
 function LoadingScreen() {
@@ -91,6 +92,9 @@ export default function App() {
 
   if (!profile) return <LoadingScreen />;
 
+  return <BiometricGate>{renderAuthedContent()}</BiometricGate>;
+
+  function renderAuthedContent() {
   if (profile.role === "admin") {
     const pendingInviteRaw = sessionStorage.getItem(PENDING_INVITE_KEY);
     if (pendingInviteRaw) {
@@ -186,4 +190,5 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
+  }
 }

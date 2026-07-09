@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 const SIZES = {
@@ -7,6 +7,27 @@ const SIZES = {
 };
 
 export default function Modal({ open, onClose, title, children, footer, size = "md" }) {
+  // iOS Safari는 키보드가 올라와도 레이아웃 뷰포트(100vh/100dvh 계산 기준)를
+  // 줄이지 않고 키보드를 그 위에 그냥 덮어씌운다 — 그래서 dvh로 크기를 잡은
+  // 모달이 키보드 뒤로 가려져 입력칸이 안 보였다(안드로이드는 반대로 뷰포트
+  // 자체가 줄어들어 문제가 없었음). window.visualViewport는 키보드가 올라오면
+  // 실제로 보이는 높이를 정확히 반영하므로, 그 값을 모달 높이에 직접 반영해
+  // 키보드 위로 밀어올린다.
+  const [vh, setVh] = useState(() => (typeof window !== "undefined" && window.visualViewport ? window.visualViewport.height : null));
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined" || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const update = () => setVh(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e) => {
@@ -48,8 +69,13 @@ export default function Modal({ open, onClose, title, children, footer, size = "
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4">
-      <div className={`flex w-full ${SIZES[size]} max-h-[85dvh] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}>
+    <div
+      className="fixed inset-x-0 top-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
+      style={{ height: vh ? `${vh}px` : "100dvh" }}
+    >
+      <div
+        className={`flex w-full ${SIZES[size]} max-h-[85%] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}
+      >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
           <h3 className="text-base font-semibold text-ink">{title}</h3>
           <button onClick={onClose} className="text-muted hover:text-ink">

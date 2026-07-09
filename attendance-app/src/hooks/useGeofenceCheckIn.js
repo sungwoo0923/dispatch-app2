@@ -37,6 +37,7 @@ async function writeAttendance({ uid, name, companyId, status, extra }) {
  */
 export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, canCheckIn = true }) {
   const [distance, setDistance] = useState(null);
+  const [accuracy, setAccuracy] = useState(null);
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [permissionError, setPermissionError] = useState(null);
   const autoCheckedInRef = useRef(false);
@@ -55,7 +56,8 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
   }, [refreshToday]);
 
   const handlePosition = useCallback(
-    async (lat, lng) => {
+    async (lat, lng, acc) => {
+      if (acc != null) setAccuracy(acc);
       if (!workSite?.lat || !workSite?.lng) return;
       const d = distanceMeters(lat, lng, workSite.lat, workSite.lng);
       setDistance(d);
@@ -121,7 +123,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
                 setPermissionError(error.message || String(error));
                 return;
               }
-              if (position && !cancelled) handlePosition(position.latitude, position.longitude);
+              if (position && !cancelled) handlePosition(position.latitude, position.longitude, position.accuracy);
             }
           );
           watcherIdRef.current = { native: true, id, BackgroundGeolocation };
@@ -134,7 +136,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
       if (navigator.geolocation) {
         const webId = navigator.geolocation.watchPosition(
           (pos) => {
-            if (!cancelled) handlePosition(pos.coords.latitude, pos.coords.longitude);
+            if (!cancelled) handlePosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
           },
           (err) => setPermissionError(err.message),
           { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
@@ -203,6 +205,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
 
   return {
     distance,
+    accuracy,
     todayAttendance,
     permissionError,
     manualCheckIn,

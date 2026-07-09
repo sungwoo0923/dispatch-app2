@@ -212,7 +212,7 @@ export default function Home() {
 
   const canCheckIn = todaySchedule?.status === "출근확정";
 
-  const { distance, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday, manualCheckInRadiusM } =
+  const { distance, accuracy, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday, manualCheckInRadiusM } =
     useGeofenceCheckIn({
       uid: user?.uid,
       name: profile?.name,
@@ -514,6 +514,7 @@ export default function Home() {
                 <div className="flex items-center justify-between text-xs text-muted">
                   <span className="flex items-center gap-1.5">
                     <Navigation size={13} /> 현재 위치까지 약 {Math.round(distance)}m
+                    {accuracy != null && <span className="text-muted/70"> (오차범위 ±{Math.round(accuracy)}m)</span>}
                   </span>
                   <span className={`font-semibold ${inRadius ? "text-primary" : "text-muted"}`}>{inRadius ? "반경 안" : "반경 밖"}</span>
                 </div>
