@@ -19,8 +19,9 @@ import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
-import AddressSearchModal from "../components/AddressSearchModal";
 import { downloadCsv } from "../utils/exportCsv";
+import { openAddressSearch } from "../utils/daumPostcode";
+import { searchAddressCoords } from "../utils/geocode";
 
 const MAX_SITES = 10;
 
@@ -54,7 +55,28 @@ export default function Centers() {
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("info");
   const [info, setInfo] = useState(EMPTY_INFO);
-  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+
+  // "내 회사 등록하기 > 센터 관리"와 동일한 다음(카카오) 우편번호 팝업으로
+  // 정확한 실제 주소를 목록에서 골라 받고, 그 도로명주소를 그대로
+  // 지오코딩해 위도/경도까지 한 번에 채운다 — 별도의 좌표 검색 팝업/직접
+  // 타이핑 없이 주소검색 버튼 한 번으로 끝난다.
+  const searchCenterAddress = async () => {
+    const result = await openAddressSearch();
+    if (!result) return;
+    setInfo((f) => ({ ...f, address: result.address }));
+    setSearchingAddress(true);
+    try {
+      const geo = await searchAddressCoords(result.address);
+      if (geo) {
+        setInfo((f) => ({ ...f, lat: geo.lat, lng: geo.lng }));
+      } else {
+        toast.error("좌표를 자동으로 찾지 못했습니다. 위도/경도를 직접 입력해주세요.");
+      }
+    } finally {
+      setSearchingAddress(false);
+    }
+  };
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -328,8 +350,8 @@ export default function Centers() {
                           value={info.address}
                           placeholder="주소검색 버튼으로 입력하세요"
                         />
-                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setAddressModalOpen(true)}>
-                          <Search size={13} /> 주소검색
+                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={searchCenterAddress} disabled={searchingAddress}>
+                          <Search size={13} /> {searchingAddress ? "좌표 찾는 중..." : "주소검색"}
                         </Button>
                       </div>
                     </label>
@@ -422,13 +444,6 @@ export default function Centers() {
           </div>
         </Card>
       </Panel>
-
-      <AddressSearchModal
-        open={addressModalOpen}
-        onClose={() => setAddressModalOpen(false)}
-        title="센터 출근지 설정"
-        onApply={(result) => setInfo((f) => ({ ...f, address: result.address, lat: result.lat, lng: result.lng }))}
-      />
     </div>
   );
 }
