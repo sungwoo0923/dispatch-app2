@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, updateDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { FolderOpen, ShieldCheck, ChevronRight, LogOut, UserRound, Search, Lock, Send, Globe } from "lucide-react";
+import { FolderOpen, ShieldCheck, ChevronRight, LogOut, UserRound, Search, Lock, Send, Globe, Bell } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { useLanguage } from "../hooks/useLanguage";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -45,6 +46,7 @@ export default function MyInfoPage() {
   const { user, profile, logout } = useAuth();
   const toast = useToast();
   const { lang, setLang, languages, t } = useLanguage();
+  const push = usePushNotifications(user?.uid);
   const [basic, setBasic] = useState(EMPTY_BASIC);
   const [saving, setSaving] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
@@ -161,6 +163,34 @@ export default function MyInfoPage() {
           ))}
         </div>
       </Card>
+
+      {push.supported && (
+        <Card className="flex items-center justify-between p-4">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+            <Bell size={15} className="text-primary" /> 푸시 알림 받기
+          </p>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={push.enabled}
+            disabled={push.loading}
+            onClick={async () => {
+              if (push.enabled) {
+                await push.disable();
+                toast.success("푸시 알림을 껐습니다");
+              } else {
+                const res = await push.enable();
+                if (res.ok) toast.success("푸시 알림이 켜졌습니다");
+                else if (res.reason === "denied") toast.error("알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.");
+                else toast.error("푸시 알림 설정에 실패했습니다.");
+              }
+            }}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${push.enabled ? "bg-primary" : "bg-slate-200"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${push.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+          </button>
+        </Card>
+      )}
 
       <Card className="p-5">
         <div className="mb-1 flex items-center justify-between">

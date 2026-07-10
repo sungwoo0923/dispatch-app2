@@ -19,6 +19,12 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+// public/firebase-messaging-sw.js runs outside Vite's module graph, so it
+// can't read import.meta.env directly — the push-registration code passes
+// this same config to it as URL query params when registering the worker.
+export { firebaseConfig };
+export const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
+
 // Without a .env.local (gitignored, so absent on every fresh clone) these
 // import.meta.env values are all undefined; treat that as "no real project
 // configured yet" and default to the emulator rather than letting

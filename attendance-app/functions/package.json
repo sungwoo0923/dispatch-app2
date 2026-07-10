@@ -1,0 +1,13 @@
+{
+  "name": "kp-work-functions",
+  "description": "notifications 문서 생성 시 대상자에게 FCM 푸시를 보내는 Cloud Function",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1"
+  },
+  "private": true
+}
