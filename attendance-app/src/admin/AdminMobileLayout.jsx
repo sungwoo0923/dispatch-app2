@@ -6,6 +6,8 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useNavBadges } from "../hooks/useNavBadges";
 import { isMenuAllowed } from "./navConfig";
+import HeaderIcons from "../employee/HeaderIcons";
+import Messenger from "../messenger/Messenger";
 
 const TABS = [
   { to: "/", label: "홈", icon: Home, end: true },
@@ -26,6 +28,8 @@ export default function AdminMobileLayout() {
   const location = useLocation();
   const [earlyLeaveCount, setEarlyLeaveCount] = useState(0);
   const [resignationCount, setResignationCount] = useState(0);
+  const [showMessenger, setShowMessenger] = useState(false);
+  const [messengerUnread, setMessengerUnread] = useState(0);
   const { badgeCounts, markSeen } = useNavBadges(profile?.companyId, user?.uid);
 
   useEffect(() => {
@@ -78,20 +82,38 @@ export default function AdminMobileLayout() {
               {resignationCount > 0 ? <FileWarning size={12} /> : <DoorOpen size={12} />} {alertCount}
             </button>
           )}
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-xs font-semibold text-primary">
-            {profile?.name?.[0] || "K"}
-          </div>
+          <HeaderIcons onMessengerClick={() => setShowMessenger(true)} messengerUnread={messengerUnread} />
           <button onClick={logout} className="text-muted hover:text-danger" title="로그아웃">
             <LogOut size={18} />
           </button>
         </div>
       </header>
 
+      {/* 안읽음 수 추적은 항상 켜두고, showMessenger로 화면 표시만 전환한다
+          (직원 모바일 앱과 동일한 패턴 — PC 관리자화면의 <Messenger />와
+          같은 chat_rooms/chat_messages 컬렉션을 그대로 공유한다). */}
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9990, background: "#fff",
+          display: "flex", flexDirection: "column", overflow: "hidden",
+          visibility: showMessenger ? "visible" : "hidden",
+          pointerEvents: showMessenger ? "auto" : "none",
+        }}
+      >
+        <Messenger
+          mobileMode
+          mobileVisible={showMessenger}
+          onClose={() => setShowMessenger(false)}
+          onUnreadChange={setMessengerUnread}
+        />
+      </div>
+
       <main className="flex-1 overflow-y-auto pb-24">
         {isMenuAllowed(location.pathname, allowedMenuPaths) ? <Outlet /> : <Navigate to="/" replace />}
       </main>
 
       <nav
+        id="admin-bottom-nav"
         className="fixed bottom-0 left-1/2 z-40 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-100 bg-white px-1 py-1.5 shadow-[0_-2px_10px_rgba(15,23,42,0.06)]"
         style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
       >

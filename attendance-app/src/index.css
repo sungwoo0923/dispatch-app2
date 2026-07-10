@@ -48,10 +48,12 @@ input, select, textarea {
   }
 }
 
-/* 모달이 열려있는 동안엔 하단 앱 탭바를 숨긴다 — iOS Safari에서 뷰포트
-   높이 계산 차이로 모달 바닥이 실제 화면 끝까지 닿지 않을 때, 그 틈으로
-   탭바가 그대로 보이면서 모달의 취소/제출 버튼을 가리는 문제가 있었다. */
-body[data-modal-open="true"] #employee-bottom-nav {
+/* 모달/사이드패널이 열려있는 동안엔 하단 앱 탭바를 숨긴다 — iOS Safari에서
+   뷰포트 높이 계산 차이로 오버레이 바닥이 실제 화면 끝까지 닿지 않을 때,
+   그 틈으로 탭바가 그대로 보이면서 오버레이의 취소/제출 버튼을 가리는
+   문제가 있었다. 직원용/관리자용 모바일 하단탭 둘 다 적용한다. */
+body[data-modal-open="true"] #employee-bottom-nav,
+body[data-modal-open="true"] #admin-bottom-nav {
   display: none;
 }
 

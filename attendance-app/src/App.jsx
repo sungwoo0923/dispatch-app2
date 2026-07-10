@@ -209,6 +209,7 @@ export default function App() {
             <Route path="templates/allowance" element={<AdminMobileAllowanceTemplates />} />
             <Route path="templates/insurance" element={<AdminMobileInsuranceRateTemplates />} />
             <Route path="templates/reports" element={<AdminMobileCenterReports />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             {sharedAdminChildRoutes}
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

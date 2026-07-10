@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+
+// 키보드가 떠 있다고 판단하는 기준: 레이아웃 뷰포트(innerHeight)보다 실제
+// 보이는 시각 뷰포트(visualViewport.height)가 이만큼 이상 작아지면 온스크린
+// 키보드가 화면을 가리고 있다고 본다. 이 문턱값 밑에서는(키보드 없음) 굳이
+// JS로 잰 값을 쓰지 않고 CSS 100dvh에 맡긴다 — visualViewport 값은 모달이
+// 열리는 순간 사파리의 크롬(주소창) 애니메이션이 아직 안정화되지 않았을 때
+// 실제보다 낮게 잡히는 경우가 있어, 그 순간의 값을 그대로 모달 높이에
+// 박아버리면 모달 바닥이 화면 끝에 닿지 못하고 짧게 잘려버렸다(그 틈으로
+// 하단 탭바가 비치고, 정작 모달 안 내용/버튼은 화면 밖으로 가려짐).
+const KEYBOARD_HEIGHT_THRESHOLD = 150;
 
 const SIZES = {
   md: "sm:max-w-md",
@@ -31,15 +42,15 @@ export default function Modal({ open, onClose, title, children, footer, size = "
   // 0보다 커지는데 모달은 top:0(레이아웃 뷰포트 기준)에 고정되어 있어서 실제
   // 눈에 보이는 화면 밖(위)으로 밀려나 버렸다. offsetTop도 함께 추적해서 top
   // 위치 자체를 그만큼 내려줘야 실제 보이는 화면과 항상 일치한다.
-  const [viewport, setViewport] = useState(() => {
-    if (typeof window === "undefined" || !window.visualViewport) return { height: null, top: 0 };
-    return { height: window.visualViewport.height, top: window.visualViewport.offsetTop };
-  });
+  const [viewport, setViewport] = useState({ height: null, top: 0 });
 
   useEffect(() => {
     if (!open || typeof window === "undefined" || !window.visualViewport) return;
     const vv = window.visualViewport;
-    const update = () => setViewport({ height: vv.height, top: vv.offsetTop });
+    const update = () => {
+      const keyboardOpen = window.innerHeight - vv.height > KEYBOARD_HEIGHT_THRESHOLD;
+      setViewport(keyboardOpen ? { height: vv.height, top: vv.offsetTop } : { height: null, top: 0 });
+    };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
@@ -49,43 +60,15 @@ export default function Modal({ open, onClose, title, children, footer, size = "
     };
   }, [open]);
 
+  useBodyScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e) => {
       if (e.key === "Escape") onClose?.();
     };
     document.addEventListener("keydown", onKeyDown);
-    // 모달이 열려있는 동안 뒤쪽 페이지가 스크롤되지 않도록 막는다. iOS
-    // Safari는 body에 overflow:hidden만 줘서는 배경이 계속 스크롤/바운스되는
-    // 경우가 많아서(안드로이드 크롬은 그걸로 충분했지만 iOS는 아니었음),
-    // body 자체를 position:fixed로 고정하고 스크롤 위치를 기억했다가 닫힐
-    // 때 되돌리는 방식을 함께 쓴다 — 이게 없으면 모바일에서 모달 안을
-    // 스크롤하려는 손가락 제스처가 뒤쪽 배경 페이지로 먹혀서, 정작 모달
-    // 안의 서명/저장 버튼까지 스크롤해서 내려갈 수가 없었다(화면 아래로
-    // 잘려 안 보이는 것처럼 느껴짐).
-    const scrollY = window.scrollY;
-    const body = document.body;
-    const prev = { overflow: body.style.overflow, position: body.style.position, top: body.style.top, width: body.style.width };
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-    // 하단 앱 탭바(EmployeeLayout의 fixed nav)는 모달과 별개의 fixed 요소라
-    // z-index만으로는 항상 안전하게 모달 아래로 깔리지 않는다 — 특히
-    // iOS Safari에서는 뷰포트 높이 계산(vh) 차이 때문에 모달 바닥이 실제
-    // 화면 하단까지 닿지 않는 경우가 있어, 그 틈으로 앱 탭바가 그대로
-    // 비치면서 취소/제출 버튼을 가려버렸다. body에 표시를 남겨 모달이 열려
-    //있는 동안엔 탭바 자체를 숨긴다(index.css 참고).
-    body.dataset.modalOpen = "true";
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      body.style.overflow = prev.overflow;
-      body.style.position = prev.position;
-      body.style.top = prev.top;
-      body.style.width = prev.width;
-      delete body.dataset.modalOpen;
-      window.scrollTo(0, scrollY);
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
   if (!open) return null;
@@ -105,7 +88,13 @@ export default function Modal({ open, onClose, title, children, footer, size = "
             <X size={20} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4"
+          style={{
+            WebkitOverflowScrolling: "touch",
+            paddingBottom: footer ? undefined : "max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem))",
+          }}
+        >
           {children}
         </div>
         {footer && (
