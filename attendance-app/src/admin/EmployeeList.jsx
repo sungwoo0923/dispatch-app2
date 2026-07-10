@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   query,
@@ -197,6 +198,7 @@ function SectionHeader({ children }) {
 
 export default function EmployeeList() {
   const { profile, user } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
   const [employees, setEmployees] = useState([]);
@@ -597,6 +599,14 @@ export default function EmployeeList() {
     setCopyTargets(new Set());
     setQuickForm({ name: "", phone: "" });
     setCopyOpen(true);
+    closeRowMenu();
+  };
+  // 스케줄등록 메뉴로 이동하면서 이 근로자를 출근자등록 팝업에 바로
+  // 미리 채워준다 — 동명이인이 있을 수 있으므로 이름 검색이 아니라
+  // uid로 정확히 지정해 넘긴다(Schedule.jsx가 location.state에서 읽음).
+  const runScheduleRegister = () => {
+    if (!rowMenu) return;
+    navigate("/schedule", { state: { presetEmployeeId: rowMenu.emp.id } });
     closeRowMenu();
   };
 
@@ -1580,6 +1590,13 @@ export default function EmployeeList() {
             onClick={() => runRowAction("근무복사")}
           >
             근무복사
+          </button>
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-left text-sm text-ink hover:bg-slate-50"
+            onClick={runScheduleRegister}
+          >
+            스케줄등록
           </button>
         </div>
       )}

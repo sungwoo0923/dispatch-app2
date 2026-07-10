@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   collection,
   query,
@@ -74,6 +75,8 @@ export default function Schedule() {
   const { profile } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [companyName, setCompanyName] = useState("");
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -92,6 +95,23 @@ export default function Schedule() {
   const [bulkSearched, setBulkSearched] = useState(false);
   const [bulkResults, setBulkResults] = useState([]);
   const [bulkSelected, setBulkSelected] = useState(() => new Set());
+
+  // 근로자목록에서 우클릭 > 스케줄등록으로 넘어온 경우, 이름 검색이 아니라
+  // uid로 정확히 그 근로자만 출근자등록 팝업에 미리 선택해둔다(동명이인
+  // 오선택 방지). 다시 안 열리도록 state를 소비 후 지워준다.
+  useEffect(() => {
+    const presetId = location.state?.presetEmployeeId;
+    if (!presetId || employees.length === 0) return;
+    const emp = employees.find((e) => e.id === presetId);
+    if (emp) {
+      setBulkResults([emp]);
+      setBulkSearched(true);
+      setBulkSelected(new Set([emp.id]));
+      setOpen(true);
+    }
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, employees]);
   const [bulkRange, setBulkRange] = useState({ start: toDateKey(), end: toDateKey() });
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
