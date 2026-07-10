@@ -55,6 +55,7 @@ export default function MyInfoPage() {
   const [requestReason, setRequestReason] = useState("");
   const [requesting, setRequesting] = useState(false);
   const [, bumpBiometric] = useState(0);
+  const [basicExpanded, setBasicExpanded] = useState(false);
 
   // 관리자용 근로자등록 화면의 "KP-Work 앱에 가입을 하지 않은 지원자만
   // 입력합니다" 카드와 동일한 필드 — 이미 가입한 근로자는 여기서 본인이
@@ -93,6 +94,7 @@ export default function MyInfoPage() {
     try {
       await updateDoc(doc(db, "users", user.uid), { ...basic, basicInfoSubmitted: true });
       toast.success("저장되었습니다. 이후 수정이 필요하면 수정요청을 이용해주세요.");
+      setBasicExpanded(false);
     } catch (err) {
       toast.error(`저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     } finally {
@@ -193,17 +195,24 @@ export default function MyInfoPage() {
       )}
 
       <Card className="p-5">
-        <div className="mb-1 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => locked && setBasicExpanded((v) => !v)}
+          className="flex w-full items-center justify-between text-left"
+        >
           <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
             <UserRound size={15} className="text-primary" /> 기본정보 입력
           </p>
           {locked && (
-            <span className="flex items-center gap-1 text-xs font-medium text-muted">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
               <Lock size={11} /> 수정 잠김
+              <ChevronRight size={14} className={`transition-transform ${basicExpanded ? "rotate-90" : ""}`} />
             </span>
           )}
-        </div>
-        <p className="mb-3 text-xs leading-relaxed text-muted">
+        </button>
+        {(!locked || basicExpanded) && (
+        <>
+        <p className="mb-3 mt-1 text-xs leading-relaxed text-muted">
           {locked
             ? "최초 저장 후에는 직접 수정할 수 없습니다. 정보가 변경되었다면 아래 수정요청 버튼으로 관리자에게 요청해주세요."
             : "급여 지급 및 서류 발급에 사용되는 정보입니다. 정확히 입력 후 저장해주세요. 최초 1회만 직접 저장할 수 있고, 이후에는 수정요청을 통해서만 변경됩니다."}
@@ -302,6 +311,8 @@ export default function MyInfoPage() {
           <Button className="mt-4 w-full" onClick={saveBasic} disabled={saving}>
             {saving ? "저장 중..." : "저장"}
           </Button>
+        )}
+        </>
         )}
       </Card>
 

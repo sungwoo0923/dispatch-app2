@@ -875,6 +875,13 @@ export default function EmployeeList() {
     try {
       if (editingUid) {
         const payload = Object.fromEntries(REGISTER_FIELD_KEYS.map((k) => [k, registerForm[k]]));
+        // 관리자가 여기서 근로자의 기본정보(주민번호/주소/계좌 등)를 채워
+        // 넣었다면, 모바일 내정보의 "기본정보 입력" 카드도 근로자가 직접
+        // 입력해 잠긴 것과 동일하게 접힌 상태로 보여야 한다.
+        const BASIC_INFO_KEYS = ["residentNumberFront", "address", "bankName", "bankAccount", "accountHolder"];
+        if (BASIC_INFO_KEYS.every((k) => String(payload[k] || "").trim())) {
+          payload.basicInfoSubmitted = true;
+        }
         await updateDoc(doc(db, "users", editingUid), payload);
         if (editingOriginal) {
           for (const [key, label] of Object.entries(CHANGE_LOG_FIELD_LABELS)) {
