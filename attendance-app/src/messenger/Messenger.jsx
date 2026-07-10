@@ -14,6 +14,31 @@ import { useLanguage } from "../hooks/useLanguage";
 const ROOMS_COLL = "chat_rooms";
 const MSGS_COLL = "chat_messages";
 const PROFILES_COLL = "chat_profiles";
+const MUTE_KEY = "kpwork_messenger_muted";
+
+// 알림음은 별도 음원 파일 없이 Web Audio API로 짧은 2음 차임을 즉석 생성한다
+// (자산 파일/네트워크 요청 불필요, PC/모바일 브라우저 공통 지원).
+function playChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    [880, 1320].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now + i * 0.09);
+      gain.gain.linearRampToValueAtTime(0.18, now + i * 0.09 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.22);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.09);
+      osc.stop(now + i * 0.09 + 0.25);
+    });
+    setTimeout(() => ctx.close(), 500);
+  } catch {}
+}
 
 // KP-Work 블루/화이트 팔레트에 맞춘 메신저 테마 (KP-Flow 메신저의 기능/구성을
 // 그대로 가져오되 색감만 이 프로그램에 맞게 재적용했다).
@@ -115,6 +140,16 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   const [showNoticeInput, setShowNoticeInput] = useState(false);
   const [pendingRoom, setPendingRoom] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
+  const [muted, setMuted] = useState(() => {
+    try { return localStorage.getItem(MUTE_KEY) === "1"; } catch { return false; }
+  });
+  const toggleMuted = () => {
+    setMuted((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(MUTE_KEY, next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
 
   const msgUnsub = useRef(null);
   const inputRef = useRef(null);
@@ -233,9 +268,12 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]);
 
   useEffect(() => {
-    if (totalUnread > prevUnreadRef.current && "vibrate" in navigator) navigator.vibrate([100, 60, 100]);
+    if (totalUnread > prevUnreadRef.current) {
+      if ("vibrate" in navigator) navigator.vibrate([100, 60, 100]);
+      if (!muted) playChime();
+    }
     prevUnreadRef.current = totalUnread;
-  }, [totalUnread]);
+  }, [totalUnread, muted]);
 
   useEffect(() => {
     const visible = mobileMode ? (mobileVisible && view === "chat") : (open && activeRoom !== null);
@@ -646,6 +684,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     onClose: mobileMode ? onClose : () => setOpen(false),
     onLeaveRoom: leaveRoom, myUid, mobileMode,
     activeRoomId: activeRoom?.id || (pendingRoom ? "_pending_" : null),
+    muted, onToggleMuted: toggleMuted,
   };
 
   const profileViewProps = {
@@ -845,7 +884,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   );
 }
 
-function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, activeRoomId }) {
+function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, activeRoomId, muted, onToggleMuted }) {
   const { t } = useLanguage();
   const [tab, setTab] = useState("friends");
   const [search, setSearch] = useState("");
@@ -877,6 +916,13 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{t("messenger.title")}</span>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={onToggleMuted} title={muted ? t("messenger.muteOff") : t("messenger.muteOn")} style={{ background: "rgba(255,255,255,0.16)", border: "none", color: "rgba(255,255,255,0.9)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {muted ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>
+              )}
+            </button>
             <button onClick={onNewGroup} title={t("messenger.groupChatTitle")} style={{ background: "rgba(255,255,255,0.16)", border: "none", color: "rgba(255,255,255,0.9)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
             </button>

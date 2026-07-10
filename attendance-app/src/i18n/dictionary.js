@@ -383,6 +383,8 @@ const STRINGS = {
   "messenger.selectRoomHint": { ko: "채팅방을 선택해주세요", en: "Select a chat room", vi: "Vui lòng chọn phòng chat", zh: "请选择聊天室", th: "โปรดเลือกห้องแชท" },
   "messenger.dmButton": { ko: "1:1 대화", en: "1:1 Chat", vi: "Chat 1:1", zh: "一对一聊天", th: "แชท 1:1" },
   "messenger.tryAgain": { ko: "다시 시도해주세요", en: "Please try again", vi: "Vui lòng thử lại", zh: "请重试", th: "โปรดลองอีกครั้ง" },
+  "messenger.muteOn": { ko: "알림음 끄기", en: "Mute notification sound", vi: "Tắt âm thanh thông báo", zh: "关闭提示音", th: "ปิดเสียงแจ้งเตือน" },
+  "messenger.muteOff": { ko: "알림음 켜기", en: "Unmute notification sound", vi: "Bật âm thanh thông báo", zh: "开启提示音", th: "เปิดเสียงแจ้งเตือน" },
 };
 
 export const DICTIONARY = SUPPORTED_LANGUAGES.reduce((acc, l) => {
