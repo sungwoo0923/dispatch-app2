@@ -532,6 +532,7 @@ export default function Schedule() {
           createdAt: serverTimestamp(),
         });
       }
+      notifyScheduleStatus(emp.id, `근무 스케줄 ${dates.length}건이 등록되었습니다. (대기 상태)`);
     }
     setOpen(false);
   };
@@ -573,6 +574,21 @@ export default function Schedule() {
       return next;
     });
 
+  // 관리자가 스케줄을 등록/변경할 때마다 해당 근로자 모바일에도 그 사실이
+  // 뜨도록, notifications 문서를 하나 만든다(모바일 알림함이 이미 이
+  // 컬렉션을 실시간 구독하고 있다).
+  const notifyScheduleStatus = (uid, message) => {
+    if (!uid) return;
+    addDoc(collection(db, "notifications"), {
+      companyId: profile.companyId,
+      uid,
+      title: "근무 스케줄 안내",
+      message,
+      read: false,
+      createdAt: serverTimestamp(),
+    }).catch(() => {});
+  };
+
   // 스케줄 상태 변경에 따르는 부수효과(출근확정 시 근로계약서 자동생성,
   // 취소 시 미서명 자동생성 계약서 정리)를 한 건 단위로 뽑아둔 헬퍼 —
   // 하단의 체크박스 일괄적용(applyStatus)과 표 우클릭 메뉴가 함께 쓴다.
@@ -581,6 +597,7 @@ export default function Schedule() {
     const s = schedules.find((x) => x.id === id);
     const emp = s && employeeByUid.get(s.uid);
     if (!s || !emp) return;
+    notifyScheduleStatus(s.uid, `${s.date} 근무 상태가 '${status}'(으)로 변경되었습니다.`);
 
     if (status === "출근확정") {
       const existing = await getDocs(
@@ -749,6 +766,7 @@ export default function Schedule() {
       createdAt: serverTimestamp(),
     });
     if (status === "출근확정") await applyScheduleStatusOne(ref.id, "출근확정");
+    else notifyScheduleStatus(uid, `${dateKey} 근무 상태가 '대기'로 변경되었습니다.`);
   };
 
   const runRowStatusChange = async (target) => {
@@ -772,6 +790,7 @@ export default function Schedule() {
             createdAt: serverTimestamp(),
           });
           await deleteDoc(doc(db, "schedules", s.id));
+          notifyScheduleStatus(s.uid, `${s.date} 근무 상태가 '휴무'로 변경되었습니다.`);
         } else if (target === "퇴사") {
           await updateDoc(doc(db, "users", s.uid), { employmentStatus: "퇴사", resignDate: s.date });
           await deleteDoc(doc(db, "schedules", s.id));
