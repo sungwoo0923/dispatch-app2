@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { RefreshCw, CheckCircle2, Sparkles } from "lucide-react";
-import { useEmulator } from "../firebase";
+import { useEmulator, vapidKey } from "../firebase";
 import { useAppUpdate } from "../hooks/useAppUpdate";
 
 // Shows which build is actually live (Login screen, admin sidebar, employee
@@ -22,6 +22,7 @@ export default function BuildInfo({ className = "" }) {
   const isLocalHost =
     typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
   const showEmulatorWarning = useEmulator && !isLocalHost;
+  const showVapidWarning = !useEmulator && !vapidKey;
 
   const { needRefresh, applyUpdate, checkForUpdate } = useAppUpdate();
   const [checking, setChecking] = useState(false);
@@ -82,6 +83,11 @@ export default function BuildInfo({ className = "" }) {
       {showEmulatorWarning && (
         <p className="mt-1 text-[10px] font-semibold text-danger">
           ⚠ 에뮬레이터 모드로 빌드됨 — .env.local에 실제 Firebase 키가 없습니다
+        </p>
+      )}
+      {showVapidWarning && (
+        <p className="mt-1 text-[10px] font-semibold text-danger">
+          ⚠ VAPID 키 미설정 — 기기 푸시 알림이 꺼져 있습니다 (.env.local에 VITE_FIREBASE_VAPID_KEY 필요)
         </p>
       )}
     </div>
