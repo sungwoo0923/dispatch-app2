@@ -234,6 +234,33 @@ const STRINGS = {
 
   // Login
   "login.language": { ko: "언어", en: "Language", vi: "Ngôn ngữ", zh: "语言", th: "ภาษา" },
+  "login.idLabel": { ko: "회원ID(휴대전화번호)", en: "ID (Phone Number)", vi: "ID (Số điện thoại)", zh: "会员ID（手机号码）", th: "ไอดี (เบอร์โทรศัพท์)" },
+  "login.idPlaceholder": { ko: "대시(-) 없이 숫자만 입력", en: "Numbers only, no dashes", vi: "Chỉ nhập số, không có dấu gạch ngang", zh: "请输入数字，不含短横线", th: "กรอกเฉพาะตัวเลข ไม่ต้องใส่ขีด" },
+  "login.password": { ko: "비밀번호", en: "Password", vi: "Mật khẩu", zh: "密码", th: "รหัสผ่าน" },
+  "login.savePhone": { ko: "회원ID 저장", en: "Remember ID", vi: "Lưu ID", zh: "记住会员ID", th: "จดจำไอดี" },
+  "login.submit": { ko: "로그인", en: "Log In", vi: "Đăng nhập", zh: "登录", th: "เข้าสู่ระบบ" },
+  "login.submitting": { ko: "로그인 중...", en: "Logging in...", vi: "Đang đăng nhập...", zh: "登录中...", th: "กำลังเข้าสู่ระบบ..." },
+  "login.error": {
+    ko: "회원ID 또는 비밀번호가 올바르지 않습니다.",
+    en: "Incorrect ID or password.",
+    vi: "ID hoặc mật khẩu không đúng.",
+    zh: "会员ID或密码不正确。",
+    th: "ไอดีหรือรหัสผ่านไม่ถูกต้อง",
+  },
+  "login.noAccount": { ko: "아직 회원이 아니신가요?", en: "Don't have an account?", vi: "Bạn chưa có tài khoản?", zh: "还不是会员吗？", th: "ยังไม่ได้เป็นสมาชิกใช่ไหม?" },
+  "login.signupEmployee": { ko: "직원 회원가입", en: "Employee Sign Up", vi: "Đăng ký nhân viên", zh: "员工注册", th: "สมัครสมาชิกพนักงาน" },
+  "login.isAdmin": { ko: "관리자이신가요?", en: "Are you an admin?", vi: "Bạn là quản trị viên?", zh: "您是管理员吗？", th: "คุณเป็นผู้ดูแลระบบใช่ไหม?" },
+  "login.adminLogin": { ko: "관리자 로그인", en: "Admin Login", vi: "Đăng nhập quản trị viên", zh: "管理员登录", th: "เข้าสู่ระบบผู้ดูแล" },
+  "login.employeeLogin": { ko: "직원 로그인", en: "Employee Login", vi: "Đăng nhập nhân viên", zh: "员工登录", th: "เข้าสู่ระบบพนักงาน" },
+  "login.email": { ko: "이메일", en: "Email", vi: "Email", zh: "邮箱", th: "อีเมล" },
+  "login.adminEmailError": {
+    ko: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    en: "Incorrect email or password.",
+    vi: "Email hoặc mật khẩu không đúng.",
+    zh: "邮箱或密码不正确。",
+    th: "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+  },
+  "login.adminSignup": { ko: "관리자(회사) 회원가입", en: "Admin (Company) Sign Up", vi: "Đăng ký quản trị viên (công ty)", zh: "管理员（企业）注册", th: "สมัครสมาชิกผู้ดูแล (บริษัท)" },
 };
 
 export const DICTIONARY = SUPPORTED_LANGUAGES.reduce((acc, l) => {

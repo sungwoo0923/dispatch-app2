@@ -5,6 +5,7 @@ import { auth } from "../firebase";
 import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
 import BuildInfo from "../components/BuildInfo";
+import { useLanguage } from "../hooks/useLanguage";
 import { SUPER_ADMIN_EMAIL } from "../constants/superAdmin";
 import { SUPER_ADMIN_PICK_COMPANY_KEY } from "../constants/session";
 
@@ -16,6 +17,7 @@ import { SUPER_ADMIN_PICK_COMPANY_KEY } from "../constants/session";
 // sessionStorage flag below) so they can search by company name instead of
 // needing to remember a raw code.
 export default function AdminLoginPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -31,16 +33,16 @@ export default function AdminLoginPage() {
         sessionStorage.setItem(SUPER_ADMIN_PICK_COMPANY_KEY, "1");
       }
     } catch (err) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      setError(t("login.adminEmailError"));
       setLoading(false);
     }
   };
 
   return (
-    <AuthShell subtitle="관리자 로그인" title="관리자 로그인">
+    <AuthShell subtitle={t("login.adminLogin")} title={t("login.adminLogin")}>
       <form onSubmit={handleSubmit}>
         <FormField
-          label="이메일"
+          label={t("login.email")}
           type="email"
           required
           value={email}
@@ -48,7 +50,7 @@ export default function AdminLoginPage() {
           placeholder="admin@company.com"
         />
         <FormField
-          label="비밀번호"
+          label={t("login.password")}
           type="password"
           required
           value={password}
@@ -57,16 +59,16 @@ export default function AdminLoginPage() {
         />
         {error && <p className="mb-3 text-xs text-danger">{error}</p>}
         <Button type="submit" className="w-full" size="lg" disabled={loading}>
-          {loading ? "로그인 중..." : "로그인"}
+          {loading ? t("login.submitting") : t("login.submit")}
         </Button>
       </form>
       <div className="mt-5 flex items-center justify-center gap-4 text-xs text-muted">
         <Link to="/admin-signup" className="hover:text-primary">
-          관리자(회사) 회원가입
+          {t("login.adminSignup")}
         </Link>
         <span className="text-slate-300">|</span>
         <Link to="/login" className="hover:text-primary">
-          직원 로그인
+          {t("login.employeeLogin")}
         </Link>
       </div>
       <BuildInfo className="mt-6" />

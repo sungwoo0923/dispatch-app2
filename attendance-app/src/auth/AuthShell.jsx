@@ -1,4 +1,5 @@
 import { CheckCircle2, MapPin, Wallet, CalendarClock } from "lucide-react";
+import LanguagePicker from "../components/LanguagePicker";
 
 export default function AuthShell({ title, subtitle, children }) {
   return (
@@ -47,6 +48,9 @@ export default function AuthShell({ title, subtitle, children }) {
 
       <div className="flex w-full items-center justify-center px-6 py-14 lg:w-1/2">
         <div className="w-full max-w-sm">
+          <div className="mb-4 flex justify-end">
+            <LanguagePicker />
+          </div>
           <div className="mb-8 flex items-center justify-center lg:hidden">
             <img src="/logo.png" alt="KP-Work" className="h-20 w-auto" />
           </div>
