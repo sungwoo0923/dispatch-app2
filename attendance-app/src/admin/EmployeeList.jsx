@@ -44,7 +44,7 @@ import {
 import { generateInviteCode } from "../utils/ids";
 import { formatPhoneNumber, formatResidentNumber } from "../utils/phoneAuth";
 import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
-import { softDeleteEmployee, softDeleteEmployees } from "../utils/employeeUtils";
+import { softDeleteEmployee, softDeleteEmployees, syncChatProfileFields } from "../utils/employeeUtils";
 import {
   DOCUMENT_TYPE_OPTIONS,
   uploadPendingEmployeeDocument,
@@ -632,6 +632,9 @@ export default function EmployeeList() {
   const updateField = (uid, field, value) => {
     const before = employees.find((e) => e.id === uid)?.[field];
     updateDoc(doc(db, "users", uid), { [field]: value });
+    if (field === "name" || field === "position" || field === "phone") {
+      syncChatProfileFields(uid, { [field]: value });
+    }
     logFieldChange(uid, field, before, value);
   };
 
@@ -681,6 +684,11 @@ export default function EmployeeList() {
   // 남아 아무 것도 바뀌지 않는다.
   const approveInfoChangeRequest = async (req) => {
     await updateDoc(doc(db, "users", req.uid), req.requestedValues);
+    syncChatProfileFields(req.uid, {
+      name: req.requestedValues?.name,
+      position: req.requestedValues?.position,
+      phone: req.requestedValues?.phone,
+    });
     await updateDoc(doc(db, "infoChangeRequests", req.id), { status: "approved", resolvedAt: serverTimestamp() });
     toast.success("승인되었습니다");
   };
@@ -883,6 +891,7 @@ export default function EmployeeList() {
           payload.basicInfoSubmitted = true;
         }
         await updateDoc(doc(db, "users", editingUid), payload);
+        syncChatProfileFields(editingUid, { name: payload.name, position: payload.position, phone: payload.phone });
         if (editingOriginal) {
           for (const [key, label] of Object.entries(CHANGE_LOG_FIELD_LABELS)) {
             const before = editingOriginal[key] ?? "";

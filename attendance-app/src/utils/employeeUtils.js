@@ -19,3 +19,17 @@ export async function softDeleteEmployees(uids) {
     setDoc(doc(db, "chat_profiles", uid), { deleted: true }, { merge: true }).catch(() => {});
   }
 }
+
+// 관리자가 근로자등록 화면에서 이름/직책/연락처를 바꿔도 chat_profiles는
+// 로그인 시점에 한 번만 생성되고 그 뒤로는 갱신되지 않아, 메신저 친구목록에
+// 옛 이름이 계속 남는다. users 문서를 고치는 모든 지점에서 이 함수도 같이
+// 불러 chat_profiles를 최신 상태로 맞춘다 — 아직 한 번도 로그인 안 해 문서가
+// 없는 사용자도 있을 수 있으니 best-effort(merge)로 처리한다.
+export function syncChatProfileFields(uid, fields) {
+  const patch = {};
+  if (fields.name !== undefined) patch.name = fields.name;
+  if (fields.position !== undefined) patch.position = fields.position;
+  if (fields.phone !== undefined) patch.phone = fields.phone;
+  if (Object.keys(patch).length === 0) return;
+  setDoc(doc(db, "chat_profiles", uid), patch, { merge: true }).catch(() => {});
+}

@@ -562,12 +562,17 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     setPhotoUploading(false);
   };
 
+  // room.memberProfiles는 방이 처음 만들어질 때 딱 한 번 저장된 스냅샷이라,
+  // 그 뒤 관리자가 근로자 이름을 바꿔도 갱신되지 않는다. 이름/사진은 항상
+  // 최신 상태로 유지되는 friends(chat_profiles 실시간 구독) 목록에서 먼저
+  // 찾고, 상대가 탈퇴 등으로 friends 목록에 없을 때만 스냅샷으로 대체한다.
   const getRoomName = (room) => {
     if (!room) return "";
     if (room.type === "self") return "나에게";
     if (room.type === "dm") {
       const otherUid = room.members?.find((uid) => uid !== myUid);
-      return room.memberProfiles?.[otherUid]?.name || "알 수 없음";
+      const live = friends.find((f) => f.uid === otherUid);
+      return live?.name || room.memberProfiles?.[otherUid]?.name || "알 수 없음";
     }
     return room.name || "그룹";
   };
@@ -576,7 +581,8 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     if (room.type === "self") return myProfile?.photo || "";
     if (room.type === "dm") {
       const otherUid = room.members?.find((uid) => uid !== myUid);
-      return room.memberProfiles?.[otherUid]?.photo || "";
+      const live = friends.find((f) => f.uid === otherUid);
+      return live?.photo || room.memberProfiles?.[otherUid]?.photo || "";
     }
     return "";
   };
