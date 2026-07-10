@@ -27,7 +27,15 @@ export function usePushNotifications(uid) {
     async (targetUid) => {
       if (!vapidKey) throw new Error("no-vapid-key");
       const swUrl = `/firebase-messaging-sw.js?${new URLSearchParams(firebaseConfig).toString()}`;
-      const registration = await navigator.serviceWorker.register(swUrl);
+      // scope를 명시하지 않으면 파일 위치(루트 "/") 기준으로 등록되는데,
+      // 이게 PWA 본체 서비스워커(sw.js)와 정확히 같은 스코프라 브라우저가
+      // "새 서비스워커가 등록/업데이트됨"으로 오인해 useAppUpdate.js의
+      // 업데이트 배너를 엉뚱하게 띄운다("푸시 켜기 누르면 업데이트 알림이
+      // 뜬다"는 문제의 원인). Firebase 공식 가이드대로 별도 스코프를 줘서
+      // PWA 서비스워커와 완전히 분리한다.
+      const registration = await navigator.serviceWorker.register(swUrl, {
+        scope: "/firebase-cloud-messaging-push-scope",
+      });
       const { getMessaging, getToken } = await import("firebase/messaging");
       const messaging = getMessaging(app);
       const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
