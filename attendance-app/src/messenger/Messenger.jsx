@@ -128,6 +128,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
           const u = userSnap.exists() ? userSnap.data() : {};
           const defaultProfile = {
             uid: myUid, email: myEmail, company,
+            role: u.role || "employee",
             name: u.name || myEmail.split("@")[0] || "나",
             statusMsg: "", photo: "",
             position: u.position || "",
@@ -143,32 +144,29 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   }, [myUid]);
 
   useEffect(() => {
+    // 회사 전체 구성원(관리자+직원) 목록을 직접 담은 users 컬렉션은 근로자
+    // 개인정보(주민번호/계좌 등)를 포함하므로 규칙상 관리자만 list할 수
+    // 있다. 그래서 친구목록은 이름/직책/연락처 정도만 담은 chat_profiles를
+    // 대신 조회한다 — 이 문서는 로그인 시점에 useAuth에서 전 사용자에게
+    // 자동 생성되므로 메신저를 한 번도 안 연 사람도 목록에 뜬다.
     if (!company) return;
     const unsub = onSnapshot(
-      query(collection(db, "users"), where("companyId", "==", company)),
-      async (userSnap) => {
-        const userList = userSnap.docs
+      query(collection(db, PROFILES_COLL), where("company", "==", company)),
+      (snap) => {
+        const list = snap.docs
           .map((d) => ({ uid: d.id, ...d.data() }))
-          .filter((u) => u.uid !== myUid && !u.deleted);
-
-        const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", company)));
-        const profileMap = {};
-        profileSnap.docs.forEach((d) => { profileMap[d.id] = d.data(); });
-
-        const merged = userList.map((u) => {
-          const p = profileMap[u.uid] || {};
-          return {
-            uid: u.uid,
-            email: u.email || "",
-            name: p.name || u.name || u.email?.split("@")[0] || u.uid,
+          .filter((p) => p.uid !== myUid && !p.deleted)
+          .map((p) => ({
+            uid: p.uid,
+            email: p.email || "",
+            name: p.name || p.email?.split("@")[0] || p.uid,
             photo: p.photo || "",
             statusMsg: p.statusMsg || "",
-            position: p.position || u.position || "",
-            phone: p.phone || u.phone || "",
+            position: p.position || "",
+            phone: p.phone || "",
             company,
-          };
-        });
-        setFriends(merged);
+          }));
+        setFriends(list);
       }
     );
     return unsub;

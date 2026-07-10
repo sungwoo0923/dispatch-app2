@@ -16,6 +16,7 @@ import { usePagination } from "../hooks/usePagination";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
 import { formatDate, toDateKey } from "../utils/dateUtils";
+import { softDeleteEmployee, softDeleteEmployees } from "../utils/employeeUtils";
 import SmsButton from "../components/SmsButton";
 
 const STATUS_TONE = { 재직: "success", 휴직: "warning", 퇴사: "danger" };
@@ -175,7 +176,7 @@ export default function EmployeeStatus() {
 
   const deleteEmployee = async (emp) => {
     if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
-    await updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: toDateKey() });
+    await softDeleteEmployee(emp.id);
     toast.success("삭제되었습니다");
   };
 
@@ -183,7 +184,7 @@ export default function EmployeeStatus() {
     const targets = filtered.filter((e) => selected.has(e.id));
     if (targets.length === 0) return;
     if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
-    await Promise.all(targets.map((e) => updateDoc(doc(db, "users", e.id), { deleted: true, deletedAt: toDateKey() })));
+    await softDeleteEmployees(targets.map((e) => e.id));
     toast.success(`${targets.length}명 삭제되었습니다`);
     setSelected(new Set());
   };

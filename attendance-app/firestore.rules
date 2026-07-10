@@ -480,8 +480,9 @@ service cloud.firestore {
     // 쓸 수 있다.
     match /chat_profiles/{uid} {
       allow read: if isSignedIn() && (isSelf(uid) || resource.data.company == myCompanyId());
-      allow create: if isSelf(uid) && request.resource.data.company == myCompanyId();
-      allow update: if isSelf(uid);
+      allow create: if (isSelf(uid) && request.resource.data.company == myCompanyId())
+        || isAdminOf(request.resource.data.company);
+      allow update: if isSelf(uid) || isAdminOf(resource.data.company);
       allow delete: if false;
     }
 

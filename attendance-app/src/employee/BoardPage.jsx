@@ -124,8 +124,12 @@ function InquiryTab() {
   useEffect(() => {
     if (!profile?.companyId) return;
     const unsubs = [
-      onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "admin")), (snap) =>
-        setAdmins(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      // users 컬렉션은 관리자만 list할 수 있어(개인정보 보호) 직원 화면에서
+      // 관리자 목록을 조회하면 항상 빈 배열이 되던 버그 — 이름/직책 정도만
+      // 담은 chat_profiles(회사 구성원 전체가 서로 조회 가능)에서 대신
+      // role이 admin인 사람만 골라온다.
+      onSnapshot(query(collection(db, "chat_profiles"), where("company", "==", profile.companyId), where("role", "==", "admin")), (snap) =>
+        setAdmins(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => !a.deleted))
       ),
       onSnapshot(query(collection(db, "inquiries"), where("fromUid", "==", user.uid)), (snap) =>
         setInquiries(snap.docs.map((d) => ({ id: d.id, ...d.data() })))

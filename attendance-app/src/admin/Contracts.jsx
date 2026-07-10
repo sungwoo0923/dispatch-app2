@@ -29,6 +29,7 @@ import { downloadCsv } from "../utils/exportCsv";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { NATIONALITY_OPTIONS, SHIFT_TYPE_OPTIONS, EMPLOYMENT_TYPE_OPTIONS, TEAM_OPTIONS, POSITION_OPTIONS } from "../constants/hr";
 import { formatDate, calculateAge, toDateKey } from "../utils/dateUtils";
+import { softDeleteEmployees } from "../utils/employeeUtils";
 import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
 import SmsButton from "../components/SmsButton";
 import ResignationApprovals from "./ResignationApprovals";
@@ -294,7 +295,7 @@ export default function Contracts() {
     if (targets.length === 0) return;
     if (!(await confirm(`선택된 ${targets.length}명을 목록에서 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
     try {
-      await Promise.all(targets.map((r) => updateDoc(doc(db, "users", r.emp.id), { deleted: true, deletedAt: toDateKey() })));
+      await softDeleteEmployees(targets.map((r) => r.emp.id));
       toast.success(`${targets.length}명 삭제되었습니다`);
       setSelected(new Set());
     } catch (err) {

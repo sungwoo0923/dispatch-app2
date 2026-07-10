@@ -44,6 +44,7 @@ import {
 import { generateInviteCode } from "../utils/ids";
 import { formatPhoneNumber, formatResidentNumber } from "../utils/phoneAuth";
 import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
+import { softDeleteEmployee, softDeleteEmployees } from "../utils/employeeUtils";
 import {
   DOCUMENT_TYPE_OPTIONS,
   uploadPendingEmployeeDocument,
@@ -695,7 +696,7 @@ export default function EmployeeList() {
 
   const deleteEmployee = async (emp) => {
     if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
-    await updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: toDateKey() });
+    await softDeleteEmployee(emp.id);
     toast.success("삭제되었습니다");
   };
 
@@ -704,7 +705,7 @@ export default function EmployeeList() {
     if (targets.length === 0) return;
     if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
     try {
-      await Promise.all(targets.map((emp) => updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: toDateKey() })));
+      await softDeleteEmployees(targets.map((emp) => emp.id));
       toast.success(`${targets.length}명 삭제되었습니다`);
       setSelected(new Set());
     } catch (err) {

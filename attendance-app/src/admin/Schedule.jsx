@@ -42,6 +42,7 @@ import { useToast } from "../hooks/useToast";
 import { useConfirm } from "../hooks/useConfirm";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
+import { softDeleteEmployee } from "../utils/employeeUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { contractStatus } from "../utils/contractStatus";
 import {
@@ -649,7 +650,7 @@ export default function Schedule() {
 
   const deleteResignedRow = async (emp) => {
     if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
-    await updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: toDateKey() });
+    await softDeleteEmployee(emp.id);
     toast.success("삭제되었습니다");
   };
 
