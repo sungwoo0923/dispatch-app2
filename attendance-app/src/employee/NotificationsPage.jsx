@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { ArrowLeft, Bell, CheckCheck, Trash2 } from "lucide-react";
@@ -30,15 +30,36 @@ export default function NotificationsPage() {
   const [items, setItems] = useState([]);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
+  const autoClearedRef = useRef(false);
 
+  // uid + createdAt 정렬 조합은 복합 인덱스가 있어야 동작하는데
+  // firestore.indexes.json에 빠져있었다 — 인덱스 없이 쿼리하면
+  // failed-precondition 오류가 나서 onSnapshot 성공 콜백이 아예
+  // 호출되지 않고, 그 전까지 로컬 캐시에 남아있던 다른 화면(헤더 종
+  // 아이콘 등)의 데이터만 잠깐 보이다가 다시 열면 텅 비어 보이는
+  // 원인이었다. 인덱스를 추가했고, 혹시 배포 전이라 여전히 실패하면
+  // 조용히 사라지는 대신 에러 토스트로 알린다.
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(
       query(collection(db, "notifications"), where("uid", "==", user.uid), orderBy("createdAt", "desc"), limit(100)),
-      (snap) => setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      (snap) => setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => toast.error(`알림 목록을 불러오지 못했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`)
     );
     return () => unsub();
   }, [user]);
+
+  // 알림이 30개 이상 쌓이면 자동으로 전체삭제한다(30개 미만은 계속 남아있음).
+  useEffect(() => {
+    if (items.length >= 30 && !autoClearedRef.current) {
+      autoClearedRef.current = true;
+      const batch = writeBatch(db);
+      items.forEach((n) => batch.delete(doc(db, "notifications", n.id)));
+      batch.commit().catch(() => {});
+    } else if (items.length < 30) {
+      autoClearedRef.current = false;
+    }
+  }, [items]);
 
   const unreadCount = items.filter((n) => !n.read).length;
 
