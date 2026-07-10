@@ -11,6 +11,8 @@ import AdminMobileLayout from "./admin/AdminMobileLayout";
 import AdminMobileHome from "./admin/AdminMobileHome";
 import AdminMobileMore from "./admin/AdminMobileMore";
 import AdminMobileEmployeeList from "./admin/AdminMobileEmployeeList";
+import AdminMobileAttendance from "./admin/AdminMobileAttendance";
+import AdminMobileSchedule from "./admin/AdminMobileSchedule";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
 import SuperAdminCompanyPicker from "./admin/SuperAdminCompanyPicker";
 import Dashboard from "./admin/Dashboard";
@@ -144,8 +146,6 @@ export default function App() {
         <Route path="employees/contracts" element={<Contracts />} />
         <Route path="employees/documents" element={<Documents />} />
         <Route path="employees/inquiries" element={<Inquiries />} />
-        <Route path="schedule" element={<Schedule />} />
-        <Route path="attendance" element={<AttendanceBoard />} />
         <Route path="leaves" element={<LeaveApprovals />} />
         <Route path="leaves/settings" element={<LeaveSettings />} />
         <Route path="leaves/management" element={<LeaveManagement />} />
@@ -185,6 +185,8 @@ export default function App() {
             <Route index element={<AdminMobileHome />} />
             <Route path="more" element={<AdminMobileMore />} />
             <Route path="employees" element={<AdminMobileEmployeeList />} />
+            <Route path="schedule" element={<AdminMobileSchedule />} />
+            <Route path="attendance" element={<AdminMobileAttendance />} />
             {sharedAdminChildRoutes}
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -197,6 +199,8 @@ export default function App() {
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="employees" element={<EmployeeList />} />
+          <Route path="schedule" element={<Schedule />} />
+          <Route path="attendance" element={<AttendanceBoard />} />
           {sharedAdminChildRoutes}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
