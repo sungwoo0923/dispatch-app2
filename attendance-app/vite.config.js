@@ -34,6 +34,9 @@ export default defineConfig({
       manifest: false, // manifest.json is hand-authored in public/
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
+        // 기본 2MiB 한도를 넘는 메인 번들도 오프라인 캐시에 포함시킨다 —
+        // 기능이 늘면서 자연스럽게 커진 크기고, code-splitting은 별도 과제.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],

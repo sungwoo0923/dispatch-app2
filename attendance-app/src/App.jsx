@@ -10,6 +10,7 @@ import AdminLayout from "./admin/AdminLayout";
 import AdminMobileLayout from "./admin/AdminMobileLayout";
 import AdminMobileHome from "./admin/AdminMobileHome";
 import AdminMobileMore from "./admin/AdminMobileMore";
+import AdminMobileEmployeeList from "./admin/AdminMobileEmployeeList";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
 import SuperAdminCompanyPicker from "./admin/SuperAdminCompanyPicker";
 import Dashboard from "./admin/Dashboard";
@@ -138,7 +139,6 @@ export default function App() {
     const sharedAdminChildRoutes = (
       <>
         {isSuperAdmin && <Route path="platform/companies" element={<PlatformCompanies />} />}
-        <Route path="employees" element={<EmployeeList />} />
         <Route path="employees/status" element={<EmployeeStatus />} />
         <Route path="employees/history-access" element={<HistoryAccessRequests />} />
         <Route path="employees/contracts" element={<Contracts />} />
@@ -184,6 +184,7 @@ export default function App() {
           <Route path="/" element={<AdminMobileLayout />}>
             <Route index element={<AdminMobileHome />} />
             <Route path="more" element={<AdminMobileMore />} />
+            <Route path="employees" element={<AdminMobileEmployeeList />} />
             {sharedAdminChildRoutes}
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -195,6 +196,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="employees" element={<EmployeeList />} />
           {sharedAdminChildRoutes}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
