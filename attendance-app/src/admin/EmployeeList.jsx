@@ -940,6 +940,20 @@ export default function EmployeeList() {
     }
   };
 
+  // 근로자등록 창이 열려있는 동안 F4로 바로 등록/저장할 수 있게 한다
+  // (발급된 가입코드 확인 화면일 땐 등록할 폼이 없으므로 제외).
+  useEffect(() => {
+    if (!registerOpen || issuedCode) return;
+    const onKeyDown = (e) => {
+      if (e.key === "F4") {
+        e.preventDefault();
+        submitRegister(e);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [registerOpen, issuedCode, submitRegister]);
+
   const addStagedDoc = () => {
     if (!stagedFile) return;
     setStagedDocs((list) => [...list, { docType: stagedDocType, file: stagedFile, fileName: stagedFile.name }]);
