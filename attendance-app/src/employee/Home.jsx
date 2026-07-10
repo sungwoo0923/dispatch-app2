@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../hooks/useLanguage";
 import { useGeofenceCheckIn } from "../hooks/useGeofenceCheckIn";
 import Card from "../components/Card";
 import Button from "../components/Button";
@@ -74,6 +75,7 @@ const DOC_META = {
 
 export default function Home() {
   const { profile, user } = useAuth();
+  const { t } = useLanguage();
   const toast = useToast();
   const [workSite, setWorkSite] = useState(null);
   const [vendor, setVendor] = useState(null);
@@ -458,13 +460,13 @@ export default function Home() {
           {checkedIn ? (
             <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold">
               <CheckCircle2 size={13} />
-              출근완료 · {formatTime(todayAttendance.checkInTime)}
-              {checkedOut && ` · 퇴근 ${formatTime(todayAttendance.checkOutTime)}`}
+              {t("home.checkedInAt", { time: formatTime(todayAttendance.checkInTime) })}
+              {checkedOut && t("home.checkedOutSuffix", { time: formatTime(todayAttendance.checkOutTime) })}
             </div>
           ) : canCheckIn ? (
-            <p className="text-xs text-white/80">근무지 반경 {manualCheckInRadiusM}m 이내에서 출근 버튼을 눌러주세요</p>
+            <p className="text-xs text-white/80">{t("home.checkInHint", { radius: manualCheckInRadiusM })}</p>
           ) : (
-            <p className="text-xs text-white/70">관리자가 오늘 출근확정 처리한 스케줄이 없습니다</p>
+            <p className="text-xs text-white/70">{t("home.noConfirmedSchedule")}</p>
           )}
         </div>
 
@@ -481,7 +483,7 @@ export default function Home() {
               <span className="absolute inset-0 animate-ping rounded-2xl bg-white/40" style={{ animationDuration: "2.2s" }} />
             )}
             <span className="relative flex items-center gap-1.5 text-base">
-              <LogIn size={18} /> 출근
+              <LogIn size={18} /> {t("home.checkIn")}
             </span>
             <span className="relative text-[11px] font-medium tracking-wide opacity-70">IN</span>
           </button>
@@ -492,7 +494,7 @@ export default function Home() {
             className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-white/10 py-5 font-semibold text-white transition-colors hover:bg-white/20 disabled:text-white/40"
           >
             <span className="flex items-center gap-1.5 text-base">
-              <LogOut size={18} /> 퇴근
+              <LogOut size={18} /> {t("home.checkOut")}
             </span>
             <span className="text-[11px] font-medium tracking-wide opacity-70">OUT</span>
           </button>
@@ -596,10 +598,10 @@ export default function Home() {
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-light text-primary">
             <MapPin size={15} />
           </div>
-          근무지 정보
+          {t("home.workSiteInfo")}
         </div>
         {loadingSite ? (
-          <p className="text-xs text-muted">불러오는 중...</p>
+          <p className="text-xs text-muted">{t("home.loadingLocation")}</p>
         ) : workSite ? (
           <div className="space-y-2">
             <p className="text-base font-bold text-ink">{workSite.name}</p>
@@ -611,10 +613,10 @@ export default function Home() {
               <div>
                 <div className="flex items-center justify-between gap-2 text-xs text-muted">
                   <span className="min-w-0 flex-1 truncate">
-                    <Navigation size={13} className="mr-1 inline-block" /> 현재 위치까지 약 {Math.round(distance)}m
-                    {accuracy != null && <span className="text-muted/70"> (오차범위 ±{Math.round(accuracy)}m)</span>}
+                    <Navigation size={13} className="mr-1 inline-block" /> {t("home.distanceLabel", { distance: Math.round(distance) })}
+                    {accuracy != null && <span className="text-muted/70"> (±{Math.round(accuracy)}m)</span>}
                   </span>
-                  <span className={`shrink-0 font-semibold ${inRadius ? "text-primary" : "text-muted"}`}>{inRadius ? "반경 안" : "반경 밖"}</span>
+                  <span className={`shrink-0 font-semibold ${inRadius ? "text-primary" : "text-muted"}`}>{inRadius ? t("home.inRadius") : t("home.outOfRadius")}</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div

@@ -5,6 +5,7 @@ import App from "./App.jsx";
 import { AuthProvider } from "./hooks/useAuth.jsx";
 import { ConfirmProvider } from "./hooks/useConfirm.jsx";
 import { ToastProvider } from "./hooks/useToast.jsx";
+import { LanguageProvider } from "./hooks/useLanguage.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import "./index.css";
 
@@ -12,12 +13,14 @@ createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <ToastProvider>
-          <ConfirmProvider>
-            <UpdateBanner />
-            <App />
-          </ConfirmProvider>
-        </ToastProvider>
+        <LanguageProvider>
+          <ToastProvider>
+            <ConfirmProvider>
+              <UpdateBanner />
+              <App />
+            </ConfirmProvider>
+          </ToastProvider>
+        </LanguageProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>

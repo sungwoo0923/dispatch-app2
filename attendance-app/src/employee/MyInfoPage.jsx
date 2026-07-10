@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, updateDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { FolderOpen, ShieldCheck, ChevronRight, LogOut, UserRound, Search, Lock, Send } from "lucide-react";
+import { FolderOpen, ShieldCheck, ChevronRight, LogOut, UserRound, Search, Lock, Send, Globe } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
+import { useLanguage } from "../hooks/useLanguage";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -43,6 +44,7 @@ const FIELD_LABELS = {
 export default function MyInfoPage() {
   const { user, profile, logout } = useAuth();
   const toast = useToast();
+  const { lang, setLang, languages, t } = useLanguage();
   const [basic, setBasic] = useState(EMPTY_BASIC);
   const [saving, setSaving] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
@@ -139,6 +141,26 @@ export default function MyInfoPage() {
           </div>
         </div>
       </div>
+
+      <Card className="p-4">
+        <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Globe size={15} className="text-primary" /> {t("myInfo.language")}
+        </div>
+        <div className="flex overflow-hidden rounded-xl border border-slate-200">
+          {languages.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              onClick={() => setLang(l.code)}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                lang === l.code ? "bg-primary text-white" : "bg-white text-muted hover:bg-slate-50"
+              }`}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <Card className="p-5">
         <div className="mb-1 flex items-center justify-between">

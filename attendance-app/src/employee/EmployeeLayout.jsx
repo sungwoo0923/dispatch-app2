@@ -2,15 +2,16 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../hooks/useLanguage";
 import HeaderIcons from "./HeaderIcons";
 import Messenger from "../messenger/Messenger";
 
-const TABS = [
-  { to: "/work-info", label: "근무정보", icon: ClipboardList },
-  { to: "/history", label: "출근현황", icon: CalendarCheck },
-  { to: "/", label: "체크", icon: CheckCircle2, end: true, center: true },
-  { to: "/board", label: "공지사항", icon: MessageSquare },
-  { to: "/my-info", label: "내정보", icon: User },
+const TAB_DEFS = [
+  { to: "/work-info", labelKey: "nav.workInfo", icon: ClipboardList },
+  { to: "/history", labelKey: "nav.history", icon: CalendarCheck },
+  { to: "/", labelKey: "nav.check", icon: CheckCircle2, end: true, center: true },
+  { to: "/board", labelKey: "nav.board", icon: MessageSquare },
+  { to: "/my-info", labelKey: "nav.myInfo", icon: User },
 ];
 
 // Routes reachable only through a hub tab still count as that tab active for
@@ -21,8 +22,10 @@ const MYINFO_ROUTES = ["/my-info", "/documents", "/safety"];
 export default function EmployeeLayout() {
   const { profile } = useAuth();
   const location = useLocation();
+  const { t } = useLanguage();
   const [showMessenger, setShowMessenger] = useState(false);
   const [messengerUnread, setMessengerUnread] = useState(0);
+  const TABS = TAB_DEFS.map((tab) => ({ ...tab, label: t(tab.labelKey) }));
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -33,8 +36,8 @@ export default function EmployeeLayout() {
         <img src="/logo.png" alt="KP-Work" className="h-11 w-auto" />
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-[10px] leading-tight text-muted">안녕하세요</p>
-            <p className="text-xs font-semibold leading-tight text-ink">{profile?.name}님</p>
+            <p className="text-[10px] leading-tight text-muted">{t("layout.greeting")}</p>
+            <p className="text-xs font-semibold leading-tight text-ink">{t("layout.nameSuffix", { name: profile?.name })}</p>
           </div>
           <HeaderIcons onMessengerClick={() => setShowMessenger(true)} messengerUnread={messengerUnread} />
         </div>
