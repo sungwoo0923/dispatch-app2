@@ -526,9 +526,22 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     await updateDoc(doc(db, MSGS_COLL, editMsg.id), { text: editText.trim(), edited: true });
     setEditMsg(null); setEditText("");
   };
-  const deleteMessage = async (msgId) => {
-    if (!(await confirm("메시지를 삭제하시겠습니까?", "delete"))) return;
-    await updateDoc(doc(db, MSGS_COLL, msgId), { text: "(삭제된 메시지)", type: "deleted" });
+  const DELETE_FOR_EVERYONE_LIMIT_MS = 24 * 60 * 60 * 1000;
+
+  const deleteMessage = async (msg) => {
+    const ageMs = Date.now() - (msg.createdAt?.toMillis?.() ?? Date.now());
+    if (ageMs > DELETE_FOR_EVERYONE_LIMIT_MS) {
+      toast.error("보낸 지 24시간이 지난 메시지는 전체삭제할 수 없습니다. 나에게만 삭제를 이용해주세요.");
+      return;
+    }
+    if (!(await confirm("메시지를 삭제하시겠습니까?\n상대방에게도 삭제된 것으로 표시됩니다.", "delete"))) return;
+    await updateDoc(doc(db, MSGS_COLL, msg.id), { text: "(삭제된 메시지)", type: "deleted" });
+  };
+
+  const deleteMessageForMe = async (msgId) => {
+    if (!myUid) return;
+    if (!(await confirm("이 메시지를 나에게서만 삭제하시겠습니까?\n상대방 화면에는 그대로 남습니다.", "delete"))) return;
+    await updateDoc(doc(db, MSGS_COLL, msgId), { hiddenFor: arrayUnion(myUid) }).catch(() => {});
   };
 
   const saveProfile = async () => {
@@ -568,7 +581,8 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     return "";
   };
 
-  const filteredMsgs = msgSearch ? messages.filter((m) => m.text?.includes(msgSearch)) : messages;
+  const visibleMsgs = messages.filter((m) => !(m.hiddenFor || []).includes(myUid));
+  const filteredMsgs = msgSearch ? visibleMsgs.filter((m) => m.text?.includes(msgSearch)) : visibleMsgs;
 
   const PANEL_W = mobileMode ? 360 : 700;
   const PANEL_H = 580;
@@ -606,7 +620,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     messages: filteredMsgs, myUid, myProfile, input, setInput, onSend: sendMessage,
     onBack: () => { setActiveRoom(null); setPendingRoom(null); if (mobileMode) setView("friends"); },
     onClose: mobileMode ? onClose : () => { setActiveRoom(null); setPendingRoom(null); },
-    editMsg, setEditMsg, editText, setEditText, onSaveEdit: saveEdit, onDeleteMsg: deleteMessage,
+    editMsg, setEditMsg, editText, setEditText, onSaveEdit: saveEdit, onDeleteMsg: deleteMessage, onDeleteForMe: deleteMessageForMe,
     msgSearch, setMsgSearch, msgContainerRef, inputRef,
     onSendImage: sendImage, onSendFile: sendFile, onSendLocation: sendLocation,
     onSendContact: () => setContactPickModal(true), onSendNotice: () => setShowNoticeInput(true),
@@ -964,7 +978,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
   );
 }
 
-function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, mobileMode, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, onDeleteForMe, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, mobileMode, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf }) {
   const [showSearch, setShowSearch] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
@@ -1180,8 +1194,9 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
               { label: "복사", action: () => { navigator.clipboard?.writeText(msg.text || ""); setCtxMenu(null); } },
               ...(isMine ? [
                 { label: "수정", action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } },
-                { label: "삭제", action: () => { onDeleteMsg(msg.id); setCtxMenu(null); }, danger: true },
+                { label: "전체삭제", action: () => { onDeleteMsg(msg); setCtxMenu(null); }, danger: true },
               ] : []),
+              { label: "나에게만 삭제", action: () => { onDeleteForMe?.(msg.id); setCtxMenu(null); }, danger: true },
             ].map(({ label, action, danger }) => (
               <button key={label} onClick={action} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 16px", background: "none", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", color: danger ? "#dc2626" : "#1e293b", borderBottom: "1px solid #f8fafc" }}>{label}</button>
             ))}
