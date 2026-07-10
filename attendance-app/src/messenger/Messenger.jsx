@@ -631,7 +631,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     },
     onSave: saveProfile, onCancel: () => setEditingProfile(false), onBack: () => setView("friends"),
     onClose: mobileMode ? onClose : () => setOpen(false),
-    onPhotoUpload: uploadProfilePhoto, photoUploading, photoFileRef,
+    onPhotoUpload: uploadProfilePhoto, photoUploading, photoFileRef, mobileMode,
   };
 
   const pcSplitContent = (
@@ -846,7 +846,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ background: HDR_GRADIENT, padding: "14px 16px 0", flexShrink: 0 }}>
+      <div style={{ background: HDR_GRADIENT, padding: mobileMode ? "calc(env(safe-area-inset-top) + 14px) 16px 0" : "14px 16px 0", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>메신저</span>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -994,7 +994,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
-      <div style={{ background: HDR_GRADIENT, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+      <div style={{ background: HDR_GRADIENT, padding: mobileMode ? "calc(env(safe-area-inset-top) + 12px) 14px 12px" : "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
         </button>
@@ -1257,10 +1257,10 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
   );
 }
 
-function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editPosition, editPhone, setEditName, setEditStatusMsg, setEditPosition, setEditPhone, onEdit, onSave, onCancel, onBack, onClose, onPhotoUpload, photoUploading, photoFileRef }) {
+function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editPosition, editPhone, setEditName, setEditStatusMsg, setEditPosition, setEditPhone, onEdit, onSave, onCancel, onBack, onClose, onPhotoUpload, photoUploading, photoFileRef, mobileMode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ background: HDR_GRADIENT, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ background: HDR_GRADIENT, padding: mobileMode ? "calc(env(safe-area-inset-top) + 12px) 14px 12px" : "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
         </button>

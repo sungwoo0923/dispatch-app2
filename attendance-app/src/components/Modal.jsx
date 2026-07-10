@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 const SIZES = {
@@ -7,6 +7,13 @@ const SIZES = {
 };
 
 export default function Modal({ open, onClose, title, children, footer, size = "md" }) {
+  // 팝업이 뜨면 포커스가 뒤쪽 페이지에 남아있지 않고 팝업 자체로 옮겨가야
+  // ESC/스크린리더 등이 팝업 기준으로 동작한다.
+  const panelRef = useRef(null);
+  useEffect(() => {
+    if (open) panelRef.current?.focus();
+  }, [open]);
+
   // iOS Safari는 키보드가 올라와도 레이아웃 뷰포트(100vh/100dvh 계산 기준)를
   // 줄이지 않고 키보드를 그 위에 그냥 덮어씌운다 — 그래서 dvh로 크기를 잡은
   // 모달이 키보드 뒤로 가려져 입력칸이 안 보였다(안드로이드는 반대로 뷰포트
@@ -83,7 +90,9 @@ export default function Modal({ open, onClose, title, children, footer, size = "
       style={{ top: viewport.top, height: viewport.height ? `${viewport.height}px` : "100dvh" }}
     >
       <div
-        className={`flex w-full ${SIZES[size]} max-h-[85%] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}
+        ref={panelRef}
+        tabIndex={-1}
+        className={`flex w-full ${SIZES[size]} max-h-[85%] flex-col rounded-t-2xl bg-white shadow-xl outline-none sm:rounded-2xl`}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-ink">{title}</h3>

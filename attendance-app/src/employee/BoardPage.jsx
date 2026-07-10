@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { ChevronDown, MessageSquarePlus } from "lucide-react";
+import { ChevronRight, MessageSquarePlus, Pin } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -37,7 +37,7 @@ export default function BoardPage() {
 function NoticeTab() {
   const { profile } = useAuth();
   const [posts, setPosts] = useState([]);
-  const [openId, setOpenId] = useState(null);
+  const [viewing, setViewing] = useState(null);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -69,39 +69,41 @@ function NoticeTab() {
         </Card>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          {sorted.map((p, idx) => {
-            const isOpen = openId === p.id;
-            return (
-              <div key={p.id} className={idx > 0 ? "border-t border-slate-100" : ""}>
-                <button
-                  className="flex w-full items-center gap-2 px-4 py-3.5 text-left active:bg-slate-50"
-                  onClick={() => setOpenId(isOpen ? null : p.id)}
-                >
-                  {p.pinned && (
-                    <span className="shrink-0 rounded bg-primary-dark px-1.5 py-0.5 text-[10px] font-bold text-white">
-                      중요
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{p.title}</span>
-                  <span className="shrink-0 text-xs text-muted">
-                    {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
-                  </span>
-                  <ChevronDown size={15} className={`shrink-0 text-muted transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                </button>
-                {isOpen && (
-                  <div className="border-t border-slate-100 bg-slate-50 px-4 pb-4 pt-3.5">
-                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{p.content}</p>
-                    <p className="mt-3 text-xs text-muted">
-                      {p.authorName} ·{" "}
-                      {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
-                    </p>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {sorted.map((p, idx) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setViewing(p)}
+              className={`flex w-full items-center gap-2 px-4 py-3.5 text-left active:bg-slate-50 ${idx > 0 ? "border-t border-slate-100" : ""}`}
+            >
+              {p.pinned && (
+                <span className="shrink-0 rounded bg-primary-dark px-1.5 py-0.5 text-[10px] font-bold text-white">중요</span>
+              )}
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{p.title}</span>
+              <span className="shrink-0 text-xs text-muted">
+                {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
+              </span>
+              <ChevronRight size={15} className="shrink-0 text-muted" />
+            </button>
+          ))}
         </div>
       )}
+
+      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title="공지사항 상세" footer={<Button className="w-full" onClick={() => setViewing(null)}>닫기</Button>}>
+        {viewing && (
+          <div className="space-y-3 text-sm">
+            <p className="flex items-center gap-1.5 font-semibold text-ink">
+              {viewing.pinned && <Badge tone="primary">고정</Badge>}
+              {viewing.title}
+            </p>
+            <p className="text-xs text-muted">
+              {viewing.authorName} ·{" "}
+              {viewing.createdAt?.toDate ? formatDate(viewing.createdAt.toDate().toISOString().slice(0, 10)) : ""}
+            </p>
+            <p className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-ink">{viewing.content}</p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -113,7 +115,7 @@ function InquiryTab() {
   const toast = useToast();
   const [admins, setAdmins] = useState([]);
   const [inquiries, setInquiries] = useState([]);
-  const [openId, setOpenId] = useState(null);
+  const [viewing, setViewing] = useState(null);
   const [open, setOpen] = useState(false);
   const [adminSearch, setAdminSearch] = useState("");
   const [form, setForm] = useState({ toUid: "", subject: "", message: "" });
@@ -175,37 +177,49 @@ function InquiryTab() {
         <MessageSquarePlus size={16} /> 새 문의 작성
       </Button>
       {sorted.length === 0 && <p className="text-xs text-muted">작성한 문의가 없습니다.</p>}
-      {sorted.map((q) => {
-        const isOpen = openId === q.id;
-        return (
-          <Card key={q.id} className="p-0">
+      {sorted.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {sorted.map((q, idx) => (
             <button
-              className="flex w-full items-center justify-between px-4 py-3.5 text-left"
-              onClick={() => setOpenId(isOpen ? null : q.id)}
+              key={q.id}
+              type="button"
+              onClick={() => setViewing(q)}
+              className={`flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left active:bg-slate-50 ${idx > 0 ? "border-t border-slate-100" : ""}`}
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink">{q.subject}</p>
-                <p className="mt-0.5 text-xs text-muted">
+                <p className="mt-0.5 truncate text-xs text-muted">
                   {q.toName}{q.toPosition ? ` (${q.toPosition})` : ""}
                   {q.createdAt?.toDate ? ` · ${formatDate(q.createdAt.toDate().toISOString().slice(0, 10))}` : ""}
                 </p>
               </div>
               <Badge tone={STATUS_TONE[q.status] || "muted"}>{q.status}</Badge>
             </button>
-            {isOpen && (
-              <div className="space-y-2 border-t border-slate-100 px-4 py-3.5">
-                <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{q.message}</p>
-                {q.reply && (
-                  <div className="rounded-xl bg-primary-light/40 p-3">
-                    <p className="mb-1 text-xs font-semibold text-primary">답변</p>
-                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{q.reply}</p>
-                  </div>
-                )}
+          ))}
+        </div>
+      )}
+
+      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title="문의 상세" footer={<Button className="w-full" onClick={() => setViewing(null)}>닫기</Button>}>
+        {viewing && (
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 flex-1 truncate font-semibold text-ink">{viewing.subject}</p>
+              <Badge tone={STATUS_TONE[viewing.status] || "muted"}>{viewing.status}</Badge>
+            </div>
+            <p className="text-xs text-muted">
+              {viewing.toName}{viewing.toPosition ? ` (${viewing.toPosition})` : ""}
+              {viewing.createdAt?.toDate ? ` · ${formatDate(viewing.createdAt.toDate().toISOString().slice(0, 10))}` : ""}
+            </p>
+            <p className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-ink">{viewing.message}</p>
+            {viewing.reply && (
+              <div className="rounded-xl bg-primary-light/40 p-3">
+                <p className="mb-1 text-xs font-semibold text-primary">답변</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{viewing.reply}</p>
               </div>
             )}
-          </Card>
-        );
-      })}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={open}
