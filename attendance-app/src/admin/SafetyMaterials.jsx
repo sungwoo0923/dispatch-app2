@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
-import { ShieldCheck, Plus, Trash2, FileText, Video, Upload } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, FileText, Video, Upload, BellRing } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -11,7 +11,7 @@ import Panel from "../components/Panel";
 import SidePanel from "../components/SidePanel";
 import { uploadSafetyMaterialFile } from "../utils/safety";
 import { SAFETY_TOPIC_TEMPLATES } from "../utils/safetyTemplates";
-import { formatDate } from "../utils/dateUtils";
+import { formatDate, calculateAge } from "../utils/dateUtils";
 
 const EMPTY_FORM = { title: "", type: "text", content: "", topicKey: "" };
 
@@ -34,6 +34,7 @@ export default function SafetyMaterials() {
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [statusView, setStatusView] = useState(null); // material
+  const [statusFilter, setStatusFilter] = useState("all"); // all | done | undone
 
   const [homeVideoUrl, setHomeVideoUrl] = useState("");
   const [homeVideoUploading, setHomeVideoUploading] = useState(false);
@@ -156,6 +157,59 @@ export default function SafetyMaterials() {
     toast.success("삭제되었습니다");
   };
 
+  const incompleteEmployeesFor = (m) => employees.filter((e) => !completions.some((c) => c.materialId === m.id && c.uid === e.id));
+
+  // 특정 안전교육자료의 미이수자에게만 이수 안내 알림을 보낸다. 새 자료
+  // 등록 시 전체 발송하던 것과 동일한 브로드캐스트 방식(직원 수만큼
+  // notifications 문서 생성)을, 대상만 "아직 이수 안 한 사람"으로 좁혀 재사용한다.
+  const sendReminderToIncomplete = async (m) => {
+    const targets = incompleteEmployeesFor(m);
+    if (targets.length === 0) {
+      toast.error("미이수자가 없습니다.");
+      return;
+    }
+    if (!(await confirm(`미이수자 ${targets.length}명에게 "${m.title}" 이수 알림을 보내시겠습니까?`, "edit"))) return;
+    const batch = writeBatch(db);
+    targets.forEach((emp) => {
+      const ref = doc(collection(db, "notifications"));
+      batch.set(ref, {
+        companyId: profile.companyId,
+        uid: emp.id,
+        title: "안전교육자료 이수 안내",
+        message: `아직 이수하지 않은 안전교육자료가 있습니다: ${m.title}`,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+    toast.success(`${targets.length}명에게 알림을 보냈습니다`);
+  };
+
+  // 자료 하나만이 아니라 회사 전체 안전교육자료 중 하나라도 미이수인
+  // 근로자에게 한 번에 알림을 보내는 메뉴 상단 버튼용 함수.
+  const sendReminderToAllIncomplete = async () => {
+    const targets = employees.filter((e) => sorted.some((m) => !completions.some((c) => c.materialId === m.id && c.uid === e.id)));
+    if (targets.length === 0) {
+      toast.error("미이수자가 없습니다.");
+      return;
+    }
+    if (!(await confirm(`미이수 항목이 있는 근로자 ${targets.length}명에게 이수 안내 알림을 보내시겠습니까?`, "edit"))) return;
+    const batch = writeBatch(db);
+    targets.forEach((emp) => {
+      const ref = doc(collection(db, "notifications"));
+      batch.set(ref, {
+        companyId: profile.companyId,
+        uid: emp.id,
+        title: "안전교육자료 이수 안내",
+        message: "아직 이수하지 않은 안전교육자료가 있습니다. 확인 후 이수해주세요.",
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+    toast.success(`${targets.length}명에게 알림을 보냈습니다`);
+  };
+
   return (
     <div className="space-y-6">
       <Panel icon={Video} title="홈 화면 안전영상">
@@ -195,9 +249,14 @@ export default function SafetyMaterials() {
         </p>
         <div className="mb-2 flex flex-nowrap items-center justify-between gap-2">
           <p className="text-xs font-medium text-muted">목록 {sorted.length}</p>
-          <Button size="sm" onClick={openNew}>
-            <Plus size={13} /> 신규 등록
-          </Button>
+          <div className="flex flex-nowrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={sendReminderToAllIncomplete}>
+              <BellRing size={13} /> 미이수자 전체 알림
+            </Button>
+            <Button size="sm" onClick={openNew}>
+              <Plus size={13} /> 신규 등록
+            </Button>
+          </div>
         </div>
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[640px] text-center text-sm">
@@ -224,7 +283,14 @@ export default function SafetyMaterials() {
                   </td>
                   <td className="px-3 py-3 text-ink">{m.createdAt?.toDate ? formatDate(m.createdAt.toDate().toISOString().slice(0, 10)) : "-"}</td>
                   <td className="px-3 py-3">
-                    <button type="button" className="text-primary hover:underline" onClick={() => setStatusView(m)}>
+                    <button
+                      type="button"
+                      className="text-primary hover:underline"
+                      onClick={() => {
+                        setStatusFilter("all");
+                        setStatusView(m);
+                      }}
+                    >
                       {completedCountFor(m.id)} / {employees.length}명
                     </button>
                   </td>
@@ -331,52 +397,76 @@ export default function SafetyMaterials() {
         footer={<Button onClick={() => setStatusView(null)}>닫기</Button>}
       >
         {statusView && (
-          <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
-            <table className="w-full text-center text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-muted">
-                  <th className="px-3 py-2 font-semibold">이름</th>
-                  <th className="px-3 py-2 font-semibold">이수여부</th>
-                  <th className="px-3 py-2 font-semibold">이수일</th>
-                  {statusView.type === "video" && (
-                    <>
-                      <th className="px-3 py-2 font-semibold">시청 시작~종료</th>
-                      <th className="px-3 py-2 font-semibold">시청 구간</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {employees.map((e) => {
-                  const c = completions.find((x) => x.materialId === statusView.id && x.uid === e.id);
-                  return (
-                    <tr key={e.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-2 text-ink">{e.name}</td>
-                      <td className="px-3 py-2">
-                        <Badge tone={c ? "success" : "warning"}>{c ? "이수완료" : "미이수"}</Badge>
-                      </td>
-                      <td className="px-3 py-2 text-ink">
-                        {c?.completedAt?.toDate ? formatDate(c.completedAt.toDate().toISOString().slice(0, 10)) : "-"}
-                      </td>
-                      {statusView.type === "video" && (
-                        <>
-                          <td className="px-3 py-2 text-ink">
-                            {c?.watchStartedAt?.toDate && c?.watchEndedAt?.toDate
-                              ? `${c.watchStartedAt.toDate().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} ~ ${c.watchEndedAt.toDate().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`
-                              : "-"}
-                          </td>
-                          <td className="px-3 py-2 text-ink">
-                            {c?.watchedMaxSec != null && c?.videoDurationSec != null
-                              ? `${formatSec(c.watchedMaxSec)} / ${formatSec(c.videoDurationSec)}`
-                              : "-"}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            <div className="flex flex-nowrap items-center justify-between gap-2">
+              <select
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">전체보기</option>
+                <option value="done">이수자만</option>
+                <option value="undone">미이수자만</option>
+              </select>
+              <Button size="sm" variant="outline" onClick={() => sendReminderToIncomplete(statusView)}>
+                <BellRing size={13} /> 미이수자에게 알림
+              </Button>
+            </div>
+            <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
+              <table className="w-full min-w-[760px] text-center text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs text-muted">
+                    <th className="px-3 py-2 font-semibold">이름</th>
+                    <th className="px-3 py-2 font-semibold">나이</th>
+                    <th className="px-3 py-2 font-semibold">국적</th>
+                    <th className="px-3 py-2 font-semibold">부서/직급</th>
+                    <th className="px-3 py-2 font-semibold">연락처</th>
+                    <th className="px-3 py-2 font-semibold">이수여부</th>
+                    <th className="px-3 py-2 font-semibold">이수일</th>
+                    {statusView.type === "video" && (
+                      <>
+                        <th className="px-3 py-2 font-semibold">시청 시작~종료</th>
+                        <th className="px-3 py-2 font-semibold">시청 구간</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees
+                    .map((e) => ({ e, c: completions.find((x) => x.materialId === statusView.id && x.uid === e.id) }))
+                    .filter(({ c }) => (statusFilter === "done" ? c : statusFilter === "undone" ? !c : true))
+                    .map(({ e, c }) => (
+                      <tr key={e.id} className="border-b border-slate-50 last:border-0">
+                        <td className="px-3 py-2 text-ink">{e.name}</td>
+                        <td className="px-3 py-2 text-ink">{calculateAge(e.residentNumberFront) ?? "-"}</td>
+                        <td className="px-3 py-2 text-ink">{e.country || e.nationality || "-"}</td>
+                        <td className="px-3 py-2 text-ink">{[e.team, e.position].filter(Boolean).join(" / ") || "-"}</td>
+                        <td className="px-3 py-2 text-ink">{e.phone || "-"}</td>
+                        <td className="px-3 py-2">
+                          <Badge tone={c ? "success" : "warning"}>{c ? "이수완료" : "미이수"}</Badge>
+                        </td>
+                        <td className="px-3 py-2 text-ink">
+                          {c?.completedAt?.toDate ? formatDate(c.completedAt.toDate().toISOString().slice(0, 10)) : "-"}
+                        </td>
+                        {statusView.type === "video" && (
+                          <>
+                            <td className="px-3 py-2 text-ink">
+                              {c?.watchStartedAt?.toDate && c?.watchEndedAt?.toDate
+                                ? `${c.watchStartedAt.toDate().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} ~ ${c.watchEndedAt.toDate().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`
+                                : "-"}
+                            </td>
+                            <td className="px-3 py-2 text-ink">
+                              {c?.watchedMaxSec != null && c?.videoDurationSec != null
+                                ? `${formatSec(c.watchedMaxSec)} / ${formatSec(c.videoDurationSec)}`
+                                : "-"}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </SidePanel>
