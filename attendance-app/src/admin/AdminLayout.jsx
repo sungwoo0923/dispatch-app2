@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, getDocs, doc, writeBatch, serverTimestamp } from "firebase/firestore";
 import { Menu, X, LogOut, ChevronDown, DoorOpen, FileWarning } from "lucide-react";
 import { db } from "../firebase";
@@ -15,7 +15,7 @@ import { toDateKey } from "../utils/dateUtils";
 // 구조라, 관리자가 화면을 켜두는 동안 주기적으로 확인하는 방식으로 둔다.
 const NO_SHOW_GRACE_MINUTES = 30;
 const NO_SHOW_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-import { NAV, SUPER_ADMIN_NAV_ITEM } from "./navConfig";
+import { NAV, SUPER_ADMIN_NAV_ITEM, filterNavByPermission, isMenuAllowed } from "./navConfig";
 
 const itemClass = ({ isActive }) =>
   `flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -97,13 +97,13 @@ function NavItems({ items, onClick, badgeCounts }) {
 }
 
 export default function AdminLayout() {
-  const { user, profile, company, logout, isSuperAdmin } = useAuth();
+  const { user, profile, company, logout, isSuperAdmin, allowedMenuPaths } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [earlyLeaveCount, setEarlyLeaveCount] = useState(0);
   const [resignationCount, setResignationCount] = useState(0);
-  const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
+  const navItems = filterNavByPermission(isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV, allowedMenuPaths);
   const { badgeCounts, markSeen } = useNavBadges(profile?.companyId, user?.uid);
 
   // 사이드바에서 배지가 붙은 메뉴로 이동하면(더블클릭 없이 클릭 한 번으로도)
@@ -289,7 +289,7 @@ export default function AdminLayout() {
         </header>
         <Breadcrumb />
         <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-4 md:px-8 md:pb-8">
-          <Outlet />
+          {isMenuAllowed(location.pathname, allowedMenuPaths) ? <Outlet /> : <Navigate to="/" replace />}
         </main>
       </div>
 

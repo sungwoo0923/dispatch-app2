@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, onSnapshot, updateDoc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, doc, onSnapshot, updateDoc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { SUPER_ADMIN_EMAIL } from "../constants/superAdmin";
 import { SUPER_ADMIN_ACTIVE_COMPANY_KEY } from "../constants/session";
@@ -122,6 +122,26 @@ export function AuthProvider({ children }) {
     return () => unsubCompany();
   }, [effectiveProfile?.companyId]);
 
+  // 그룹(권한)이 지정된 관리자는 그 그룹에 허용된 메뉴 경로만 볼 수 있다 —
+  // null이면 "제한 없음"(그룹 미지정 관리자, 최고관리자는 항상 이 경우).
+  // navConfig.js의 isMenuAllowed/filterNavByPermission이 이 값을 그대로 소비한다.
+  const [allowedMenuPaths, setAllowedMenuPaths] = useState(null);
+  useEffect(() => {
+    if (!effectiveProfile?.companyId || effectiveProfile.role !== "admin" || isSuperAdmin || !effectiveProfile.groupId) {
+      setAllowedMenuPaths(null);
+      return;
+    }
+    const unsub = onSnapshot(
+      query(
+        collection(db, "permissionGroupMenus"),
+        where("companyId", "==", effectiveProfile.companyId),
+        where("groupId", "==", effectiveProfile.groupId)
+      ),
+      (snap) => setAllowedMenuPaths(new Set(snap.docs.map((d) => d.data().menuId)))
+    );
+    return () => unsub();
+  }, [effectiveProfile?.companyId, effectiveProfile?.role, effectiveProfile?.groupId, isSuperAdmin]);
+
   const value = {
     user,
     profile: effectiveProfile,
@@ -129,6 +149,7 @@ export function AuthProvider({ children }) {
     company,
     companyLoading,
     isSuperAdmin,
+    allowedMenuPaths,
     activeCompanyId,
     setActiveCompanyId,
     logout: () => {

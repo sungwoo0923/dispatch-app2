@@ -128,6 +128,31 @@ export const NAV = [
 // AdminLayout/Breadcrumb에서 isSuperAdmin일 때만 붙이도록 한다.
 export const SUPER_ADMIN_NAV_ITEM = { to: "/platform/companies", label: "가입자관리", icon: KeyRound };
 
+// 그룹(권한)이 지정된 관리자라도 항상 접근 가능해야 하는 경로 — 홈(대시보드)과
+// 본인 정보 화면까지 막히면 로그인 후 아무것도 못 하는 상태가 될 수 있다.
+const ALWAYS_ALLOWED_PATHS = ["/", "/settings/me"];
+
+// allowedMenuPaths가 null/undefined면 "제한 없음"(그룹이 없는 관리자 또는
+// 최고관리자)으로 취급한다 — useAuth.jsx의 allowedMenuPaths 계산 규칙과 반드시 맞춰야 한다.
+export function isMenuAllowed(path, allowedMenuPaths) {
+  if (!allowedMenuPaths) return true;
+  if (ALWAYS_ALLOWED_PATHS.includes(path)) return true;
+  return allowedMenuPaths.has(path);
+}
+
+export function filterNavByPermission(navItems, allowedMenuPaths) {
+  if (!allowedMenuPaths) return navItems;
+  return navItems
+    .map((item) => {
+      if (item.children) {
+        const children = item.children.filter((c) => isMenuAllowed(c.to, allowedMenuPaths));
+        return children.length > 0 ? { ...item, children } : null;
+      }
+      return isMenuAllowed(item.to, allowedMenuPaths) ? item : null;
+    })
+    .filter(Boolean);
+}
+
 // Flattened path -> { section, label } lookup for the breadcrumb bar.
 export function resolveBreadcrumb(pathname, navItems = NAV) {
   for (const item of navItems) {
