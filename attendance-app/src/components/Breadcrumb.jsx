@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Home, ChevronRight, Star } from "lucide-react";
-import { NAV, SUPER_ADMIN_NAV_ITEM, resolveBreadcrumb } from "../admin/navConfig";
+import { NAV, SUPER_ADMIN_NAV_ITEMS, resolveBreadcrumb } from "../admin/navConfig";
 import { useAuth } from "../hooks/useAuth";
 
 // Mirrors the reference guide's "홈 > 섹션 > 현재 화면" bar with a per-route
@@ -10,7 +10,7 @@ import { useAuth } from "../hooks/useAuth";
 export default function Breadcrumb() {
   const location = useLocation();
   const { isSuperAdmin } = useAuth();
-  const navItems = isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV;
+  const navItems = isSuperAdmin ? [...NAV, ...SUPER_ADMIN_NAV_ITEMS] : NAV;
   const { section, label } = resolveBreadcrumb(location.pathname, navItems);
   const [starred, setStarred] = useState(() => {
     try {

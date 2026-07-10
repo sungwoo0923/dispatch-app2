@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { NAV, SUPER_ADMIN_NAV_ITEM, filterNavByPermission } from "./navConfig";
+import { NAV, SUPER_ADMIN_NAV_ITEMS, filterNavByPermission } from "./navConfig";
 
 // 하단탭에 다 담을 수 없는 나머지 메뉴(휴가/안전/정산/통계/조직/권한/템플릿/
 // 설정 등)를 아코디언 목록으로 모아두는 화면. 근로자/스케줄/게시판처럼
@@ -13,7 +13,7 @@ export default function AdminMobileMore() {
   const { profile, isSuperAdmin, allowedMenuPaths } = useAuth();
   const [openSection, setOpenSection] = useState(null);
 
-  const navItems = filterNavByPermission(isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV, allowedMenuPaths).filter(
+  const navItems = filterNavByPermission(isSuperAdmin ? [...NAV, ...SUPER_ADMIN_NAV_ITEMS] : NAV, allowedMenuPaths).filter(
     (item) => !HIDDEN_TOP_LEVEL.includes(item.to)
   );
 

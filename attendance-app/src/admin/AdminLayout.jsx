@@ -15,7 +15,7 @@ import { toDateKey } from "../utils/dateUtils";
 // 구조라, 관리자가 화면을 켜두는 동안 주기적으로 확인하는 방식으로 둔다.
 const NO_SHOW_GRACE_MINUTES = 30;
 const NO_SHOW_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-import { NAV, SUPER_ADMIN_NAV_ITEM, filterNavByPermission, isMenuAllowed } from "./navConfig";
+import { NAV, SUPER_ADMIN_NAV_ITEMS, filterNavByPermission, isMenuAllowed } from "./navConfig";
 
 const itemClass = ({ isActive }) =>
   `flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -103,7 +103,7 @@ export default function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [earlyLeaveCount, setEarlyLeaveCount] = useState(0);
   const [resignationCount, setResignationCount] = useState(0);
-  const navItems = filterNavByPermission(isSuperAdmin ? [...NAV, SUPER_ADMIN_NAV_ITEM] : NAV, allowedMenuPaths);
+  const navItems = filterNavByPermission(isSuperAdmin ? [...NAV, ...SUPER_ADMIN_NAV_ITEMS] : NAV, allowedMenuPaths);
   const { badgeCounts, markSeen } = useNavBadges(profile?.companyId, user?.uid);
 
   // 사이드바에서 배지가 붙은 메뉴로 이동하면(더블클릭 없이 클릭 한 번으로도)

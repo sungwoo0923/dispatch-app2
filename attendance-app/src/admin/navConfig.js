@@ -12,6 +12,7 @@ import {
   Building2,
   Lock,
   KeyRound,
+  Smartphone,
 } from "lucide-react";
 
 export const NAV = [
@@ -124,9 +125,12 @@ export const NAV = [
   },
 ];
 
-// 최고관리자(super admin)에게만 노출되는 항목. NAV에 포함시키지 않고 따로 두어
+// 최고관리자(super admin)에게만 노출되는 항목들. NAV에 포함시키지 않고 따로 두어
 // AdminLayout/Breadcrumb에서 isSuperAdmin일 때만 붙이도록 한다.
-export const SUPER_ADMIN_NAV_ITEM = { to: "/platform/companies", label: "가입자관리", icon: KeyRound };
+export const SUPER_ADMIN_NAV_ITEMS = [
+  { to: "/platform/companies", label: "가입자관리", icon: KeyRound },
+  { to: "/platform/mobile-preview", label: "모바일 미리보기", icon: Smartphone },
+];
 
 // 그룹(권한)이 지정된 관리자라도 항상 접근 가능해야 하는 경로 — 홈(대시보드)과
 // 본인 정보 화면까지 막히면 로그인 후 아무것도 못 하는 상태가 될 수 있다.

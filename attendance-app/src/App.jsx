@@ -58,6 +58,7 @@ import Devices from "./admin/Devices";
 import PermissionGroups from "./admin/PermissionGroups";
 import PermissionGroupMenus from "./admin/PermissionGroupMenus";
 import PlatformCompanies from "./admin/PlatformCompanies";
+import MobilePreview from "./admin/MobilePreview";
 import ShiftTemplates from "./admin/ShiftTemplates";
 import AllowanceTemplates from "./admin/AllowanceTemplates";
 import InsuranceRateTemplates from "./admin/InsuranceRateTemplates";
@@ -163,6 +164,7 @@ export default function App() {
     const sharedAdminChildRoutes = (
       <>
         {isSuperAdmin && <Route path="platform/companies" element={<PlatformCompanies />} />}
+        {isSuperAdmin && <Route path="platform/mobile-preview" element={<MobilePreview />} />}
         <Route path="employees/status" element={<EmployeeStatus />} />
         <Route path="employees/history-access" element={<HistoryAccessRequests />} />
         <Route path="employees/contracts" element={<Contracts />} />
