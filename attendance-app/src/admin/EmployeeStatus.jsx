@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { UserCog, Search, Download } from "lucide-react";
+import { UserCog, Search, Download, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -15,7 +15,7 @@ import SortableTh from "../components/SortableTh";
 import { usePagination } from "../hooks/usePagination";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
-import { formatDate } from "../utils/dateUtils";
+import { formatDate, toDateKey } from "../utils/dateUtils";
 import SmsButton from "../components/SmsButton";
 
 const STATUS_TONE = { 재직: "success", 휴직: "warning", 퇴사: "danger" };
@@ -65,7 +65,7 @@ export default function EmployeeStatus() {
     const unsubs = [
       onSnapshot(
         query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")),
-        (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))
       ),
       onSnapshot(query(collection(db, "businessEntities"), where("companyId", "==", profile.companyId)), (snap) =>
         setBusinessEntities(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -171,6 +171,21 @@ export default function EmployeeStatus() {
     setSelected(new Set());
     setBulkDate("");
     setBulkReason("");
+  };
+
+  const deleteEmployee = async (emp) => {
+    if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
+    await updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: toDateKey() });
+    toast.success("삭제되었습니다");
+  };
+
+  const deleteSelectedEmployees = async () => {
+    const targets = filtered.filter((e) => selected.has(e.id));
+    if (targets.length === 0) return;
+    if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
+    await Promise.all(targets.map((e) => updateDoc(doc(db, "users", e.id), { deleted: true, deletedAt: toDateKey() })));
+    toast.success(`${targets.length}명 삭제되었습니다`);
+    setSelected(new Set());
   };
 
   const openEdit = (emp) => {
@@ -299,6 +314,9 @@ export default function EmployeeStatus() {
             <Button variant="outline" onClick={exportExcel}>
               <Download size={16} /> 엑셀 다운로드
             </Button>
+            <Button variant="danger" onClick={deleteSelectedEmployees} disabled={selected.size === 0}>
+              <Trash2 size={16} /> 선택삭제 ({selected.size})
+            </Button>
           </div>
         </div>
 
@@ -358,6 +376,7 @@ export default function EmployeeStatus() {
                 <SortableTh sortKey="hireDate" sort={sort} onSort={setSort}>입사일자</SortableTh>
                 <SortableTh sortKey="resignDate" sort={sort} onSort={setSort}>퇴사일자</SortableTh>
                 <th className="px-4 py-3 font-semibold">변경사유</th>
+                <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
             <tbody>
@@ -382,11 +401,20 @@ export default function EmployeeStatus() {
                   <td className="px-4 py-3 text-ink">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.changeReason || "-"}</td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => deleteEmployee(emp)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                    >
+                      🗑️ 삭제
+                    </button>
+                  </td>
                 </tr>
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={12} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 데이터가 없습니다.
                   </td>
                 </tr>

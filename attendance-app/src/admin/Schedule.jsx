@@ -39,6 +39,7 @@ import DraggableTh from "../components/DraggableTh";
 import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useToast } from "../hooks/useToast";
+import { useConfirm } from "../hooks/useConfirm";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
@@ -70,6 +71,7 @@ const EMPTY_FILTERS = {
 export default function Schedule() {
   const { profile } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const [companyName, setCompanyName] = useState("");
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -117,7 +119,10 @@ export default function Schedule() {
     getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
     const unsubUsers = onSnapshot(
       query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")),
-      (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      // 삭제(탈퇴)된 근로자는 employeeByUid에서 아예 빠져야 스케줄/대기/휴무
+      // 카드에서도 함께 사라진다 — 근로자목록에서 삭제해도 여기 그대로
+      // 남아있던 버그의 원인이 바로 이 필터 누락이었다.
+      (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))
     );
     const unsubSites = onSnapshot(
       query(collection(db, "workSites"), where("companyId", "==", profile.companyId)),
@@ -628,6 +633,26 @@ export default function Schedule() {
     }
   };
 
+  // 스케줄/대기/휴무/퇴사 4개 카드 모두 행 단위 삭제 버튼을 갖는다 — 각
+  // 카드가 근거로 삼는 컬렉션(문서)이 서로 달라 kind별로 분기한다.
+  const deleteScheduleRow = async (s) => {
+    if (!(await confirm(`${s.name} 근로자의 ${formatDate(s.date)} 스케줄을 삭제하시겠습니까?`, "delete"))) return;
+    await deleteDoc(doc(db, "schedules", s.id));
+    toast.success("삭제되었습니다");
+  };
+
+  const deleteLeaveRow = async (lv) => {
+    if (!(await confirm(`${lv.name || ""} 근로자의 휴무 기록을 삭제하시겠습니까?`, "delete"))) return;
+    await deleteDoc(doc(db, "leaves", lv.id));
+    toast.success("삭제되었습니다");
+  };
+
+  const deleteResignedRow = async (emp) => {
+    if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
+    await updateDoc(doc(db, "users", emp.id), { deleted: true, deletedAt: toDateKey() });
+    toast.success("삭제되었습니다");
+  };
+
   const openRowMenu = (e, kind, row) => {
     e.preventDefault();
     setRowMenu({ x: e.clientX, y: e.clientY, kind, row });
@@ -1076,6 +1101,7 @@ export default function Schedule() {
                         {c.label}
                       </DraggableTh>
                     ))}
+                    <th className="px-4 py-3 font-semibold">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1099,12 +1125,21 @@ export default function Schedule() {
                             {c.render(row)}
                           </td>
                         ))}
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => deleteScheduleRow(s)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                          >
+                            🗑️ 삭제
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                   {confirmedRows.length === 0 && (
                     <tr>
-                      <td colSpan={visibleScheduleColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
+                      <td colSpan={visibleScheduleColumns.length + 4} className="px-4 py-6 text-center text-xs text-muted">
                         출근확정된 스케줄이 없습니다.
                       </td>
                     </tr>
@@ -1143,6 +1178,7 @@ export default function Schedule() {
                     {c.label}
                   </DraggableTh>
                 ))}
+                <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
             <tbody>
@@ -1164,11 +1200,20 @@ export default function Schedule() {
                       {c.render(row)}
                     </td>
                   ))}
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => deleteScheduleRow(row.schedule)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                    >
+                      🗑️ 삭제
+                    </button>
+                  </td>
                 </tr>
               ))}
               {pendingRows.length === 0 && (
                 <tr>
-                  <td colSpan={visibleScheduleColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={visibleScheduleColumns.length + 4} className="px-4 py-6 text-center text-xs text-muted">
                     대기 중인 인원이 없습니다.
                   </td>
                 </tr>
@@ -1203,6 +1248,7 @@ export default function Schedule() {
                     {c.label}
                   </DraggableTh>
                 ))}
+                <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
             <tbody>
@@ -1218,11 +1264,20 @@ export default function Schedule() {
                       {c.render(row)}
                     </td>
                   ))}
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => deleteLeaveRow(row.leave)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                    >
+                      🗑️ 삭제
+                    </button>
+                  </td>
                 </tr>
               ))}
               {leaveRows.length === 0 && (
                 <tr>
-                  <td colSpan={visibleLeaveColumns.length + 1} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={visibleLeaveColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
                     휴무 중인 인원이 없습니다.
                   </td>
                 </tr>
@@ -1257,6 +1312,7 @@ export default function Schedule() {
                     {c.label}
                   </DraggableTh>
                 ))}
+                <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
             <tbody>
@@ -1272,11 +1328,20 @@ export default function Schedule() {
                       {c.render(emp)}
                     </td>
                   ))}
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => deleteResignedRow(emp)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                    >
+                      🗑️ 삭제
+                    </button>
+                  </td>
                 </tr>
               ))}
               {resignedRows.length === 0 && (
                 <tr>
-                  <td colSpan={visibleResignedColumns.length + 1} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={visibleResignedColumns.length + 2} className="px-4 py-6 text-center text-xs text-muted">
                     퇴사 처리된 인원이 없습니다.
                   </td>
                 </tr>
