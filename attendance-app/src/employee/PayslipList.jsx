@@ -4,11 +4,13 @@ import { collection, query, where, orderBy, onSnapshot } from "firebase/firestor
 import { ChevronRight, Wallet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../hooks/useLanguage";
 import Card from "../components/Card";
 import MonthRangeSearch from "../components/MonthRangeSearch";
 
 export default function PayslipList() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [payrolls, setPayrolls] = useState([]);
   const [range, setRange] = useState(null);
 
@@ -30,9 +32,9 @@ export default function PayslipList() {
 
   return (
     <div className="space-y-3 px-4 pt-4">
-      <h2 className="text-sm font-semibold text-ink">급여관리</h2>
+      <h2 className="text-sm font-semibold text-ink">{t("payslip.title")}</h2>
       <MonthRangeSearch onSearch={setRange} />
-      {filteredPayrolls.length === 0 && <p className="text-xs text-muted">발급된 명세서가 없습니다.</p>}
+      {filteredPayrolls.length === 0 && <p className="text-xs text-muted">{t("payslip.empty")}</p>}
       {filteredPayrolls.map((p) => (
         <Link key={p.id} to={`/payslips/${p.id}`}>
           <Card className="flex items-center justify-between gap-3 p-4">

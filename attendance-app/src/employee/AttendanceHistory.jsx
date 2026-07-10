@@ -8,12 +8,14 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { useToast } from "../hooks/useToast";
+import { useLanguage } from "../hooks/useLanguage";
 import { formatDate, formatTime } from "../utils/dateUtils";
 
 const STATUS_TONE = { 출근: "success", 지각: "warning", 결근: "danger", 조퇴: "warning" };
 const STATUS_BAR = { 출근: "bg-primary", 지각: "bg-warning", 결근: "bg-danger", 조퇴: "bg-warning" };
+const STATUS_KEY = { 출근: "attendance.status.출근", 지각: "attendance.status.지각", 결근: "attendance.status.결근", 조퇴: "attendance.status.조퇴" };
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
-const REQUEST_STATUS_LABEL = { pending: "승인대기", approved: "승인됨", rejected: "반려됨" };
+const REQUEST_STATUS_KEY = { pending: "attendance.requestPending", approved: "attendance.requestApproved", rejected: "attendance.requestRejected" };
 const REQUEST_STATUS_ICON = { pending: Hourglass, approved: CheckCircle2, rejected: XCircle };
 const REQUEST_STATUS_TEXT_CLS = { pending: "text-warning", approved: "text-success", rejected: "text-danger" };
 
@@ -25,6 +27,7 @@ function monthLabel(dateKey) {
 export default function AttendanceHistory() {
   const { user, profile } = useAuth();
   const toast = useToast();
+  const { t } = useLanguage();
   const [records, setRecords] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
   const [detail, setDetail] = useState(null);
@@ -39,7 +42,7 @@ export default function AttendanceHistory() {
     const unsub = onSnapshot(
       q,
       (snap) => setRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      () => toast.error("출근기록을 불러오지 못했습니다. 앱을 다시 시작해주세요.")
+      () => toast.error(t("attendance.loadError"))
     );
     return () => unsub();
   }, [user]);
@@ -95,14 +98,14 @@ export default function AttendanceHistory() {
         attendanceId: detail.id,
         date: detail.date,
         field: requestField,
-        fieldLabel: requestField === "checkInTime" ? "출근시각" : "퇴근시각",
+        fieldLabel: requestField === "checkInTime" ? t("attendance.checkInTime") : t("attendance.checkOutTime"),
         currentTime: currentIso ? currentIso.slice(11, 16) : "",
         requestedTime: requestTime,
         reason: requestReason.trim(),
         status: "pending",
         createdAt: serverTimestamp(),
       });
-      toast.success("변경 요청이 접수되었습니다. 관리자 승인을 기다려주세요.");
+      toast.success(t("attendance.requestSubmitted"));
       setRequestField(null);
       setRequestReason("");
     } catch (err) {
@@ -127,15 +130,15 @@ export default function AttendanceHistory() {
                 const Ico = REQUEST_STATUS_ICON[pending.status];
                 return <Ico size={12} />;
               })()}
-              {REQUEST_STATUS_LABEL[pending.status]}
+              {t(REQUEST_STATUS_KEY[pending.status])}
             </span>
           )}
         </div>
         <p className="mt-1.5 text-lg font-bold text-ink">{value ? formatTime(value) : "-"}</p>
         {pending && (
           <p className="mt-1 text-xs text-muted">
-            {pending.status === "pending" ? "요청" : pending.status === "approved" ? "변경" : "요청"} 시각 {pending.requestedTime}
-            {pending.status === "rejected" && pending.adminNote ? ` · 사유: ${pending.adminNote}` : ""}
+            {t("attendance.requestedTime", { status: t(REQUEST_STATUS_KEY[pending.status === "approved" ? "approved" : "pending"]), time: pending.requestedTime })}
+            {pending.status === "rejected" && pending.adminNote ? ` · ${pending.adminNote}` : ""}
           </p>
         )}
         {!showForm ? (
@@ -145,7 +148,7 @@ export default function AttendanceHistory() {
             disabled={pending?.status === "pending"}
             className="mt-2 text-xs font-semibold text-primary disabled:text-slate-300"
           >
-            {pending?.status === "pending" ? "승인 대기중" : "시각 변경 요청"}
+            {pending?.status === "pending" ? t("attendance.waitingApproval") : t("attendance.requestChange")}
           </button>
         ) : (
           <div className="mt-2 space-y-2 border-t border-slate-200 pt-2.5">
@@ -158,16 +161,16 @@ export default function AttendanceHistory() {
             <textarea
               className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs"
               rows={2}
-              placeholder="변경 사유를 입력해주세요"
+              placeholder={t("attendance.requestReasonPlaceholder")}
               value={requestReason}
               onChange={(e) => setRequestReason(e.target.value)}
             />
             <div className="flex gap-2">
               <Button size="sm" variant="outline" className="flex-1" onClick={() => setRequestField(null)}>
-                취소
+                {t("common.cancel")}
               </Button>
               <Button size="sm" className="flex-1" onClick={submitRequest} disabled={submitting || !requestTime || !requestReason.trim()}>
-                <Send size={12} /> 요청 제출
+                <Send size={12} /> {t("attendance.submitRequest")}
               </Button>
             </div>
           </div>
@@ -178,11 +181,11 @@ export default function AttendanceHistory() {
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
-      <h2 className="text-sm font-semibold text-ink">출근기록</h2>
+      <h2 className="text-sm font-semibold text-ink">{t("attendance.title")}</h2>
       {grouped.length === 0 && (
         <Card className="flex flex-col items-center gap-2 p-10 text-center">
           <Clock size={26} className="text-muted" />
-          <p className="text-sm text-muted">출근 기록이 없습니다.</p>
+          <p className="text-sm text-muted">{t("attendance.empty")}</p>
         </Card>
       )}
       {grouped.map(([month, list]) => (
@@ -204,7 +207,7 @@ export default function AttendanceHistory() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <p className="text-sm font-semibold text-ink">{formatDate(r.date)}</p>
-                        <Badge tone={STATUS_TONE[r.status] || "muted"}>{r.status || "미출근"}</Badge>
+                        <Badge tone={STATUS_TONE[r.status] || "muted"}>{r.status ? t(STATUS_KEY[r.status]) : t("attendance.status.미출근")}</Badge>
                         {req && <Hourglass size={12} className="text-warning" />}
                       </div>
                       <div className="mt-1 flex items-center gap-3 text-xs text-muted">
@@ -225,20 +228,18 @@ export default function AttendanceHistory() {
         </div>
       ))}
 
-      <Modal open={Boolean(detail)} onClose={closeDetail} title="출근기록 상세" footer={<Button className="w-full" onClick={closeDetail}>닫기</Button>}>
+      <Modal open={Boolean(detail)} onClose={closeDetail} title={t("attendance.detailTitle")} footer={<Button className="w-full" onClick={closeDetail}>{t("common.close")}</Button>}>
         {detail && (
           <div className="space-y-3">
             <div className="flex items-center justify-between rounded-xl bg-primary-light/40 px-4 py-3">
               <span className="text-sm font-semibold text-ink">{formatDate(detail.date)}</span>
-              <Badge tone={STATUS_TONE[detail.status] || "muted"}>{detail.status || "미출근"}</Badge>
+              <Badge tone={STATUS_TONE[detail.status] || "muted"}>{detail.status ? t(STATUS_KEY[detail.status]) : t("attendance.status.미출근")}</Badge>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
-              <TimeField icon={LogIn} label="출근시각" field="checkInTime" value={detail.checkInTime} />
-              <TimeField icon={LogOut} label="퇴근시각" field="checkOutTime" value={detail.checkOutTime} />
+              <TimeField icon={LogIn} label={t("attendance.checkInTime")} field="checkInTime" value={detail.checkInTime} />
+              <TimeField icon={LogOut} label={t("attendance.checkOutTime")} field="checkOutTime" value={detail.checkOutTime} />
             </div>
-            <p className="text-xs leading-relaxed text-muted">
-              변경 요청을 제출하면 관리자 승인 후 실제 기록에 반영됩니다. 승인 대기 중인 요청이 있으면 새 요청을 제출할 수 없습니다.
-            </p>
+            <p className="text-xs leading-relaxed text-muted">{t("attendance.requestNotice")}</p>
           </div>
         )}
       </Modal>

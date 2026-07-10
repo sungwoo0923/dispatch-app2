@@ -19,9 +19,9 @@ import { formatResidentNumber } from "../utils/phoneAuth";
 import { openAddressSearch } from "../utils/daumPostcode";
 
 const ITEMS = [
-  { to: "/documents", label: "서류함", icon: FolderOpen, badgeKey: "documents" },
-  { to: "/safety", label: "안전교육", icon: ShieldCheck, badgeKey: "safety" },
-  { to: "/safety/archive", label: "안전교육자료", icon: ShieldCheck, badgeKey: "safetyArchive" },
+  { to: "/documents", labelKey: "myInfo.documents", icon: FolderOpen, badgeKey: "documents" },
+  { to: "/safety", labelKey: "myInfo.safety", icon: ShieldCheck, badgeKey: "safety" },
+  { to: "/safety/archive", labelKey: "myInfo.safetyArchive", icon: ShieldCheck, badgeKey: "safetyArchive" },
 ];
 
 const EMPTY_BASIC = {
@@ -34,13 +34,13 @@ const EMPTY_BASIC = {
   accountHolder: "",
 };
 
-const FIELD_LABELS = {
-  residentNumberFront: "주민/외국인번호",
-  address: "주소",
-  addressDetail: "상세주소",
-  bankName: "급여은행",
-  bankAccount: "급여계좌",
-  accountHolder: "예금주",
+const FIELD_LABEL_KEYS = {
+  residentNumberFront: "myInfo.residentNumber",
+  address: "myInfo.address",
+  addressDetail: "myInfo.addressDetail",
+  bankName: "myInfo.bankName",
+  bankAccount: "myInfo.bankAccount",
+  accountHolder: "myInfo.accountHolder",
 };
 
 export default function MyInfoPage() {
@@ -95,7 +95,7 @@ export default function MyInfoPage() {
     setSaving(true);
     try {
       await updateDoc(doc(db, "users", user.uid), { ...basic, basicInfoSubmitted: true });
-      toast.success("저장되었습니다. 이후 수정이 필요하면 수정요청을 이용해주세요.");
+      toast.success(t("myInfo.basicSaved"));
       setBasicExpanded(false);
     } catch (err) {
       toast.error(`저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
@@ -123,7 +123,7 @@ export default function MyInfoPage() {
         status: "pending",
         createdAt: serverTimestamp(),
       });
-      toast.success("수정요청이 접수되었습니다. 관리자 확인 후 반영됩니다.");
+      toast.success(t("myInfo.requestSubmitted"));
       setRequestOpen(false);
     } catch (err) {
       toast.error(`요청에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
@@ -171,7 +171,7 @@ export default function MyInfoPage() {
       {push.supported && (
         <Card className="flex items-center justify-between p-4">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-            <Bell size={15} className="text-primary" /> 푸시 알림 받기
+            <Bell size={15} className="text-primary" /> {t("myInfo.push")}
           </p>
           <button
             type="button"
@@ -181,11 +181,11 @@ export default function MyInfoPage() {
             onClick={async () => {
               if (push.enabled) {
                 await push.disable();
-                toast.success("푸시 알림을 껐습니다");
+                toast.success(t("myInfo.pushOff"));
               } else {
                 const res = await push.enable();
-                if (res.ok) toast.success("푸시 알림이 켜졌습니다");
-                else if (res.reason === "denied") toast.error("알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.");
+                if (res.ok) toast.success(t("myInfo.pushOn"));
+                else if (res.reason === "denied") toast.error(t("myInfo.pushDenied"));
                 else toast.error(describePushFailure(res.reason));
               }
             }}
@@ -203,11 +203,11 @@ export default function MyInfoPage() {
           className="flex w-full items-center justify-between text-left"
         >
           <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-            <UserRound size={15} className="text-primary" /> 기본정보 입력
+            <UserRound size={15} className="text-primary" /> {t("myInfo.basicInfo")}
           </p>
           {locked && (
             <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
-              <Lock size={11} /> 수정 잠김
+              <Lock size={11} /> {t("myInfo.locked")}
               <ChevronRight size={14} className={`transition-transform ${basicExpanded ? "rotate-90" : ""}`} />
             </span>
           )}
@@ -215,28 +215,26 @@ export default function MyInfoPage() {
         {(!locked || basicExpanded) && (
         <>
         <p className="mb-3 mt-1 text-xs leading-relaxed text-muted">
-          {locked
-            ? "최초 저장 후에는 직접 수정할 수 없습니다. 정보가 변경되었다면 아래 수정요청 버튼으로 관리자에게 요청해주세요."
-            : "급여 지급 및 서류 발급에 사용되는 정보입니다. 정확히 입력 후 저장해주세요. 최초 1회만 직접 저장할 수 있고, 이후에는 수정요청을 통해서만 변경됩니다."}
+          {locked ? t("myInfo.lockedDesc") : t("myInfo.unlockedDesc")}
         </p>
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">ID</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.id")}</span>
             <input disabled className={fieldCls} value={basic.externalId} />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">주민/외국인번호</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.residentNumber")}</span>
             <input
               disabled={locked}
               className={fieldCls}
               value={basic.residentNumberFront}
               onChange={(e) => setBasic((f) => ({ ...f, residentNumberFront: formatResidentNumber(e.target.value) }))}
-              placeholder="주민등록번호 또는 외국인등록번호"
+              placeholder={t("myInfo.residentNumberPlaceholder")}
               maxLength={14}
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">주소</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.address")}</span>
             <div className="flex flex-nowrap gap-2">
               <input
                 readOnly
@@ -244,7 +242,7 @@ export default function MyInfoPage() {
                 onClick={() => !locked && searchAddress(setBasic)}
                 className={`${fieldCls} ${!locked ? "cursor-pointer bg-slate-50" : ""}`}
                 value={basic.address}
-                placeholder="눌러서 주소 검색"
+                placeholder={t("myInfo.addressPlaceholder")}
               />
               {!locked && (
                 <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => searchAddress(setBasic)}>
@@ -254,32 +252,32 @@ export default function MyInfoPage() {
             </div>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">상세주소</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.addressDetail")}</span>
             <input
               disabled={locked}
               className={fieldCls}
               value={basic.addressDetail}
               onChange={(e) => setBasic((f) => ({ ...f, addressDetail: e.target.value }))}
-              placeholder="동/호수 등 나머지 주소"
+              placeholder={t("myInfo.addressDetailPlaceholder")}
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">급여은행</span>
+              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankName")}</span>
               <select
                 disabled={locked}
                 className={fieldCls}
                 value={basic.bankName}
                 onChange={(e) => setBasic((f) => ({ ...f, bankName: e.target.value }))}
               >
-                <option value="">선택</option>
+                <option value="">{t("common.select")}</option>
                 {BANK_OPTIONS.map((b) => (
                   <option key={b}>{b}</option>
                 ))}
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">급여계좌</span>
+              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankAccount")}</span>
               <input
                 disabled={locked}
                 className={fieldCls}
@@ -289,7 +287,7 @@ export default function MyInfoPage() {
             </label>
           </div>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">예금주</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.accountHolder")}</span>
             <input
               disabled={locked}
               className={fieldCls}
@@ -302,16 +300,16 @@ export default function MyInfoPage() {
         {locked ? (
           pendingRequest ? (
             <div className="mt-4 rounded-xl bg-slate-50 py-2.5 text-center text-xs font-medium text-muted">
-              수정요청 처리 대기중입니다
+              {t("myInfo.requestPending")}
             </div>
           ) : (
             <Button variant="outline" className="mt-4 w-full" onClick={openRequest}>
-              <Send size={14} /> 수정요청
+              <Send size={14} /> {t("myInfo.requestEdit")}
             </Button>
           )
         ) : (
           <Button className="mt-4 w-full" onClick={saveBasic} disabled={saving}>
-            {saving ? "저장 중..." : "저장"}
+            {saving ? t("common.saving") : t("common.save")}
           </Button>
         )}
         </>
@@ -322,14 +320,14 @@ export default function MyInfoPage() {
         <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
       </Card>
 
-      {ITEMS.map(({ to, label, icon: Icon, badgeKey }) => (
+      {ITEMS.map(({ to, labelKey, icon: Icon, badgeKey }) => (
         <Link key={to} to={to} onClick={() => markSubItemSeen(badgeKey)}>
           <Card className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
                 <Icon size={18} />
               </div>
-              <p className="text-sm font-medium text-ink">{label}</p>
+              <p className="text-sm font-medium text-ink">{t(labelKey)}</p>
               {subItemCounts[badgeKey] > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[11px] font-bold text-white">
                   {subItemCounts[badgeKey]}
@@ -353,37 +351,37 @@ export default function MyInfoPage() {
           }
         }}
       >
-        <LogOut size={16} /> {shouldLockInsteadOfSignOut(user?.uid) ? "잠금" : "로그아웃"}
+        <LogOut size={16} /> {shouldLockInsteadOfSignOut(user?.uid) ? t("myInfo.lock") : t("myInfo.logout")}
       </Button>
       <BuildInfo className="pt-2" />
 
       <Modal
         open={requestOpen}
         onClose={() => setRequestOpen(false)}
-        title="기본정보 수정요청"
+        title={t("myInfo.requestModalTitle")}
         footer={
           <>
             <Button variant="outline" onClick={() => setRequestOpen(false)}>
-              취소
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitRequest} disabled={requesting}>
-              {requesting ? "요청 중..." : "요청 보내기"}
+              {requesting ? t("common.requesting") : t("common.send")}
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <p className="text-xs text-muted">수정하고 싶은 값으로 바꾼 뒤 요청을 보내면, 관리자가 확인 후 반영 여부를 결정합니다.</p>
-          {Object.entries(FIELD_LABELS).map(([key, label]) =>
+          <p className="text-xs text-muted">{t("myInfo.requestModalDesc")}</p>
+          {Object.entries(FIELD_LABEL_KEYS).map(([key, labelKey]) =>
             key === "bankName" ? (
               <label key={key} className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">{label}</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted">{t(labelKey)}</span>
                 <select
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                   value={requestForm.bankName}
                   onChange={(e) => setRequestForm((f) => ({ ...f, bankName: e.target.value }))}
                 >
-                  <option value="">선택</option>
+                  <option value="">{t("common.select")}</option>
                   {BANK_OPTIONS.map((b) => (
                     <option key={b}>{b}</option>
                   ))}
@@ -391,14 +389,14 @@ export default function MyInfoPage() {
               </label>
             ) : key === "address" ? (
               <label key={key} className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">{label}</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted">{t(labelKey)}</span>
                 <div className="flex flex-nowrap gap-2">
                   <input
                     readOnly
                     onClick={() => searchAddress(setRequestForm)}
                     className="w-full cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm"
                     value={requestForm.address}
-                    placeholder="눌러서 주소 검색"
+                    placeholder={t("myInfo.addressPlaceholder")}
                   />
                   <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => searchAddress(setRequestForm)}>
                     <Search size={13} />
@@ -407,7 +405,7 @@ export default function MyInfoPage() {
               </label>
             ) : (
               <label key={key} className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">{label}</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted">{t(labelKey)}</span>
                 <input
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                   value={requestForm[key]}
@@ -422,7 +420,7 @@ export default function MyInfoPage() {
             )
           )}
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">수정 사유(선택)</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.requestReason")}</span>
             <textarea
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
               rows={2}

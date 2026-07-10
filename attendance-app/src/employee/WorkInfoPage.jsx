@@ -4,18 +4,20 @@ import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimest
 import { Building2, FileSignature, Wallet, CalendarClock, Landmark, MapPin, ChevronRight } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../hooks/useLanguage";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 
 const MENU = [
-  { to: "/contracts", label: "계약관리", icon: FileSignature, bg: "bg-purple-500" },
-  { to: "/payslips", label: "급여관리", icon: Wallet, bg: "bg-primary" },
-  { to: "/leave", label: "휴가신청관리", icon: CalendarClock, bg: "bg-emerald-500" },
+  { to: "/contracts", labelKey: "workInfo.menu.contracts", icon: FileSignature, bg: "bg-purple-500" },
+  { to: "/payslips", labelKey: "workInfo.menu.payslips", icon: Wallet, bg: "bg-primary" },
+  { to: "/leave", labelKey: "workInfo.menu.leave", icon: CalendarClock, bg: "bg-emerald-500" },
 ];
 
 export default function WorkInfoPage() {
   const { profile, user } = useAuth();
+  const { t } = useLanguage();
   const [workSite, setWorkSite] = useState(null);
   const [vendor, setVendor] = useState(null);
   const [workSites, setWorkSites] = useState([]);
@@ -98,50 +100,50 @@ export default function WorkInfoPage() {
       <div className="-mx-4 -mt-4 overflow-hidden rounded-b-[32px] bg-gradient-to-br from-primary via-primary to-primary-dark px-5 pb-8 pt-6 text-white shadow-lg shadow-primary/25">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold text-white/75">
-            <Building2 size={14} /> 출근조직
+            <Building2 size={14} /> {t("workInfo.org")}
           </div>
           {pendingRequest ? (
             <span className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium text-white">
-              변경 승인대기
+              {t("workInfo.changePending")}
             </span>
           ) : (
             <button className="text-xs font-semibold text-white/90 hover:text-white" onClick={openChangeModal}>
-              변경
+              {t("workInfo.change")}
             </button>
           )}
         </div>
         <div className="mt-2 space-y-1">
-          <p className="text-2xl font-bold tracking-tight">{workSite?.name || "배정된 근무지가 없습니다"}</p>
+          <p className="text-2xl font-bold tracking-tight">{workSite?.name || t("workInfo.noSite")}</p>
           {vendor && <p className="text-sm font-medium text-white/75">{vendor.name}</p>}
         </div>
       </div>
 
       <Card className="-mt-9 p-5">
         <p className="mb-3 flex items-center gap-2 text-xs font-bold text-muted">
-          <Wallet size={13} className="text-primary" /> 급여정보
+          <Wallet size={13} className="text-primary" /> {t("workInfo.payInfo")}
         </p>
         <div className="divide-y divide-slate-100">
           <div className="flex items-center justify-between py-2.5 text-sm">
             <span className="flex items-center gap-2 text-muted">
-              <Landmark size={14} className="text-slate-300" /> 예금주
+              <Landmark size={14} className="text-slate-300" /> {t("workInfo.accountHolder")}
             </span>
             <span className="font-semibold text-ink">{profile?.name || "-"}</span>
           </div>
           <div className="flex items-center justify-between py-2.5 text-sm">
             <span className="flex items-center gap-2 text-muted">
-              <Landmark size={14} className="text-slate-300" /> 은행
+              <Landmark size={14} className="text-slate-300" /> {t("workInfo.bank")}
             </span>
             <span className="font-semibold text-ink">{profile?.bankName || "-"}</span>
           </div>
           <div className="flex items-center justify-between gap-3 py-2.5 text-sm">
             <span className="flex shrink-0 items-center gap-2 text-muted">
-              <Landmark size={14} className="text-slate-300" /> 계좌번호
+              <Landmark size={14} className="text-slate-300" /> {t("workInfo.accountNumber")}
             </span>
             <span className="min-w-0 flex-1 truncate text-right font-semibold text-ink">{profile?.bankAccount || "-"}</span>
           </div>
           <div className="flex items-center justify-between gap-3 py-2.5 text-sm">
             <span className="flex shrink-0 items-center gap-2 text-muted">
-              <MapPin size={14} className="text-slate-300" /> 주소
+              <MapPin size={14} className="text-slate-300" /> {t("workInfo.address")}
             </span>
             <span className="min-w-0 flex-1 truncate text-right font-semibold text-ink">{workSite?.address || "-"}</span>
           </div>
@@ -149,47 +151,47 @@ export default function WorkInfoPage() {
       </Card>
 
       <div className="grid grid-cols-3 gap-3">
-        {MENU.map(({ to, label, icon: Icon, bg }) => (
+        {MENU.map(({ to, labelKey, icon: Icon, bg }) => (
           <Link
             key={to}
             to={to}
             className={`group flex flex-col items-center justify-center gap-2 rounded-2xl ${bg} p-4 text-center text-white shadow-lg shadow-black/5 transition-transform active:scale-95`}
           >
             <Icon size={22} />
-            <p className="text-sm font-bold">{label}</p>
+            <p className="text-sm font-bold">{t(labelKey)}</p>
           </Link>
         ))}
       </div>
 
       <Card className="flex items-center gap-3 p-4 text-muted">
         <ChevronRight size={14} className="shrink-0" />
-        <p className="text-xs">카드를 눌러 계약서·급여명세서·휴가신청 내역을 확인하세요.</p>
+        <p className="text-xs">{t("workInfo.hint")}</p>
       </Card>
 
       <Modal
         open={changeOpen}
         onClose={() => setChangeOpen(false)}
-        title="배정변경 요청"
+        title={t("workInfo.changeModalTitle")}
         footer={
           <>
             <Button variant="outline" onClick={() => setChangeOpen(false)}>
-              취소
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitChangeRequest} disabled={submitting || !changeForm.siteId}>
-              {submitting ? "요청 중..." : "요청"}
+              {submitting ? t("common.requesting") : t("workInfo.request")}
             </Button>
           </>
         }
       >
         <form onSubmit={submitChangeRequest} className="space-y-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">희망 근무지</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("workInfo.requestedSite")}</span>
             <select
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
               value={changeForm.siteId}
               onChange={(e) => setChangeForm((f) => ({ ...f, siteId: e.target.value }))}
             >
-              <option value="">선택</option>
+              <option value="">{t("common.select")}</option>
               {workSites.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -198,13 +200,13 @@ export default function WorkInfoPage() {
             </select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">희망 소속업체</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("workInfo.requestedVendor")}</span>
             <select
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
               value={changeForm.vendorId}
               onChange={(e) => setChangeForm((f) => ({ ...f, vendorId: e.target.value }))}
             >
-              <option value="">선택 안 함</option>
+              <option value="">{t("workInfo.notSelected")}</option>
               {vendors.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
@@ -213,7 +215,7 @@ export default function WorkInfoPage() {
             </select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">사유</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("workInfo.reason")}</span>
             <textarea
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
               rows={2}

@@ -86,15 +86,15 @@ export default function EmployeeLayout() {
       <Modal
         open={onboardingPrompt}
         onClose={() => setOnboardingPrompt(false)}
-        title="완료해야 할 항목이 있습니다"
+        title={t("onboarding.title")}
         footer={
           <Button variant="outline" className="w-full" onClick={() => setOnboardingPrompt(false)}>
-            나중에 하기
+            {t("onboarding.later")}
           </Button>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-ink">아래 항목을 먼저 완료해주세요. 완료 전에는 출근 처리가 되지 않습니다.</p>
+          <p className="text-sm text-ink">{t("onboarding.body")}</p>
           {pendingContracts > 0 && (
             <button
               type="button"
@@ -105,7 +105,7 @@ export default function EmployeeLayout() {
               }}
             >
               <FileSignature size={18} className="shrink-0 text-primary" />
-              <span className="flex-1 text-sm text-ink">근로계약서 서명하기</span>
+              <span className="flex-1 text-sm text-ink">{t("onboarding.signContract")}</span>
             </button>
           )}
           {pendingSafetyCount > 0 && (
@@ -118,7 +118,7 @@ export default function EmployeeLayout() {
               }}
             >
               <ShieldAlert size={18} className="shrink-0 text-danger" />
-              <span className="flex-1 text-sm text-ink">안전교육 이수하기 ({pendingSafetyCount}건)</span>
+              <span className="flex-1 text-sm text-ink">{t("onboarding.completeSafety", { count: pendingSafetyCount })}</span>
             </button>
           )}
         </div>

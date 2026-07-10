@@ -3,11 +3,13 @@ import { collection, query, where, orderBy, onSnapshot } from "firebase/firestor
 import { CalendarDays } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../hooks/useLanguage";
 import Card from "../components/Card";
 import { formatDate, toDateKey } from "../utils/dateUtils";
 
 export default function SchedulePage() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [schedules, setSchedules] = useState([]);
 
   useEffect(() => {
@@ -24,8 +26,8 @@ export default function SchedulePage() {
 
   return (
     <div className="space-y-3 px-4 pt-4">
-      <h2 className="text-sm font-semibold text-ink">예정된 스케줄</h2>
-      {schedules.length === 0 && <p className="text-xs text-muted">예정된 스케줄이 없습니다.</p>}
+      <h2 className="text-sm font-semibold text-ink">{t("schedule.title")}</h2>
+      {schedules.length === 0 && <p className="text-xs text-muted">{t("schedule.empty")}</p>}
       {schedules.map((s) => (
         <Card key={s.id} className="flex items-center gap-3 p-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
