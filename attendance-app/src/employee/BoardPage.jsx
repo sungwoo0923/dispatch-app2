@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { Pin, ChevronDown, MessageSquarePlus } from "lucide-react";
+import { ChevronDown, MessageSquarePlus } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -58,34 +58,50 @@ function NoticeTab() {
 
   return (
     <div className="space-y-3">
-      {sorted.length === 0 && <p className="text-xs text-muted">등록된 게시글이 없습니다.</p>}
-      {sorted.map((p) => {
-        const isOpen = openId === p.id;
-        return (
-          <Card key={p.id} className="p-0">
-            <button
-              className="flex w-full items-center justify-between px-4 py-3.5 text-left"
-              onClick={() => setOpenId(isOpen ? null : p.id)}
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                {p.pinned && <Pin size={13} className="shrink-0 text-primary" />}
-                <span className="truncate text-sm font-medium text-ink">{p.title}</span>
-                {p.pinned && <Badge tone="primary">고정</Badge>}
+      <div className="px-0.5">
+        <p className="text-sm font-semibold text-ink">공지사항</p>
+        <p className="mt-0.5 text-[11px] text-muted">회사의 새로운 소식과 안내를 확인하세요</p>
+      </div>
+      {sorted.length === 0 ? (
+        <Card className="flex flex-col items-center gap-1 p-8 text-center">
+          <p className="text-sm font-medium text-ink">등록된 공지사항이 없습니다</p>
+          <p className="text-[11px] text-muted">새 소식이 있으면 이 곳에 안내됩니다.</p>
+        </Card>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {sorted.map((p, idx) => {
+            const isOpen = openId === p.id;
+            return (
+              <div key={p.id} className={idx > 0 ? "border-t border-slate-100" : ""}>
+                <button
+                  className="flex w-full items-center gap-2 px-4 py-3.5 text-left active:bg-slate-50"
+                  onClick={() => setOpenId(isOpen ? null : p.id)}
+                >
+                  {p.pinned && (
+                    <span className="shrink-0 rounded bg-primary-dark px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      중요
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{p.title}</span>
+                  <span className="shrink-0 text-[11px] text-muted">
+                    {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
+                  </span>
+                  <ChevronDown size={15} className={`shrink-0 text-muted transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+                {isOpen && (
+                  <div className="border-t border-slate-100 bg-slate-50 px-4 pb-4 pt-3.5">
+                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{p.content}</p>
+                    <p className="mt-3 text-[11px] text-muted">
+                      {p.authorName} ·{" "}
+                      {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
+                    </p>
+                  </div>
+                )}
               </div>
-              <ChevronDown size={16} className={`shrink-0 text-muted transition-transform ${isOpen ? "rotate-180" : ""}`} />
-            </button>
-            {isOpen && (
-              <div className="border-t border-slate-100 px-4 py-3.5">
-                <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted">{p.content}</p>
-                <p className="mt-3 text-[11px] text-muted">
-                  {p.authorName} ·{" "}
-                  {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
-                </p>
-              </div>
-            )}
-          </Card>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
