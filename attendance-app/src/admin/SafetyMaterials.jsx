@@ -15,6 +15,12 @@ import { formatDate } from "../utils/dateUtils";
 
 const EMPTY_FORM = { title: "", type: "text", content: "", topicKey: "" };
 
+function formatSec(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export default function SafetyMaterials() {
   const { profile } = useAuth();
   const confirm = useConfirm();
@@ -332,6 +338,12 @@ export default function SafetyMaterials() {
                   <th className="px-3 py-2 font-semibold">이름</th>
                   <th className="px-3 py-2 font-semibold">이수여부</th>
                   <th className="px-3 py-2 font-semibold">이수일</th>
+                  {statusView.type === "video" && (
+                    <>
+                      <th className="px-3 py-2 font-semibold">시청 시작~종료</th>
+                      <th className="px-3 py-2 font-semibold">시청 구간</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -346,6 +358,20 @@ export default function SafetyMaterials() {
                       <td className="px-3 py-2 text-ink">
                         {c?.completedAt?.toDate ? formatDate(c.completedAt.toDate().toISOString().slice(0, 10)) : "-"}
                       </td>
+                      {statusView.type === "video" && (
+                        <>
+                          <td className="px-3 py-2 text-ink">
+                            {c?.watchStartedAt?.toDate && c?.watchEndedAt?.toDate
+                              ? `${c.watchStartedAt.toDate().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} ~ ${c.watchEndedAt.toDate().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`
+                              : "-"}
+                          </td>
+                          <td className="px-3 py-2 text-ink">
+                            {c?.watchedMaxSec != null && c?.videoDurationSec != null
+                              ? `${formatSec(c.watchedMaxSec)} / ${formatSec(c.videoDurationSec)}`
+                              : "-"}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}

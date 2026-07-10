@@ -105,6 +105,9 @@ function MandatoryMaterials() {
   const [videoWatched, setVideoWatched] = useState(false);
   const padRef = useRef(null);
   const maxWatchedRef = useRef(0);
+  const videoDurationRef = useRef(0);
+  const watchStartedAtRef = useRef(null);
+  const watchEndedAtRef = useRef(null);
 
   // 영상은 임의로 재생바를 당겨 건너뛰면 이수 처리가 안 되도록, 실제로 재생된
   // 가장 앞선 지점(maxWatchedRef)보다 앞으로 seek하면 그 지점으로 되돌린다.
@@ -114,6 +117,9 @@ function MandatoryMaterials() {
   // 높은 video의 onEnded 이벤트만 기준으로 삼는다.
   useEffect(() => {
     maxWatchedRef.current = 0;
+    videoDurationRef.current = 0;
+    watchStartedAtRef.current = null;
+    watchEndedAtRef.current = null;
     setVideoWatched(viewing?.type !== "video");
   }, [viewing]);
 
@@ -139,6 +145,15 @@ function MandatoryMaterials() {
     if (!padRef.current || padRef.current.isEmpty() || !viewing) return;
     setSaving(true);
     try {
+      const watchInfo =
+        viewing.type === "video"
+          ? {
+              watchStartedAt: watchStartedAtRef.current,
+              watchEndedAt: watchEndedAtRef.current,
+              videoDurationSec: Math.round(videoDurationRef.current) || null,
+              watchedMaxSec: Math.round(maxWatchedRef.current) || null,
+            }
+          : {};
       await addDoc(collection(db, "safetyCompletions"), {
         companyId: profile.companyId,
         materialId: viewing.id,
@@ -146,6 +161,7 @@ function MandatoryMaterials() {
         name: profile.name,
         signatureDataUrl: padRef.current.getDataUrl(),
         completedAt: serverTimestamp(),
+        ...watchInfo,
       });
       toast.success("이수 처리되었습니다");
       setViewing(null);
@@ -200,13 +216,22 @@ function MandatoryMaterials() {
                 controls
                 controlsList="noplaybackrate"
                 className="w-full rounded-xl bg-black"
+                onPlay={() => {
+                  if (!watchStartedAtRef.current) watchStartedAtRef.current = new Date();
+                }}
+                onDurationChange={(e) => {
+                  if (e.currentTarget.duration) videoDurationRef.current = e.currentTarget.duration;
+                }}
                 onTimeUpdate={(e) => {
                   if (e.currentTarget.currentTime > maxWatchedRef.current) maxWatchedRef.current = e.currentTarget.currentTime;
                 }}
                 onSeeking={(e) => {
                   if (e.currentTarget.currentTime > maxWatchedRef.current + 1) e.currentTarget.currentTime = maxWatchedRef.current;
                 }}
-                onEnded={() => setVideoWatched(true)}
+                onEnded={() => {
+                  watchEndedAtRef.current = new Date();
+                  setVideoWatched(true);
+                }}
               />
             ) : (
               <div className="max-h-72 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-ink">
