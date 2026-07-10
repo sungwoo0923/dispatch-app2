@@ -140,6 +140,19 @@ service cloud.firestore {
       allow create: if isAdminOf(request.resource.data.companyId);
     }
 
+    // 근로자가 본인의 출근/퇴근 기록 시각 변경을 요청하고, 관리자가
+    // 승인/반려한다 — 승인 시 실제 attendance 문서 반영은 관리자 계정으로
+    // 별도로 이루어진다(이 문서 자체는 요청/결정 이력만 담는다).
+    match /attendanceChangeRequests/{reqId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow update: if isAdminOf(resource.data.companyId);
+      allow delete: if false;
+    }
+
     match /leaves/{leaveId} {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));

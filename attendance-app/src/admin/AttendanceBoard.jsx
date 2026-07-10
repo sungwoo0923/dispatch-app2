@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Check, X as XIcon } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -21,7 +21,9 @@ import {
 } from "../constants/hr";
 import SmsButton from "../components/SmsButton";
 
-const VIEW_OPTIONS = ["출근현황", "휴무현황", "수정현황"];
+const VIEW_OPTIONS = ["출근현황", "휴무현황", "수정현황", "변경요청"];
+const CHANGE_REQUEST_STATUS_TONE = { pending: "warning", approved: "success", rejected: "danger" };
+const CHANGE_REQUEST_STATUS_LABEL = { pending: "승인대기", approved: "승인됨", rejected: "반려됨" };
 const EDIT_STATUS_OPTIONS = ["출근", "지각", "조퇴", "출근전", "결근"];
 
 const EMPTY_FILTERS = {
@@ -48,6 +50,9 @@ export default function AttendanceBoard() {
   const [attendance, setAttendance] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [edits, setEdits] = useState([]);
+  const [changeRequests, setChangeRequests] = useState([]);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [rejectNote, setRejectNote] = useState("");
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [range, setRange] = useState({ start: toDateKey(), end: toDateKey() });
@@ -116,6 +121,70 @@ export default function AttendanceBoard() {
     );
     return () => unsub();
   }, [profile?.companyId, view]);
+
+  useEffect(() => {
+    if (!profile?.companyId || view !== "변경요청") return;
+    const unsub = onSnapshot(
+      query(collection(db, "attendanceChangeRequests"), where("companyId", "==", profile.companyId)),
+      (snap) => setChangeRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [profile?.companyId, view]);
+
+  const sortedChangeRequests = useMemo(
+    () => [...changeRequests].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)),
+    [changeRequests]
+  );
+
+  const approveChangeRequest = async (req) => {
+    const newIso = `${req.date}T${req.requestedTime}:00`;
+    await updateDoc(doc(db, "attendance", req.attendanceId), { [req.field]: newIso, source: "manual" });
+    await addDoc(collection(db, "attendanceEdits"), {
+      companyId: profile.companyId,
+      uid: req.uid,
+      name: req.name,
+      date: req.date,
+      field: req.fieldLabel,
+      oldValue: req.currentTime || "-",
+      newValue: req.requestedTime,
+      reason: `근로자 변경요청 승인 (${req.reason})`,
+      editedAt: serverTimestamp(),
+      editedBy: user?.uid || null,
+    });
+    await updateDoc(doc(db, "attendanceChangeRequests", req.id), {
+      status: "approved",
+      decidedAt: serverTimestamp(),
+      decidedBy: user?.uid || null,
+    });
+    await addDoc(collection(db, "notifications"), {
+      companyId: profile.companyId,
+      uid: req.uid,
+      title: "출근기록 변경 요청이 승인되었습니다",
+      message: `${formatDate(req.date)} ${req.fieldLabel} → ${req.requestedTime}`,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  };
+
+  const rejectChangeRequest = async () => {
+    if (!rejectTarget) return;
+    await updateDoc(doc(db, "attendanceChangeRequests", rejectTarget.id), {
+      status: "rejected",
+      adminNote: rejectNote.trim(),
+      decidedAt: serverTimestamp(),
+      decidedBy: user?.uid || null,
+    });
+    await addDoc(collection(db, "notifications"), {
+      companyId: profile.companyId,
+      uid: rejectTarget.uid,
+      title: "출근기록 변경 요청이 반려되었습니다",
+      message: `${formatDate(rejectTarget.date)} ${rejectTarget.fieldLabel}${rejectNote.trim() ? ` · ${rejectNote.trim()}` : ""}`,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+    setRejectTarget(null);
+    setRejectNote("");
+  };
 
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
@@ -741,7 +810,105 @@ export default function AttendanceBoard() {
             </table>
           </div>
         )}
+
+        {view === "변경요청" && (
+          <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
+            <table className="w-full min-w-[880px] text-center text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs text-muted">
+                  <th className="px-4 py-3 font-semibold">순번</th>
+                  <th className="px-4 py-3 font-semibold">이름</th>
+                  <th className="px-4 py-3 font-semibold">근무일자</th>
+                  <th className="px-4 py-3 font-semibold">변경항목</th>
+                  <th className="px-4 py-3 font-semibold">기존시각</th>
+                  <th className="px-4 py-3 font-semibold">요청시각</th>
+                  <th className="px-4 py-3 font-semibold">사유</th>
+                  <th className="px-4 py-3 font-semibold">상태</th>
+                  <th className="px-4 py-3 font-semibold">처리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedChangeRequests.map((r, i) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-4 py-3 text-ink">{i + 1}</td>
+                    <td className="px-4 py-3 text-ink">{r.name}</td>
+                    <td className="px-4 py-3 text-ink">{formatDate(r.date)}</td>
+                    <td className="px-4 py-3 text-ink">{r.fieldLabel}</td>
+                    <td className="px-4 py-3 text-ink">{r.currentTime || "-"}</td>
+                    <td className="px-4 py-3 font-semibold text-ink">{r.requestedTime}</td>
+                    <td className="px-4 py-3 text-ink">{r.reason}</td>
+                    <td className="px-4 py-3">
+                      <Badge tone={CHANGE_REQUEST_STATUS_TONE[r.status]}>{CHANGE_REQUEST_STATUS_LABEL[r.status]}</Badge>
+                      {r.status === "rejected" && r.adminNote && <p className="mt-1 text-[11px] text-muted">{r.adminNote}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.status === "pending" ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => approveChangeRequest(r)}
+                            className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark"
+                          >
+                            <Check size={12} /> 승인
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setRejectTarget(r); setRejectNote(""); }}
+                            className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-muted hover:bg-slate-50"
+                          >
+                            <XIcon size={12} /> 반려
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {sortedChangeRequests.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
+                      출근시간 변경 요청이 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
+
+      <Modal
+        open={Boolean(rejectTarget)}
+        onClose={() => setRejectTarget(null)}
+        title="변경 요청 반려"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setRejectTarget(null)}>
+              취소
+            </Button>
+            <Button onClick={rejectChangeRequest}>반려하기</Button>
+          </>
+        }
+      >
+        {rejectTarget && (
+          <div className="space-y-3">
+            <p className="text-sm text-ink">
+              {rejectTarget.name}님의 {formatDate(rejectTarget.date)} {rejectTarget.fieldLabel} 변경 요청을 반려합니다.
+            </p>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">반려 사유 (선택)</span>
+              <textarea
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                rows={3}
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                placeholder="근로자에게 전달할 사유"
+              />
+            </label>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={Boolean(detail)}
