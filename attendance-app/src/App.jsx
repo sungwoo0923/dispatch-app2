@@ -7,6 +7,9 @@ import EmployeeSignupPage from "./auth/EmployeeSignupPage";
 import PendingApprovalPage from "./auth/PendingApprovalPage";
 import CompanyApprovalPendingPage from "./auth/CompanyApprovalPendingPage";
 import AdminLayout from "./admin/AdminLayout";
+import AdminMobileLayout from "./admin/AdminMobileLayout";
+import AdminMobileHome from "./admin/AdminMobileHome";
+import AdminMobileMore from "./admin/AdminMobileMore";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
 import SuperAdminCompanyPicker from "./admin/SuperAdminCompanyPicker";
 import Dashboard from "./admin/Dashboard";
@@ -65,6 +68,7 @@ import SafetyArchivePage from "./employee/SafetyArchivePage";
 import BoardPage from "./employee/BoardPage";
 import NotificationsPage from "./employee/NotificationsPage";
 import BiometricGate from "./components/BiometricGate";
+import { useIsMobile } from "./hooks/useIsMobile";
 import { PENDING_INVITE_KEY, SUPER_ADMIN_PICK_COMPANY_KEY } from "./constants/session";
 
 function LoadingScreen() {
@@ -82,6 +86,7 @@ function LoadingScreen() {
 
 export default function App() {
   const { user, profile, loading, company, companyLoading, isSuperAdmin } = useAuth();
+  const isMobile = useIsMobile();
 
   if (loading) return <LoadingScreen />;
 
@@ -126,48 +131,71 @@ export default function App() {
       return <CompanyApprovalPendingPage status={company.status} />;
     }
 
+    // 아래 하위 라우트 목록은 PC(AdminLayout)와 모바일(AdminMobileLayout)
+    // 트리가 완전히 동일하게 공유한다 — 화면별로 모바일 전용 컴포넌트를
+    // 새로 만들면 여기서 그 컴포넌트로 교체해나간다(순차 전환). 아직
+    // 교체되지 않은 화면은 과도기적으로 PC 컴포넌트를 그대로 재사용한다.
+    const sharedAdminChildRoutes = (
+      <>
+        {isSuperAdmin && <Route path="platform/companies" element={<PlatformCompanies />} />}
+        <Route path="employees" element={<EmployeeList />} />
+        <Route path="employees/status" element={<EmployeeStatus />} />
+        <Route path="employees/history-access" element={<HistoryAccessRequests />} />
+        <Route path="employees/contracts" element={<Contracts />} />
+        <Route path="employees/documents" element={<Documents />} />
+        <Route path="employees/inquiries" element={<Inquiries />} />
+        <Route path="schedule" element={<Schedule />} />
+        <Route path="attendance" element={<AttendanceBoard />} />
+        <Route path="leaves" element={<LeaveApprovals />} />
+        <Route path="leaves/settings" element={<LeaveSettings />} />
+        <Route path="leaves/management" element={<LeaveManagement />} />
+        <Route path="leaves/usage" element={<LeaveUsage />} />
+        <Route path="safety" element={<SafetyTrainings />} />
+        <Route path="safety/settings" element={<SafetySettings />} />
+        <Route path="safety/materials" element={<SafetyMaterials />} />
+        <Route path="payroll" element={<Payroll />} />
+        <Route path="payroll/settings" element={<SiteInsuranceRates />} />
+        <Route path="stats" element={<StatsSummary />} />
+        <Route path="stats/attendance-count" element={<StatsAttendanceCount />} />
+        <Route path="stats/monthly-grid" element={<StatsMonthlyGrid />} />
+        <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
+        <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
+        <Route path="board" element={<Board />} />
+        <Route path="settings/admins" element={<AdminAccounts />} />
+        <Route path="settings/org" element={<OrgSettings />} />
+        <Route path="settings/me" element={<MyInfo />} />
+        <Route path="org/entities" element={<BusinessEntities />} />
+        <Route path="org/vendors" element={<Vendors />} />
+        <Route path="org/centers" element={<Centers />} />
+        <Route path="org/devices" element={<Devices />} />
+        <Route path="permissions/groups" element={<PermissionGroups />} />
+        <Route path="permissions/menus" element={<PermissionGroupMenus />} />
+        <Route path="templates" element={<Navigate to="/templates/shift" replace />} />
+        <Route path="templates/shift" element={<ShiftTemplates />} />
+        <Route path="templates/allowance" element={<AllowanceTemplates />} />
+        <Route path="templates/insurance" element={<InsuranceRateTemplates />} />
+        <Route path="templates/reports" element={<CenterReports />} />
+      </>
+    );
+
+    if (isMobile) {
+      return (
+        <Routes>
+          <Route path="/" element={<AdminMobileLayout />}>
+            <Route index element={<AdminMobileHome />} />
+            <Route path="more" element={<AdminMobileMore />} />
+            {sharedAdminChildRoutes}
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      );
+    }
+
     return (
       <Routes>
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
-          {isSuperAdmin && <Route path="platform/companies" element={<PlatformCompanies />} />}
-          <Route path="employees" element={<EmployeeList />} />
-          <Route path="employees/status" element={<EmployeeStatus />} />
-          <Route path="employees/history-access" element={<HistoryAccessRequests />} />
-          <Route path="employees/contracts" element={<Contracts />} />
-          <Route path="employees/documents" element={<Documents />} />
-          <Route path="employees/inquiries" element={<Inquiries />} />
-          <Route path="schedule" element={<Schedule />} />
-          <Route path="attendance" element={<AttendanceBoard />} />
-          <Route path="leaves" element={<LeaveApprovals />} />
-          <Route path="leaves/settings" element={<LeaveSettings />} />
-          <Route path="leaves/management" element={<LeaveManagement />} />
-          <Route path="leaves/usage" element={<LeaveUsage />} />
-          <Route path="safety" element={<SafetyTrainings />} />
-          <Route path="safety/settings" element={<SafetySettings />} />
-          <Route path="safety/materials" element={<SafetyMaterials />} />
-          <Route path="payroll" element={<Payroll />} />
-          <Route path="payroll/settings" element={<SiteInsuranceRates />} />
-          <Route path="stats" element={<StatsSummary />} />
-          <Route path="stats/attendance-count" element={<StatsAttendanceCount />} />
-          <Route path="stats/monthly-grid" element={<StatsMonthlyGrid />} />
-          <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
-          <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
-          <Route path="board" element={<Board />} />
-          <Route path="settings/admins" element={<AdminAccounts />} />
-          <Route path="settings/org" element={<OrgSettings />} />
-          <Route path="settings/me" element={<MyInfo />} />
-          <Route path="org/entities" element={<BusinessEntities />} />
-          <Route path="org/vendors" element={<Vendors />} />
-          <Route path="org/centers" element={<Centers />} />
-          <Route path="org/devices" element={<Devices />} />
-          <Route path="permissions/groups" element={<PermissionGroups />} />
-          <Route path="permissions/menus" element={<PermissionGroupMenus />} />
-          <Route path="templates" element={<Navigate to="/templates/shift" replace />} />
-          <Route path="templates/shift" element={<ShiftTemplates />} />
-          <Route path="templates/allowance" element={<AllowanceTemplates />} />
-          <Route path="templates/insurance" element={<InsuranceRateTemplates />} />
-          <Route path="templates/reports" element={<CenterReports />} />
+          {sharedAdminChildRoutes}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -151,7 +151,12 @@ export default function Board() {
   return (
     <div className="space-y-6">
       <Panel icon={MessageSquare} title={`게시판 (${sorted.length}건)`}>
-        <p className="mb-4 text-xs text-muted">전 직원 또는 특정 팀을 대상으로 공지·점검사항을 작성하고 관리합니다.</p>
+        <div className="mb-4 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+          <p className="text-xs text-muted">전 직원 또는 특정 팀을 대상으로 공지·점검사항을 작성하고 관리합니다.</p>
+          <Button size="sm" onClick={openNew}>
+            <Plus size={13} /> 등록
+          </Button>
+        </div>
         {sorted.length === 0 ? (
           <Card className="p-10 text-center">
             <p className="text-sm font-medium text-ink">등록된 공지사항이 없습니다</p>
@@ -166,15 +171,7 @@ export default function Board() {
                   <th className="px-4 py-3 text-center">제목</th>
                   <th className="w-20 px-4 py-3 text-center">대상</th>
                   <th className="w-16 px-4 py-3 text-center">조회수</th>
-                  <th className="w-32 px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={openNew}
-                      className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2.5 py-1 text-xs font-semibold text-white hover:bg-white/25"
-                    >
-                      <Plus size={13} /> 등록
-                    </button>
-                  </th>
+                  <th className="w-32 px-4 py-3 text-right">작성자</th>
                 </tr>
               </thead>
               <tbody>
