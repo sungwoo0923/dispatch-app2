@@ -122,7 +122,7 @@ export default function AttendanceHistory() {
             <Icon size={13} /> {label}
           </span>
           {pending && (
-            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${REQUEST_STATUS_TEXT_CLS[pending.status]}`}>
+            <span className={`inline-flex items-center gap-1 text-xs font-semibold ${REQUEST_STATUS_TEXT_CLS[pending.status]}`}>
               {(() => {
                 const Ico = REQUEST_STATUS_ICON[pending.status];
                 return <Ico size={12} />;
@@ -133,7 +133,7 @@ export default function AttendanceHistory() {
         </div>
         <p className="mt-1.5 text-lg font-bold text-ink">{value ? formatTime(value) : "-"}</p>
         {pending && (
-          <p className="mt-1 text-[11px] text-muted">
+          <p className="mt-1 text-xs text-muted">
             {pending.status === "pending" ? "요청" : pending.status === "approved" ? "변경" : "요청"} 시각 {pending.requestedTime}
             {pending.status === "rejected" && pending.adminNote ? ` · 사유: ${pending.adminNote}` : ""}
           </p>
@@ -143,7 +143,7 @@ export default function AttendanceHistory() {
             type="button"
             onClick={() => openRequestForm(field, value)}
             disabled={pending?.status === "pending"}
-            className="mt-2 text-[11px] font-semibold text-primary disabled:text-slate-300"
+            className="mt-2 text-xs font-semibold text-primary disabled:text-slate-300"
           >
             {pending?.status === "pending" ? "승인 대기중" : "시각 변경 요청"}
           </button>
@@ -236,7 +236,7 @@ export default function AttendanceHistory() {
               <TimeField icon={LogIn} label="출근시각" field="checkInTime" value={detail.checkInTime} />
               <TimeField icon={LogOut} label="퇴근시각" field="checkOutTime" value={detail.checkOutTime} />
             </div>
-            <p className="text-[11px] leading-relaxed text-muted">
+            <p className="text-xs leading-relaxed text-muted">
               변경 요청을 제출하면 관리자 승인 후 실제 기록에 반영됩니다. 승인 대기 중인 요청이 있으면 새 요청을 제출할 수 없습니다.
             </p>
           </div>

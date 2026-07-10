@@ -146,12 +146,12 @@ export default function MyInfoPage() {
             <UserRound size={15} className="text-primary" /> 기본정보 입력
           </p>
           {locked && (
-            <span className="flex items-center gap-1 text-[11px] font-medium text-muted">
+            <span className="flex items-center gap-1 text-xs font-medium text-muted">
               <Lock size={11} /> 수정 잠김
             </span>
           )}
         </div>
-        <p className="mb-3 text-[11px] leading-relaxed text-muted">
+        <p className="mb-3 text-xs leading-relaxed text-muted">
           {locked
             ? "최초 저장 후에는 직접 수정할 수 없습니다. 정보가 변경되었다면 아래 수정요청 버튼으로 관리자에게 요청해주세요."
             : "급여 지급 및 서류 발급에 사용되는 정보입니다. 정확히 입력 후 저장해주세요. 최초 1회만 직접 저장할 수 있고, 이후에는 수정요청을 통해서만 변경됩니다."}

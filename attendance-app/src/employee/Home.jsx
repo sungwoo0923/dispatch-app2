@@ -584,7 +584,7 @@ export default function Home() {
           <Link to="/board">
             <Card className="flex items-center gap-3 p-4">
               <Megaphone size={18} className="shrink-0 text-primary" />
-              <p className="flex-1 truncate text-xs text-ink">[공지] {latestNotice.title}</p>
+              <p className="min-w-0 flex-1 truncate text-xs text-ink">[공지] {latestNotice.title}</p>
             </Card>
           </Link>
         )}
@@ -608,12 +608,12 @@ export default function Home() {
               </p>
             ) : distance != null ? (
               <div>
-                <div className="flex items-center justify-between text-xs text-muted">
-                  <span className="flex items-center gap-1.5">
-                    <Navigation size={13} /> 현재 위치까지 약 {Math.round(distance)}m
+                <div className="flex items-center justify-between gap-2 text-xs text-muted">
+                  <span className="min-w-0 flex-1 truncate">
+                    <Navigation size={13} className="mr-1 inline-block" /> 현재 위치까지 약 {Math.round(distance)}m
                     {accuracy != null && <span className="text-muted/70"> (오차범위 ±{Math.round(accuracy)}m)</span>}
                   </span>
-                  <span className={`font-semibold ${inRadius ? "text-primary" : "text-muted"}`}>{inRadius ? "반경 안" : "반경 밖"}</span>
+                  <span className={`shrink-0 font-semibold ${inRadius ? "text-primary" : "text-muted"}`}>{inRadius ? "반경 안" : "반경 밖"}</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div

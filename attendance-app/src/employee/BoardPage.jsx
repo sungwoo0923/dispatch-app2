@@ -60,12 +60,12 @@ function NoticeTab() {
     <div className="space-y-3">
       <div className="px-0.5">
         <p className="text-sm font-semibold text-ink">공지사항</p>
-        <p className="mt-0.5 text-[11px] text-muted">회사의 새로운 소식과 안내를 확인하세요</p>
+        <p className="mt-0.5 text-xs text-muted">회사의 새로운 소식과 안내를 확인하세요</p>
       </div>
       {sorted.length === 0 ? (
         <Card className="flex flex-col items-center gap-1 p-8 text-center">
           <p className="text-sm font-medium text-ink">등록된 공지사항이 없습니다</p>
-          <p className="text-[11px] text-muted">새 소식이 있으면 이 곳에 안내됩니다.</p>
+          <p className="text-xs text-muted">새 소식이 있으면 이 곳에 안내됩니다.</p>
         </Card>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -83,7 +83,7 @@ function NoticeTab() {
                     </span>
                   )}
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{p.title}</span>
-                  <span className="shrink-0 text-[11px] text-muted">
+                  <span className="shrink-0 text-xs text-muted">
                     {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
                   </span>
                   <ChevronDown size={15} className={`shrink-0 text-muted transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -91,7 +91,7 @@ function NoticeTab() {
                 {isOpen && (
                   <div className="border-t border-slate-100 bg-slate-50 px-4 pb-4 pt-3.5">
                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{p.content}</p>
-                    <p className="mt-3 text-[11px] text-muted">
+                    <p className="mt-3 text-xs text-muted">
                       {p.authorName} ·{" "}
                       {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
                     </p>
@@ -185,7 +185,7 @@ function InquiryTab() {
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-ink">{q.subject}</p>
-                <p className="mt-0.5 text-[11px] text-muted">
+                <p className="mt-0.5 text-xs text-muted">
                   {q.toName}{q.toPosition ? ` (${q.toPosition})` : ""}
                   {q.createdAt?.toDate ? ` · ${formatDate(q.createdAt.toDate().toISOString().slice(0, 10))}` : ""}
                 </p>
@@ -197,7 +197,7 @@ function InquiryTab() {
                 <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{q.message}</p>
                 {q.reply && (
                   <div className="rounded-xl bg-primary-light/40 p-3">
-                    <p className="mb-1 text-[11px] font-semibold text-primary">답변</p>
+                    <p className="mb-1 text-xs font-semibold text-primary">답변</p>
                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{q.reply}</p>
                   </div>
                 )}
@@ -259,7 +259,7 @@ function InquiryTab() {
               onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
             />
           </label>
-          <p className="text-[11px] text-muted">문의 내용은 본인과 선택한 담당자만 확인할 수 있습니다.</p>
+          <p className="text-xs text-muted">문의 내용은 본인과 선택한 담당자만 확인할 수 있습니다.</p>
         </div>
       </Modal>
     </div>

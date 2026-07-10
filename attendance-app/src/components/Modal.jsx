@@ -85,9 +85,9 @@ export default function Modal({ open, onClose, title, children, footer, size = "
       <div
         className={`flex w-full ${SIZES[size]} max-h-[85%] flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h3 className="text-base font-semibold text-ink">{title}</h3>
-          <button onClick={onClose} className="text-muted hover:text-ink">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-ink">{title}</h3>
+          <button onClick={onClose} className="shrink-0 text-muted hover:text-ink">
             <X size={20} />
           </button>
         </div>

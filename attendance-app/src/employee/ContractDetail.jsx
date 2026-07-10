@@ -60,7 +60,7 @@ export default function ContractDetail() {
 
       <Card className="p-5">
         <p className="mb-3 text-center text-base font-semibold text-ink">{contract.title}</p>
-        <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-sans text-[11px] leading-relaxed text-ink">
+        <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-sans text-xs leading-relaxed text-ink">
           {contract.content}
         </pre>
       </Card>
@@ -73,7 +73,7 @@ export default function ContractDetail() {
           ) : (
             <p className="text-xs text-warning">서명 대기중</p>
           )}
-          {contract.companySignedAt && <p className="mt-1 text-[11px] text-muted">{formatDate(contract.companySignedAt)}</p>}
+          {contract.companySignedAt && <p className="mt-1 text-xs text-muted">{formatDate(contract.companySignedAt)}</p>}
         </Card>
         <Card className="p-4 text-center">
           <p className="mb-1.5 text-xs font-medium text-muted">을 (근로자)</p>
@@ -82,7 +82,7 @@ export default function ContractDetail() {
           ) : (
             <p className="text-xs text-warning">서명 필요</p>
           )}
-          {contract.employeeSignedAt && <p className="mt-1 text-[11px] text-muted">{formatDate(contract.employeeSignedAt)}</p>}
+          {contract.employeeSignedAt && <p className="mt-1 text-xs text-muted">{formatDate(contract.employeeSignedAt)}</p>}
         </Card>
       </div>
 

@@ -43,7 +43,7 @@ export default function SafetyTrainingsPage() {
 
   return (
     <div className="space-y-3 px-4 pt-4">
-      <h2 className="text-base font-bold text-ink">안전교육</h2>
+      <h2 className="text-sm font-semibold text-ink">안전교육</h2>
 
       <MandatoryMaterials />
 
@@ -161,7 +161,7 @@ function MandatoryMaterials() {
                 className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-left disabled:opacity-60"
               >
                 {m.type === "video" ? <Video size={16} className="shrink-0 text-primary" /> : <FileText size={16} className="shrink-0 text-primary" />}
-                <span className="flex-1 truncate text-sm font-medium text-ink">{m.title}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{m.title}</span>
                 <Badge tone={done ? "success" : "warning"}>{done ? "이수완료" : "이수필요"}</Badge>
               </button>
             );

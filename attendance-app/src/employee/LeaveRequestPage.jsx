@@ -111,15 +111,15 @@ export default function LeaveRequestPage() {
         <div className="grid grid-cols-3 gap-2 text-center">
           <div>
             <p className="text-lg font-bold text-ink">{balance.entitlement}</p>
-            <p className="text-[11px] text-muted">부여</p>
+            <p className="text-xs text-muted">부여</p>
           </div>
           <div>
             <p className="text-lg font-bold text-ink">{balance.used}</p>
-            <p className="text-[11px] text-muted">사용</p>
+            <p className="text-xs text-muted">사용</p>
           </div>
           <div>
             <p className="text-lg font-bold text-primary">{balance.remaining}</p>
-            <p className="text-[11px] text-muted">잔여</p>
+            <p className="text-xs text-muted">잔여</p>
           </div>
         </div>
       </Card>
@@ -143,7 +143,7 @@ export default function LeaveRequestPage() {
                   {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
                 </p>
                 {lv.status === "rejected" && lv.adminNote && (
-                  <p className="mt-0.5 text-[11px] text-danger">반려사유: {lv.adminNote}</p>
+                  <p className="mt-0.5 text-xs text-danger">반려사유: {lv.adminNote}</p>
                 )}
               </div>
               <div className="flex items-center gap-2">

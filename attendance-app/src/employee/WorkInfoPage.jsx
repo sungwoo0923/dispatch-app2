@@ -133,17 +133,17 @@ export default function WorkInfoPage() {
             </span>
             <span className="font-semibold text-ink">{profile?.bankName || "-"}</span>
           </div>
-          <div className="flex items-center justify-between py-2.5 text-sm">
-            <span className="flex items-center gap-2 text-muted">
+          <div className="flex items-center justify-between gap-3 py-2.5 text-sm">
+            <span className="flex shrink-0 items-center gap-2 text-muted">
               <Landmark size={14} className="text-slate-300" /> 계좌번호
             </span>
-            <span className="font-semibold text-ink">{profile?.bankAccount || "-"}</span>
+            <span className="min-w-0 flex-1 truncate text-right font-semibold text-ink">{profile?.bankAccount || "-"}</span>
           </div>
-          <div className="flex items-center justify-between py-2.5 text-sm">
-            <span className="flex items-center gap-2 text-muted">
+          <div className="flex items-center justify-between gap-3 py-2.5 text-sm">
+            <span className="flex shrink-0 items-center gap-2 text-muted">
               <MapPin size={14} className="text-slate-300" /> 주소
             </span>
-            <span className="font-semibold text-ink">{workSite?.address || "-"}</span>
+            <span className="min-w-0 flex-1 truncate text-right font-semibold text-ink">{workSite?.address || "-"}</span>
           </div>
         </div>
       </Card>

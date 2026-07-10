@@ -83,17 +83,17 @@ export default function ContractsPage() {
       {filteredContracts.length === 0 && !resignation && <p className="text-xs text-muted">받은 계약서가 없습니다.</p>}
       {filteredContracts.map((c) => (
         <Link key={c.id} to={`/contracts/${c.id}`}>
-          <Card className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
+          <Card className="flex items-center justify-between gap-3 p-4">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
                 <FileSignature size={18} />
               </div>
-              <div>
-                <p className="text-sm font-medium text-ink">{c.title}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-ink">{c.title}</p>
                 <p className="text-xs text-muted">{c.startDate ? formatDate(c.startDate) : ""}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <Badge tone={CONTRACT_STATUS_TONE[contractStatus(c)]}>{contractStatus(c)}</Badge>
               <ChevronRight size={16} className="text-muted" />
             </div>

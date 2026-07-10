@@ -116,9 +116,9 @@ export default function ResignationPage() {
             <span className="text-muted">직책</span>
             <span>{req.position || "-"}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted">근무지</span>
-            <span>{req.siteName || "-"}</span>
+          <div className="flex justify-between gap-3">
+            <span className="shrink-0 text-muted">근무지</span>
+            <span className="min-w-0 flex-1 truncate text-right">{req.siteName || "-"}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted">입사일자</span>

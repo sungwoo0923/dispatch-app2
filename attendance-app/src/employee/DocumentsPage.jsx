@@ -59,18 +59,18 @@ export default function DocumentsPage() {
 
       {documents.length === 0 && <p className="text-xs text-muted">업로드된 서류가 없습니다.</p>}
       {documents.map((d) => (
-        <Card key={d.id} className="flex items-center justify-between p-4">
-          <a href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
+        <Card key={d.id} className="flex items-center justify-between gap-3 p-4">
+          <a href={d.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
               <FileText size={18} />
             </div>
-            <div>
-              <p className="text-sm font-medium text-ink">{d.docType}</p>
-              <p className="text-xs text-muted">{d.fileName}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-ink">{d.docType}</p>
+              <p className="truncate text-xs text-muted">{d.fileName}</p>
             </div>
           </a>
           <button
-            className="text-muted hover:text-danger"
+            className="shrink-0 text-muted hover:text-danger"
             onClick={() =>
               deleteEmployeeDocument(d)
                 .then(() => toast.success("삭제되었습니다"))

@@ -30,22 +30,22 @@ export default function PayslipList() {
 
   return (
     <div className="space-y-3 px-4 pt-4">
-      <h2 className="text-base font-bold text-ink">급여관리</h2>
+      <h2 className="text-sm font-semibold text-ink">급여관리</h2>
       <MonthRangeSearch onSearch={setRange} />
       {filteredPayrolls.length === 0 && <p className="text-xs text-muted">발급된 명세서가 없습니다.</p>}
       {filteredPayrolls.map((p) => (
         <Link key={p.id} to={`/payslips/${p.id}`}>
-          <Card className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light text-primary">
+          <Card className="flex items-center justify-between gap-3 p-4">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
                 <Wallet size={20} />
               </div>
-              <div>
-                <p className="text-base font-bold text-ink">{p.siteName || p.month}</p>
-                <p className="mt-0.5 text-sm font-semibold text-ink">{p.month} · {p.netPay?.toLocaleString()}원</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">{p.siteName || p.month}</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-ink">{p.month} · {p.netPay?.toLocaleString()}원</p>
               </div>
             </div>
-            <ChevronRight size={20} className="text-muted" />
+            <ChevronRight size={20} className="shrink-0 text-muted" />
           </Card>
         </Link>
       ))}

@@ -54,7 +54,7 @@ export default function SafetyArchivePage() {
       <Link to="/my-info" className="flex items-center gap-1 text-xs text-muted">
         <ArrowLeft size={14} /> 내정보
       </Link>
-      <h2 className="text-base font-bold text-ink">안전교육자료</h2>
+      <h2 className="text-sm font-semibold text-ink">안전교육자료</h2>
       <p className="text-xs text-muted">이미 이수한 자료도 언제든 다시 열람할 수 있습니다.</p>
 
       {materials.length === 0 && <p className="text-xs text-muted">등록된 안전교육자료가 없습니다.</p>}
@@ -63,11 +63,11 @@ export default function SafetyArchivePage() {
         return (
           <Card key={m.id} className="p-4">
             <button type="button" onClick={() => setViewing(m)} className="flex w-full items-center gap-3 text-left">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
                 {m.type === "video" ? <Video size={18} /> : <FileText size={18} />}
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-ink">{m.title}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-ink">{m.title}</p>
                 <p className="text-xs text-muted">{c ? `이수완료 · ${c.completedAt?.toDate ? c.completedAt.toDate().toISOString().slice(0, 10) : ""}` : "미이수"}</p>
               </div>
               <Badge tone={c ? "success" : "warning"}>{c ? "이수완료" : "미이수"}</Badge>
