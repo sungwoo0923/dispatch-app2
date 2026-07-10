@@ -4,7 +4,7 @@ import { storage, db } from "../firebase";
 
 export const DOCUMENT_TYPE_OPTIONS = ["신분증 사본", "통장 사본", "자격증", "재직증명서", "기타"];
 
-export async function uploadEmployeeDocument({ companyId, uid, employeeName, docType, file }) {
+export async function uploadEmployeeDocument({ companyId, uid, employeeName, docType, file, uploadedBy = "employee" }) {
   const path = `companies/${companyId}/employees/${uid}/${Date.now()}_${file.name}`;
   const storageRef = ref(storage, path);
   await uploadBytes(storageRef, file);
@@ -18,6 +18,7 @@ export async function uploadEmployeeDocument({ companyId, uid, employeeName, doc
     fileName: file.name,
     url,
     path,
+    uploadedBy,
     uploadedAt: serverTimestamp(),
   });
 }

@@ -7,6 +7,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { useLanguage } from "../hooks/useLanguage";
 import { usePushNotifications } from "../hooks/usePushNotifications";
+import { useMyInfoBadges } from "../hooks/useMyInfoBadges";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -18,9 +19,9 @@ import { formatResidentNumber } from "../utils/phoneAuth";
 import { openAddressSearch } from "../utils/daumPostcode";
 
 const ITEMS = [
-  { to: "/documents", label: "서류함", icon: FolderOpen },
-  { to: "/safety", label: "안전교육", icon: ShieldCheck },
-  { to: "/safety/archive", label: "안전교육자료", icon: ShieldCheck },
+  { to: "/documents", label: "서류함", icon: FolderOpen, badgeKey: "documents" },
+  { to: "/safety", label: "안전교육", icon: ShieldCheck, badgeKey: "safety" },
+  { to: "/safety/archive", label: "안전교육자료", icon: ShieldCheck, badgeKey: "safetyArchive" },
 ];
 
 const EMPTY_BASIC = {
@@ -47,6 +48,7 @@ export default function MyInfoPage() {
   const toast = useToast();
   const { lang, setLang, languages, t } = useLanguage();
   const push = usePushNotifications(user?.uid);
+  const { counts: subItemCounts, markSeen: markSubItemSeen } = useMyInfoBadges(user?.uid, profile?.companyId);
   const [basic, setBasic] = useState(EMPTY_BASIC);
   const [saving, setSaving] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
@@ -320,14 +322,19 @@ export default function MyInfoPage() {
         <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
       </Card>
 
-      {ITEMS.map(({ to, label, icon: Icon }) => (
-        <Link key={to} to={to}>
+      {ITEMS.map(({ to, label, icon: Icon, badgeKey }) => (
+        <Link key={to} to={to} onClick={() => markSubItemSeen(badgeKey)}>
           <Card className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
                 <Icon size={18} />
               </div>
               <p className="text-sm font-medium text-ink">{label}</p>
+              {subItemCounts[badgeKey] > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[11px] font-bold text-white">
+                  {subItemCounts[badgeKey]}
+                </span>
+              )}
             </div>
             <ChevronRight size={16} className="text-muted" />
           </Card>

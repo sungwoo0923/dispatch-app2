@@ -901,7 +901,7 @@ export default function EmployeeList() {
             await updateDoc(doc(db, "users", editingUid), { photoUrl });
           }
           for (const { docType, file } of stagedDocs) {
-            await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file });
+            await uploadEmployeeDocument({ companyId: profile.companyId, uid: editingUid, employeeName: registerForm.name, docType, file, uploadedBy: "admin" });
           }
         } catch (uploadErr) {
           console.error(uploadErr);

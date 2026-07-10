@@ -73,6 +73,7 @@ export default function Documents() {
         employeeName: emp?.name || "",
         docType: form.docType,
         file,
+        uploadedBy: "admin",
       });
       setOpen(false);
       setFile(null);
