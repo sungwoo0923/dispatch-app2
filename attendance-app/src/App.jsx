@@ -23,6 +23,18 @@ import AdminMobilePayroll from "./admin/AdminMobilePayroll";
 import AdminMobileSiteInsuranceRates from "./admin/AdminMobileSiteInsuranceRates";
 import AdminMobileStatsSummary from "./admin/AdminMobileStatsSummary";
 import AdminMobileStatsAttendanceCount from "./admin/AdminMobileStatsAttendanceCount";
+import AdminMobileBusinessEntities from "./admin/AdminMobileBusinessEntities";
+import AdminMobileVendors from "./admin/AdminMobileVendors";
+import AdminMobileCenters from "./admin/AdminMobileCenters";
+import AdminMobileDevices from "./admin/AdminMobileDevices";
+import AdminMobileAdminAccounts from "./admin/AdminMobileAdminAccounts";
+import AdminMobileOrgSettings from "./admin/AdminMobileOrgSettings";
+import AdminMobilePermissionGroups from "./admin/AdminMobilePermissionGroups";
+import AdminMobilePermissionGroupMenus from "./admin/AdminMobilePermissionGroupMenus";
+import AdminMobileShiftTemplates from "./admin/AdminMobileShiftTemplates";
+import AdminMobileAllowanceTemplates from "./admin/AdminMobileAllowanceTemplates";
+import AdminMobileInsuranceRateTemplates from "./admin/AdminMobileInsuranceRateTemplates";
+import AdminMobileCenterReports from "./admin/AdminMobileCenterReports";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
 import SuperAdminCompanyPicker from "./admin/SuperAdminCompanyPicker";
 import Dashboard from "./admin/Dashboard";
@@ -161,20 +173,8 @@ export default function App() {
         <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
         <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
         <Route path="board" element={<Board />} />
-        <Route path="settings/admins" element={<AdminAccounts />} />
-        <Route path="settings/org" element={<OrgSettings />} />
         <Route path="settings/me" element={<MyInfo />} />
-        <Route path="org/entities" element={<BusinessEntities />} />
-        <Route path="org/vendors" element={<Vendors />} />
-        <Route path="org/centers" element={<Centers />} />
-        <Route path="org/devices" element={<Devices />} />
-        <Route path="permissions/groups" element={<PermissionGroups />} />
-        <Route path="permissions/menus" element={<PermissionGroupMenus />} />
         <Route path="templates" element={<Navigate to="/templates/shift" replace />} />
-        <Route path="templates/shift" element={<ShiftTemplates />} />
-        <Route path="templates/allowance" element={<AllowanceTemplates />} />
-        <Route path="templates/insurance" element={<InsuranceRateTemplates />} />
-        <Route path="templates/reports" element={<CenterReports />} />
       </>
     );
 
@@ -197,6 +197,18 @@ export default function App() {
             <Route path="payroll/settings" element={<AdminMobileSiteInsuranceRates />} />
             <Route path="stats" element={<AdminMobileStatsSummary />} />
             <Route path="stats/attendance-count" element={<AdminMobileStatsAttendanceCount />} />
+            <Route path="org/entities" element={<AdminMobileBusinessEntities />} />
+            <Route path="org/vendors" element={<AdminMobileVendors />} />
+            <Route path="org/centers" element={<AdminMobileCenters />} />
+            <Route path="org/devices" element={<AdminMobileDevices />} />
+            <Route path="settings/admins" element={<AdminMobileAdminAccounts />} />
+            <Route path="settings/org" element={<AdminMobileOrgSettings />} />
+            <Route path="permissions/groups" element={<AdminMobilePermissionGroups />} />
+            <Route path="permissions/menus" element={<AdminMobilePermissionGroupMenus />} />
+            <Route path="templates/shift" element={<AdminMobileShiftTemplates />} />
+            <Route path="templates/allowance" element={<AdminMobileAllowanceTemplates />} />
+            <Route path="templates/insurance" element={<AdminMobileInsuranceRateTemplates />} />
+            <Route path="templates/reports" element={<AdminMobileCenterReports />} />
             {sharedAdminChildRoutes}
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -221,6 +233,18 @@ export default function App() {
           <Route path="payroll/settings" element={<SiteInsuranceRates />} />
           <Route path="stats" element={<StatsSummary />} />
           <Route path="stats/attendance-count" element={<StatsAttendanceCount />} />
+          <Route path="org/entities" element={<BusinessEntities />} />
+          <Route path="org/vendors" element={<Vendors />} />
+          <Route path="org/centers" element={<Centers />} />
+          <Route path="org/devices" element={<Devices />} />
+          <Route path="settings/admins" element={<AdminAccounts />} />
+          <Route path="settings/org" element={<OrgSettings />} />
+          <Route path="permissions/groups" element={<PermissionGroups />} />
+          <Route path="permissions/menus" element={<PermissionGroupMenus />} />
+          <Route path="templates/shift" element={<ShiftTemplates />} />
+          <Route path="templates/allowance" element={<AllowanceTemplates />} />
+          <Route path="templates/insurance" element={<InsuranceRateTemplates />} />
+          <Route path="templates/reports" element={<CenterReports />} />
           {sharedAdminChildRoutes}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
