@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { ChevronRight, MessageSquarePlus, Pin } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -11,6 +11,7 @@ import Modal from "../components/Modal";
 import { formatDate } from "../utils/dateUtils";
 
 const TOP_TABS = ["공지", "문의하기"];
+const CATEGORY_LABEL = { notice: "공지사항", inspection: "점검사항" };
 
 export default function BoardPage() {
   const [tab, setTab] = useState("공지");
@@ -35,7 +36,7 @@ export default function BoardPage() {
 }
 
 function NoticeTab() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [posts, setPosts] = useState([]);
   const [viewing, setViewing] = useState(null);
 
@@ -49,12 +50,21 @@ function NoticeTab() {
 
   const sorted = useMemo(
     () =>
-      [...posts].sort((a, b) => {
-        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-      }),
-    [posts]
+      posts
+        .filter((p) => !p.targetTeams?.length || p.targetTeams.includes(profile?.team))
+        .sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+        }),
+    [posts, profile?.team]
   );
+
+  const openView = (p) => {
+    setViewing(p);
+    if (user?.uid && !(p.viewedBy || []).includes(user.uid)) {
+      updateDoc(doc(db, "posts", p.id), { viewedBy: arrayUnion(user.uid) }).catch(() => {});
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -73,11 +83,14 @@ function NoticeTab() {
             <button
               key={p.id}
               type="button"
-              onClick={() => setViewing(p)}
+              onClick={() => openView(p)}
               className={`flex w-full items-center gap-2 px-4 py-3.5 text-left active:bg-slate-50 ${idx > 0 ? "border-t border-slate-100" : ""}`}
             >
               {p.pinned && (
                 <span className="shrink-0 rounded bg-primary-dark px-1.5 py-0.5 text-[10px] font-bold text-white">중요</span>
+              )}
+              {p.category === "inspection" && (
+                <Badge tone="warning">{CATEGORY_LABEL.inspection}</Badge>
               )}
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{p.title}</span>
               <span className="shrink-0 text-xs text-muted">
@@ -94,6 +107,7 @@ function NoticeTab() {
           <div className="space-y-3 text-sm">
             <p className="flex items-center gap-1.5 font-semibold text-ink">
               {viewing.pinned && <Badge tone="primary">고정</Badge>}
+              {viewing.category === "inspection" && <Badge tone="warning">{CATEGORY_LABEL.inspection}</Badge>}
               {viewing.title}
             </p>
             <p className="text-xs text-muted">

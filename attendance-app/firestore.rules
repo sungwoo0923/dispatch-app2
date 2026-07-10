@@ -369,7 +369,12 @@ service cloud.firestore {
 
     match /posts/{postId} {
       allow read: if isSignedIn();
-      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow create: if isAdminOf(request.resource.data.companyId);
+      // 조회수 기록: 같은 회사 구성원이라면 viewedBy 필드만 바꾸는 조건으로
+      // 본인 uid를 추가할 수 있다 (그 외 필드 변경은 여전히 관리자만 가능).
+      allow update: if isAdminOf(resource.data.companyId) ||
+        (isSignedIn() && myCompanyId() == resource.data.companyId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(["viewedBy"]));
       allow delete: if isAdminOf(resource.data.companyId);
     }
 

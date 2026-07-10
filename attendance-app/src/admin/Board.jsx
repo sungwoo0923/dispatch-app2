@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { Trash2, Plus, MessageSquare, Pin, MessageCircleWarning, Copy } from "lucide-react";
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { Trash2, Plus, MessageSquare, Pin, MessageCircleWarning, Copy, Eye, Wrench } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -10,25 +10,33 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import SidePanel from "../components/SidePanel";
 import { formatDate } from "../utils/dateUtils";
 
-// 공지 제목은 사용자가 따로 입력하지 않고 "작성한 날짜 + 공지사항"으로
-// 자동 생성한다 (예: "2026년 07월 10일 공지사항").
-function autoTitle(d = new Date()) {
-  return `${d.getFullYear()}년 ${String(d.getMonth() + 1).padStart(2, "0")}월 ${String(d.getDate()).padStart(2, "0")}일 공지사항`;
+const CATEGORY_OPTIONS = [
+  { value: "notice", label: "공지사항" },
+  { value: "inspection", label: "점검사항" },
+];
+const CATEGORY_LABEL = Object.fromEntries(CATEGORY_OPTIONS.map((c) => [c.value, c.label]));
+const CATEGORY_TONE = { notice: "primary", inspection: "warning" };
+
+// 공지 제목은 사용자가 따로 입력하지 않고 "작성한 날짜 + 카테고리"로
+// 자동 생성한다 (예: "2026년 07월 10일 공지사항" / "... 점검사항").
+function autoTitle(d = new Date(), category = "notice") {
+  return `${d.getFullYear()}년 ${String(d.getMonth() + 1).padStart(2, "0")}월 ${String(d.getDate()).padStart(2, "0")}일 ${CATEGORY_LABEL[category] || CATEGORY_LABEL.notice}`;
 }
 
-const EMPTY_FORM = { content: "", pinned: false, urgentSms: false, urgentSiteId: "" };
+const EMPTY_FORM = { content: "", pinned: false, category: "notice", targetMode: "all", targetTeams: [], urgentSms: false, urgentSiteId: "" };
 
 export default function Board() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const confirm = useConfirm();
   const toast = useToast();
   const [posts, setPosts] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [viewing, setViewing] = useState(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [smsRecipients, setSmsRecipients] = useState(null); // { numbers, body } — 번호 일괄 복사용 fallback 팝업
 
@@ -53,6 +61,11 @@ export default function Board() {
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
 
+  const teamOptions = useMemo(() => {
+    const set = new Set(employees.map((e) => e.team).filter(Boolean));
+    return [...set].sort();
+  }, [employees]);
+
   const sorted = useMemo(
     () =>
       [...posts].sort((a, b) => {
@@ -64,18 +77,29 @@ export default function Board() {
 
   const openNew = () => {
     setForm(EMPTY_FORM);
-    setModalOpen(true);
+    setPanelOpen(true);
+  };
+
+  const toggleTargetTeam = (team) => {
+    setForm((f) => ({
+      ...f,
+      targetTeams: f.targetTeams.includes(team) ? f.targetTeams.filter((t) => t !== team) : [...f.targetTeams, team],
+    }));
   };
 
   const submit = async (e) => {
     e.preventDefault();
     const now = new Date();
-    const title = autoTitle(now);
+    const title = autoTitle(now, form.category);
+    const targetTeams = form.targetMode === "teams" ? form.targetTeams : [];
     await addDoc(collection(db, "posts"), {
       companyId: profile.companyId,
       title,
       content: form.content,
       pinned: form.pinned,
+      category: form.category,
+      targetTeams,
+      viewedBy: [],
       authorName: profile.name,
       createdAt: serverTimestamp(),
     });
@@ -98,7 +122,7 @@ export default function Board() {
     }
 
     setForm(EMPTY_FORM);
-    setModalOpen(false);
+    setPanelOpen(false);
   };
 
   const copySmsNumbers = async () => {
@@ -117,10 +141,17 @@ export default function Board() {
     setViewing(null);
   };
 
+  const openView = (p) => {
+    setViewing(p);
+    if (user?.uid && !(p.viewedBy || []).includes(user.uid)) {
+      updateDoc(doc(db, "posts", p.id), { viewedBy: arrayUnion(user.uid) }).catch(() => {});
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Panel icon={MessageSquare} title={`게시판 (${sorted.length}건)`}>
-        <p className="mb-4 text-xs text-muted">전 직원에게 공지할 소식을 작성하고 관리합니다.</p>
+        <p className="mb-4 text-xs text-muted">전 직원 또는 특정 팀을 대상으로 공지·점검사항을 작성하고 관리합니다.</p>
         {sorted.length === 0 ? (
           <Card className="p-10 text-center">
             <p className="text-sm font-medium text-ink">등록된 공지사항이 없습니다</p>
@@ -133,6 +164,8 @@ export default function Board() {
                 <tr className="bg-primary-dark text-xs font-semibold text-white">
                   <th className="w-24 px-4 py-3 text-center">날짜</th>
                   <th className="px-4 py-3 text-center">제목</th>
+                  <th className="w-20 px-4 py-3 text-center">대상</th>
+                  <th className="w-16 px-4 py-3 text-center">조회수</th>
                   <th className="w-32 px-4 py-3 text-right">
                     <button
                       type="button"
@@ -148,17 +181,24 @@ export default function Board() {
                 {sorted.map((p, idx) => (
                   <tr
                     key={p.id}
-                    onClick={() => setViewing(p)}
+                    onClick={() => openView(p)}
                     className={`cursor-pointer text-center hover:bg-slate-50 ${idx > 0 ? "border-t border-slate-100" : ""}`}
                   >
                     <td className="px-4 py-3 text-xs text-muted">
                       {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)).slice(5) : ""}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-left">
                       <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
                         {p.pinned && <Pin size={13} className="shrink-0 text-primary" />}
+                        <Badge tone={CATEGORY_TONE[p.category] || "primary"}>{CATEGORY_LABEL[p.category] || CATEGORY_LABEL.notice}</Badge>
                         {p.title}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">
+                      {p.targetTeams?.length ? p.targetTeams.join(", ") : "전체"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1"><Eye size={12} /> {(p.viewedBy || []).length}</span>
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-muted">{p.authorName}</td>
                   </tr>
@@ -169,13 +209,13 @@ export default function Board() {
         )}
       </Panel>
 
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+      <SidePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
         title="공지 작성"
         footer={
           <>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
+            <Button variant="outline" onClick={() => setPanelOpen(false)}>
               취소
             </Button>
             <Button onClick={submit} disabled={!form.content.trim()}>
@@ -184,10 +224,29 @@ export default function Board() {
           </>
         }
       >
-        <form onSubmit={submit} className="space-y-3">
-          <p className="rounded-lg bg-slate-50 px-3.5 py-2.5 text-xs text-muted">
-            제목은 "{autoTitle()}"처럼 등록일 기준으로 자동 생성됩니다.
-          </p>
+        <form onSubmit={submit} className="mx-auto max-w-2xl space-y-5">
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-muted">분류</span>
+            <div className="flex gap-2">
+              {CATEGORY_OPTIONS.map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, category: c.value }))}
+                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+                    form.category === c.value ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted hover:bg-slate-50"
+                  }`}
+                >
+                  {c.value === "inspection" && <Wrench size={13} className="mr-1 inline-block" />}
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 rounded-lg bg-slate-50 px-3.5 py-2.5 text-xs text-muted">
+              제목은 "{autoTitle(new Date(), form.category)}"처럼 등록일과 분류를 기준으로 자동 생성됩니다.
+            </p>
+          </div>
+
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">내용</span>
             <textarea
@@ -198,6 +257,51 @@ export default function Board() {
               onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
             />
           </label>
+
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-muted">공지 대상</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, targetMode: "all" }))}
+                className={`flex-1 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+                  form.targetMode === "all" ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted hover:bg-slate-50"
+                }`}
+              >
+                전 직원
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, targetMode: "teams" }))}
+                className={`flex-1 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+                  form.targetMode === "teams" ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted hover:bg-slate-50"
+                }`}
+              >
+                팀별 선택
+              </button>
+            </div>
+            {form.targetMode === "teams" && (
+              <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border border-slate-200 p-3">
+                {teamOptions.length === 0 ? (
+                  <p className="text-xs text-muted">등록된 팀 정보가 있는 직원이 없습니다.</p>
+                ) : (
+                  teamOptions.map((team) => (
+                    <button
+                      key={team}
+                      type="button"
+                      onClick={() => toggleTargetTeam(team)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        form.targetTeams.includes(team) ? "border-primary bg-primary text-white" : "border-slate-200 text-muted hover:bg-slate-50"
+                      }`}
+                    >
+                      {team}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
@@ -239,7 +343,7 @@ export default function Board() {
             )}
           </div>
         </form>
-      </Modal>
+      </SidePanel>
 
       <Modal
         open={Boolean(smsRecipients)}
@@ -286,6 +390,7 @@ export default function Board() {
               <span className="mb-1 block text-xs font-medium text-muted">제목</span>
               <p className="flex items-center gap-1.5 font-semibold text-ink">
                 {viewing.pinned && <Badge tone="primary">고정</Badge>}
+                <Badge tone={CATEGORY_TONE[viewing.category] || "primary"}>{CATEGORY_LABEL[viewing.category] || CATEGORY_LABEL.notice}</Badge>
                 {viewing.title}
               </p>
             </div>
@@ -299,6 +404,14 @@ export default function Board() {
                 <p className="text-ink">
                   {viewing.createdAt?.toDate ? formatDate(viewing.createdAt.toDate().toISOString().slice(0, 10)) : "-"}
                 </p>
+              </div>
+              <div>
+                <span className="mb-1 block text-xs font-medium text-muted">대상</span>
+                <p className="text-ink">{viewing.targetTeams?.length ? viewing.targetTeams.join(", ") : "전 직원"}</p>
+              </div>
+              <div>
+                <span className="mb-1 block text-xs font-medium text-muted">조회수</span>
+                <p className="inline-flex items-center gap-1 text-ink"><Eye size={13} /> {(viewing.viewedBy || []).length}명</p>
               </div>
             </div>
             <div>
