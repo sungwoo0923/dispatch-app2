@@ -954,20 +954,8 @@ const [noticePage, setNoticePage] = useState(1);
 const NOTICE_PAGE_SIZE = 5;
 const [schedulePage, setSchedulePage] = useState(1);
 const SCHEDULE_PAGE_SIZE = 5;
-const [scheduleTypeFilter, setScheduleTypeFilter] = useState(null); // null=전체, "leave"=휴가신청관리에서 진입
-const LEAVE_TYPES = ["휴가", "오전반차", "오후반차", "병가", "경조사"];
 const [handoverPage, setHandoverPage] = useState(1);
 const HANDOVER_PAGE_SIZE = 5;
-
-// 🧾 근무정보: 계약관리 / 급여관리
-const [contracts, setContracts] = useState([]);
-const [payslips, setPayslips] = useState([]);
-const [selectedContract, setSelectedContract] = useState(null);
-const [contractOpen, setContractOpen] = useState(false);
-const [contractForm, setContractForm] = useState({ employeeUid: "", employeeName: "", contractType: "정규직", startDate: "", endDate: "", position: "", department: "", salary: "", note: "" });
-const [selectedPayslip, setSelectedPayslip] = useState(null);
-const [payslipOpen, setPayslipOpen] = useState(false);
-const [payslipForm, setPayslipForm] = useState({ employeeUid: "", employeeName: "", yearMonth: "", baseSalary: "", allowances: "", deductions: "", note: "" });
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
   // -------------------------------------------------------------
@@ -1259,20 +1247,6 @@ useEffect(() => {
   );
   return () => unsub();
 }, []);
-
-// 🧾 계약관리 / 급여관리 실시간 구독 (회사 단위)
-useEffect(() => {
-  const co = userCompany || localStorage.getItem("userCompany") || "";
-  const unsub1 = onSnapshot(collection(db, "contracts"), (snap) => {
-    const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => !co || c.companyName === co);
-    setContracts(list);
-  });
-  const unsub2 = onSnapshot(collection(db, "payslips"), (snap) => {
-    const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => !co || p.companyName === co);
-    setPayslips(list);
-  });
-  return () => { unsub1(); unsub2(); };
-}, [userCompany]);
 // 자동 마이그레이션: 6월 16일 이전 일정 승인 처리
 React.useEffect(() => {
   schedules.forEach(s => {
@@ -2608,10 +2582,7 @@ const title =
   : page === "ratecard" ? "단가표"
   : page === "form" ? (form._editId ? "수정하기" : "화물등록")
   : page === "notice" ? "공지사항"
-  : page === "schedule" ? (scheduleTypeFilter === "leave" ? "휴가신청관리" : "일정")
-  : page === "workinfo" ? "근무정보"
-  : page === "contracts" ? "계약관리"
-  : page === "payslips" ? "급여관리"
+  : page === "schedule" ? "일정"
   : page === "fare" ? "자사운임표"
   : page === "national-fare" ? "전국운임 조회"
   : page === "status" ? "배차현황"
@@ -2891,11 +2862,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "contracts" || page === "payslips"
-      ? () => setPage("workinfo")
-      : page === "schedule" && scheduleTypeFilter === "leave"
-      ? () => { setScheduleTypeFilter(null); setPage("workinfo"); }
-      : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "workinfo"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -3020,11 +2987,6 @@ onGoAttendance={() => {
   setShowMenu(false);
 }}
 
-onGoWorkInfo={() => {
-  setPage("workinfo");
-  setShowMenu(false);
-}}
-
           onGoFare={() => {
             setPage("fare");
             setShowMenu(false);
@@ -3106,11 +3068,9 @@ onGoWorkInfo={() => {
 })()}
 
 {/* ================= 일정 ================= */}
-{page === "schedule" && (() => {
-  const visibleSchedules = scheduleTypeFilter === "leave" ? sortedSchedules.filter(s => LEAVE_TYPES.includes(s.type)) : sortedSchedules;
-  return (
+{page === "schedule" && (
   <div className="px-4 py-3 space-y-3">
-    {visibleSchedules.length === 0 && (
+    {schedules.length === 0 && (
       <div className="bg-white rounded-xl border overflow-hidden">
         <table className="w-full text-[12px]">
           <thead>
@@ -3127,7 +3087,7 @@ onGoWorkInfo={() => {
         <div className="text-sm text-gray-400 text-center py-4">등록된 일정이 없습니다.</div>
       </div>
     )}
-    {visibleSchedules.length > 0 && (
+    {schedules.length > 0 && (
       <>
         <div className="bg-white rounded-xl border overflow-hidden">
           <table className="w-full text-[12px]">
@@ -3142,7 +3102,7 @@ onGoWorkInfo={() => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {visibleSchedules.slice((schedulePage - 1) * SCHEDULE_PAGE_SIZE, schedulePage * SCHEDULE_PAGE_SIZE).map(s => (
+              {sortedSchedules.slice((schedulePage - 1) * SCHEDULE_PAGE_SIZE, schedulePage * SCHEDULE_PAGE_SIZE).map(s => (
                 <tr key={s.id} onClick={() => setSelectedSchedule(s)} className="cursor-pointer active:bg-blue-50">
                   <td className="px-2 py-2.5 text-center font-bold text-gray-800">{(s.startDate || s.start || "").slice(5).replace("-", ".")}</td>
                   <td className="px-2 py-2.5 text-center">
@@ -3170,238 +3130,9 @@ onGoWorkInfo={() => {
             </tbody>
           </table>
         </div>
-        <MobilePagination page={schedulePage} total={Math.ceil(visibleSchedules.length / SCHEDULE_PAGE_SIZE)} onChange={setSchedulePage} />
+        <MobilePagination page={schedulePage} total={Math.ceil(schedules.length / SCHEDULE_PAGE_SIZE)} onChange={setSchedulePage} />
       </>
     )}
-  </div>
-  );
-})()}
-{/* ================= 근무정보 허브 ================= */}
-{page === "workinfo" && (
-  <div className="px-4 py-4">
-    <div className="grid grid-cols-3 gap-3">
-      {[
-        { label: "계약관리", icon: "📝", color: "#8B5CF6", onClick: () => setPage("contracts") },
-        { label: "급여관리", icon: "👛", color: "#3B5BDB", onClick: () => setPage("payslips") },
-        { label: "휴가신청관리", icon: "🗓️", color: "#12B886", onClick: () => { setScheduleTypeFilter("leave"); setPage("schedule"); } },
-      ].map(c => (
-        <button key={c.label} onClick={c.onClick}
-          className="rounded-2xl flex flex-col items-center justify-center gap-2 py-6 active:opacity-80 transition"
-          style={{ background: c.color }}>
-          <span style={{ fontSize: 26 }}>{c.icon}</span>
-          <span className="text-white text-[13px] font-bold">{c.label}</span>
-        </button>
-      ))}
-    </div>
-  </div>
-)}
-{/* ================= 계약관리 ================= */}
-{page === "contracts" && (() => {
-  const myContracts = role === "totalMaster" ? contracts : contracts.filter(c => c.employeeUid === currentUser?.uid);
-  return (
-    <div className="px-4 py-3 space-y-2.5">
-      {role === "totalMaster" && (
-        <button
-          onClick={() => { setContractForm({ employeeUid: "", employeeName: "", contractType: "정규직", startDate: "", endDate: "", position: "", department: "", salary: "", note: "" }); setContractOpen(true); }}
-          className="w-full py-2.5 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-bold"
-        >
-          + 계약 등록
-        </button>
-      )}
-      {myContracts.length === 0 ? (
-        <div className="text-sm text-gray-400 text-center py-10">등록된 계약 정보가 없습니다.</div>
-      ) : myContracts
-        .sort((a, b) => (b.startDate || "").localeCompare(a.startDate || ""))
-        .map(c => (
-        <button key={c.id} onClick={() => setSelectedContract(c)}
-          className="w-full text-left bg-white rounded-xl border border-gray-100 shadow-sm p-4 active:bg-gray-50 transition">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[13px] font-bold text-gray-800">{c.employeeName || "-"}</span>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600">{c.contractType || "정규직"}</span>
-          </div>
-          <div className="text-[12px] text-gray-500">{c.position || "-"} {c.department ? `· ${c.department}` : ""}</div>
-          <div className="text-[11px] text-gray-400 mt-1">{c.startDate || "-"} ~ {c.endDate || "무기한"}</div>
-        </button>
-      ))}
-    </div>
-  );
-})()}
-{selectedContract && (
-  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-3" onClick={() => setSelectedContract(null)}>
-    <div className="bg-white w-full rounded-2xl overflow-hidden shadow-2xl" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-      <div className="flex justify-between items-center px-5 py-4 bg-[#8B5CF6]">
-        <span className="font-bold text-white">계약 상세</span>
-        <button onClick={() => setSelectedContract(null)} className="text-white/80"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-      </div>
-      <div className="p-5 space-y-2.5">
-        <DetailRow label="직원명" value={selectedContract.employeeName} />
-        <DetailRow label="계약형태" value={selectedContract.contractType} />
-        <DetailRow label="직급" value={selectedContract.position} />
-        <DetailRow label="부서" value={selectedContract.department} />
-        <DetailRow label="계약기간" value={`${selectedContract.startDate || "-"} ~ ${selectedContract.endDate || "무기한"}`} />
-        <DetailRow label="계약금액" value={selectedContract.salary ? Number(selectedContract.salary).toLocaleString() + "원" : ""} />
-        <DetailRow label="비고" value={selectedContract.note} />
-      </div>
-      {role === "totalMaster" && (
-        <div className="flex border-t border-gray-100">
-          <button
-            onClick={() => { setContractForm({ ...selectedContract }); setSelectedContract(null); setContractOpen(true); }}
-            className="flex-1 py-3 text-[13px] font-bold text-purple-600 active:bg-gray-50"
-          >수정</button>
-          <button
-            onClick={() => setConfirmDialog({ message: "계약 정보를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "contracts", selectedContract.id)); setSelectedContract(null); } })}
-            className="flex-1 py-3 text-[13px] font-bold text-red-500 border-l border-gray-100 active:bg-gray-50"
-          >삭제</button>
-        </div>
-      )}
-    </div>
-  </div>
-)}
-{contractOpen && (
-  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-3" style={{ overflowY: "auto" }} onClick={() => setContractOpen(false)}>
-    <div className="bg-white w-full rounded-2xl overflow-hidden shadow-2xl my-4" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-      <div className="flex justify-between items-center px-5 py-4 bg-[#8B5CF6]">
-        <span className="font-bold text-white">{contractForm.id ? "계약 수정" : "계약 등록"}</span>
-        <button onClick={() => setContractOpen(false)} className="text-white/80"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-      </div>
-      <div className="p-5 space-y-3">
-        <select value={contractForm.employeeUid} onChange={e => { const u = mobileUsers.find(u => (u.uid || u.id) === e.target.value); setContractForm(f => ({ ...f, employeeUid: e.target.value, employeeName: u?.name || "" })); }} className="w-full border rounded-lg px-3 py-2 text-[13px]">
-          <option value="">직원 선택</option>
-          {mobileUsers.map(u => <option key={u.uid || u.id} value={u.uid || u.id}>{u.name}</option>)}
-        </select>
-        <select value={contractForm.contractType} onChange={e => setContractForm(f => ({ ...f, contractType: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-[13px]">
-          <option>정규직</option><option>계약직</option><option>일용직</option><option>인턴</option>
-        </select>
-        <div className="flex gap-2">
-          <input type="date" value={contractForm.startDate} onChange={e => setContractForm(f => ({ ...f, startDate: e.target.value }))} className="flex-1 border rounded-lg px-3 py-2 text-[13px]" />
-          <input type="date" value={contractForm.endDate} onChange={e => setContractForm(f => ({ ...f, endDate: e.target.value }))} className="flex-1 border rounded-lg px-3 py-2 text-[13px]" placeholder="무기한 시 비움" />
-        </div>
-        <input value={contractForm.position} onChange={e => setContractForm(f => ({ ...f, position: e.target.value }))} placeholder="직급" className="w-full border rounded-lg px-3 py-2 text-[13px]" />
-        <input value={contractForm.department} onChange={e => setContractForm(f => ({ ...f, department: e.target.value }))} placeholder="부서" className="w-full border rounded-lg px-3 py-2 text-[13px]" />
-        <input type="number" value={contractForm.salary} onChange={e => setContractForm(f => ({ ...f, salary: e.target.value }))} placeholder="계약금액(연봉 등)" className="w-full border rounded-lg px-3 py-2 text-[13px]" />
-        <textarea value={contractForm.note} onChange={e => setContractForm(f => ({ ...f, note: e.target.value }))} placeholder="비고" className="w-full border rounded-lg px-3 py-2 text-[13px]" rows={2} />
-        <button
-          onClick={async () => {
-            if (!contractForm.employeeUid) { alert("직원을 선택해주세요."); return; }
-            const co = userCompany || localStorage.getItem("userCompany") || "";
-            const { id, ...rest } = contractForm;
-            const payload = { ...rest, companyName: co, salary: Number(contractForm.salary) || 0 };
-            if (id) {
-              await updateDoc(doc(db, "contracts", id), payload);
-            } else {
-              await addDoc(collection(db, "contracts"), { ...payload, createdAt: serverTimestamp() });
-            }
-            setContractOpen(false);
-          }}
-          className="w-full py-2.5 rounded-lg bg-[#8B5CF6] text-white text-[13px] font-bold"
-        >저장</button>
-      </div>
-    </div>
-  </div>
-)}
-{/* ================= 급여관리 ================= */}
-{page === "payslips" && (() => {
-  const myPayslips = role === "totalMaster" ? payslips : payslips.filter(p => p.employeeUid === currentUser?.uid);
-  return (
-    <div className="px-4 py-3 space-y-2.5">
-      {role === "totalMaster" && (
-        <button
-          onClick={() => { setPayslipForm({ employeeUid: "", employeeName: "", yearMonth: "", baseSalary: "", allowances: "", deductions: "", note: "" }); setPayslipOpen(true); }}
-          className="w-full py-2.5 rounded-xl bg-[#3B5BDB] text-white text-[13px] font-bold"
-        >
-          + 급여명세서 등록
-        </button>
-      )}
-      {myPayslips.length === 0 ? (
-        <div className="text-sm text-gray-400 text-center py-10">등록된 급여명세서가 없습니다.</div>
-      ) : myPayslips
-        .sort((a, b) => (b.yearMonth || "").localeCompare(a.yearMonth || ""))
-        .map(p => {
-          const net = (Number(p.baseSalary) || 0) + (Number(p.allowances) || 0) - (Number(p.deductions) || 0);
-          return (
-          <button key={p.id} onClick={() => setSelectedPayslip(p)}
-            className="w-full text-left bg-white rounded-xl border border-gray-100 shadow-sm p-4 active:bg-gray-50 transition">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[13px] font-bold text-gray-800">{p.yearMonth || "-"}</span>
-              {role === "totalMaster" && <span className="text-[11px] text-gray-400">{p.employeeName}</span>}
-            </div>
-            <div className="text-[16px] font-extrabold text-blue-700">{net.toLocaleString()}원</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">실지급액</div>
-          </button>
-        );})}
-    </div>
-  );
-})()}
-{selectedPayslip && (() => {
-  const net = (Number(selectedPayslip.baseSalary) || 0) + (Number(selectedPayslip.allowances) || 0) - (Number(selectedPayslip.deductions) || 0);
-  return (
-  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-3" onClick={() => setSelectedPayslip(null)}>
-    <div className="bg-white w-full rounded-2xl overflow-hidden shadow-2xl" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-      <div className="flex justify-between items-center px-5 py-4 bg-[#3B5BDB]">
-        <span className="font-bold text-white">{selectedPayslip.yearMonth} 급여명세서</span>
-        <button onClick={() => setSelectedPayslip(null)} className="text-white/80"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-      </div>
-      <div className="p-5 space-y-2.5">
-        <DetailRow label="직원명" value={selectedPayslip.employeeName} />
-        <DetailRow label="기본급" value={Number(selectedPayslip.baseSalary || 0).toLocaleString() + "원"} />
-        <DetailRow label="수당" value={Number(selectedPayslip.allowances || 0).toLocaleString() + "원"} />
-        <DetailRow label="공제액" value={Number(selectedPayslip.deductions || 0).toLocaleString() + "원"} />
-        <DetailRow label="비고" value={selectedPayslip.note} />
-        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-          <span className="text-[13px] font-bold text-gray-600">실지급액</span>
-          <span className="text-[17px] font-extrabold text-blue-700">{net.toLocaleString()}원</span>
-        </div>
-      </div>
-      {role === "totalMaster" && (
-        <div className="flex border-t border-gray-100">
-          <button
-            onClick={() => { setPayslipForm({ ...selectedPayslip }); setSelectedPayslip(null); setPayslipOpen(true); }}
-            className="flex-1 py-3 text-[13px] font-bold text-blue-600 active:bg-gray-50"
-          >수정</button>
-          <button
-            onClick={() => setConfirmDialog({ message: "급여명세서를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "payslips", selectedPayslip.id)); setSelectedPayslip(null); } })}
-            className="flex-1 py-3 text-[13px] font-bold text-red-500 border-l border-gray-100 active:bg-gray-50"
-          >삭제</button>
-        </div>
-      )}
-    </div>
-  </div>
-  );
-})()}
-{payslipOpen && (
-  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-3" style={{ overflowY: "auto" }} onClick={() => setPayslipOpen(false)}>
-    <div className="bg-white w-full rounded-2xl overflow-hidden shadow-2xl my-4" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-      <div className="flex justify-between items-center px-5 py-4 bg-[#3B5BDB]">
-        <span className="font-bold text-white">{payslipForm.id ? "급여명세서 수정" : "급여명세서 등록"}</span>
-        <button onClick={() => setPayslipOpen(false)} className="text-white/80"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-      </div>
-      <div className="p-5 space-y-3">
-        <select value={payslipForm.employeeUid} onChange={e => { const u = mobileUsers.find(u => (u.uid || u.id) === e.target.value); setPayslipForm(f => ({ ...f, employeeUid: e.target.value, employeeName: u?.name || "" })); }} className="w-full border rounded-lg px-3 py-2 text-[13px]">
-          <option value="">직원 선택</option>
-          {mobileUsers.map(u => <option key={u.uid || u.id} value={u.uid || u.id}>{u.name}</option>)}
-        </select>
-        <input type="month" value={payslipForm.yearMonth} onChange={e => setPayslipForm(f => ({ ...f, yearMonth: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-[13px]" />
-        <input type="number" value={payslipForm.baseSalary} onChange={e => setPayslipForm(f => ({ ...f, baseSalary: e.target.value }))} placeholder="기본급" className="w-full border rounded-lg px-3 py-2 text-[13px]" />
-        <input type="number" value={payslipForm.allowances} onChange={e => setPayslipForm(f => ({ ...f, allowances: e.target.value }))} placeholder="수당" className="w-full border rounded-lg px-3 py-2 text-[13px]" />
-        <input type="number" value={payslipForm.deductions} onChange={e => setPayslipForm(f => ({ ...f, deductions: e.target.value }))} placeholder="공제액" className="w-full border rounded-lg px-3 py-2 text-[13px]" />
-        <textarea value={payslipForm.note} onChange={e => setPayslipForm(f => ({ ...f, note: e.target.value }))} placeholder="비고" className="w-full border rounded-lg px-3 py-2 text-[13px]" rows={2} />
-        <button
-          onClick={async () => {
-            if (!payslipForm.employeeUid || !payslipForm.yearMonth) { alert("직원과 급여월을 선택해주세요."); return; }
-            const co = userCompany || localStorage.getItem("userCompany") || "";
-            const { id, ...rest } = payslipForm;
-            const payload = { ...rest, companyName: co, baseSalary: Number(payslipForm.baseSalary) || 0, allowances: Number(payslipForm.allowances) || 0, deductions: Number(payslipForm.deductions) || 0 };
-            if (id) {
-              await updateDoc(doc(db, "payslips", id), payload);
-            } else {
-              await addDoc(collection(db, "payslips"), { ...payload, createdAt: serverTimestamp() });
-            }
-            setPayslipOpen(false);
-          }}
-          className="w-full py-2.5 rounded-lg bg-[#3B5BDB] text-white text-[13px] font-bold"
-        >저장</button>
-      </div>
-    </div>
   </div>
 )}
 {/* 🔥 일정 상세 팝업 */}
@@ -4921,7 +4652,6 @@ function MobileSideMenu({
   onDeleteAll,
   onGoHandover,
   onGoAttendance,
-  onGoWorkInfo,
   onGoMyInfo,
   onGoSettings,
   setUiScale,
@@ -5016,7 +4746,6 @@ function MobileSideMenu({
             <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} dark={dark} />
             <MenuItem label="인수인계" onClick={onGoHandover} dark={dark} />
             <MenuItem label="출근기록부" onClick={onGoAttendance} dark={dark} />
-            <MenuItem label="근무정보" onClick={onGoWorkInfo} dark={dark} />
           </MenuSection>
           <MenuSection title="매출 / 운임표" dark={dark}>
             <MenuItem label="자사운임표" onClick={onGoFare} dark={dark} />
