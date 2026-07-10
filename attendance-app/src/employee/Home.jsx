@@ -27,6 +27,8 @@ import {
   ShieldAlert,
   Clock,
   CheckCircle2,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -86,6 +88,8 @@ export default function Home() {
   const [pendingContracts, setPendingContracts] = useState(0);
   const [latestNotice, setLatestNotice] = useState(null);
   const [tipIndex, setTipIndex] = useState(0);
+  const [homeSafetyVideoUrl, setHomeSafetyVideoUrl] = useState("");
+  const [videoMuted, setVideoMuted] = useState(true);
   const [showChecklist, setShowChecklist] = useState(false);
   const [docStep, setDocStep] = useState(0);
   const [docRead, setDocRead] = useState({});
@@ -111,6 +115,14 @@ export default function Home() {
     const timer = setInterval(() => setTipIndex((i) => (i + 1) % SAFETY_TIPS.length), 4000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(doc(db, "companies", profile.companyId), (s) =>
+      setHomeSafetyVideoUrl(s.data()?.homeSafetyVideoUrl || "")
+    );
+    return () => unsub();
+  }, [profile?.companyId]);
 
   useEffect(() => {
     async function loadSite() {
@@ -543,16 +555,44 @@ export default function Home() {
         </div>
       )}
 
-      <Card className="overflow-hidden border-none bg-gradient-to-br from-rose-500 to-rose-600 p-5 text-white shadow-lg shadow-rose-500/25">
-        <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/85">
-          <ShieldAlert size={13} /> 오늘도 안전하게!
-        </p>
-        <p className="text-sm font-semibold leading-relaxed">{SAFETY_TIPS[tipIndex]}</p>
-        <div className="mt-3 flex justify-center gap-1.5">
-          {SAFETY_TIPS.map((_, i) => (
-            <span key={i} className={`h-1.5 rounded-full transition-all ${i === tipIndex ? "w-4 bg-white" : "w-1.5 bg-white/40"}`} />
-          ))}
-        </div>
+      <Card className="relative overflow-hidden border-none bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-lg shadow-rose-500/25">
+        {homeSafetyVideoUrl ? (
+          <div className="relative">
+            <video
+              key={homeSafetyVideoUrl}
+              src={homeSafetyVideoUrl}
+              className="aspect-video w-full bg-black object-cover"
+              autoPlay
+              loop
+              muted={videoMuted}
+              playsInline
+              preload="auto"
+            />
+            <p className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+              <ShieldAlert size={12} /> 오늘도 안전하게!
+            </p>
+            <button
+              type="button"
+              onClick={() => setVideoMuted((v) => !v)}
+              className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-95"
+              aria-label={videoMuted ? "소리 켜기" : "음소거"}
+            >
+              {videoMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+            </button>
+          </div>
+        ) : (
+          <div className="p-5">
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/85">
+              <ShieldAlert size={13} /> 오늘도 안전하게!
+            </p>
+            <p className="text-sm font-semibold leading-relaxed">{SAFETY_TIPS[tipIndex]}</p>
+            <div className="mt-3 flex justify-center gap-1.5">
+              {SAFETY_TIPS.map((_, i) => (
+                <span key={i} className={`h-1.5 rounded-full transition-all ${i === tipIndex ? "w-4 bg-white" : "w-1.5 bg-white/40"}`} />
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
 
       <div className="space-y-2">

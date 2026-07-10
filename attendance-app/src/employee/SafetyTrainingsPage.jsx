@@ -162,7 +162,7 @@ function MandatoryMaterials() {
               >
                 {m.type === "video" ? <Video size={16} className="shrink-0 text-primary" /> : <FileText size={16} className="shrink-0 text-primary" />}
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{m.title}</span>
-                <Badge tone={done ? "success" : "warning"}>{done ? "이수완료" : "이수필요"}</Badge>
+                <Badge tone={done ? "success" : "warning"} className={done ? "" : "animate-pulse"}>{done ? "이수완료" : "이수필요"}</Badge>
               </button>
             );
           })}

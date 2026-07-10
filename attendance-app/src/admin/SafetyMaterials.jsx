@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
-import { ShieldCheck, Plus, Trash2, FileText, Video } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, FileText, Video, Upload } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -29,6 +29,10 @@ export default function SafetyMaterials() {
   const [saving, setSaving] = useState(false);
   const [statusView, setStatusView] = useState(null); // material
 
+  const [homeVideoUrl, setHomeVideoUrl] = useState("");
+  const [homeVideoUploading, setHomeVideoUploading] = useState(false);
+  const homeVideoInputRef = useRef(null);
+
   useEffect(() => {
     if (!profile?.companyId) return;
     const unsubs = [
@@ -41,9 +45,34 @@ export default function SafetyMaterials() {
       onSnapshot(query(collection(db, "safetyCompletions"), where("companyId", "==", profile.companyId)), (s) =>
         setCompletions(s.docs.map((d) => ({ id: d.id, ...d.data() })))
       ),
+      onSnapshot(doc(db, "companies", profile.companyId), (s) => setHomeVideoUrl(s.data()?.homeSafetyVideoUrl || "")),
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
+
+  // 모바일 홈 화면의 "오늘도 안전하게" 카드에서 계속 반복재생되는 짧은
+  // 안내영상 — 이수/서명이 필요한 안전교육자료(위 목록)와는 별개로, 회사당
+  // 하나만 두는 단순한 앰비언트 영상이라 companies 문서에 URL 하나만 저장한다.
+  const uploadHomeVideo = async (f) => {
+    if (!f) return;
+    setHomeVideoUploading(true);
+    try {
+      const url = await uploadSafetyMaterialFile({ companyId: profile.companyId, materialId: "home_ambient", file: f });
+      await updateDoc(doc(db, "companies", profile.companyId), { homeSafetyVideoUrl: url });
+      toast.success("홈 화면 안전영상이 등록되었습니다");
+    } catch (err) {
+      toast.error(`업로드에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    } finally {
+      setHomeVideoUploading(false);
+      if (homeVideoInputRef.current) homeVideoInputRef.current.value = "";
+    }
+  };
+
+  const removeHomeVideo = async () => {
+    if (!(await confirm("홈 화면 안전영상을 삭제하시겠습니까?", "delete"))) return;
+    await updateDoc(doc(db, "companies", profile.companyId), { homeSafetyVideoUrl: "" });
+    toast.success("삭제되었습니다");
+  };
 
   const sorted = [...materials].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
@@ -123,6 +152,37 @@ export default function SafetyMaterials() {
 
   return (
     <div className="space-y-6">
+      <Panel icon={Video} title="홈 화면 안전영상">
+        <p className="mb-4 text-xs text-muted">
+          모바일 홈 화면 "오늘도 안전하게!" 카드에서 끊김 없이 계속 반복재생되는 짧은 안내영상입니다(음소거 기본, 근로자가 소리 켜기 가능).
+          이수 서명이 필요한 안전교육자료와는 별개이며, 회사당 1개만 등록할 수 있습니다. 3분 미만의 짧은 영상을 권장합니다.
+        </p>
+        {homeVideoUrl ? (
+          <div className="flex flex-wrap items-center gap-4">
+            <video src={homeVideoUrl} className="h-32 w-56 rounded-xl bg-black object-cover" muted loop autoPlay playsInline />
+            <div className="flex flex-col gap-2">
+              <Button size="sm" variant="outline" onClick={() => homeVideoInputRef.current?.click()} disabled={homeVideoUploading}>
+                <Upload size={13} /> {homeVideoUploading ? "업로드 중..." : "다른 영상으로 교체"}
+              </Button>
+              <Button size="sm" variant="danger" onClick={removeHomeVideo} disabled={homeVideoUploading}>
+                <Trash2 size={13} /> 삭제
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button size="sm" onClick={() => homeVideoInputRef.current?.click()} disabled={homeVideoUploading}>
+            <Upload size={13} /> {homeVideoUploading ? "업로드 중..." : "영상 업로드"}
+          </Button>
+        )}
+        <input
+          ref={homeVideoInputRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={(e) => uploadHomeVideo(e.target.files?.[0])}
+        />
+      </Panel>
+
       <Panel icon={ShieldCheck} title="안전교육자료">
         <p className="mb-4 text-xs text-muted">
           지침(글) 또는 영상을 등록하면 근로자 앱에서 필수로 확인 후 서명해야 이수 처리됩니다. 미이수 근로자는 출근 시 안내됩니다.
