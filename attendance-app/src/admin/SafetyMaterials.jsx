@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { ShieldCheck, Plus, Trash2, FileText, Video } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -86,6 +86,26 @@ export default function SafetyMaterials() {
         active: true,
         createdAt: serverTimestamp(),
       });
+
+      // 회사 소속 전 직원에게 새 안전교육자료 등록 알림을 보낸다. notifications는
+      // 원래 근로자 1명을 대상으로 하는 구조라, 여기서는 그 형태를 유지한 채
+      // 직원 수만큼 문서를 각각 만든다(회사 전체 브로드캐스트 알림의 첫 사례).
+      if (employees.length > 0) {
+        const batch = writeBatch(db);
+        employees.forEach((emp) => {
+          const ref = doc(collection(db, "notifications"));
+          batch.set(ref, {
+            companyId: profile.companyId,
+            uid: emp.id,
+            title: "새 안전교육자료가 등록되었습니다",
+            message: form.title,
+            read: false,
+            createdAt: serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
+
       toast.success("안전교육자료가 등록되었습니다");
       setPanelOpen(false);
     } catch (err) {

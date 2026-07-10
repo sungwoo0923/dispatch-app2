@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import HeaderIcons from "./HeaderIcons";
 
 const TABS = [
   { to: "/work-info", label: "근무정보", icon: ClipboardList },
@@ -26,14 +27,12 @@ export default function EmployeeLayout() {
         style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.625rem)" }}
       >
         <img src="/logo.png" alt="KP-Work" className="h-11 w-auto" />
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <div className="text-right">
             <p className="text-[10px] leading-tight text-muted">안녕하세요</p>
             <p className="text-xs font-semibold leading-tight text-ink">{profile?.name}님</p>
           </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
-            {profile?.name?.[0] || "K"}
-          </div>
+          <HeaderIcons />
         </div>
       </header>
 

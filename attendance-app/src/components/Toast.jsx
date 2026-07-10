@@ -10,7 +10,10 @@ const TONE = {
 export default function ToastStack({ toasts }) {
   if (toasts.length === 0) return null;
   return (
-    <div className="fixed right-4 top-4 z-[100] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2">
+    <div
+      className="fixed right-4 z-[100] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
+      style={{ top: "calc(env(safe-area-inset-top) + 1rem)" }}
+    >
       {toasts.map((t) => {
         const { icon: Icon, className, iconClassName } = TONE[t.tone] || TONE.success;
         return (
