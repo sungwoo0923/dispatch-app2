@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { Users, CheckCircle2, AlarmClock, LogOut as LogOutIcon, UserX, Megaphone, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import {
+  Users,
+  CheckCircle2,
+  AlarmClock,
+  LogOut as LogOutIcon,
+  UserX,
+  Megaphone,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  TrendingUp,
+  UserPlus,
+  UserMinus,
+} from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -11,8 +24,8 @@ import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   BarChart,
   Bar,
   XAxis,
@@ -20,6 +33,27 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
+
+// 두 차트가 공유하는 툴팁 — recharts 기본 툴팁은 각지고 그림자도 없어 나머지
+// 화면의 카드/뱃지 톤과 어울리지 않는다. 앱 전체에서 쓰는 카드 스타일(둥근
+// 모서리·옅은 그림자·색점 범례)을 그대로 가져와 통일감을 준다.
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-lg">
+      <p className="mb-1 text-[11px] font-semibold text-muted">{label}</p>
+      <div className="space-y-0.5">
+        {payload.map((p) => (
+          <div key={p.dataKey} className="flex items-center gap-2 text-xs">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: p.color }} />
+            <span className="text-muted">{p.name}</span>
+            <span className="ml-auto font-semibold text-ink">{p.value}명</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const MINI_STATS = [
   { key: "scheduled", label: "예정", icon: Users, className: "text-ink" },
@@ -109,6 +143,8 @@ export default function Dashboard() {
   const currentHeadcount = chartData[chartData.length - 1]?.전체인원 || 0;
   const prevHeadcount = chartData[chartData.length - 2]?.전체인원 || 0;
   const diff = currentHeadcount - prevHeadcount;
+  const currentHired = chartData[chartData.length - 1]?.입사자 || 0;
+  const currentResigned = chartData[chartData.length - 1]?.퇴사자 || 0;
 
   const shiftMonth = (delta) => setMonthCursor((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
 
@@ -189,29 +225,68 @@ export default function Dashboard() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div>
-            <p className="mb-2 text-xs font-medium text-muted">전체인원</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={chartData} margin={{ left: -20 }}>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:divide-x md:divide-slate-100">
+          <div className="md:pr-6">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+                <TrendingUp size={13} className="text-primary" /> 전체인원
+              </p>
+              <p className="text-lg font-bold text-ink">
+                {currentHeadcount}
+                <span className="ml-0.5 text-xs font-medium text-muted">명</span>
+              </p>
+            </div>
+            <ResponsiveContainer width="100%" height={190}>
+              <AreaChart data={chartData} margin={{ left: -20, top: 8, right: 8 }}>
+                <defs>
+                  <linearGradient id="headcountFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563EB" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip />
-                <Line type="monotone" dataKey="전체인원" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 3 }} />
-              </LineChart>
+                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} width={26} />
+                <Tooltip content={<ChartTooltip />} cursor={{ stroke: "#CBD5E1", strokeDasharray: "4 4" }} />
+                <Area
+                  type="monotone"
+                  dataKey="전체인원"
+                  name="전체인원"
+                  stroke="#2563EB"
+                  strokeWidth={2.5}
+                  fill="url(#headcountFill)"
+                  dot={{ r: 2.5, strokeWidth: 0, fill: "#2563EB" }}
+                  activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff" }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div>
-            <p className="mb-2 text-xs font-medium text-muted">입사자 / 퇴사자</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} margin={{ left: -20 }}>
+          <div className="md:pl-6">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted">입사자 / 퇴사자</p>
+              <div className="flex items-center gap-3 text-[11px] text-muted">
+                <span className="flex items-center gap-1">
+                  <UserPlus size={11} className="text-primary" /> {currentHired}명
+                </span>
+                <span className="flex items-center gap-1">
+                  <UserMinus size={11} className="text-slate-400" /> {currentResigned}명
+                </span>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={190}>
+              <BarChart data={chartData} margin={{ left: -20, top: 8, right: 8 }} barCategoryGap="30%">
+                <defs>
+                  <linearGradient id="hiredFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3B82F6" />
+                    <stop offset="100%" stopColor="#1D4ED8" />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="입사자" fill="#2563EB" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="퇴사자" fill="#CBD5E1" radius={[3, 3, 0, 0]} />
+                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} width={26} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "#F1F5F9" }} />
+                <Bar dataKey="입사자" name="입사자" fill="url(#hiredFill)" radius={[4, 4, 0, 0]} maxBarSize={14} />
+                <Bar dataKey="퇴사자" name="퇴사자" fill="#E2E8F0" radius={[4, 4, 0, 0]} maxBarSize={14} />
               </BarChart>
             </ResponsiveContainer>
           </div>
