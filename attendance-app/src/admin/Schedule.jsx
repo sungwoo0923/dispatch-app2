@@ -26,6 +26,7 @@ import {
   Clock,
   CalendarOff,
   UserMinus,
+  Trash2,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -42,7 +43,7 @@ import { useToast } from "../hooks/useToast";
 import { useConfirm } from "../hooks/useConfirm";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatDate, calculateAge } from "../utils/dateUtils";
-import { softDeleteEmployee } from "../utils/employeeUtils";
+import { softDeleteEmployees } from "../utils/employeeUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { contractStatus } from "../utils/contractStatus";
 import {
@@ -96,6 +97,8 @@ export default function Schedule() {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [range, setRange] = useState({ start: toDateKey(), end: toDateKey() });
   const [selected, setSelected] = useState(() => new Set());
+  const [selectedLeaves, setSelectedLeaves] = useState(() => new Set());
+  const [selectedResigned, setSelectedResigned] = useState(() => new Set());
   const [statusAction, setStatusAction] = useState("출근확정");
   const [view, setView] = useState("list");
   const [calendarMonth, setCalendarMonth] = useState(() => toDateKey().slice(0, 7));
@@ -532,6 +535,24 @@ export default function Schedule() {
       return next;
     });
 
+  // 휴무/퇴사 인원 현황은 각각 다른 컬렉션(leaves/users)을 참조하므로
+  // 스케줄 선택 상태(selected)와 별도의 Set을 쓴다. 토글 로직은 동일해
+  // setter만 받는 범용 헬퍼로 공유한다.
+  const toggleOne = (setter, id) =>
+    setter((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAllIn = (setter, ids) =>
+    setter((s) => {
+      const allSelected = ids.length > 0 && ids.every((id) => s.has(id));
+      const next = new Set(s);
+      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
+
   // 스케줄 상태 변경에 따르는 부수효과(출근확정 시 근로계약서 자동생성,
   // 취소 시 미서명 자동생성 계약서 정리)를 한 건 단위로 뽑아둔 헬퍼 —
   // 하단의 체크박스 일괄적용(applyStatus)과 표 우클릭 메뉴가 함께 쓴다.
@@ -634,24 +655,34 @@ export default function Schedule() {
     }
   };
 
-  // 스케줄/대기/휴무/퇴사 4개 카드 모두 행 단위 삭제 버튼을 갖는다 — 각
-  // 카드가 근거로 삼는 컬렉션(문서)이 서로 달라 kind별로 분기한다.
-  const deleteScheduleRow = async (s) => {
-    if (!(await confirm(`${s.name} 근로자의 ${formatDate(s.date)} 스케줄을 삭제하시겠습니까?`, "delete"))) return;
-    await deleteDoc(doc(db, "schedules", s.id));
-    toast.success("삭제되었습니다");
+  // 스케줄/대기/휴무/퇴사 4개 카드 모두 체크박스로 선택한 행을 한 번에
+  // 삭제한다 — 각 카드가 근거로 삼는 컬렉션(문서)이 서로 달라 카드별로
+  // 분기한다. 칸마다 개별 삭제 버튼을 두지 않고, 선택 후 한 번에
+  // 지우는 방식(다른 목록 화면들의 "선택삭제"와 동일한 패턴)으로 통일했다.
+  const deleteSelectedSchedules = async () => {
+    if (selectedSchedules.length === 0) return;
+    if (!(await confirm(`선택된 ${selectedSchedules.length}건의 스케줄을 삭제하시겠습니까?`, "delete"))) return;
+    await Promise.all(selectedSchedules.map(({ schedule: s }) => deleteDoc(doc(db, "schedules", s.id))));
+    toast.success(`${selectedSchedules.length}건 삭제되었습니다`);
+    setSelected(new Set());
   };
 
-  const deleteLeaveRow = async (lv) => {
-    if (!(await confirm(`${lv.name || ""} 근로자의 휴무 기록을 삭제하시겠습니까?`, "delete"))) return;
-    await deleteDoc(doc(db, "leaves", lv.id));
-    toast.success("삭제되었습니다");
+  const deleteSelectedLeaves = async () => {
+    const targets = leaveRows.filter((row) => selectedLeaves.has(row.leave.id));
+    if (targets.length === 0) return;
+    if (!(await confirm(`선택된 ${targets.length}건의 휴무 기록을 삭제하시겠습니까?`, "delete"))) return;
+    await Promise.all(targets.map((row) => deleteDoc(doc(db, "leaves", row.leave.id))));
+    toast.success(`${targets.length}건 삭제되었습니다`);
+    setSelectedLeaves(new Set());
   };
 
-  const deleteResignedRow = async (emp) => {
-    if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
-    await softDeleteEmployee(emp.id);
-    toast.success("삭제되었습니다");
+  const deleteSelectedResigned = async () => {
+    const targets = resignedRows.filter((emp) => selectedResigned.has(emp.id));
+    if (targets.length === 0) return;
+    if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
+    await softDeleteEmployees(targets.map((emp) => emp.id));
+    toast.success(`${targets.length}명 삭제되었습니다`);
+    setSelectedResigned(new Set());
   };
 
   const openRowMenu = (e, kind, row) => {
@@ -1068,6 +1099,9 @@ export default function Schedule() {
               <Button size="sm" variant="outline" disabled={selected.size === 0} onClick={() => setTemplateOpen(true)}>
                 <Repeat size={13} /> 템플릿변경하기
               </Button>
+              <Button size="sm" variant="danger" disabled={selected.size === 0} onClick={deleteSelectedSchedules}>
+                <Trash2 size={13} /> 선택삭제 ({selected.size})
+              </Button>
               <Button size="sm" variant="outline" onClick={exportCsv}>
                 <FileSpreadsheet size={13} /> 엑셀
               </Button>
@@ -1102,7 +1136,6 @@ export default function Schedule() {
                         {c.label}
                       </DraggableTh>
                     ))}
-                    <th className="px-4 py-3 font-semibold">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1126,21 +1159,12 @@ export default function Schedule() {
                             {c.render(row)}
                           </td>
                         ))}
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => deleteScheduleRow(s)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
-                          >
-                            🗑️ 삭제
-                          </button>
-                        </td>
                       </tr>
                     );
                   })}
                   {confirmedRows.length === 0 && (
                     <tr>
-                      <td colSpan={visibleScheduleColumns.length + 4} className="px-4 py-6 text-center text-xs text-muted">
+                      <td colSpan={visibleScheduleColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
                         출근확정된 스케줄이 없습니다.
                       </td>
                     </tr>
@@ -1179,7 +1203,6 @@ export default function Schedule() {
                     {c.label}
                   </DraggableTh>
                 ))}
-                <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
             <tbody>
@@ -1201,20 +1224,11 @@ export default function Schedule() {
                       {c.render(row)}
                     </td>
                   ))}
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => deleteScheduleRow(row.schedule)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
-                    >
-                      🗑️ 삭제
-                    </button>
-                  </td>
                 </tr>
               ))}
               {pendingRows.length === 0 && (
                 <tr>
-                  <td colSpan={visibleScheduleColumns.length + 4} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={visibleScheduleColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
                     대기 중인 인원이 없습니다.
                   </td>
                 </tr>
@@ -1229,12 +1243,29 @@ export default function Schedule() {
           <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
             <CalendarOff size={13} /> 휴무 인원 현황 {leaveRows.length}
           </p>
-          <ColumnVisibilityButton columns={leaveColumnsOrdered} hidden={hiddenLeaveColumns} toggleColumn={toggleLeaveColumn} />
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={selectedLeaves.size === 0}
+              onClick={deleteSelectedLeaves}
+            >
+              <Trash2 size={13} /> 선택삭제 ({selectedLeaves.size})
+            </Button>
+            <ColumnVisibilityButton columns={leaveColumnsOrdered} hidden={hiddenLeaveColumns} toggleColumn={toggleLeaveColumn} />
+          </div>
         </div>
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="w-10 px-2 py-3 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={leaveRows.length > 0 && leaveRows.every((row) => selectedLeaves.has(row.leave.id))}
+                    onChange={() => toggleAllIn(setSelectedLeaves, leaveRows.map((row) => row.leave.id))}
+                  />
+                </th>
                 <th className="px-4 py-3 font-semibold">순번</th>
                 {visibleLeaveColumns.map((c) => (
                   <DraggableTh
@@ -1249,31 +1280,28 @@ export default function Schedule() {
                     {c.label}
                   </DraggableTh>
                 ))}
-                <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
             <tbody>
               {leaveRows.map((row, i) => (
                 <tr
                   key={row.leave.id}
-                  className="border-b border-slate-50 last:border-0"
+                  className={`border-b border-slate-50 last:border-0 ${selectedLeaves.has(row.leave.id) ? "bg-primary-light/60" : ""}`}
                   onContextMenu={(e) => openRowMenu(e, "leave", row)}
                 >
+                  <td className="px-2 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedLeaves.has(row.leave.id)}
+                      onChange={() => toggleOne(setSelectedLeaves, row.leave.id)}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-ink">{i + 1}</td>
                   {visibleLeaveColumns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-ink">
                       {c.render(row)}
                     </td>
                   ))}
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => deleteLeaveRow(row.leave)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
-                    >
-                      🗑️ 삭제
-                    </button>
-                  </td>
                 </tr>
               ))}
               {leaveRows.length === 0 && (
@@ -1293,12 +1321,29 @@ export default function Schedule() {
           <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
             <UserMinus size={13} /> 퇴사 인원 현황 {resignedRows.length}
           </p>
-          <ColumnVisibilityButton columns={resignedColumnsOrdered} hidden={hiddenResignedColumns} toggleColumn={toggleResignedColumn} />
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={selectedResigned.size === 0}
+              onClick={deleteSelectedResigned}
+            >
+              <Trash2 size={13} /> 선택삭제 ({selectedResigned.size})
+            </Button>
+            <ColumnVisibilityButton columns={resignedColumnsOrdered} hidden={hiddenResignedColumns} toggleColumn={toggleResignedColumn} />
+          </div>
         </div>
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="w-10 px-2 py-3 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={resignedRows.length > 0 && resignedRows.every((emp) => selectedResigned.has(emp.id))}
+                    onChange={() => toggleAllIn(setSelectedResigned, resignedRows.map((emp) => emp.id))}
+                  />
+                </th>
                 <th className="px-4 py-3 font-semibold">순번</th>
                 {visibleResignedColumns.map((c) => (
                   <DraggableTh
@@ -1313,31 +1358,28 @@ export default function Schedule() {
                     {c.label}
                   </DraggableTh>
                 ))}
-                <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
             <tbody>
               {resignedRows.map((emp, i) => (
                 <tr
                   key={emp.id}
-                  className="border-b border-slate-50 last:border-0"
+                  className={`border-b border-slate-50 last:border-0 ${selectedResigned.has(emp.id) ? "bg-primary-light/60" : ""}`}
                   onContextMenu={(e) => openRowMenu(e, "resigned", emp)}
                 >
+                  <td className="px-2 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedResigned.has(emp.id)}
+                      onChange={() => toggleOne(setSelectedResigned, emp.id)}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-ink">{i + 1}</td>
                   {visibleResignedColumns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-ink">
                       {c.render(emp)}
                     </td>
                   ))}
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => deleteResignedRow(emp)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
-                    >
-                      🗑️ 삭제
-                    </button>
-                  </td>
                 </tr>
               ))}
               {resignedRows.length === 0 && (

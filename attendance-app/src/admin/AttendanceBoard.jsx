@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Check, X as XIcon } from "lucide-react";
+import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Check, X as XIcon, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -820,9 +820,10 @@ export default function AttendanceBoard() {
                       <button
                         type="button"
                         onClick={() => deleteLeave(lv)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                        title="삭제"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
                       >
-                        🗑️ 삭제
+                        <Trash2 size={14} />
                       </button>
                     </td>
                   </tr>
@@ -875,9 +876,10 @@ export default function AttendanceBoard() {
                         <button
                           type="button"
                           onClick={() => deleteEdit(e)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                          title="삭제"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
                         >
-                          🗑️ 삭제
+                          <Trash2 size={14} />
                         </button>
                       </td>
                     </tr>
@@ -951,9 +953,10 @@ export default function AttendanceBoard() {
                       <button
                         type="button"
                         onClick={() => deleteChangeRequest(r)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                        title="삭제"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
                       >
-                        🗑️ 삭제
+                        <Trash2 size={14} />
                       </button>
                     </td>
                   </tr>

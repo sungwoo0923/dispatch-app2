@@ -406,9 +406,10 @@ export default function EmployeeStatus() {
                     <button
                       type="button"
                       onClick={() => deleteEmployee(emp)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                      title="삭제"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
                     >
-                      🗑️ 삭제
+                      <Trash2 size={14} />
                     </button>
                   </td>
                 </tr>
