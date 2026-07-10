@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, getDocs, doc, writeBatch, serverTimestamp } from "firebase/firestore";
 import { Menu, X, LogOut, ChevronDown, DoorOpen, FileWarning } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -8,6 +8,13 @@ import { useNavBadges } from "../hooks/useNavBadges";
 import Breadcrumb from "../components/Breadcrumb";
 import BuildInfo from "../components/BuildInfo";
 import Messenger from "../messenger/Messenger";
+import { toDateKey } from "../utils/dateUtils";
+
+// 스케줄 출근시각 이후 이만큼(분) 지나도 체크인 기록이 없으면 결근(노쇼)
+// 알림을 관리자 전원에게 broadcast한다. 서버 크론이 없는 클라이언트 전용
+// 구조라, 관리자가 화면을 켜두는 동안 주기적으로 확인하는 방식으로 둔다.
+const NO_SHOW_GRACE_MINUTES = 30;
+const NO_SHOW_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 import { NAV, SUPER_ADMIN_NAV_ITEM } from "./navConfig";
 
 const itemClass = ({ isActive }) =>
@@ -131,6 +138,76 @@ export default function AdminLayout() {
       )
     );
     return () => unsub();
+  }, [profile?.companyId]);
+
+  // 결근(노쇼) 자동 알림: 오늘 출근확정된 스케줄인데 유예시간이 지나도록
+  // 체크인 기록이 없으면 관리자 전원에게 알림을 보내고, schedules 문서에
+  // noShowAlertSent를 남겨 같은 스케줄에 중복 발송하지 않게 한다.
+  useEffect(() => {
+    if (!profile?.companyId) return;
+
+    const checkNoShows = async () => {
+      const todayKey = toDateKey();
+      const now = new Date();
+      const schedSnap = await getDocs(
+        query(
+          collection(db, "schedules"),
+          where("companyId", "==", profile.companyId),
+          where("date", "==", todayKey),
+          where("status", "==", "출근확정")
+        )
+      );
+      const candidates = schedSnap.docs.filter((d) => {
+        const s = d.data();
+        if (s.noShowAlertSent || !s.startTime) return false;
+        const [h, m] = s.startTime.split(":").map(Number);
+        if (Number.isNaN(h) || Number.isNaN(m)) return false;
+        const scheduled = new Date(now);
+        scheduled.setHours(h, m, 0, 0);
+        return (now.getTime() - scheduled.getTime()) / 60000 >= NO_SHOW_GRACE_MINUTES;
+      });
+      if (candidates.length === 0) return;
+
+      // 개별 문서를 uid별로 getDoc하는 대신, 오늘자 회사 전체 출근기록을
+      // 한 번의 list 쿼리로 가져와 체크인한 uid 집합을 만든다 — attendance의
+      // get() 규칙은 본인 uid만 허용해 관리자가 다른 사람 문서를 개별
+      // getDoc하면 항상 거부되므로(문서가 없을 때는 특히), list 쿼리로
+      // 우회한다.
+      const attSnap = await getDocs(
+        query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("date", "==", todayKey))
+      );
+      const checkedInUids = new Set(attSnap.docs.filter((d) => d.data().checkInTime).map((d) => d.data().uid));
+
+      const noShows = candidates.filter((d) => !checkedInUids.has(d.data().uid));
+      if (noShows.length === 0) return;
+
+      const adminSnap = await getDocs(
+        query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "admin"))
+      );
+      if (adminSnap.empty) return;
+
+      for (const schedDoc of noShows) {
+        const s = schedDoc.data();
+        const batch = writeBatch(db);
+        adminSnap.docs.forEach((a) => {
+          const ref = doc(collection(db, "notifications"));
+          batch.set(ref, {
+            companyId: profile.companyId,
+            uid: a.id,
+            title: "근로자 결근(미출근) 알림",
+            message: `${s.name} 근로자가 오늘 ${s.startTime} 출근 예정이었으나 아직 체크인하지 않았습니다.`,
+            read: false,
+            createdAt: serverTimestamp(),
+          });
+        });
+        batch.update(schedDoc.ref, { noShowAlertSent: true });
+        await batch.commit();
+      }
+    };
+
+    checkNoShows();
+    const interval = setInterval(checkNoShows, NO_SHOW_CHECK_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [profile?.companyId]);
 
   return (

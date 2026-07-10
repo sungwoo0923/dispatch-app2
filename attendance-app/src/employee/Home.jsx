@@ -307,9 +307,10 @@ export default function Home() {
       workSite,
       enabled: Boolean(workSite),
       canCheckIn,
+      scheduleStartTime: todaySchedule?.startTime || "",
     });
 
-  const checkedIn = todayAttendance?.status === "출근" && todayAttendance?.checkInTime;
+  const checkedIn = ["출근", "지각"].includes(todayAttendance?.status) && todayAttendance?.checkInTime;
   const checkedOut = Boolean(todayAttendance?.checkOutTime);
 
   // 일용직은 근로계약동의서까지 매 출근 시 확인/서명해야 하고, 그 외

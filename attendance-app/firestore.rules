@@ -183,7 +183,11 @@ service cloud.firestore {
     match /notifications/{id} {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
-      allow create: if isAdminOf(request.resource.data.companyId);
+      // 관리자가 직원에게 보내는 경우뿐 아니라, 지각/결근 자동 알림처럼 직원
+      // 클라이언트가 "관리자에게" 보내야 하는 경우도 있어 같은 회사 내
+      // 발신은 역할과 무관하게 허용한다.
+      allow create: if isAdminOf(request.resource.data.companyId) ||
+        (isSignedIn() && myCompanyId() == request.resource.data.companyId);
       allow update: if isSignedIn() && resource.data.uid == request.auth.uid;
       allow delete: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));

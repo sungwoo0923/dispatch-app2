@@ -1,8 +1,46 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 import { distanceMeters } from "../utils/distance";
 import { toDateKey, attendanceDocId } from "../utils/dateUtils";
+
+// 스케줄 출근시각보다 이 분(分) 이상 늦게 체크인하면 "지각"으로 기록하고
+// 관리자에게 알림을 보낸다.
+const LATE_GRACE_MINUTES = 10;
+
+function minutesLate(scheduleStartTime, checkInDate) {
+  if (!scheduleStartTime) return 0;
+  const [h, m] = scheduleStartTime.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
+  const scheduled = new Date(checkInDate);
+  scheduled.setHours(h, m, 0, 0);
+  return Math.round((checkInDate.getTime() - scheduled.getTime()) / 60000);
+}
+
+// 지각 체크인이 발생하면 같은 회사 관리자 전원에게 알림을 broadcast한다
+// (SafetyMaterials.jsx의 전 직원 broadcast와 동일한 패턴, 대상만 관리자로 바뀜).
+async function notifyAdminsOfLateCheckIn({ companyId, name, late }) {
+  if (!companyId) return;
+  try {
+    const snap = await getDocs(query(collection(db, "users"), where("companyId", "==", companyId), where("role", "==", "admin")));
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => {
+      const ref = doc(collection(db, "notifications"));
+      batch.set(ref, {
+        companyId,
+        uid: d.id,
+        title: "근로자 지각 출근 알림",
+        message: `${name} 근로자가 예정 출근시각보다 ${late}분 늦게 출근했습니다.`,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+  } catch {
+    // 알림 발송 실패가 출근 처리 자체를 막으면 안 되므로 조용히 무시한다.
+  }
+}
 
 const CHECK_IN_RADIUS_M = 100;
 const CHECK_OUT_RADIUS_M = 300;
@@ -35,7 +73,7 @@ async function writeAttendance({ uid, name, companyId, status, extra }) {
  * a native app, browser geolocation otherwise) and auto check-in/out when the
  * employee enters/leaves the radius of their assigned work site.
  */
-export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, canCheckIn = true }) {
+export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, canCheckIn = true, scheduleStartTime = "" }) {
   const [distance, setDistance] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
   const [todayAttendance, setTodayAttendance] = useState(null);
@@ -48,7 +86,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
     const snap = await getDoc(doc(db, "attendance", attendanceDocId(uid, toDateKey())));
     const data = snap.exists() ? snap.data() : null;
     setTodayAttendance(data);
-    autoCheckedInRef.current = data?.status === "출근";
+    autoCheckedInRef.current = data?.status === "출근" || data?.status === "지각";
   }, [uid]);
 
   useEffect(() => {
@@ -67,32 +105,35 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
 
       if (canCheckIn && !autoCheckedInRef.current && d <= radiusIn) {
         autoCheckedInRef.current = true;
+        const now = new Date();
+        const late = minutesLate(scheduleStartTime, now);
         await writeAttendance({
           uid,
           name,
           companyId,
-          status: "출근",
+          status: late > LATE_GRACE_MINUTES ? "지각" : "출근",
           extra: {
-            checkInTime: new Date().toISOString(),
+            checkInTime: now.toISOString(),
             checkInLocation: { lat, lng, distanceM: Math.round(d) },
             source: "auto",
             siteId: workSite.id,
             siteName: workSite.name,
           },
         });
+        if (late > LATE_GRACE_MINUTES) notifyAdminsOfLateCheckIn({ companyId, name, late });
         refreshToday();
       } else if (autoCheckedInRef.current && d > radiusOut && !todayAttendance?.checkOutTime) {
         await writeAttendance({
           uid,
           name,
           companyId,
-          status: "출근", // keep as present-day status, just record checkout time
+          status: todayAttendance?.status || "출근", // preserve 지각/출근 as recorded at check-in
           extra: { checkOutTime: new Date().toISOString(), checkOutSource: "auto" },
         });
         refreshToday();
       }
     },
-    [uid, name, companyId, workSite, todayAttendance, refreshToday, canCheckIn]
+    [uid, name, companyId, workSite, todayAttendance, refreshToday, canCheckIn, scheduleStartTime]
   );
 
   useEffect(() => {
@@ -171,13 +212,15 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
       if (distance == null) return { ok: false, reason: "no-location" };
       if (distance > MANUAL_CHECK_IN_RADIUS_M) return { ok: false, reason: "too-far" };
 
+      const now = new Date();
+      const late = minutesLate(scheduleStartTime, now);
       await writeAttendance({
         uid,
         name,
         companyId,
-        status: "출근",
+        status: late > LATE_GRACE_MINUTES ? "지각" : "출근",
         extra: {
-          checkInTime: new Date().toISOString(),
+          checkInTime: now.toISOString(),
           checkInLocation: { distanceM: Math.round(distance) },
           source: "manual",
           siteId: workSite?.id || null,
@@ -185,11 +228,12 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
           ...extraFields,
         },
       });
+      if (late > LATE_GRACE_MINUTES) notifyAdminsOfLateCheckIn({ companyId, name, late });
       autoCheckedInRef.current = true;
       refreshToday();
       return { ok: true };
     },
-    [uid, name, companyId, distance, workSite, refreshToday, canCheckIn]
+    [uid, name, companyId, distance, workSite, refreshToday, canCheckIn, scheduleStartTime]
   );
 
   const manualCheckOut = useCallback(async () => {
