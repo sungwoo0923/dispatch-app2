@@ -52,7 +52,23 @@ export function useNavBadges(companyId, adminUid) {
 
   useEffect(() => {
     if (!adminUid) return;
-    const unsub = onSnapshot(doc(db, "adminReadState", adminUid), (snap) => setReadState(snap.data() || {}));
+    const unsub = onSnapshot(doc(db, "adminReadState", adminUid), (snap) => {
+      const data = snap.data() || {};
+      // markSeen()으로 방금 이 클라이언트가 직접 쓴 필드는 서버 확인 전
+      // 잠깐 로컬 캐시에서 serverTimestamp()가 null로 되돌아오는 시점이
+      // 있다(펜딩 쓰기 echo). 이때 그대로 덮어쓰면 lastSeen이 순간적으로
+      // 0으로 리셋되어 배지가 "전체 항목 수"로 확 늘었다가 서버 확인 직후
+      // 다시 정상치로 돌아오는 깜빡임이 생긴다 — 그게 "나타났다가
+      // 사라진다"는 증상의 원인이었다. null 값은 무시하고 이전 값을
+      // 유지해 이 깜빡임을 없앤다.
+      setReadState((prev) => {
+        const next = { ...prev };
+        for (const [k, v] of Object.entries(data)) {
+          if (v != null) next[k] = v;
+        }
+        return next;
+      });
+    });
     return () => unsub();
   }, [adminUid]);
 
