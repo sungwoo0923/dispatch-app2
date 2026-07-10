@@ -8,6 +8,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { db, storage } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 
 const ROOMS_COLL = "chat_rooms";
 const MSGS_COLL = "chat_messages";
@@ -71,6 +72,7 @@ function Avatar({ name = "", photo = "", size = 36, bgColor = ACCENT }) {
 export default function Messenger({ mobileMode = false, mobileVisible = false, onClose, onUnreadChange, controlledOpen, onOpenChange }) {
   const { user, profile } = useAuth();
   const confirm = useConfirm();
+  const toast = useToast();
   const myUid = user?.uid || "";
   const myEmail = user?.email || "";
   const company = profile?.companyId || "";
@@ -325,7 +327,11 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
         const roomRef = await addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData);
         room = { id: roomRef.id, ...pendingRoom.roomData };
         setActiveRoom(room); setPendingRoom(null);
-      } catch { return; }
+      } catch (err) {
+        setInput(text);
+        toast.error(`대화방 생성에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+        return;
+      }
     }
     if (!room) return;
 

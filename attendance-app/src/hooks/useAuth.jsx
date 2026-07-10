@@ -60,35 +60,6 @@ export function AuthProvider({ children }) {
     return () => unsubProfile();
   }, [user]);
 
-  // 메신저 친구목록/문의 담당자 선택 등 "회사 구성원 전체 조회"가 필요한
-  // 화면은 PII가 담긴 users 컬렉션을 직접 list하지 못하도록 규칙으로
-  // 막혀있다(관리자만 가능). 대신 이름/직책/연락처 정도만 담은
-  // chat_profiles를 회사 구성원끼리 서로 조회할 수 있게 열어뒀는데, 그
-  // 문서가 메신저를 최소 한 번 열어야만 생성되면 한 번도 안 연 사용자는
-  // 다른 사람 목록에 영영 안 뜬다 — 그래서 로그인 시점에 없으면 바로
-  // 만들어 회사 전체 구성원이 항상 조회 가능하도록 보장한다.
-  useEffect(() => {
-    if (!user || !profile?.companyId) return;
-    const ref = doc(db, "chat_profiles", user.uid);
-    getDoc(ref)
-      .then((snap) => {
-        if (snap.exists()) return;
-        return setDoc(ref, {
-          uid: user.uid,
-          email: user.email || "",
-          company: profile.companyId,
-          role: profile.role || "employee",
-          name: profile.name || user.email?.split("@")[0] || "",
-          statusMsg: "",
-          photo: "",
-          position: profile.position || "",
-          phone: profile.phone || "",
-          createdAt: serverTimestamp(),
-        });
-      })
-      .catch(() => {});
-  }, [user, profile?.companyId, profile?.role, profile?.name]);
-
   const isSuperAdmin = !!user?.email && user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
 
   // The company the rest of the app should read/write as. For a regular
@@ -101,6 +72,38 @@ export function AuthProvider({ children }) {
     profile && isSuperAdmin && activeCompanyId && activeCompanyId !== profile.companyId
       ? { ...profile, companyId: activeCompanyId }
       : profile;
+
+  // 메신저 친구목록/문의 담당자 선택 등 "회사 구성원 전체 조회"가 필요한
+  // 화면은 PII가 담긴 users 컬렉션을 직접 list하지 못하도록 규칙으로
+  // 막혀있다(관리자만 가능). 대신 이름/직책/연락처 정도만 담은
+  // chat_profiles를 회사 구성원끼리 서로 조회할 수 있게 열어뒀는데, 그
+  // 문서가 메신저를 최소 한 번 열어야만 생성되면 한 번도 안 연 사용자는
+  // 다른 사람 목록에 영영 안 뜬다 — 그래서 로그인 시점에 없으면 바로
+  // 만들어 회사 전체 구성원이 항상 조회 가능하도록 보장한다. effectiveProfile의
+  // companyId를 쓰는 이유: 슈퍼관리자가 다른 회사로 전환해 들어간 상태라면
+  // 그 회사 기준으로 chat_profiles가 생성되어야 메신저(같은 effectiveProfile
+  // 기준 company를 쓰는)의 친구목록에 뜬다.
+  useEffect(() => {
+    if (!user || !effectiveProfile?.companyId) return;
+    const ref = doc(db, "chat_profiles", user.uid);
+    getDoc(ref)
+      .then((snap) => {
+        if (snap.exists()) return;
+        return setDoc(ref, {
+          uid: user.uid,
+          email: user.email || "",
+          company: effectiveProfile.companyId,
+          role: effectiveProfile.role || "employee",
+          name: effectiveProfile.name || user.email?.split("@")[0] || "",
+          statusMsg: "",
+          photo: "",
+          position: effectiveProfile.position || "",
+          phone: effectiveProfile.phone || "",
+          createdAt: serverTimestamp(),
+        });
+      })
+      .catch(() => {});
+  }, [user, effectiveProfile?.companyId, effectiveProfile?.role, effectiveProfile?.name]);
 
   // Company-approval gate: only relevant for role === "admin". Kept in the
   // shared auth context (not fetched per-page) since App.jsx needs it before

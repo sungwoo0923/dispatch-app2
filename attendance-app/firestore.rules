@@ -479,8 +479,8 @@ service cloud.firestore {
     // 구성원끼리는 서로 조회 가능해야 친구 목록을 만들 수 있다. 본인 것만
     // 쓸 수 있다.
     match /chat_profiles/{uid} {
-      allow read: if isSignedIn() && (isSelf(uid) || resource.data.company == myCompanyId());
-      allow create: if (isSelf(uid) && request.resource.data.company == myCompanyId())
+      allow read: if isSignedIn() && (isSelf(uid) || isSuperAdmin() || resource.data.company == myCompanyId());
+      allow create: if (isSelf(uid) && (isSuperAdmin() || request.resource.data.company == myCompanyId()))
         || isAdminOf(request.resource.data.company);
       allow update: if isSelf(uid) || isAdminOf(resource.data.company);
       allow delete: if false;
@@ -488,10 +488,15 @@ service cloud.firestore {
 
     // 채팅방: 멤버만 읽고 쓸 수 있다. 생성 시 나 자신이 멤버 목록에
     // 포함되어야 하고, 수정(읽음처리/안읽음카운트/나가기)도 기존 멤버만.
+    // company == myCompanyId() 비교는 플랫폼 슈퍼관리자가 "다른 회사"로
+    // 전환해 들어간 상태에서는 항상 실패한다(myCompanyId()는 본인 소속
+    // 회사만 알고, 클라이언트의 회사 전환 상태를 모르기 때문) — 그래서
+    // 슈퍼관리자로 테스트할 때 채팅방 생성(=메시지 전송)이 계속
+    // 실패했었다. isSuperAdmin()이면 이 비교를 건너뛴다.
     match /chat_rooms/{roomId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.members;
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.members
-        && request.resource.data.company == myCompanyId();
+        && (isSuperAdmin() || request.resource.data.company == myCompanyId());
       allow update: if isSignedIn() && request.auth.uid in resource.data.members;
       allow delete: if false;
     }
