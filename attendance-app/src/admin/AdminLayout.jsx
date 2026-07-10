@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, getDocs, doc, writeBatch, serverTimestamp } from "firebase/firestore";
 import { Menu, X, LogOut, ChevronDown, DoorOpen, FileWarning } from "lucide-react";
 import { db } from "../firebase";
@@ -213,9 +213,9 @@ export default function AdminLayout() {
   return (
     <div className="flex min-h-screen bg-surface">
       <aside className="hidden w-60 shrink-0 border-r border-slate-100 bg-white md:flex md:flex-col">
-        <div className="flex items-center px-5 py-5">
+        <Link to="/" className="flex items-center px-5 py-5">
           <img src="/logo.png" alt="KP-Work" className="h-14 w-auto" />
-        </div>
+        </Link>
         {company && (
           <div className="mx-3 mb-2 rounded-xl bg-slate-50 px-3 py-2">
             <p className="truncate text-xs font-semibold text-ink">{company.name}</p>
@@ -238,7 +238,9 @@ export default function AdminLayout() {
         <div className="fixed inset-0 z-50 flex md:hidden">
           <div className="w-64 overflow-y-auto bg-white shadow-xl">
             <div className="flex items-center justify-between px-5 py-4">
-              <img src="/logo.png" alt="KP-Work" className="h-12 w-auto" />
+              <Link to="/" onClick={() => setMobileOpen(false)}>
+                <img src="/logo.png" alt="KP-Work" className="h-12 w-auto" />
+              </Link>
               <button onClick={() => setMobileOpen(false)}>
                 <X size={20} />
               </button>

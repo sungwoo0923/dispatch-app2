@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AlertTriangle, Save, Pencil, Send } from "lucide-react";
 import Button from "./Button";
 
@@ -11,6 +12,23 @@ const KIND = {
 // 프로그램 전역에서 저장/수정/삭제 액션 전에 뜨는 확인 팝업. useConfirm() 훅으로
 // 호출하면 이 컴포넌트가 앱 루트에서 한 번만 렌더링된 상태로 열고 닫힌다.
 export default function ConfirmDialog({ open, kind = "save", message, onConfirm, onCancel }) {
+  // 엔터=확인, esc=취소 — 이 팝업엔 텍스트 입력란이 없어 전역으로 걸어도
+  // 다른 입력을 방해하지 않는다.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        onConfirm?.();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel?.();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onConfirm, onCancel]);
+
   if (!open) return null;
   const { icon: Icon, tone, button, label } = KIND[kind] || KIND.save;
 
