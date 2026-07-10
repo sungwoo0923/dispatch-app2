@@ -117,7 +117,7 @@ export default function AdminSignupPage() {
       const code = form.adminCode.trim().toUpperCase();
       const inviteSnap = await getDoc(doc(db, "adminInvites", code));
       if (!inviteSnap.exists()) {
-        setError("관리자 초대코드를 다시 확인해주세요.");
+        setError("관리자 초대코드를 다시 확인해주세요. (회사코드/직원 가입코드와는 다른 코드입니다 — 기존 관리자가 '내 정보 > 관리자 계정' 화면에서 발급한 코드를 입력해주세요)");
         setLoading(false);
         return;
       }

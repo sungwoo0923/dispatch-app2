@@ -6,7 +6,12 @@ const SIZES = {
   lg: "sm:max-w-2xl",
 };
 
-export default function Modal({ open, onClose, title, children, footer, size = "md" }) {
+// 모달 안에서 또 다른 모달을 여는 중첩 팝업 패턴("내 회사 등록하기" 안의
+// "센터 관리" 추가 팝업 등)에서, 둘 다 기본 z-index가 같으면 브라우저의
+// DOM 순서 기반 쌓임 규칙에 기대게 되어 리렌더/포털 등 사소한 변화에도
+// 뒤 팝업이 앞 팝업 밑에 깔릴 수 있다. 안쪽 모달을 열 때는 zIndex prop으로
+// 명시적으로 더 높은 값을 줘서 항상 위에 뜨도록 보장한다.
+export default function Modal({ open, onClose, title, children, footer, size = "md", zIndex = 100 }) {
   // 팝업이 뜨면 포커스가 뒤쪽 페이지에 남아있지 않고 팝업 자체로 옮겨가야
   // ESC/스크린리더 등이 팝업 기준으로 동작한다.
   const panelRef = useRef(null);
@@ -86,8 +91,8 @@ export default function Modal({ open, onClose, title, children, footer, size = "
   if (!open) return null;
   return (
     <div
-      className="fixed inset-x-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
-      style={{ top: viewport.top, height: viewport.height ? `${viewport.height}px` : "100dvh" }}
+      className="fixed inset-x-0 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
+      style={{ top: viewport.top, height: viewport.height ? `${viewport.height}px` : "100dvh", zIndex }}
     >
       <div
         ref={panelRef}

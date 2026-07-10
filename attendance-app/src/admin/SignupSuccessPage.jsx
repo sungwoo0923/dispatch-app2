@@ -10,11 +10,15 @@ export default function SignupSuccessPage({ payload, onDismiss }) {
         </p>
       )}
       <p className="mb-2 text-sm text-muted">
-        아래 초대코드를 직원들에게 공유해주세요. 직원은 이 코드로 회원가입합니다.
+        아래 <strong className="text-ink">회사코드</strong>를 직원들에게 공유해주세요. 직원은 로그인 화면 &gt; 직원 회원가입에서 이 코드로 가입합니다.
       </p>
-      <div className="mb-5 rounded-xl bg-primary-light px-4 py-3 text-center text-2xl font-bold tracking-widest text-primary">
+      <div className="mb-3 rounded-xl bg-primary-light px-4 py-3 text-center text-2xl font-bold tracking-widest text-primary">
         {payload.code}
       </div>
+      <p className="mb-5 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-muted">
+        ※ 이 회사코드는 <strong>직원 가입 전용</strong>입니다. 다른 관리자를 추가로 초대하려면, 로그인 후
+        사이드바 &gt; 내 정보 &gt; 관리자 계정 화면에서 별도의 <strong>관리자 초대코드</strong>를 새로 발급해야 합니다.
+      </p>
       <Button className="w-full" size="lg" onClick={onDismiss}>
         시작하기
       </Button>

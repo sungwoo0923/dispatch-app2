@@ -33,7 +33,7 @@ export default function ConfirmDialog({ open, kind = "save", message, onConfirm,
   const { icon: Icon, tone, button, label } = KIND[kind] || KIND.save;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
         <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full ${tone}`}>
           <Icon size={22} />

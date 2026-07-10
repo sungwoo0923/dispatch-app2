@@ -9,6 +9,12 @@ import { registerSW } from "virtual:pwa-register";
 let needRefresh = false;
 let updateSW = null;
 let swRegistration = null;
+// 사용자가 배너를 "닫기"로 넘긴 뒤에도 5분 주기 검사가 같은 대기 중인
+// 서비스워커를 다시 감지해 onNeedRefresh를 재호출하면, 방금 닫은 배너가
+// 바로 또 뜨는 것처럼 보인다("수시로 알림이 뜬다"는 문의의 원인). 닫은
+// 뒤 일정 시간은 같은 세션에서 재알림을 억제한다 — 새로고침하면 자연히
+// 초기화되므로 진짜 새 배포가 있으면 다음 방문/새로고침 때는 다시 뜬다.
+let dismissedUntil = 0;
 const listeners = new Set();
 
 function setNeedRefresh(value) {
@@ -18,7 +24,9 @@ function setNeedRefresh(value) {
 
 if (typeof window !== "undefined" && "serviceWorker" in navigator) {
   updateSW = registerSW({
+    immediate: true,
     onNeedRefresh() {
+      if (Date.now() < dismissedUntil) return;
       setNeedRefresh(true);
     },
     onRegisteredSW(_url, registration) {
@@ -48,8 +56,22 @@ export function useAppUpdate() {
     listeners.add(listener);
     return () => listeners.delete(listener);
   }, []);
-  const applyUpdate = () => updateSW?.(true);
-  const dismiss = () => setNeedRefresh(false);
+  // updateSW(true)는 대기 중인 서비스워커에 SKIP_WAITING을 보내고
+  // controllerchange 이벤트에서 새로고침하는데, 그 이벤트가 어떤 이유로든
+  // 안 뜨면("버튼을 눌러도 반응이 없다") 사용자 입장에선 버튼이 고장난
+  // 것처럼 보인다. 일정 시간 안에 브라우저가 알아서 새로고침하지 않으면
+  // 강제로 새로고침해 항상 눈에 보이는 결과가 나오게 한다.
+  const applyUpdate = () => {
+    updateSW?.(true);
+    if (swRegistration?.waiting) {
+      swRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+    setTimeout(() => window.location.reload(), 1200);
+  };
+  const dismiss = () => {
+    dismissedUntil = Date.now() + 10 * 60 * 1000;
+    setNeedRefresh(false);
+  };
 
   // "업데이트 확인" 버튼을 직접 눌렀을 때 쓰는 함수 — 서버에 새 서비스워커가
   // 있는지 바로 확인해보고, 있으면 { hasUpdate: true }, 없으면(=지금이 최신

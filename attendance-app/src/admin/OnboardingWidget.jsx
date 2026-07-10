@@ -91,7 +91,7 @@ function NameListModal({ open, onClose, title, items, onAdd, onRename, onRemove,
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={title} size="md">
+    <Modal open={open} onClose={onClose} title={title} size="md" zIndex={110}>
       {editingId ? (
         <form onSubmit={submit} className="space-y-3">
           <button type="button" onClick={cancelEdit} className="flex items-center gap-1 text-xs text-muted hover:text-primary">
@@ -382,6 +382,7 @@ function ShiftTemplateModal({ open, onClose, form, setForm, companyId, businessE
       onClose={onClose}
       title="근무시간 설정하기"
       size="md"
+      zIndex={110}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
