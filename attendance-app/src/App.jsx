@@ -12,6 +12,7 @@ import SuperAdminCompanyPicker from "./admin/SuperAdminCompanyPicker";
 import Dashboard from "./admin/Dashboard";
 import EmployeeList from "./admin/EmployeeList";
 import EmployeeStatus from "./admin/EmployeeStatus";
+import HistoryAccessRequests from "./admin/HistoryAccessRequests";
 import Contracts from "./admin/Contracts";
 import Documents from "./admin/Documents";
 import Inquiries from "./admin/Inquiries";
@@ -132,6 +133,7 @@ export default function App() {
           {isSuperAdmin && <Route path="platform/companies" element={<PlatformCompanies />} />}
           <Route path="employees" element={<EmployeeList />} />
           <Route path="employees/status" element={<EmployeeStatus />} />
+          <Route path="employees/history-access" element={<HistoryAccessRequests />} />
           <Route path="employees/contracts" element={<Contracts />} />
           <Route path="employees/documents" element={<Documents />} />
           <Route path="employees/inquiries" element={<Inquiries />} />

@@ -26,6 +26,7 @@ export const NAV = [
       { to: "/employees/documents", label: "서류함" },
       { to: "/employees/inquiries", label: "문의함" },
       { to: "/employees/status", label: "입퇴사현황" },
+      { to: "/employees/history-access", label: "조회기간 확장요청" },
     ],
   },
   {

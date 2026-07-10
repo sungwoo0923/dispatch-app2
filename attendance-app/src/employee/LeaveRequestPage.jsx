@@ -9,6 +9,7 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import MonthRangeSearch from "../components/MonthRangeSearch";
 import { calcLeaveBalance, LEAVE_TYPES } from "../utils/leave";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
@@ -24,6 +25,7 @@ export default function LeaveRequestPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [range, setRange] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -40,6 +42,14 @@ export default function LeaveRequestPage() {
     () => calcLeaveBalance({ hireDate: profile?.hireDate || toDateKey(), leaves }),
     [profile?.hireDate, leaves]
   );
+
+  const filteredLeaves = useMemo(() => {
+    if (!range) return leaves;
+    return leaves.filter((lv) => {
+      const key = (lv.startDate || "").slice(0, 7);
+      return key && key >= range.startMonth && key <= range.endMonth;
+    });
+  }, [leaves, range]);
 
   const openNew = () => {
     setEditingId(null);
@@ -118,8 +128,11 @@ export default function LeaveRequestPage() {
         <Plus size={18} /> 휴가 신청
       </Button>
 
+      <MonthRangeSearch onSearch={setRange} />
+
       <div className="space-y-3">
-        {leaves.map((lv) => {
+        {filteredLeaves.length === 0 && <p className="text-xs text-muted">조회된 휴가 신청이 없습니다.</p>}
+        {filteredLeaves.map((lv) => {
           const [label, tone] = STATUS_LABEL[lv.status] || ["승인대기", "warning"];
           const pending = lv.status === "pending";
           return (

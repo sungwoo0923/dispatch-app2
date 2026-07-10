@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { ChevronRight, FileSignature, FileWarning } from "lucide-react";
@@ -6,6 +6,7 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
+import MonthRangeSearch from "../components/MonthRangeSearch";
 import { formatDate } from "../utils/dateUtils";
 import { contractStatus, CONTRACT_STATUS_TONE } from "../utils/contractStatus";
 import { computeResignationStatus } from "../utils/resignationStatus";
@@ -24,6 +25,7 @@ export default function ContractsPage() {
   const { user } = useAuth();
   const [contracts, setContracts] = useState([]);
   const [resignation, setResignation] = useState(null);
+  const [range, setRange] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -45,9 +47,18 @@ export default function ContractsPage() {
     return () => unsub();
   }, [user]);
 
+  const filteredContracts = useMemo(() => {
+    if (!range) return contracts;
+    return contracts.filter((c) => {
+      const key = (c.startDate || "").slice(0, 7);
+      return key && key >= range.startMonth && key <= range.endMonth;
+    });
+  }, [contracts, range]);
+
   return (
     <div className="space-y-3 px-4 pt-4">
       <h2 className="text-sm font-semibold text-ink">계약서</h2>
+      <MonthRangeSearch onSearch={setRange} />
       {resignation && (
         <Link to="/resignation">
           <Card className="flex items-center justify-between border border-danger/20 bg-red-50 p-4">
@@ -69,8 +80,8 @@ export default function ContractsPage() {
           </Card>
         </Link>
       )}
-      {contracts.length === 0 && !resignation && <p className="text-xs text-muted">받은 계약서가 없습니다.</p>}
-      {contracts.map((c) => (
+      {filteredContracts.length === 0 && !resignation && <p className="text-xs text-muted">받은 계약서가 없습니다.</p>}
+      {filteredContracts.map((c) => (
         <Link key={c.id} to={`/contracts/${c.id}`}>
           <Card className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">

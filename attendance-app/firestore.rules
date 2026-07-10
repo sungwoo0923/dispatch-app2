@@ -153,6 +153,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // 모바일 계약관리/급여관리/휴가관리의 3개월 조회 제한을 넘어서고 싶을 때
+    // 근로자가 관리자에게 보내는 확장 요청. 승인되면 users/{uid}의
+    // extendedHistoryAccess를 관리자가 직접 true/false로 바꾼다.
+    match /historyAccessRequests/{reqId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow update: if isAdminOf(resource.data.companyId);
+      allow delete: if false;
+    }
+
     match /leaves/{leaveId} {
       allow read: if isSignedIn() &&
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));

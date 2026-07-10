@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
-import { ChevronRight, Wallet, Info } from "lucide-react";
+import { ChevronRight, Wallet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
+import MonthRangeSearch from "../components/MonthRangeSearch";
 
 export default function PayslipList() {
   const { user } = useAuth();
   const [payrolls, setPayrolls] = useState([]);
+  const [range, setRange] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -21,15 +23,17 @@ export default function PayslipList() {
     return () => unsub();
   }, [user]);
 
+  const filteredPayrolls = useMemo(() => {
+    if (!range) return payrolls;
+    return payrolls.filter((p) => p.month >= range.startMonth && p.month <= range.endMonth);
+  }, [payrolls, range]);
+
   return (
     <div className="space-y-3 px-4 pt-4">
       <h2 className="text-base font-bold text-ink">급여관리</h2>
-      <div className="flex items-center gap-2 rounded-xl bg-primary-light px-3.5 py-2.5 text-xs font-medium text-primary">
-        <Info size={14} className="shrink-0" />
-        현재일자 기준 3개월 전까지 조회됩니다.
-      </div>
-      {payrolls.length === 0 && <p className="text-xs text-muted">발급된 명세서가 없습니다.</p>}
-      {payrolls.map((p) => (
+      <MonthRangeSearch onSearch={setRange} />
+      {filteredPayrolls.length === 0 && <p className="text-xs text-muted">발급된 명세서가 없습니다.</p>}
+      {filteredPayrolls.map((p) => (
         <Link key={p.id} to={`/payslips/${p.id}`}>
           <Card className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
