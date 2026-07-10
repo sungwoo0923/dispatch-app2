@@ -1,10 +1,13 @@
-import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User, FileSignature, ShieldAlert } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useLanguage } from "../hooks/useLanguage";
+import { useOnboardingPending } from "../hooks/useOnboardingPending";
 import HeaderIcons from "./HeaderIcons";
 import Messenger from "../messenger/Messenger";
+import Modal from "../components/Modal";
+import Button from "../components/Button";
 
 const TAB_DEFS = [
   { to: "/work-info", labelKey: "nav.workInfo", icon: ClipboardList },
@@ -20,12 +23,28 @@ const WORKINFO_ROUTES = ["/work-info", "/contracts", "/payslips", "/leave"];
 const MYINFO_ROUTES = ["/my-info", "/documents", "/safety"];
 
 export default function EmployeeLayout() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useLanguage();
   const [showMessenger, setShowMessenger] = useState(false);
   const [messengerUnread, setMessengerUnread] = useState(0);
   const TABS = TAB_DEFS.map((tab) => ({ ...tab, label: t(tab.labelKey) }));
+
+  const { pendingContracts, pendingSafetyCount } = useOnboardingPending(user, profile?.companyId);
+  const [onboardingPrompt, setOnboardingPrompt] = useState(false);
+  const onboardingShownRef = useRef(false);
+
+  // 예전엔 체크(홈) 탭에서만 이 팝업이 떴다 — 다른 탭에 있는 동안에는
+  // 완료해야 할 항목이 있어도 안내를 못 받았다. 레이아웃(모든 탭에서
+  // 항상 마운트됨) 레벨로 옮겨 어느 탭에 있든 한 번은 뜨도록 한다.
+  useEffect(() => {
+    if (onboardingShownRef.current) return;
+    if (pendingContracts > 0 || pendingSafetyCount > 0) {
+      onboardingShownRef.current = true;
+      setOnboardingPrompt(true);
+    }
+  }, [pendingContracts, pendingSafetyCount]);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -63,6 +82,47 @@ export default function EmployeeLayout() {
       <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
+
+      <Modal
+        open={onboardingPrompt}
+        onClose={() => setOnboardingPrompt(false)}
+        title="완료해야 할 항목이 있습니다"
+        footer={
+          <Button variant="outline" className="w-full" onClick={() => setOnboardingPrompt(false)}>
+            나중에 하기
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink">아래 항목을 먼저 완료해주세요. 완료 전에는 출근 처리가 되지 않습니다.</p>
+          {pendingContracts > 0 && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light p-4 text-left"
+              onClick={() => {
+                setOnboardingPrompt(false);
+                navigate("/contracts");
+              }}
+            >
+              <FileSignature size={18} className="shrink-0 text-primary" />
+              <span className="flex-1 text-sm text-ink">근로계약서 서명하기</span>
+            </button>
+          )}
+          {pendingSafetyCount > 0 && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-xl border border-danger/20 bg-red-50 p-4 text-left"
+              onClick={() => {
+                setOnboardingPrompt(false);
+                navigate("/safety");
+              }}
+            >
+              <ShieldAlert size={18} className="shrink-0 text-danger" />
+              <span className="flex-1 text-sm text-ink">안전교육 이수하기 ({pendingSafetyCount}건)</span>
+            </button>
+          )}
+        </div>
+      </Modal>
 
       <nav
         id="employee-bottom-nav"
