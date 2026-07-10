@@ -9,6 +9,7 @@ import { db, storage } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
+import { useLanguage } from "../hooks/useLanguage";
 
 const ROOMS_COLL = "chat_rooms";
 const MSGS_COLL = "chat_messages";
@@ -32,12 +33,12 @@ function fmtDate(ts) {
   const d = ts?.toDate ? ts.toDate() : new Date(ts);
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
-function fmtLastMsg(ts) {
+function fmtLastMsg(ts, t) {
   if (!ts) return "";
   const d = ts?.toDate ? ts.toDate() : new Date(ts);
   const now = new Date();
   const diff = now - d;
-  if (diff < 60000) return "방금";
+  if (diff < 60000) return t("messenger.justNow");
   if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (d >= today) return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -73,6 +74,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   const { user, profile } = useAuth();
   const confirm = useConfirm();
   const toast = useToast();
+  const { t } = useLanguage();
   const myUid = user?.uid || "";
   const myEmail = user?.email || "";
   const company = profile?.companyId || "";
@@ -282,12 +284,12 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     if (existing) { setActiveRoom(existing); setPendingRoom(null); if (mobileMode) setView("chat"); return; }
     setActiveRoom(null);
     setPendingRoom({
-      displayName: "나에게",
+      displayName: t("messenger.toMe"),
       displayPhoto: myProfile?.photo || "",
       roomData: {
         type: "self",
         members: [myUid],
-        memberProfiles: { [myUid]: { name: myProfile?.name || "나", photo: myProfile?.photo || "" } },
+        memberProfiles: { [myUid]: { name: myProfile?.name || t("messenger.me"), photo: myProfile?.photo || "" } },
         company, lastMsg: "", lastAt: serverTimestamp(), lastSenderUid: "",
         [`lastRead.${myUid}`]: serverTimestamp(), [`unreadCount.${myUid}`]: 0,
       },
@@ -329,7 +331,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
         setActiveRoom(room); setPendingRoom(null);
       } catch (err) {
         setInput(text);
-        toast.error(`대화방 생성에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+        toast.error(`${t("messenger.roomCreateFailed")} (${err?.code || err?.message || t("messenger.tryAgain")})`);
         return;
       }
     }
@@ -423,7 +425,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
 
   const sendLocation = () => {
     if (!activeRoom) return;
-    if (!navigator.geolocation) { alert("위치 기능을 지원하지 않는 브라우저입니다."); return; }
+    if (!navigator.geolocation) { alert(t("messenger.geoUnsupported")); return; }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const lat = pos.coords.latitude.toFixed(6);
       const lng = pos.coords.longitude.toFixed(6);
@@ -438,10 +440,10 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
       const upd = {};
       others.forEach((u) => { upd[`unreadCount.${u}`] = increment(1); });
       await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
-        lastMsg: "[위치]", lastAt: serverTimestamp(), lastSenderUid: myUid,
+        lastMsg: `[${t("messenger.location")}]`, lastAt: serverTimestamp(), lastSenderUid: myUid,
         [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
       }).catch(() => {});
-    }, () => alert("위치 정보를 가져올 수 없습니다."));
+    }, () => alert(t("messenger.geoFailed")));
   };
 
   const sendContact = async (friend) => {
@@ -510,13 +512,13 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     }
     await addDoc(collection(db, MSGS_COLL), {
       roomId: selfRoom.id, text, type: "text",
-      senderUid: myUid, senderName: myProfile?.name || "나", senderPhoto: myProfile?.photo || "",
+      senderUid: myUid, senderName: myProfile?.name || t("messenger.me"), senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), readBy: [myUid], totalMembers: 1,
     });
   };
 
   const leaveRoom = async (roomId) => {
-    if (!(await confirm("채팅방에서 나가시겠습니까?\n나가면 대화 내용이 삭제됩니다.", "delete"))) return;
+    if (!(await confirm(t("messenger.leaveRoomConfirm"), "delete"))) return;
     await updateDoc(doc(db, ROOMS_COLL, roomId), { members: arrayRemove(myUid) }).catch(() => {});
     if (activeRoom?.id === roomId) { setActiveRoom(null); setView("friends"); }
   };
@@ -531,16 +533,16 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   const deleteMessage = async (msg) => {
     const ageMs = Date.now() - (msg.createdAt?.toMillis?.() ?? Date.now());
     if (ageMs > DELETE_FOR_EVERYONE_LIMIT_MS) {
-      toast.error("보낸 지 24시간이 지난 메시지는 전체삭제할 수 없습니다. 나에게만 삭제를 이용해주세요.");
+      toast.error(t("messenger.deleteAllTooOld"));
       return;
     }
-    if (!(await confirm("메시지를 삭제하시겠습니까?\n상대방에게도 삭제된 것으로 표시됩니다.", "delete"))) return;
-    await updateDoc(doc(db, MSGS_COLL, msg.id), { text: "(삭제된 메시지)", type: "deleted" });
+    if (!(await confirm(t("messenger.deleteMsgConfirm"), "delete"))) return;
+    await updateDoc(doc(db, MSGS_COLL, msg.id), { text: t("messenger.deletedMessage"), type: "deleted" });
   };
 
   const deleteMessageForMe = async (msgId) => {
     if (!myUid) return;
-    if (!(await confirm("이 메시지를 나에게서만 삭제하시겠습니까?\n상대방 화면에는 그대로 남습니다.", "delete"))) return;
+    if (!(await confirm(t("messenger.deleteForMeConfirm"), "delete"))) return;
     await updateDoc(doc(db, MSGS_COLL, msgId), { hiddenFor: arrayUnion(myUid) }).catch(() => {});
   };
 
@@ -568,13 +570,13 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   // 찾고, 상대가 탈퇴 등으로 friends 목록에 없을 때만 스냅샷으로 대체한다.
   const getRoomName = (room) => {
     if (!room) return "";
-    if (room.type === "self") return "나에게";
+    if (room.type === "self") return t("messenger.toMe");
     if (room.type === "dm") {
       const otherUid = room.members?.find((uid) => uid !== myUid);
       const live = friends.find((f) => f.uid === otherUid);
-      return live?.name || room.memberProfiles?.[otherUid]?.name || "알 수 없음";
+      return live?.name || room.memberProfiles?.[otherUid]?.name || t("messenger.unknown");
     }
-    return room.name || "그룹";
+    return room.name || t("messenger.group");
   };
   const getRoomPhoto = (room) => {
     if (!room) return "";
@@ -669,7 +671,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
         ) : (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#94a3b8", gap: 12 }}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-            <span style={{ fontSize: 14 }}>채팅방을 선택해주세요</span>
+            <span style={{ fontSize: 14 }}>{t("messenger.selectRoomHint")}</span>
           </div>
         )}
       </div>
@@ -703,21 +705,21 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
               <div style={{ padding: "12px 20px 0", borderBottom: "1px solid #f1f5f9" }}>
                 {profileView.phone && (
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
-                    <span style={{ color: "#64748b", fontWeight: 600 }}>전화번호</span>
+                    <span style={{ color: "#64748b", fontWeight: 600 }}>{t("messenger.phoneLabel")}</span>
                     <a href={`tel:${profileView.phone}`} style={{ color: ACCENT, fontWeight: 600, textDecoration: "none" }}>{profileView.phone}</a>
                   </div>
                 )}
                 {profileView.email && (
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
-                    <span style={{ color: "#64748b", fontWeight: 600 }}>이메일</span>
+                    <span style={{ color: "#64748b", fontWeight: 600 }}>{t("messenger.emailLabel")}</span>
                     <span style={{ color: "#334155", fontWeight: 500 }}>{profileView.email}</span>
                   </div>
                 )}
               </div>
             )}
             <div style={{ padding: "12px 20px 16px", display: "flex", gap: 10 }}>
-              <button onClick={() => { openDM(profileView); setProfileView(null); }} style={{ flex: 1, padding: "9px 0", background: ACCENT, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>1:1 대화</button>
-              <button onClick={() => setProfileView(null)} style={{ flex: 1, padding: "9px 0", background: "#f1f5f9", color: "#334155", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>닫기</button>
+              <button onClick={() => { openDM(profileView); setProfileView(null); }} style={{ flex: 1, padding: "9px 0", background: ACCENT, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t("messenger.dmButton")}</button>
+              <button onClick={() => setProfileView(null)} style={{ flex: 1, padding: "9px 0", background: "#f1f5f9", color: "#334155", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{t("messenger.close")}</button>
             </div>
           </div>
         </div>
@@ -727,16 +729,16 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
         <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setNewGroupModal(false)}>
           <div style={{ background: "#fff", borderRadius: 20, width: "90%", maxWidth: 360, overflow: "hidden", boxShadow: "0 20px 60px rgba(15,23,42,0.3)" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ background: ACCENT, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>단체 채팅방 만들기</span>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{t("messenger.newGroupTitle")}</span>
               <button onClick={() => setNewGroupModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
             </div>
             <div style={{ padding: "20px 20px 16px" }}>
               <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 5 }}>채팅방 이름 *</label>
-                <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="채팅방 이름 입력"
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 5 }}>{t("messenger.groupNameLabel")}</label>
+                <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder={t("messenger.groupNamePlaceholder")}
                   style={{ width: "100%", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 12px", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               </div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 8 }}>멤버 선택 ({groupMembers.length}명 선택됨)</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 8 }}>{t("messenger.memberSelect", { count: groupMembers.length })}</label>
               <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
                 {friends.map((f) => {
                   const checked = groupMembers.includes(f.uid);
@@ -751,9 +753,9 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
               </div>
             </div>
             <div style={{ padding: "0 20px 20px", display: "flex", gap: 10 }}>
-              <button onClick={() => setNewGroupModal(false)} style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#334155", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
+              <button onClick={() => setNewGroupModal(false)} style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#334155", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{t("common.cancel")}</button>
               <button onClick={createGroup} disabled={!groupName.trim() || groupMembers.length === 0}
-                style={{ flex: 1, padding: "10px 0", background: ACCENT, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: (!groupName.trim() || groupMembers.length === 0) ? 0.4 : 1 }}>만들기</button>
+                style={{ flex: 1, padding: "10px 0", background: ACCENT, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: (!groupName.trim() || groupMembers.length === 0) ? 0.4 : 1 }}>{t("messenger.create")}</button>
             </div>
           </div>
         </div>
@@ -763,7 +765,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
         <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: mobileMode ? "flex-end" : "center", justifyContent: "center" }} onClick={() => setContactPickModal(false)}>
           <div style={{ background: "#fff", borderRadius: mobileMode ? "20px 20px 0 0" : 20, width: mobileMode ? "100%" : 320, maxWidth: mobileMode ? 480 : 320, maxHeight: mobileMode ? "60vh" : 480, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(15,23,42,0.3)" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ background: ACCENT, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>연락처 공유</span>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{t("messenger.contactShareTitle")}</span>
               <button onClick={() => setContactPickModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 20, cursor: "pointer" }}>✕</button>
             </div>
             <div style={{ overflowY: "auto", flex: 1 }}>
@@ -785,12 +787,12 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
       {showNoticeInput && (
         <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowNoticeInput(false)}>
           <div style={{ background: "#fff", borderRadius: 16, width: 320, padding: 20, boxShadow: "0 20px 60px rgba(15,23,42,0.3)" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: ACCENT, marginBottom: 12 }}>공지사항 전송</div>
-            <textarea value={noticeInput} onChange={(e) => setNoticeInput(e.target.value)} placeholder="공지 내용을 입력하세요..." rows={4} autoFocus
+            <div style={{ fontSize: 14, fontWeight: 700, color: ACCENT, marginBottom: 12 }}>{t("messenger.sendNoticeTitle")}</div>
+            <textarea value={noticeInput} onChange={(e) => setNoticeInput(e.target.value)} placeholder={t("messenger.noticePlaceholder")} rows={4} autoFocus
               style={{ width: "100%", border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <button onClick={() => setShowNoticeInput(false)} style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#334155", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
-              <button onClick={sendNotice} disabled={!noticeInput.trim()} style={{ flex: 1, padding: "10px 0", background: ACCENT, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: noticeInput.trim() ? 1 : 0.4 }}>전송</button>
+              <button onClick={() => setShowNoticeInput(false)} style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#334155", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{t("common.cancel")}</button>
+              <button onClick={sendNotice} disabled={!noticeInput.trim()} style={{ flex: 1, padding: "10px 0", background: ACCENT, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: noticeInput.trim() ? 1 : 0.4 }}>{t("messenger.send")}</button>
             </div>
           </div>
         </div>
@@ -811,7 +813,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     <>
       <button
         onClick={() => setOpen((p) => !p)}
-        title="메신저"
+        title={t("messenger.title")}
         style={{
           position: "fixed", bottom: BTN_BOTTOM, right: 24, zIndex: 99998,
           width: 56, height: 56, borderRadius: "50%",
@@ -832,7 +834,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
 
       {open && (
         <div style={{ position: "fixed", bottom: BTN_BOTTOM + 64, right: 24, width: panelW, height: panelH, zIndex: 99997 }}>
-          <div onMouseDown={startResizePanelDrag} style={{ position: "absolute", top: 0, left: 0, width: 18, height: 18, cursor: "nw-resize", zIndex: 10, borderRadius: "8px 0 8px 0", background: "rgba(29,78,216,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }} title="드래그하여 크기 조정">
+          <div onMouseDown={startResizePanelDrag} style={{ position: "absolute", top: 0, left: 0, width: 18, height: 18, cursor: "nw-resize", zIndex: 10, borderRadius: "8px 0 8px 0", background: "rgba(29,78,216,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }} title={t("messenger.resizeTitle")}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 9L9 1M1 5L5 1M5 9L9 5" stroke={ACCENT} strokeWidth="1.5" strokeLinecap="round" /></svg>
           </div>
           {panelContent}
@@ -844,6 +846,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
 }
 
 function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, activeRoomId }) {
+  const { t } = useLanguage();
   const [tab, setTab] = useState("friends");
   const [search, setSearch] = useState("");
   const [contextMenu, setContextMenu] = useState(null);
@@ -872,32 +875,32 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ background: HDR_GRADIENT, padding: mobileMode ? "calc(env(safe-area-inset-top) + 14px) 16px 0" : "14px 16px 0", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>메신저</span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{t("messenger.title")}</span>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={onNewGroup} title="단체 채팅" style={{ background: "rgba(255,255,255,0.16)", border: "none", color: "rgba(255,255,255,0.9)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={onNewGroup} title={t("messenger.groupChatTitle")} style={{ background: "rgba(255,255,255,0.16)", border: "none", color: "rgba(255,255,255,0.9)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
             </button>
             <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 0 }}>✕</button>
           </div>
         </div>
         <div style={{ display: "flex", gap: 0 }}>
-          {[["friends", "친구"], ["chats", "채팅"]].map(([t, l]) => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", background: "none", color: tab === t ? "#fff" : "rgba(255,255,255,0.6)", fontWeight: tab === t ? 700 : 400, fontSize: 13, borderBottom: tab === t ? "2px solid #fff" : "2px solid transparent", transition: "all 0.15s" }}>
-              {l}{t === "chats" && totalUnread > 0 ? <span style={{ marginLeft: 4, background: "#dc2626", color: "#fff", borderRadius: 10, fontSize: 10, padding: "1px 5px", fontWeight: 700 }}>{totalUnread}</span> : ""}
+          {[["friends", t("messenger.tabFriends")], ["chats", t("messenger.tabChats")]].map(([tabKey, tabLabel]) => (
+            <button key={tabKey} onClick={() => setTab(tabKey)} style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer", background: "none", color: tab === tabKey ? "#fff" : "rgba(255,255,255,0.6)", fontWeight: tab === tabKey ? 700 : 400, fontSize: 13, borderBottom: tab === tabKey ? "2px solid #fff" : "2px solid transparent", transition: "all 0.15s" }}>
+              {tabLabel}{tabKey === "chats" && totalUnread > 0 ? <span style={{ marginLeft: 4, background: "#dc2626", color: "#fff", borderRadius: 10, fontSize: 10, padding: "1px 5px", fontWeight: 700 }}>{totalUnread}</span> : ""}
             </button>
           ))}
         </div>
       </div>
 
       <div style={{ padding: "10px 12px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tab === "chats" ? "채팅방 검색..." : "친구 검색..."}
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tab === "chats" ? t("messenger.searchChats") : t("messenger.searchFriends")}
           style={{ width: "100%", border: "1px solid #e2e8f0", borderRadius: 20, padding: "6px 14px", fontSize: 12, outline: "none", boxSizing: "border-box", background: "#fff" }} />
       </div>
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         {tab === "chats" ? (
           filteredRooms.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>채팅방이 없습니다<br /><span style={{ fontSize: 12 }}>친구 탭에서 대화를 시작하세요</span></div>
+            <div style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>{t("messenger.noChatRooms")}<br /><span style={{ fontSize: 12 }}>{t("messenger.startFromFriendsTab")}</span></div>
           ) : filteredRooms.map((room) => {
             const unread = unreadMap[room.id] || 0;
             const name = getRoomName(room);
@@ -921,7 +924,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{name}</span>
-                    <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0, marginLeft: 4 }}>{fmtLastMsg(room.lastAt)}</span>
+                    <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0, marginLeft: 4 }}>{fmtLastMsg(room.lastAt, t)}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>{room.lastMsg || ""}</span>
@@ -934,9 +937,9 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
         ) : (
           <>
             <div onClick={onOpenProfile} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #e2e8f0", background: "#f8fafc" }}>
-              <Avatar name={myProfile?.name || "나"} photo={myProfile?.photo} size={44} />
+              <Avatar name={myProfile?.name || t("messenger.me")} photo={myProfile?.photo} size={44} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>{myProfile?.name || "나"} <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400 }}>(나)</span></div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>{myProfile?.name || t("messenger.me")} <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400 }}>({t("messenger.me")})</span></div>
                 {myProfile?.statusMsg && <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{myProfile.statusMsg}</div>}
               </div>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
@@ -946,13 +949,13 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: ACCENT }}>나에게</div>
-                <div style={{ fontSize: 12, color: "#94a3b8" }}>메모, 링크, 파일 저장</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: ACCENT }}>{t("messenger.toMe")}</div>
+                <div style={{ fontSize: 12, color: "#94a3b8" }}>{t("messenger.memoLinkFile")}</div>
               </div>
             </div>
-            <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>친구 {filteredFriends.length}명</div>
+            <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("messenger.friendsCount", { count: filteredFriends.length })}</div>
             {filteredFriends.length === 0 ? (
-              <div style={{ padding: 20, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>같은 회사 사용자가 없습니다</div>
+              <div style={{ padding: 20, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>{t("messenger.noFriends")}</div>
             ) : filteredFriends.map((f) => (
               <div key={f.uid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }} onClick={() => onOpenPeerProfile(f)}>
                 <Avatar name={f.name} photo={f.photo} size={40} />
@@ -960,7 +963,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{f.name}</div>
                   {f.statusMsg && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 1 }}>{f.statusMsg}</div>}
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); onOpenDM(f); }} style={{ background: ACCENT, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>대화</button>
+                <button onClick={(e) => { e.stopPropagation(); onOpenDM(f); }} style={{ background: ACCENT, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{t("messenger.talkButton")}</button>
               </div>
             ))}
           </>
@@ -972,8 +975,8 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
           <div style={{ position: "fixed", inset: 0, zIndex: 100001 }} onClick={closeContext} />
           <div style={{ position: "fixed", left: Math.min(contextMenu.x, window.innerWidth - 200), top: Math.min(contextMenu.y, window.innerHeight - 160), zIndex: 100002, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(15,23,42,0.18)", border: "1px solid #e2e8f0", overflow: "hidden", minWidth: 180 }}>
             {[
-              { label: "대화 입장", action: () => { onOpenRoom(contextMenu.room); closeContext(); }, color: "#1e293b" },
-              { label: "채팅방 나가기", action: () => { onLeaveRoom(contextMenu.room.id); closeContext(); }, color: "#dc2626" },
+              { label: t("messenger.enterRoom"), action: () => { onOpenRoom(contextMenu.room); closeContext(); }, color: "#1e293b" },
+              { label: t("messenger.leaveRoom"), action: () => { onLeaveRoom(contextMenu.room.id); closeContext(); }, color: "#dc2626" },
             ].map((item) => (
               <button key={item.label} onClick={item.action} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 16px", background: "none", border: "none", cursor: "pointer", color: item.color, fontSize: 13, fontWeight: 600, textAlign: "left" }}>{item.label}</button>
             ))}
@@ -985,6 +988,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, onDeleteForMe, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, mobileMode, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf }) {
+  const { t } = useLanguage();
   const [showSearch, setShowSearch] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
@@ -1025,7 +1029,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
         <Avatar name={roomName} photo={roomPhoto} size={32} bgColor={room.type === "group" ? "#475569" : ACCENT_HOVER} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roomName}</div>
-          {room.type === "group" && room.members && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)" }}>{room.members.length}명</div>}
+          {room.type === "group" && room.members && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)" }}>{t("messenger.membersCount", { count: room.members.length })}</div>}
         </div>
         <button onClick={() => setShowSearch((p) => !p)} style={{ background: "none", border: "none", color: showSearch ? "#fff" : "rgba(255,255,255,0.6)", cursor: "pointer", padding: 4 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
@@ -1035,14 +1039,14 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
 
       {showSearch && (
         <div style={{ padding: "8px 12px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-          <input value={msgSearch} onChange={(e) => setMsgSearch(e.target.value)} placeholder="메시지 검색..." autoFocus
+          <input value={msgSearch} onChange={(e) => setMsgSearch(e.target.value)} placeholder={t("messenger.searchMessages")} autoFocus
             style={{ width: "100%", border: "1px solid #e2e8f0", borderRadius: 20, padding: "5px 12px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
         </div>
       )}
 
       <div ref={msgContainerRef} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 2, background: CHAT_BG }}>
         {messages.length === 0 && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13 }}>대화를 시작해보세요.</div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13 }}>{t("messenger.startChatHint")}</div>
         )}
         {(() => {
           let prevDate = "";
@@ -1075,10 +1079,10 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
                     {!isContinued && !isMine && <span style={{ fontSize: 11, fontWeight: 600, color: "#334155", marginBottom: 3, paddingLeft: 4 }}>{msg.senderName}</span>}
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 4, flexDirection: isMine ? "row-reverse" : "row" }}>
                       {msg.type === "deleted" ? (
-                        <div style={{ padding: "8px 12px", borderRadius: 14, background: "#e2e8f0", fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>(삭제된 메시지)</div>
+                        <div style={{ padding: "8px 12px", borderRadius: 14, background: "#e2e8f0", fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>{t("messenger.deletedMessage")}</div>
                       ) : msg.type === "notice" ? (
                         <div style={{ background: "#fef3c7", border: "1px solid #f59e0b", borderRadius: 12, padding: "10px 14px", maxWidth: 240 }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: "#b45309", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>공지사항</div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#b45309", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("messenger.noticeLabel")}</div>
                           <div style={{ fontSize: 13, color: "#1e293b", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.text}</div>
                         </div>
                       ) : msg.type === "image" ? (
@@ -1103,7 +1107,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
                             <div style={{ background: ACCENT, padding: "28px 16px", textAlign: "center" }}>
                               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
                             </div>
-                            <div style={{ background: "#fff", padding: "8px 12px", fontSize: 12, fontWeight: 600, color: ACCENT, textAlign: "center", borderTop: "1px solid #e2e8f0" }}>위치 보기</div>
+                            <div style={{ background: "#fff", padding: "8px 12px", fontSize: 12, fontWeight: 600, color: ACCENT, textAlign: "center", borderTop: "1px solid #e2e8f0" }}>{t("messenger.viewLocation")}</div>
                           </div>
                         </a>
                       ) : msg.type === "contact" ? (
@@ -1126,8 +1130,8 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           <input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onSaveEdit(); if (e.key === "Escape") setEditMsg(null); }} autoFocus
                             style={{ border: `1px solid ${ACCENT}`, borderRadius: 10, padding: "6px 10px", fontSize: 13, outline: "none", minWidth: 120 }} />
-                          <button onClick={onSaveEdit} style={{ background: ACCENT, color: "#fff", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>저장</button>
-                          <button onClick={() => setEditMsg(null)} style={{ background: "#e2e8f0", color: "#334155", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, cursor: "pointer" }}>취소</button>
+                          <button onClick={onSaveEdit} style={{ background: ACCENT, color: "#fff", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{t("messenger.save")}</button>
+                          <button onClick={() => setEditMsg(null)} style={{ background: "#e2e8f0", color: "#334155", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, cursor: "pointer" }}>{t("common.cancel")}</button>
                         </div>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column" }}
@@ -1146,7 +1150,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
                           )}
                           <div style={{ padding: "8px 12px", borderRadius: isMine ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: isMine ? MY_BUBBLE : "#fff", color: isMine ? "#fff" : "#1e293b", fontSize: 13, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" }}>
                             {msg.text}
-                            {msg.edited && <span style={{ fontSize: 10, opacity: 0.65, marginLeft: 4 }}>(수정됨)</span>}
+                            {msg.edited && <span style={{ fontSize: 10, opacity: 0.65, marginLeft: 4 }}>{t("messenger.edited")}</span>}
                           </div>
                           {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3, justifyContent: isMine ? "flex-end" : "flex-start" }}>
@@ -1167,7 +1171,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
                             const unreadCount = total - (msg.readBy || []).length;
                             return unreadCount > 0
                               ? <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap" }}>{unreadCount}</span>
-                              : <span style={{ fontSize: 10, color: "#94a3b8", whiteSpace: "nowrap" }}>읽음</span>;
+                              : <span style={{ fontSize: 10, color: "#94a3b8", whiteSpace: "nowrap" }}>{t("messenger.read")}</span>;
                           })()}
                         </div>
                       )}
@@ -1195,14 +1199,14 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
               ))}
             </div>
             {[
-              { label: "답장", action: () => { onReply?.(msg); setCtxMenu(null); } },
-              { label: "나에게 보내기", action: () => { onSendToSelf?.(msg.text); setCtxMenu(null); setSelfSentToast(true); setTimeout(() => setSelfSentToast(false), 2500); } },
-              { label: "복사", action: () => { navigator.clipboard?.writeText(msg.text || ""); setCtxMenu(null); } },
+              { label: t("messenger.reply"), action: () => { onReply?.(msg); setCtxMenu(null); } },
+              { label: t("messenger.sendToSelf"), action: () => { onSendToSelf?.(msg.text); setCtxMenu(null); setSelfSentToast(true); setTimeout(() => setSelfSentToast(false), 2500); } },
+              { label: t("messenger.copy"), action: () => { navigator.clipboard?.writeText(msg.text || ""); setCtxMenu(null); } },
               ...(isMine ? [
-                { label: "수정", action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } },
-                { label: "전체삭제", action: () => { onDeleteMsg(msg); setCtxMenu(null); }, danger: true },
+                { label: t("messenger.edit"), action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } },
+                { label: t("messenger.deleteAll"), action: () => { onDeleteMsg(msg); setCtxMenu(null); }, danger: true },
               ] : []),
-              { label: "나에게만 삭제", action: () => { onDeleteForMe?.(msg.id); setCtxMenu(null); }, danger: true },
+              { label: t("messenger.deleteForMe"), action: () => { onDeleteForMe?.(msg.id); setCtxMenu(null); }, danger: true },
             ].map(({ label, action, danger }) => (
               <button key={label} onClick={action} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 16px", background: "none", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", color: danger ? "#dc2626" : "#1e293b", borderBottom: "1px solid #f8fafc" }}>{label}</button>
             ))}
@@ -1214,20 +1218,20 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
         <div style={{ padding: "10px 12px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", display: "flex", gap: 8, flexWrap: "wrap" }}>
           <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, cursor: "pointer", color: ACCENT, minWidth: 60, position: "relative", overflow: "hidden" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>사진</span>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>{t("messenger.photo")}</span>
             <input type="file" accept="image/*" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) { onSendImage(f); setShowAttachMenu(false); } e.target.value = ""; }} />
           </label>
           <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, cursor: "pointer", color: ACCENT, minWidth: 60, position: "relative", overflow: "hidden" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>파일</span>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>{t("messenger.file")}</span>
             <input type="file" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) { onSendFile(f); setShowAttachMenu(false); } e.target.value = ""; }} />
           </label>
           {[
-            { label: "위치", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, action: () => { onSendLocation(); setShowAttachMenu(false); } },
-            { label: "연락처", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>, action: () => { onSendContact(); setShowAttachMenu(false); } },
-            { label: "공지", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>, action: () => { onSendNotice(); setShowAttachMenu(false); } },
+            { label: t("messenger.location"), icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, action: () => { onSendLocation(); setShowAttachMenu(false); } },
+            { label: t("messenger.contact"), icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>, action: () => { onSendContact(); setShowAttachMenu(false); } },
+            { label: t("messenger.notice"), icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>, action: () => { onSendNotice(); setShowAttachMenu(false); } },
           ].map((item) => (
             <button key={item.label} onClick={item.action} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, cursor: "pointer", color: ACCENT, minWidth: 60 }}>{item.icon}<span style={{ fontSize: 11, fontWeight: 600 }}>{item.label}</span></button>
           ))}
@@ -1238,8 +1242,8 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
         <div style={{ padding: "6px 12px 4px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <div style={{ width: 3, alignSelf: "stretch", background: MY_BUBBLE, borderRadius: 2, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: MY_BUBBLE }}>{replyTo.senderName}에게 답장</div>
-            <div style={{ fontSize: 12, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyTo.text || "[미디어]"}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: MY_BUBBLE }}>{t("messenger.replyingTo", { name: replyTo.senderName })}</div>
+            <div style={{ fontSize: 12, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyTo.text || t("messenger.mediaPlaceholder")}</div>
           </div>
           <button onClick={() => setReplyTo(null)} style={{ background: "none", border: "none", color: "#94a3b8", fontSize: 16, cursor: "pointer", padding: "0 4px" }}>✕</button>
         </div>
@@ -1251,10 +1255,10 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
             style={{ width: 32, height: 32, borderRadius: "50%", background: showAttachMenu ? ACCENT : "none", border: "none", color: showAttachMenu ? "#fff" : "#64748b", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: 2 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
           </button>
-          {fileUploading && <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>업로드 중...</span>}
+          {fileUploading && <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>{t("messenger.uploading")}</span>}
           <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-            placeholder="메시지 입력..." rows={1}
+            placeholder={t("messenger.messagePlaceholder")} rows={1}
             style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13, color: "#1e293b", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }} />
           <button type="button" onClick={onSend} disabled={!input.trim()}
             style={{ width: 32, height: 32, borderRadius: "50%", background: input.trim() ? MY_BUBBLE : "#e2e8f0", border: "none", cursor: input.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -1266,8 +1270,8 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
       {imgPreview && (
         <div style={{ position: "fixed", inset: 0, zIndex: 200000, background: "rgba(15,23,42,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }} onClick={() => setImgPreview(null)}>
           <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 10 }} onClick={(e) => e.stopPropagation()}>
-            <a href={imgPreview} download target="_blank" rel="noopener noreferrer" style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "none" }}>저장</a>
-            <button onClick={() => setImgPreview(null)} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>닫기</button>
+            <a href={imgPreview} download target="_blank" rel="noopener noreferrer" style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "none" }}>{t("messenger.save")}</a>
+            <button onClick={() => setImgPreview(null)} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t("messenger.close")}</button>
           </div>
           <img src={imgPreview} style={{ maxWidth: "90vw", maxHeight: "80vh", borderRadius: 12, objectFit: "contain" }} onClick={(e) => e.stopPropagation()} />
         </div>
@@ -1275,7 +1279,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
 
       {selfSentToast && (
         <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", zIndex: 9999999, background: ACCENT, color: "#fff", borderRadius: 10, padding: "10px 22px", fontSize: 13, fontWeight: 700, boxShadow: "0 4px 16px rgba(15,23,42,0.25)", whiteSpace: "nowrap", pointerEvents: "none" }}>
-          나에게 보냈습니다
+          {t("messenger.sentToSelfToast")}
         </div>
       )}
     </div>
@@ -1283,20 +1287,21 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
 }
 
 function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editPosition, editPhone, setEditName, setEditStatusMsg, setEditPosition, setEditPhone, onEdit, onSave, onCancel, onBack, onClose, onPhotoUpload, photoUploading, photoFileRef, mobileMode }) {
+  const { t } = useLanguage();
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ background: HDR_GRADIENT, padding: mobileMode ? "calc(env(safe-area-inset-top) + 12px) 14px 12px" : "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
         </button>
-        <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "#fff" }}>내 프로필</span>
+        <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "#fff" }}>{t("messenger.myProfileTitle")}</span>
         <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ background: "linear-gradient(160deg, #2563eb 0%, #1d4ed8 100%)", padding: "30px 20px 24px", textAlign: "center" }}>
           <div style={{ position: "relative", display: "inline-block", marginBottom: 12 }}>
-            <Avatar name={myProfile?.name || "나"} photo={myProfile?.photo} size={80} />
+            <Avatar name={myProfile?.name || t("messenger.me")} photo={myProfile?.photo} size={80} />
             <button onClick={() => photoFileRef.current?.click()} style={{ position: "absolute", bottom: -2, right: -2, width: 24, height: 24, borderRadius: "50%", background: "#fff", border: `2px solid ${ACCENT}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {photoUploading ? <span style={{ fontSize: 10 }}>...</span> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>}
             </button>
@@ -1305,32 +1310,32 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editP
           </div>
           {editingProfile ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center", width: "100%" }}>
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="이름"
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder={t("messenger.namePlaceholder")}
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 10, padding: "6px 12px", color: "#fff", fontSize: 16, fontWeight: 700, outline: "none", width: "80%" }} />
-              <input value={editStatusMsg} onChange={(e) => setEditStatusMsg(e.target.value)} placeholder="상태 메시지..."
+              <input value={editStatusMsg} onChange={(e) => setEditStatusMsg(e.target.value)} placeholder={t("messenger.statusPlaceholder")}
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.85)", fontSize: 13, outline: "none", width: "80%" }} />
-              <input value={editPosition} onChange={(e) => setEditPosition(e.target.value)} placeholder="직책 (예: 팀장, 과장...)"
+              <input value={editPosition} onChange={(e) => setEditPosition(e.target.value)} placeholder={t("messenger.positionPlaceholder")}
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.85)", fontSize: 13, outline: "none", width: "80%" }} />
-              <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="전화번호"
+              <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder={t("messenger.phonePlaceholder")}
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.85)", fontSize: 13, outline: "none", width: "80%" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button onClick={onSave} style={{ background: "#fff", color: ACCENT, border: "none", borderRadius: 10, padding: "6px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>저장</button>
-                <button onClick={onCancel} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "6px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>취소</button>
+                <button onClick={onSave} style={{ background: "#fff", color: ACCENT, border: "none", borderRadius: 10, padding: "6px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{t("messenger.save")}</button>
+                <button onClick={onCancel} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "6px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>{t("common.cancel")}</button>
               </div>
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4 }}>{myProfile?.name || "이름 없음"}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4 }}>{myProfile?.name || t("messenger.noName")}</div>
               {myProfile?.position && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 4 }}>{myProfile.position}</div>}
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", minHeight: 18 }}>{myProfile?.statusMsg || "상태 메시지를 입력해보세요"}</div>
-              <button onClick={onEdit} style={{ marginTop: 12, background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 20, padding: "6px 20px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>프로필 편집</button>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", minHeight: 18 }}>{myProfile?.statusMsg || t("messenger.statusMsgHint")}</div>
+              <button onClick={onEdit} style={{ marginTop: 12, background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 20, padding: "6px 20px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("messenger.editProfile")}</button>
             </>
           )}
         </div>
 
         <div style={{ padding: "16px 20px" }}>
           <div style={{ background: "#f8fafc", borderRadius: 12, overflow: "hidden", border: "1px solid #e2e8f0" }}>
-            {[["이메일", myProfile?.email || ""], ["회사", myProfile?.company || ""], ["직책", myProfile?.position || "-"], ["전화번호", myProfile?.phone || "-"]].map(([label, value], idx, arr) => (
+            {[[t("messenger.emailLabel"), myProfile?.email || ""], [t("messenger.companyLabel"), myProfile?.company || ""], [t("messenger.positionLabel"), myProfile?.position || "-"], [t("messenger.phoneLabel"), myProfile?.phone || "-"]].map(([label, value], idx, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: idx < arr.length - 1 ? "1px solid #e2e8f0" : "none" }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>{label}</span>
                 <span style={{ fontSize: 13, color: "#1e293b", fontWeight: 500 }}>{value}</span>
