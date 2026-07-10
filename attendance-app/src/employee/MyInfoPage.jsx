@@ -316,10 +316,6 @@ export default function MyInfoPage() {
         )}
       </Card>
 
-      <Card className="p-4">
-        <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
-      </Card>
-
       {ITEMS.map(({ to, labelKey, icon: Icon, badgeKey }) => (
         <Link key={to} to={to} onClick={() => markSubItemSeen(badgeKey)}>
           <Card className="flex items-center justify-between p-4">
@@ -338,6 +334,10 @@ export default function MyInfoPage() {
           </Card>
         </Link>
       ))}
+
+      <Card className="p-4">
+        <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
+      </Card>
 
       <Button
         variant="outline"

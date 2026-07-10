@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { Search, Plus, Trash2 } from "lucide-react";
+import { Search, Plus, Trash2, Phone } from "lucide-react";
 import { db, storage } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -138,17 +138,30 @@ export default function AdminMobileVendors() {
 
       <div className="space-y-2">
         {rows.length === 0 && <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-muted">등록된 소속업체가 없습니다.</div>}
-        {rows.map((v) => (
-          <button key={v.id} type="button" onClick={() => select(v)} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left active:bg-slate-50">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="truncate text-sm font-semibold text-ink">{v.name}</span>
-                {v.sealImageUrl ? <Badge tone="success">직인등록</Badge> : <Badge tone="muted">직인미등록</Badge>}
+        {rows.map((v) => {
+          const callPhone = v.managerPhone || v.ceoPhone;
+          return (
+            <button key={v.id} type="button" onClick={() => select(v)} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left active:bg-slate-50">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-sm font-semibold text-ink">{v.name}</span>
+                  {v.sealImageUrl ? <Badge tone="success">직인등록</Badge> : <Badge tone="muted">직인미등록</Badge>}
+                </div>
+                <p className="mt-0.5 truncate text-xs text-muted">{entityName(v.businessEntityId)} · {v.managerName || "담당자 미입력"} · {v.registeredAt ? formatDate(v.registeredAt) : "-"}</p>
               </div>
-              <p className="mt-0.5 truncate text-xs text-muted">{entityName(v.businessEntityId)} · {v.managerName || "담당자 미입력"} · {v.registeredAt ? formatDate(v.registeredAt) : "-"}</p>
-            </div>
-          </button>
-        ))}
+              {callPhone && (
+                <a
+                  href={`tel:${callPhone}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="shrink-0 rounded-lg p-1.5 text-primary hover:bg-primary-light"
+                  aria-label="전화 걸기"
+                >
+                  <Phone size={16} />
+                </a>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <Modal open={formOpen} onClose={() => setFormOpen(false)} title="소속업체 상세">

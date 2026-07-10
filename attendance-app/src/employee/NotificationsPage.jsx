@@ -170,9 +170,11 @@ export default function NotificationsPage() {
                 <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${!n.read ? "bg-primary" : "bg-transparent"}`} />
               )}
               <div className="min-w-0 flex-1">
-                <p className={`text-sm ${!n.read ? "font-semibold text-ink" : "font-medium text-ink"}`}>{n.title}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className={`text-sm ${!n.read ? "font-semibold text-ink" : "font-medium text-ink"}`}>{n.title}</p>
+                  <span className="shrink-0 text-[10px] text-muted">{timeAgo(n.createdAt)}</span>
+                </div>
                 {n.message && <p className="mt-0.5 text-xs leading-relaxed text-muted">{n.message}</p>}
-                <p className="mt-1 text-[10px] text-muted">{timeAgo(n.createdAt)}</p>
               </div>
             </Card>
           </button>

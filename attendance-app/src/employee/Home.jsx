@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   Volume2,
   VolumeX,
+  Phone,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -105,7 +106,7 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000 * 30);
+    const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -155,12 +156,15 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return;
-    getDocs(query(collection(db, "contracts"), where("uid", "==", user.uid))).then((snap) => {
-      // 회사 도장이 아직 안 찍혀 status가 "sent"에 머물러도, 직원 본인이
-      // 이미 서명(employeeSignatureDataUrl)했다면 직원 입장에선 완료된
-      // 것이다 — useOnboardingPending.js와 동일 기준.
+    // 회사 도장이 아직 안 찍혀 status가 "sent"에 머물러도, 직원 본인이
+    // 이미 서명(employeeSignatureDataUrl)했다면 직원 입장에선 완료된
+    // 것이다 — useOnboardingPending.js와 동일 기준. onSnapshot으로 구독해
+    // 사용자가 계약서에 들어가 서명을 완료하는 즉시 이 화면의 알림카드도
+    // 다시 들어오지 않고도 바로 사라지도록 한다.
+    const unsub = onSnapshot(query(collection(db, "contracts"), where("uid", "==", user.uid)), (snap) => {
       setPendingContracts(snap.docs.filter((d) => !d.data().employeeSignatureDataUrl).length);
     });
+    return () => unsub();
   }, [user]);
 
   // 근로계약서 자동 발송 — 두 가지 규칙을 합쳐서 처리한다.
@@ -265,6 +269,23 @@ export default function Home() {
   }, [user]);
 
   const dismissNotification = (id) => updateDoc(doc(db, "notifications", id), { read: true });
+
+  // 출근확정 스케줄 알림은 실제로 출근을 완료하면 더 이상 확인할 필요가
+  // 없으므로, 출근 완료(checkedIn) 시점에 자동으로 읽음 처리해 목록에서
+  // 사라지게 한다.
+  useEffect(() => {
+    if (!checkedIn) return;
+    notifications
+      .filter((n) => n.message?.includes(toDateKey()) && n.message?.includes("'출근확정'"))
+      .forEach((n) => dismissNotification(n.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkedIn, notifications]);
+
+  const formatNotificationTime = (createdAt) => {
+    const ms = createdAt?.seconds ? createdAt.seconds * 1000 : createdAt ? new Date(createdAt).getTime() : null;
+    if (!ms) return "";
+    return new Date(ms).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  };
 
   // 안전교육자료(지침/영상) 미이수 건수 — 하나라도 남아있으면 출근 버튼을
   // 막고 안전교육 페이지로 안내한다 (관리자가 등록한 필수 안전교육 이수 강제).
@@ -436,6 +457,7 @@ export default function Home() {
   const ampm = now.getHours() < 12 ? "오전" : "오후";
   const hour12 = now.getHours() % 12 || 12;
   const timeStr = `${String(hour12).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const secStr = String(now.getSeconds()).padStart(2, "0");
   const dateStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${WEEKDAY_KR[now.getDay()]})`;
   const siteVendorLabel = [workSite?.name, vendor?.name].filter(Boolean).join(" · ") || "-";
 
@@ -448,7 +470,10 @@ export default function Home() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-medium text-white/70">{ampm}</p>
-            <p className="text-[2.75rem] font-bold leading-none tabular-nums tracking-tight">{timeStr}</p>
+            <p className="text-[2.75rem] font-bold leading-none tabular-nums tracking-tight">
+              {timeStr}
+              <span className="ml-1 text-lg font-semibold text-white/70">{secStr}</span>
+            </p>
             <p className="mt-2 text-xs text-white/70">{dateStr}</p>
           </div>
           <div className={`flex h-11 w-11 items-center justify-center rounded-2xl backdrop-blur ${checkedIn ? "bg-white/20" : "bg-white/10"}`}>
@@ -476,7 +501,9 @@ export default function Home() {
             onClick={openCheckIn}
             disabled={!workSite || checkedIn}
             className={`relative flex flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl py-5 font-semibold transition-colors disabled:cursor-not-allowed ${
-              !checkedIn && canCheckIn ? "bg-white text-primary shadow-lg shadow-black/10 hover:bg-white/90" : "bg-white/10 text-white/50"
+              !checkedIn && canCheckIn
+                ? "animate-checkin-blink bg-white text-primary shadow-lg shadow-black/10 hover:bg-white/90"
+                : "bg-white/10 text-white/50"
             }`}
           >
             {canCheckIn && !checkedIn && (
@@ -532,7 +559,10 @@ export default function Home() {
             <Card key={n.id} className="flex items-start gap-3 border border-primary/20 bg-primary-light/40 p-4">
               <Bell size={16} className="mt-0.5 shrink-0 text-primary" />
               <div className="flex-1">
-                <p className="text-sm font-semibold text-ink">{n.title}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-ink">{n.title}</p>
+                  <span className="shrink-0 text-[10px] text-muted">{formatNotificationTime(n.createdAt)}</span>
+                </div>
                 {n.message && <p className="mt-0.5 text-xs text-muted">{n.message}</p>}
               </div>
               <button type="button" className="shrink-0 text-muted hover:text-ink" onClick={() => dismissNotification(n.id)}>
@@ -633,6 +663,26 @@ export default function Home() {
         ) : workSite ? (
           <div className="space-y-2">
             <p className="text-base font-bold text-ink">{workSite.name}</p>
+            {(workSite.phone || vendor?.managerPhone || vendor?.ceoPhone) && (
+              <div className="flex flex-wrap gap-2">
+                {workSite.phone && (
+                  <a
+                    href={`tel:${workSite.phone}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-medium text-primary"
+                  >
+                    <Phone size={12} /> 센터
+                  </a>
+                )}
+                {(vendor?.managerPhone || vendor?.ceoPhone) && (
+                  <a
+                    href={`tel:${vendor.managerPhone || vendor.ceoPhone}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-medium text-primary"
+                  >
+                    <Phone size={12} /> 소속업체
+                  </a>
+                )}
+              </div>
+            )}
             {workSite.lat == null || workSite.lng == null ? (
               <p className="flex items-center gap-1.5 text-xs text-danger">
                 <Navigation size={13} /> 이 근무지에는 위치 좌표가 설정되어 있지 않습니다. 관리자에게 문의해주세요.

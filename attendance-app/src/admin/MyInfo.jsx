@@ -170,10 +170,6 @@ export default function MyInfo() {
           {copied && <p className="mt-1 text-right text-xs text-primary">복사됨</p>}
         </div>
 
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
-        </div>
-
         {push.supported && (
           <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-5">
             <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
@@ -201,6 +197,10 @@ export default function MyInfo() {
             </button>
           </div>
         )}
+
+        <div className="mt-5 border-t border-slate-100 pt-5">
+          <BiometricSettingsCard uid={user.uid} label={profile?.name} onChange={() => bumpBiometric((n) => n + 1)} />
+        </div>
 
         <div className="mt-5 flex flex-nowrap items-center justify-between border-t border-slate-100 pt-5">
           <button onClick={() => navigate("/settings/admins")} className="flex items-center gap-1.5 text-xs text-muted hover:text-primary">

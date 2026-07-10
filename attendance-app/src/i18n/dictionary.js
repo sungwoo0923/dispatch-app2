@@ -182,6 +182,7 @@ const STRINGS = {
   "workInfo.bank": { ko: "은행", en: "Bank", vi: "Ngân hàng", zh: "银行", th: "ธนาคาร" },
   "workInfo.accountNumber": { ko: "계좌번호", en: "Account Number", vi: "Số tài khoản", zh: "账户号码", th: "เลขบัญชี" },
   "workInfo.address": { ko: "주소", en: "Address", vi: "Địa chỉ", zh: "地址", th: "ที่อยู่" },
+  "workInfo.contact": { ko: "연락처", en: "Contact", vi: "Liên hệ", zh: "联系方式", th: "ติดต่อ" },
   "workInfo.menu.contracts": { ko: "계약관리", en: "Contracts", vi: "Hợp đồng", zh: "合同管理", th: "จัดการสัญญา" },
   "workInfo.menu.payslips": { ko: "급여관리", en: "Payslips", vi: "Bảng lương", zh: "工资管理", th: "จัดการเงินเดือน" },
   "workInfo.menu.leave": { ko: "휴가신청관리", en: "Leave Requests", vi: "Đơn xin nghỉ phép", zh: "休假申请管理", th: "จัดการคำขอลา" },

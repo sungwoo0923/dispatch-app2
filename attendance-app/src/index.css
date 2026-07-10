@@ -70,3 +70,11 @@ body[data-modal-open="true"] #admin-bottom-nav {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+@keyframes checkinBlink {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.85); }
+  50% { box-shadow: 0 0 0 7px rgba(255, 255, 255, 0); }
+}
+.animate-checkin-blink {
+  animation: checkinBlink 1.6s ease-in-out infinite;
+}

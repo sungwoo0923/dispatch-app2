@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { Building2, FileSignature, Wallet, CalendarClock, Landmark, MapPin, ChevronRight } from "lucide-react";
+import { Building2, FileSignature, Wallet, CalendarClock, Landmark, MapPin, ChevronRight, Phone } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useLanguage } from "../hooks/useLanguage";
@@ -147,6 +147,28 @@ export default function WorkInfoPage() {
             </span>
             <span className="min-w-0 flex-1 truncate text-right font-semibold text-ink">{workSite?.address || "-"}</span>
           </div>
+          {(workSite?.phone || vendor?.managerPhone || vendor?.ceoPhone) && (
+            <div className="flex items-center justify-between gap-3 py-2.5 text-sm">
+              <span className="flex shrink-0 items-center gap-2 text-muted">
+                <Phone size={14} className="text-slate-300" /> {t("workInfo.contact")}
+              </span>
+              <span className="flex flex-wrap justify-end gap-2">
+                {workSite?.phone && (
+                  <a href={`tel:${workSite.phone}`} className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-semibold text-primary">
+                    <Phone size={11} /> 센터
+                  </a>
+                )}
+                {(vendor?.managerPhone || vendor?.ceoPhone) && (
+                  <a
+                    href={`tel:${vendor.managerPhone || vendor.ceoPhone}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-semibold text-primary"
+                  >
+                    <Phone size={11} /> 소속업체
+                  </a>
+                )}
+              </span>
+            </div>
+          )}
         </div>
       </Card>
 

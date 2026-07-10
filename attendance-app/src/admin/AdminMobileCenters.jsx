@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { Search, Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, Plus, Trash2, ArrowUp, ArrowDown, Phone } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -19,7 +19,7 @@ const TABS = [
   { key: "deptpos", label: "부서&직급" },
   { key: "holidays", label: "지정외휴일" },
 ];
-const EMPTY_INFO = { businessEntityId: "", name: "", contractYN: "사용", faceYN: "사용", address: "", memo: "", lat: "", lng: "", radiusM: 100 };
+const EMPTY_INFO = { businessEntityId: "", name: "", contractYN: "사용", faceYN: "사용", address: "", phone: "", memo: "", lat: "", lng: "", radiusM: 100 };
 
 function VendorsTabMobile({ companyId, site, entityName }) {
   const [allVendors, setAllVendors] = useState([]);
@@ -202,7 +202,7 @@ export default function AdminMobileCenters() {
 
   const select = (s) => {
     setSelectedId(s.id);
-    setInfo({ businessEntityId: s.businessEntityId || "", name: s.name || "", contractYN: s.contractYN || "사용", faceYN: s.faceYN || "사용", address: s.address || "", memo: s.memo || "", lat: s.lat ?? "", lng: s.lng ?? "", radiusM: s.radiusM ?? 100 });
+    setInfo({ businessEntityId: s.businessEntityId || "", name: s.name || "", contractYN: s.contractYN || "사용", faceYN: s.faceYN || "사용", address: s.address || "", phone: s.phone || "", memo: s.memo || "", lat: s.lat ?? "", lng: s.lng ?? "", radiusM: s.radiusM ?? 100 });
     setTab("info");
     setDetailOpen(true);
   };
@@ -252,6 +252,16 @@ export default function AdminMobileCenters() {
               </div>
               <p className="mt-0.5 truncate text-xs text-muted">{entityName(s.businessEntityId)} · {s.address || "주소 미등록"}</p>
             </div>
+            {s.phone && (
+              <a
+                href={`tel:${s.phone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0 rounded-lg p-1.5 text-primary hover:bg-primary-light"
+                aria-label="전화 걸기"
+              >
+                <Phone size={16} />
+              </a>
+            )}
           </button>
         ))}
       </div>
@@ -312,6 +322,10 @@ export default function AdminMobileCenters() {
                     <Search size={13} /> {searchingAddress ? "검색중" : "검색"}
                   </Button>
                 </div>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted">센터 전화번호</span>
+                <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={info.phone} onChange={(e) => setInfo((f) => ({ ...f, phone: e.target.value }))} placeholder="02-000-0000" />
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
