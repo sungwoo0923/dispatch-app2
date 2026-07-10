@@ -6,7 +6,7 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { useLanguage } from "../hooks/useLanguage";
-import { usePushNotifications } from "../hooks/usePushNotifications";
+import { usePushNotifications, describePushFailure } from "../hooks/usePushNotifications";
 import { useMyInfoBadges } from "../hooks/useMyInfoBadges";
 import Card from "../components/Card";
 import Button from "../components/Button";
@@ -186,7 +186,7 @@ export default function MyInfoPage() {
                 const res = await push.enable();
                 if (res.ok) toast.success("푸시 알림이 켜졌습니다");
                 else if (res.reason === "denied") toast.error("알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.");
-                else toast.error("푸시 알림 설정에 실패했습니다.");
+                else toast.error(describePushFailure(res.reason));
               }
             }}
             className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${push.enabled ? "bg-primary" : "bg-slate-200"}`}

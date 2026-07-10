@@ -74,3 +74,19 @@ export function usePushNotifications(uid) {
 
   return { supported, enabled, loading, enable, disable };
 }
+
+// enable()이 실패했을 때 "설정에 실패했습니다"라고만 뜨면 사용자도, 나중에
+// 원인을 파악해야 하는 사람도 뭐가 문제인지 알 수 없다. README에 정리된
+// 3가지 필수 설정(Blaze 요금제/VAPID 키/Cloud Function 배포) 중 무엇이
+// 빠졌는지 최대한 구체적으로 안내한다.
+export function describePushFailure(reason) {
+  if (reason === "unsupported") return "이 브라우저는 푸시 알림을 지원하지 않습니다.";
+  if (reason === "no-vapid-key") return "VAPID 키가 설정되지 않았습니다. 관리자에게 문의해주세요. (앱 설정에 VAPID 키 등록 필요)";
+  if (typeof reason === "string" && reason.includes("messaging/permission-blocked"))
+    return "알림 권한이 차단되어 있습니다. 브라우저 설정에서 알림을 허용해주세요.";
+  if (typeof reason === "string" && (reason.includes("messaging/failed-service-worker-registration") || reason.includes("service")))
+    return "알림 서비스워커 등록에 실패했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.";
+  if (typeof reason === "string" && reason.includes("messaging/token-subscribe-failed"))
+    return "푸시 서버 등록에 실패했습니다. 잠시 후 다시 시도해주세요. (계속되면 관리자에게 문의)";
+  return `푸시 알림 설정에 실패했습니다. (${reason || "알 수 없는 오류"})`;
+}
