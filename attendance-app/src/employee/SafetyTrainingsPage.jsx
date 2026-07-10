@@ -102,7 +102,20 @@ function MandatoryMaterials() {
   const [myCompletions, setMyCompletions] = useState([]);
   const [viewing, setViewing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [videoWatched, setVideoWatched] = useState(false);
   const padRef = useRef(null);
+  const maxWatchedRef = useRef(0);
+
+  // 영상은 임의로 재생바를 당겨 건너뛰면 이수 처리가 안 되도록, 실제로 재생된
+  // 가장 앞선 지점(maxWatchedRef)보다 앞으로 seek하면 그 지점으로 되돌린다.
+  // 끝까지 재생(onEnded)해야만 서명칸이 열린다. 예전에 텍스트자료에 스크롤
+  // 진행률로 게이트를 걸었다가 스크롤 감지가 부정확해 끝까지 내려도 서명이
+  // 안 열리는 버그가 있었던 적이 있어(위 주석 참고), 이번엔 그보다 신뢰도가
+  // 높은 video의 onEnded 이벤트만 기준으로 삼는다.
+  useEffect(() => {
+    maxWatchedRef.current = 0;
+    setVideoWatched(viewing?.type !== "video");
+  }, [viewing]);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -182,16 +195,35 @@ function MandatoryMaterials() {
         {viewing && (
           <div className="space-y-3">
             {viewing.type === "video" ? (
-              <video src={viewing.videoUrl} controls className="w-full rounded-xl bg-black" />
+              <video
+                src={viewing.videoUrl}
+                controls
+                controlsList="noplaybackrate"
+                className="w-full rounded-xl bg-black"
+                onTimeUpdate={(e) => {
+                  if (e.currentTarget.currentTime > maxWatchedRef.current) maxWatchedRef.current = e.currentTarget.currentTime;
+                }}
+                onSeeking={(e) => {
+                  if (e.currentTarget.currentTime > maxWatchedRef.current + 1) e.currentTarget.currentTime = maxWatchedRef.current;
+                }}
+                onEnded={() => setVideoWatched(true)}
+              />
             ) : (
               <div className="max-h-72 overflow-y-auto whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-ink">
                 {viewing.content}
               </div>
             )}
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-muted">서명</p>
-              <SignaturePad ref={padRef} onSave={submitCompletion} saving={saving} />
-            </div>
+            {viewing.type === "video" && !videoWatched && (
+              <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-medium text-warning">
+                영상을 임의로 건너뛸 수 없습니다. 끝까지 시청해야 서명할 수 있습니다.
+              </p>
+            )}
+            {(viewing.type !== "video" || videoWatched) && (
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-muted">서명</p>
+                <SignaturePad ref={padRef} onSave={submitCompletion} saving={saving} />
+              </div>
+            )}
           </div>
         )}
       </Modal>
