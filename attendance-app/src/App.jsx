@@ -19,6 +19,10 @@ import AdminMobileLeaveUsage from "./admin/AdminMobileLeaveUsage";
 import AdminMobileSafetyTrainings from "./admin/AdminMobileSafetyTrainings";
 import AdminMobileSafetySettings from "./admin/AdminMobileSafetySettings";
 import AdminMobileSafetyMaterials from "./admin/AdminMobileSafetyMaterials";
+import AdminMobilePayroll from "./admin/AdminMobilePayroll";
+import AdminMobileSiteInsuranceRates from "./admin/AdminMobileSiteInsuranceRates";
+import AdminMobileStatsSummary from "./admin/AdminMobileStatsSummary";
+import AdminMobileStatsAttendanceCount from "./admin/AdminMobileStatsAttendanceCount";
 import SignupSuccessPage from "./admin/SignupSuccessPage";
 import SuperAdminCompanyPicker from "./admin/SuperAdminCompanyPicker";
 import Dashboard from "./admin/Dashboard";
@@ -153,10 +157,6 @@ export default function App() {
         <Route path="employees/documents" element={<Documents />} />
         <Route path="employees/inquiries" element={<Inquiries />} />
         <Route path="leaves/settings" element={<LeaveSettings />} />
-        <Route path="payroll" element={<Payroll />} />
-        <Route path="payroll/settings" element={<SiteInsuranceRates />} />
-        <Route path="stats" element={<StatsSummary />} />
-        <Route path="stats/attendance-count" element={<StatsAttendanceCount />} />
         <Route path="stats/monthly-grid" element={<StatsMonthlyGrid />} />
         <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
         <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
@@ -193,6 +193,10 @@ export default function App() {
             <Route path="safety" element={<AdminMobileSafetyTrainings />} />
             <Route path="safety/settings" element={<AdminMobileSafetySettings />} />
             <Route path="safety/materials" element={<AdminMobileSafetyMaterials />} />
+            <Route path="payroll" element={<AdminMobilePayroll />} />
+            <Route path="payroll/settings" element={<AdminMobileSiteInsuranceRates />} />
+            <Route path="stats" element={<AdminMobileStatsSummary />} />
+            <Route path="stats/attendance-count" element={<AdminMobileStatsAttendanceCount />} />
             {sharedAdminChildRoutes}
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -213,6 +217,10 @@ export default function App() {
           <Route path="safety" element={<SafetyTrainings />} />
           <Route path="safety/settings" element={<SafetySettings />} />
           <Route path="safety/materials" element={<SafetyMaterials />} />
+          <Route path="payroll" element={<Payroll />} />
+          <Route path="payroll/settings" element={<SiteInsuranceRates />} />
+          <Route path="stats" element={<StatsSummary />} />
+          <Route path="stats/attendance-count" element={<StatsAttendanceCount />} />
           {sharedAdminChildRoutes}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
