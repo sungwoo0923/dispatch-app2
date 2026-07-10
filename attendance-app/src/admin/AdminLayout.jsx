@@ -212,7 +212,7 @@ export default function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-surface">
-      <aside className="hidden w-60 shrink-0 border-r border-slate-100 bg-white md:flex md:flex-col">
+      <aside className="hidden w-60 shrink-0 border-r border-slate-100 bg-white md:sticky md:top-0 md:flex md:h-screen md:flex-col">
         <Link to="/" className="flex items-center px-5 py-5">
           <img src="/logo.png" alt="KP-Work" className="h-14 w-auto" />
         </Link>
