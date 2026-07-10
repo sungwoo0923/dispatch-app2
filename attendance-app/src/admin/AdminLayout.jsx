@@ -7,6 +7,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useNavBadges } from "../hooks/useNavBadges";
 import Breadcrumb from "../components/Breadcrumb";
 import BuildInfo from "../components/BuildInfo";
+import Messenger from "../messenger/Messenger";
 import { NAV, SUPER_ADMIN_NAV_ITEM } from "./navConfig";
 
 const itemClass = ({ isActive }) =>
@@ -212,6 +213,8 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      <Messenger />
     </div>
   );
 }

@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import HeaderIcons from "./HeaderIcons";
+import Messenger from "../messenger/Messenger";
 
 const TABS = [
   { to: "/work-info", label: "근무정보", icon: ClipboardList },
@@ -19,6 +21,8 @@ const MYINFO_ROUTES = ["/my-info", "/documents", "/safety"];
 export default function EmployeeLayout() {
   const { profile } = useAuth();
   const location = useLocation();
+  const [showMessenger, setShowMessenger] = useState(false);
+  const [messengerUnread, setMessengerUnread] = useState(0);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -32,9 +36,26 @@ export default function EmployeeLayout() {
             <p className="text-[10px] leading-tight text-muted">안녕하세요</p>
             <p className="text-xs font-semibold leading-tight text-ink">{profile?.name}님</p>
           </div>
-          <HeaderIcons />
+          <HeaderIcons onMessengerClick={() => setShowMessenger(true)} messengerUnread={messengerUnread} />
         </div>
       </header>
+
+      {/* 항상 마운트해 안읽음 수를 추적하고, showMessenger로 화면 표시만 전환한다 */}
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9990, background: "#fff",
+          display: "flex", flexDirection: "column", overflow: "hidden",
+          visibility: showMessenger ? "visible" : "hidden",
+          pointerEvents: showMessenger ? "auto" : "none",
+        }}
+      >
+        <Messenger
+          mobileMode
+          mobileVisible={showMessenger}
+          onClose={() => setShowMessenger(false)}
+          onUnreadChange={setMessengerUnread}
+        />
+      </div>
 
       <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />

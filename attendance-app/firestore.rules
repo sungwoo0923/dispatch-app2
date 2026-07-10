@@ -36,6 +36,18 @@ service cloud.firestore {
       );
     }
 
+    // 사내 메신저 규칙에서 "내 회사"를 판별할 때 쓴다 — 관리자는 admins/{uid},
+    // 근로자는 users/{uid}에 companyId가 있다.
+    function myCompanyId() {
+      return exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.companyId
+        : (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            : null
+        );
+    }
+
     match /admins/{uid} {
       allow get: if isSelf(uid);
       allow list: if false;
@@ -430,6 +442,40 @@ service cloud.firestore {
       // the code (via a fresh, not-yet-admin account) must be able to clear
       // it too; the doc holds no sensitive data beyond name/phone/companyId.
       allow delete: if isSignedIn();
+    }
+
+    // ── 사내 메신저 (KP-Flow 메신저를 그대로 이식) ──
+    // 프로필: 이름/사진/상태메시지 등 민감하지 않은 정보라 같은 회사
+    // 구성원끼리는 서로 조회 가능해야 친구 목록을 만들 수 있다. 본인 것만
+    // 쓸 수 있다.
+    match /chat_profiles/{uid} {
+      allow read: if isSignedIn() && (isSelf(uid) || resource.data.company == myCompanyId());
+      allow create: if isSelf(uid) && request.resource.data.company == myCompanyId();
+      allow update: if isSelf(uid);
+      allow delete: if false;
+    }
+
+    // 채팅방: 멤버만 읽고 쓸 수 있다. 생성 시 나 자신이 멤버 목록에
+    // 포함되어야 하고, 수정(읽음처리/안읽음카운트/나가기)도 기존 멤버만.
+    match /chat_rooms/{roomId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.members
+        && request.resource.data.company == myCompanyId();
+      allow update: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow delete: if false;
+    }
+
+    // 메시지: 그 방의 멤버만 읽고 쓸 수 있다. 작성은 본인 명의로만, 수정은
+    // (읽음표시/이모티콘 반응/수정·삭제 모두) 같은 방 멤버 누구나 가능하게
+    // 열어둔다 — KP-Flow 원본과 동일한 구성.
+    match /chat_messages/{msgId} {
+      allow read: if isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(resource.data.roomId)).data.members;
+      allow create: if isSignedIn() && request.resource.data.senderUid == request.auth.uid &&
+        request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(request.resource.data.roomId)).data.members;
+      allow update: if isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(resource.data.roomId)).data.members;
+      allow delete: if false;
     }
   }
 }
