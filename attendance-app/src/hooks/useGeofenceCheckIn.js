@@ -3,19 +3,7 @@ import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs
 import { db } from "../firebase";
 import { distanceMeters } from "../utils/distance";
 import { toDateKey, attendanceDocId } from "../utils/dateUtils";
-
-// 스케줄 출근시각보다 이 분(分) 이상 늦게 체크인하면 "지각"으로 기록하고
-// 관리자에게 알림을 보낸다.
-const LATE_GRACE_MINUTES = 10;
-
-function minutesLate(scheduleStartTime, checkInDate) {
-  if (!scheduleStartTime) return 0;
-  const [h, m] = scheduleStartTime.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
-  const scheduled = new Date(checkInDate);
-  scheduled.setHours(h, m, 0, 0);
-  return Math.round((checkInDate.getTime() - scheduled.getTime()) / 60000);
-}
+import { LATE_GRACE_MINUTES, minutesLate } from "../utils/attendanceStatus";
 
 // 지각 체크인이 발생하면 같은 회사 관리자 전원에게 알림을 broadcast한다
 // (SafetyMaterials.jsx의 전 직원 broadcast와 동일한 패턴, 대상만 관리자로 바뀜).

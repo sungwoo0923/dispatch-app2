@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Check, X as XIcon } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
@@ -13,6 +15,7 @@ import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, formatTime, formatDate } from "../utils/dateUtils";
+import { computeCheckInStatus } from "../utils/attendanceStatus";
 import {
   EMPLOYMENT_TYPE_OPTIONS,
   SHIFT_TYPE_OPTIONS,
@@ -41,6 +44,8 @@ const EMPTY_FILTERS = {
 
 export default function AttendanceBoard() {
   const { profile, user } = useAuth();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [companyName, setCompanyName] = useState("");
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -136,9 +141,33 @@ export default function AttendanceBoard() {
     [changeRequests]
   );
 
+  // 출근시각이 수정될 때마다 지각 여부를 스케줄 출근예정시각 기준으로
+  // 다시 계산한다 — 안 그러면 관리자가 지각 전 시간으로 고쳐도, 또는
+  // 근로자의 시간 변경요청을 승인해도 상태는 체크인 당시의 "지각"에
+  // 그대로 머물러 있게 된다.
+  const recomputeCheckInStatus = async (uid, date, checkInIso) => {
+    if (!checkInIso) return null;
+    const snap = await getDocs(
+      query(
+        collection(db, "schedules"),
+        where("companyId", "==", profile.companyId),
+        where("uid", "==", uid),
+        where("date", "==", date)
+      )
+    );
+    const startTime = snap.docs[0]?.data()?.startTime;
+    if (!startTime) return null;
+    return computeCheckInStatus(startTime, new Date(checkInIso));
+  };
+
   const approveChangeRequest = async (req) => {
     const newIso = `${req.date}T${req.requestedTime}:00`;
-    await updateDoc(doc(db, "attendance", req.attendanceId), { [req.field]: newIso, source: "manual" });
+    const updates = { [req.field]: newIso, source: "manual" };
+    if (req.field === "checkInTime") {
+      const newStatus = await recomputeCheckInStatus(req.uid, req.date, newIso);
+      if (newStatus) updates.status = newStatus;
+    }
+    await updateDoc(doc(db, "attendance", req.attendanceId), updates);
     await addDoc(collection(db, "attendanceEdits"), {
       companyId: profile.companyId,
       uid: req.uid,
@@ -184,6 +213,24 @@ export default function AttendanceBoard() {
     });
     setRejectTarget(null);
     setRejectNote("");
+  };
+
+  const deleteLeave = async (lv) => {
+    if (!(await confirm(`${lv.name || ""} 근로자의 휴무 기록을 삭제하시겠습니까?`, "delete"))) return;
+    await deleteDoc(doc(db, "leaves", lv.id));
+    toast.success("삭제되었습니다");
+  };
+
+  const deleteEdit = async (e) => {
+    if (!(await confirm("이 수정 내역을 삭제하시겠습니까?", "delete"))) return;
+    await deleteDoc(doc(db, "attendanceEdits", e.id));
+    toast.success("삭제되었습니다");
+  };
+
+  const deleteChangeRequest = async (r) => {
+    if (!(await confirm("이 변경 요청을 삭제하시겠습니까?", "delete"))) return;
+    await deleteDoc(doc(db, "attendanceChangeRequests", r.id));
+    toast.success("삭제되었습니다");
   };
 
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
@@ -235,9 +282,25 @@ export default function AttendanceBoard() {
   }, [attendance, employeeByUid, filters, sort]);
 
   const attendanceColumns = [
+    {
+      key: "status",
+      label: "근무상태",
+      render: ({ record: r }) => (
+        <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
+          {r.status || "미출근"}
+        </Badge>
+      ),
+    },
     { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
     { key: "position", label: "직급", render: ({ emp }) => emp.position || "-" },
-    { key: "checkIn", label: "출근시간", render: ({ record: r }) => (r.checkInTime ? formatTime(r.checkInTime) : "-") },
+    {
+      key: "checkIn",
+      label: "출근시간",
+      render: ({ record: r }) => {
+        if (!r.checkInTime) return "-";
+        return <span className={r.status === "지각" ? "font-semibold text-danger" : undefined}>{formatTime(r.checkInTime)}</span>;
+      },
+    },
     { key: "checkOut", label: "퇴근시간", render: ({ record: r }) => (r.checkOutTime ? formatTime(r.checkOutTime) : "-") },
     { key: "date", label: "근무일", render: ({ record: r }) => formatDate(r.date) },
     { key: "company", label: "사업자", render: () => companyName },
@@ -259,15 +322,6 @@ export default function AttendanceBoard() {
       key: "checkOutType",
       label: "퇴근유형",
       render: ({ record: r }) => (r.checkOutTime ? (r.source === "manual" ? "수동" : "자동") : "-"),
-    },
-    {
-      key: "status",
-      label: "근무상태",
-      render: ({ record: r }) => (
-        <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
-          {r.status || "미출근"}
-        </Badge>
-      ),
     },
   ];
   const {
@@ -308,9 +362,18 @@ export default function AttendanceBoard() {
       updates.checkOutTime = `${r.date}T${detailForm.checkOutTime}:00`;
       editLogs.push({ field: "퇴근시각", oldValue: prevCheckOut || "-", newValue: detailForm.checkOutTime });
     }
-    if (detailForm.status !== (r.status || "출근전")) {
+    const statusChangedManually = detailForm.status !== (r.status || "출근전");
+    if (statusChangedManually) {
       updates.status = detailForm.status;
       editLogs.push({ field: "상태", oldValue: r.status || "출근전", newValue: detailForm.status });
+    } else if (updates.checkInTime) {
+      // 관리자가 상태는 그대로 둔 채 출근시각만 고친 경우 — 스케줄
+      // 출근예정시각 기준으로 지각 여부를 다시 계산해 반영한다.
+      const newStatus = await recomputeCheckInStatus(r.uid, r.date, updates.checkInTime);
+      if (newStatus && newStatus !== r.status) {
+        updates.status = newStatus;
+        editLogs.push({ field: "상태", oldValue: r.status || "출근전", newValue: newStatus });
+      }
     }
     if (Object.keys(updates).length === 0) {
       closeDetail();
@@ -739,6 +802,7 @@ export default function AttendanceBoard() {
                   <th className="px-4 py-3 font-semibold">이름</th>
                   <th className="px-4 py-3 font-semibold">전화번호</th>
                   <th className="px-4 py-3 font-semibold">기간</th>
+                  <th className="px-4 py-3 font-semibold">삭제</th>
                 </tr>
               </thead>
               <tbody>
@@ -752,11 +816,20 @@ export default function AttendanceBoard() {
                     <td className="px-4 py-3 text-ink">
                       {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => deleteLeave(lv)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                      >
+                        🗑️ 삭제
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {leaves.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted">
+                    <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
                       휴무 정보가 없습니다.
                     </td>
                   </tr>
@@ -779,6 +852,7 @@ export default function AttendanceBoard() {
                   <th className="px-4 py-3 font-semibold">변경후</th>
                   <th className="px-4 py-3 font-semibold">사유</th>
                   <th className="px-4 py-3 font-semibold">변경일시</th>
+                  <th className="px-4 py-3 font-semibold">삭제</th>
                 </tr>
               </thead>
               <tbody>
@@ -797,11 +871,20 @@ export default function AttendanceBoard() {
                       <td className="px-4 py-3 text-ink">
                         {e.editedAt?.toDate ? e.editedAt.toDate().toLocaleString("ko-KR") : "-"}
                       </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => deleteEdit(e)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                        >
+                          🗑️ 삭제
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 {edits.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-xs text-muted">
+                    <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
                       수정 내역이 없습니다.
                     </td>
                   </tr>
@@ -825,6 +908,7 @@ export default function AttendanceBoard() {
                   <th className="px-4 py-3 font-semibold">사유</th>
                   <th className="px-4 py-3 font-semibold">상태</th>
                   <th className="px-4 py-3 font-semibold">처리</th>
+                  <th className="px-4 py-3 font-semibold">삭제</th>
                 </tr>
               </thead>
               <tbody>
@@ -863,11 +947,20 @@ export default function AttendanceBoard() {
                         <span className="text-xs text-muted">-</span>
                       )}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => deleteChangeRequest(r)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-danger/90"
+                      >
+                        🗑️ 삭제
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {sortedChangeRequests.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted">
+                    <td colSpan={10} className="px-4 py-6 text-center text-xs text-muted">
                       출근시간 변경 요청이 없습니다.
                     </td>
                   </tr>
