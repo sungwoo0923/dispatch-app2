@@ -9,6 +9,7 @@ import {
   connectAuthEmulator,
 } from "firebase/auth";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -67,9 +68,11 @@ export const auth = initializeAuth(app, {
   persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
 });
 export const storage = getStorage(app);
+export const functions = getFunctions(app, "us-central1");
 
 if (useEmulator) {
   connectFirestoreEmulator(db, "localhost", 8081);
   connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
   connectStorageEmulator(storage, "localhost", 9199);
+  connectFunctionsEmulator(functions, "localhost", 5001);
 }

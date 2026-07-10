@@ -105,11 +105,11 @@ export function AuthProvider({ children }) {
       .catch(() => {});
   }, [user, effectiveProfile?.companyId, effectiveProfile?.role, effectiveProfile?.name]);
 
-  // Company-approval gate: only relevant for role === "admin". Kept in the
-  // shared auth context (not fetched per-page) since App.jsx needs it before
-  // it can decide whether to render the admin route tree at all.
+  // Company-approval gate: 관리자뿐 아니라 직원도 소속 회사가 탈퇴(정지)
+  // 처리되면 즉시 로그인이 막혀야 하므로, role과 무관하게 구독한다. App.jsx가
+  // 이 값으로 admin/employee 라우트 트리 진입 여부를 모두 결정한다.
   useEffect(() => {
-    if (!effectiveProfile?.companyId || effectiveProfile.role !== "admin") {
+    if (!effectiveProfile?.companyId) {
       setCompany(null);
       setCompanyLoading(false);
       return;
@@ -120,7 +120,7 @@ export function AuthProvider({ children }) {
       setCompanyLoading(false);
     });
     return () => unsubCompany();
-  }, [effectiveProfile?.companyId, effectiveProfile?.role]);
+  }, [effectiveProfile?.companyId]);
 
   const value = {
     user,

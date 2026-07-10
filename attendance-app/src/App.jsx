@@ -178,6 +178,10 @@ export default function App() {
   if (profile.deleted) return <PendingApprovalPage />;
   if (!profile.approved) return <PendingApprovalPage />;
   if (profile.employmentStatus === "퇴사") return <PendingApprovalPage />;
+  if (companyLoading) return <LoadingScreen />;
+  if (company && company.status && company.status !== "approved") {
+    return <CompanyApprovalPendingPage status={company.status} />;
+  }
 
   return (
     <Routes>

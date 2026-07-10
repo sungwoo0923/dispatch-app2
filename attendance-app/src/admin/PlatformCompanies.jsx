@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { KeyRound, Copy, LogIn, Eye, Pencil } from "lucide-react";
-import { db } from "../firebase";
+import { httpsCallable } from "firebase/functions";
+import { KeyRound, Copy, LogIn, Eye, Pencil, Trash2 } from "lucide-react";
+import { db, functions } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
@@ -53,6 +54,10 @@ export default function PlatformCompanies() {
   const [authLevel, setAuthLevel] = useState(AUTH_LEVEL_OPTIONS[0]);
   const [viewing, setViewing] = useState(null); // company being 상세-viewed
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null); // company pending 완전삭제
+  const [deleteTypedName, setDeleteTypedName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (!isSuperAdmin) return;
@@ -99,6 +104,28 @@ export default function PlatformCompanies() {
       setEditing(null);
     } catch (err) {
       setError(`처리에 실패했습니다: ${err.code || err.message}`);
+    }
+  };
+
+  const openDeleteConfirm = (c) => {
+    setEditing(null);
+    setDeleteTarget(c);
+    setDeleteTypedName("");
+    setDeleteError("");
+  };
+
+  const runHardDelete = async () => {
+    if (!deleteTarget || deleteTypedName !== deleteTarget.name) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await httpsCallable(functions, "deleteCompanyCascade")({ companyId: deleteTarget.id });
+      toast.success("회사 데이터가 모두 삭제되었습니다");
+      setDeleteTarget(null);
+    } catch (err) {
+      setDeleteError(`삭제에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -227,6 +254,11 @@ export default function PlatformCompanies() {
             {(editing?.status === "suspended" || editing?.status === "rejected") && (
               <Button onClick={() => setStatus("approved", `'${editing.name}'을(를) 복구하시겠습니까?`)}>복구</Button>
             )}
+            {editing?.status === "suspended" && (
+              <Button variant="danger" onClick={() => openDeleteConfirm(editing)}>
+                <Trash2 size={13} /> 완전삭제
+              </Button>
+            )}
           </>
         }
       >
@@ -300,6 +332,47 @@ export default function PlatformCompanies() {
                 <span className="text-ink">{value}</span>
               </div>
             ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(deleteTarget)}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        title="회사 완전삭제"
+        zIndex={110}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              취소
+            </Button>
+            <Button variant="danger" onClick={runHardDelete} disabled={deleting || deleteTypedName !== deleteTarget?.name}>
+              {deleting ? "삭제 중..." : "완전삭제 실행"}
+            </Button>
+          </>
+        }
+      >
+        {deleteTarget && (
+          <div className="space-y-3 text-sm">
+            <div className="rounded-xl bg-red-50 p-4 text-danger">
+              <p className="font-semibold">이 작업은 되돌릴 수 없습니다.</p>
+              <p className="mt-1 text-xs leading-relaxed">
+                '{deleteTarget.name}'의 관리자·근로자 계정, 근태/급여/계약서/메신저 등 모든 데이터와 업로드된 파일이 영구적으로
+                삭제됩니다. 소속 사용자는 모두 즉시 로그아웃되며 다시 로그인할 수 없습니다.
+              </p>
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">
+                계속하려면 회사명 <span className="font-semibold text-ink">'{deleteTarget.name}'</span>을(를) 정확히 입력하세요
+              </span>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={deleteTypedName}
+                onChange={(e) => setDeleteTypedName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            {deleteError && <p className="text-xs text-danger">{deleteError}</p>}
           </div>
         )}
       </Modal>
