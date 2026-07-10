@@ -6,6 +6,7 @@ import { auth } from "../firebase";
 import Button from "../components/Button";
 import BuildInfo from "../components/BuildInfo";
 import LanguagePicker from "../components/LanguagePicker";
+import LoginCarousel from "../components/LoginCarousel";
 import { useLanguage } from "../hooks/useLanguage";
 import { phoneToAuthEmail, normalizePhone } from "../utils/phoneAuth";
 
@@ -35,12 +36,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white px-6 py-14">
+    <div className="flex min-h-screen bg-white">
+      <div className="relative hidden w-1/2 lg:block">
+        <LoginCarousel />
+      </div>
+
+      <div className="flex w-full items-center justify-center px-6 py-14 lg:w-1/2">
       <div className="w-full max-w-sm">
         <div className="mb-4 flex justify-end">
           <LanguagePicker />
         </div>
-        <div className="mb-10 flex flex-col items-center">
+        <div className="mb-10 flex flex-col items-center lg:hidden">
           <img src="/logo.png" alt="KP-Work" className="h-28 w-auto" />
         </div>
 
@@ -98,6 +104,7 @@ export default function LoginPage() {
           </Link>
         </div>
         <BuildInfo className="mt-6" />
+      </div>
       </div>
     </div>
   );

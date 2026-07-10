@@ -63,3 +63,8 @@ body[data-modal-open="true"] #employee-bottom-nav {
   background: #cbd5e1;
   border-radius: 999px;
 }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

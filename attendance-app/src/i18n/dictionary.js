@@ -385,6 +385,39 @@ const STRINGS = {
   "messenger.tryAgain": { ko: "다시 시도해주세요", en: "Please try again", vi: "Vui lòng thử lại", zh: "请重试", th: "โปรดลองอีกครั้ง" },
   "messenger.muteOn": { ko: "알림음 끄기", en: "Mute notification sound", vi: "Tắt âm thanh thông báo", zh: "关闭提示音", th: "ปิดเสียงแจ้งเตือน" },
   "messenger.muteOff": { ko: "알림음 켜기", en: "Unmute notification sound", vi: "Bật âm thanh thông báo", zh: "开启提示音", th: "เปิดเสียงแจ้งเตือน" },
+
+  "loginCarousel.slide1Title": { ko: "위치 기반 자동출근", en: "Location-based Auto Check-in", vi: "Chấm công tự động theo vị trí", zh: "基于位置的自动打卡", th: "เช็คอินอัตโนมัติตามตำแหน่ง" },
+  "loginCarousel.slide1Body": {
+    ko: "정해진 근무지 반경에 들어서면\n자동으로 출근이 기록됩니다",
+    en: "Check-in is recorded automatically\nwhen you enter the worksite radius",
+    vi: "Chấm công tự động ghi nhận\nkhi bạn vào phạm vi nơi làm việc",
+    zh: "进入指定工作地点范围后\n将自动记录出勤",
+    th: "บันทึกการเช็คอินอัตโนมัติ\nเมื่อคุณเข้าสู่รัศมีสถานที่ทำงาน",
+  },
+  "loginCarousel.slide2Title": { ko: "실시간 근태 현황", en: "Real-time Attendance Status", vi: "Trạng thái chấm công thời gian thực", zh: "实时出勤状态", th: "สถานะการเข้างานแบบเรียลไทม์" },
+  "loginCarousel.slide2Body": {
+    ko: "전 직원의 출퇴근 상태를\n관리자 화면에서 한눈에 확인하세요",
+    en: "Check every employee's check-in status\nat a glance from the admin screen",
+    vi: "Xem trạng thái chấm công của\ntoàn bộ nhân viên chỉ trong một màn hình",
+    zh: "在管理员界面一目了然地\n查看全体员工的出勤状态",
+    th: "ดูสถานะการเข้า-ออกงานของ\nพนักงานทั้งหมดได้ในหน้าจอเดียว",
+  },
+  "loginCarousel.slide3Title": { ko: "급여 · 연차 관리", en: "Payroll & Leave Management", vi: "Quản lý lương & nghỉ phép", zh: "薪资与年假管理", th: "จัดการเงินเดือน & วันลา" },
+  "loginCarousel.slide3Body": {
+    ko: "복잡한 급여 정산과 연차 관리를\n하나의 시스템으로 간편하게",
+    en: "Handle complex payroll settlement\nand leave management in one system",
+    vi: "Quản lý lương và nghỉ phép\nphức tạp chỉ trong một hệ thống",
+    zh: "复杂的薪资结算与年假管理\n一个系统即可轻松搞定",
+    th: "จัดการเงินเดือนที่ซับซ้อนและ\nวันลาในระบบเดียวอย่างง่ายดาย",
+  },
+  "loginCarousel.slide4Title": { ko: "전자계약 · 안전교육", en: "E-Contracts & Safety Training", vi: "Hợp đồng điện tử & Đào tạo an toàn", zh: "电子合同与安全教育", th: "สัญญาอิเล็กทรอนิกส์ & อบรมความปลอดภัย" },
+  "loginCarousel.slide4Body": {
+    ko: "근로계약서 서명부터 안전교육까지\n앱 하나로 모두 처리하세요",
+    en: "From signing labor contracts to safety training,\nhandle it all in one app",
+    vi: "Từ ký hợp đồng lao động đến đào tạo an toàn,\nxử lý tất cả trong một ứng dụng",
+    zh: "从签署劳动合同到安全教育\n一个应用全部搞定",
+    th: "ตั้งแต่เซ็นสัญญาจ้างงานจนถึงอบรมความปลอดภัย\nจัดการทั้งหมดได้ในแอปเดียว",
+  },
 };
 
 export const DICTIONARY = SUPPORTED_LANGUAGES.reduce((acc, l) => {
