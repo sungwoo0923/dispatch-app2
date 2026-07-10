@@ -156,7 +156,10 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
     getDocs(query(collection(db, "contracts"), where("uid", "==", user.uid))).then((snap) => {
-      setPendingContracts(snap.docs.filter((d) => d.data().status !== "signed").length);
+      // 회사 도장이 아직 안 찍혀 status가 "sent"에 머물러도, 직원 본인이
+      // 이미 서명(employeeSignatureDataUrl)했다면 직원 입장에선 완료된
+      // 것이다 — useOnboardingPending.js와 동일 기준.
+      setPendingContracts(snap.docs.filter((d) => !d.data().employeeSignatureDataUrl).length);
     });
   }, [user]);
 

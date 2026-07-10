@@ -14,7 +14,13 @@ export function useOnboardingPending(user, companyId) {
   useEffect(() => {
     if (!user) return;
     getDocs(query(collection(db, "contracts"), where("uid", "==", user.uid))).then((snap) => {
-      setPendingContracts(snap.docs.filter((d) => d.data().status !== "signed").length);
+      // status는 회사 쪽 서명(도장)까지 합쳐진 상태라, 회사가 아직 도장을
+      // 안 찍었으면(companySignatureDataUrl 없음) 직원이 이미 서명해도
+      // "sent"에 머무른다 — 그 경우까지 미완료로 세면 직원은 자기 몫을
+      // 다 했는데도 "완료해야 할 항목" 팝업이 계속 뜬다. 직원 입장의
+      // 완료 여부는 본인 서명(employeeSignatureDataUrl) 존재 여부로만
+      // 판단한다.
+      setPendingContracts(snap.docs.filter((d) => !d.data().employeeSignatureDataUrl).length);
     });
   }, [user]);
 
