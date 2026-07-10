@@ -270,17 +270,6 @@ export default function Home() {
 
   const dismissNotification = (id) => updateDoc(doc(db, "notifications", id), { read: true });
 
-  // 출근확정 스케줄 알림은 실제로 출근을 완료하면 더 이상 확인할 필요가
-  // 없으므로, 출근 완료(checkedIn) 시점에 자동으로 읽음 처리해 목록에서
-  // 사라지게 한다.
-  useEffect(() => {
-    if (!checkedIn) return;
-    notifications
-      .filter((n) => n.message?.includes(toDateKey()) && n.message?.includes("'출근확정'"))
-      .forEach((n) => dismissNotification(n.id));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkedIn, notifications]);
-
   const formatNotificationTime = (createdAt) => {
     const ms = createdAt?.seconds ? createdAt.seconds * 1000 : createdAt ? new Date(createdAt).getTime() : null;
     if (!ms) return "";
@@ -335,6 +324,17 @@ export default function Home() {
 
   const checkedIn = ["출근", "지각"].includes(todayAttendance?.status) && todayAttendance?.checkInTime;
   const checkedOut = Boolean(todayAttendance?.checkOutTime);
+
+  // 출근확정 스케줄 알림은 실제로 출근을 완료하면 더 이상 확인할 필요가
+  // 없으므로, 출근 완료(checkedIn) 시점에 자동으로 읽음 처리해 목록에서
+  // 사라지게 한다.
+  useEffect(() => {
+    if (!checkedIn) return;
+    notifications
+      .filter((n) => n.message?.includes(toDateKey()) && n.message?.includes("'출근확정'"))
+      .forEach((n) => dismissNotification(n.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkedIn, notifications]);
 
   // 일용직은 근로계약동의서까지 매 출근 시 확인/서명해야 하고, 그 외
   // 근무형태는 안전교육일지만 확인/서명하면 된다.
