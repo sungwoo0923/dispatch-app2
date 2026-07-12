@@ -5044,6 +5044,13 @@ function MobileOrderList({
   const [orderInfoOrder, setOrderInfoOrder] = useState(null);
   const longPressTimerRef = useRef(null);
   const longPressStartPos = useRef({ x: 0, y: 0 });
+  const longPressScrollCleanupRef = useRef(null);
+  const cancelLongPress = () => {
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+    longPressScrollCleanupRef.current?.();
+    longPressScrollCleanupRef.current = null;
+  };
 
   // 현재 보이는 모든 오더 flat 배열
   const allVisibleOrders = useMemo(() => {
@@ -5448,22 +5455,27 @@ const summary = useMemo(() => {
                       style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                       onContextMenu={(e) => e.preventDefault()}
                       onTouchStart={multiSelectMode ? undefined : (e) => {
-                        if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
+                        if (e.touches.length > 1) { cancelLongPress(); return; }
                         longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                        const onScroll = () => cancelLongPress();
+                        window.addEventListener("scroll", onScroll, { passive: true });
+                        longPressScrollCleanupRef.current = () => window.removeEventListener("scroll", onScroll);
                         longPressTimerRef.current = setTimeout(() => {
-                          setLongPressOrder(o);
+                          longPressScrollCleanupRef.current?.();
+                          longPressScrollCleanupRef.current = null;
                           longPressTimerRef.current = null;
+                          setLongPressOrder(o);
                         }, 500);
                       }}
                       onTouchMove={(e) => {
                         if (!longPressTimerRef.current) return;
-                        if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
+                        if (e.touches.length > 1) { cancelLongPress(); return; }
                         const dx = Math.abs(e.touches[0].clientX - longPressStartPos.current.x);
                         const dy = Math.abs(e.touches[0].clientY - longPressStartPos.current.y);
-                        if (dx > 8 || dy > 8) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                        if (dx > 8 || dy > 8) cancelLongPress();
                       }}
-                      onTouchEnd={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
-                      onTouchCancel={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
+                      onTouchEnd={cancelLongPress}
+                      onTouchCancel={cancelLongPress}
                     >
                       {multiSelectMode && (
                         <button
@@ -14566,6 +14578,13 @@ function MobileUnassignedList({
   const [orderInfoOrder, setOrderInfoOrder] = useState(null);
   const longPressTimerRef = useRef(null);
   const longPressStartPos = useRef({ x: 0, y: 0 });
+  const longPressScrollCleanupRef = useRef(null);
+  const cancelLongPress = () => {
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+    longPressScrollCleanupRef.current?.();
+    longPressScrollCleanupRef.current = null;
+  };
 
   // ✅ focusOrderId가 들어오면: 해당 카드로 스크롤 → 파란 glow 1회 → 종료
   useEffect(() => {
@@ -14844,22 +14863,30 @@ return (
                   style={{ scrollMarginTop: 90, WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                   onContextMenu={(e) => e.preventDefault()}
                   onTouchStart={(e) => {
-                    if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
+                    if (e.touches.length > 1) { cancelLongPress(); return; }
                     longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                    // 스크롤 샘플링 속도가 느린 일부 기기에서 touchmove 델타 체크만으로는
+                    // 스크롤 시작을 늦게 감지해 롱프레스 메뉴가 잘못 뜨는 경우가 있어,
+                    // 실제 scroll 이벤트로도 즉시 취소되게 이중 안전장치를 둠
+                    const onScroll = () => cancelLongPress();
+                    window.addEventListener("scroll", onScroll, { passive: true });
+                    longPressScrollCleanupRef.current = () => window.removeEventListener("scroll", onScroll);
                     longPressTimerRef.current = setTimeout(() => {
-                      setLongPressOrder(o);
+                      longPressScrollCleanupRef.current?.();
+                      longPressScrollCleanupRef.current = null;
                       longPressTimerRef.current = null;
+                      setLongPressOrder(o);
                     }, 500);
                   }}
                   onTouchMove={(e) => {
                     if (!longPressTimerRef.current) return;
-                    if (e.touches.length > 1) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; return; }
+                    if (e.touches.length > 1) { cancelLongPress(); return; }
                     const dx = Math.abs(e.touches[0].clientX - longPressStartPos.current.x);
                     const dy = Math.abs(e.touches[0].clientY - longPressStartPos.current.y);
-                    if (dx > 8 || dy > 8) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                    if (dx > 8 || dy > 8) cancelLongPress();
                   }}
-                  onTouchEnd={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
-                  onTouchCancel={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
+                  onTouchEnd={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
                 >
                   <MobileOrderCard
                     order={o}
