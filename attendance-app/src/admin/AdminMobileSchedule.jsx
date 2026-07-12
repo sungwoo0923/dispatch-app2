@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, getDoc, serverTimestamp } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, Search, Phone, Plus, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Phone, Plus, CalendarDays, CheckSquare, Square } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -48,6 +48,9 @@ export default function AdminMobileSchedule() {
   const [actionRow, setActionRow] = useState(null); // { kind, row }
   const [registerOpen, setRegisterOpen] = useState(false);
   const [registerSearch, setRegisterSearch] = useState("");
+  const [registerSiteFilter, setRegisterSiteFilter] = useState("all");
+  const [registerSelected, setRegisterSelected] = useState(new Set());
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -234,19 +237,49 @@ export default function AdminMobileSchedule() {
     const kw = registerSearch.trim();
     return employees
       .filter((e) => e.employmentStatus !== "퇴사" && !e.deleted)
+      .filter((e) => registerSiteFilter === "all" || e.workSiteId === registerSiteFilter)
       .filter((e) => !kw || e.name?.includes(kw) || e.phone?.includes(kw))
-      .slice(0, 30);
-  }, [employees, registerSearch]);
+      .slice(0, 100);
+  }, [employees, registerSearch, registerSiteFilter]);
 
-  const registerSchedule = async (emp) => {
+  const closeRegisterModal = () => {
+    setRegisterOpen(false);
+    setRegisterSearch("");
+    setRegisterSiteFilter("all");
+    setRegisterSelected(new Set());
+  };
+
+  const toggleRegisterSelected = (uid) => {
+    setRegisterSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  };
+
+  const toggleRegisterSelectAll = () => {
+    setRegisterSelected((prev) => (prev.size === registerCandidates.length ? new Set() : new Set(registerCandidates.map((e) => e.id))));
+  };
+
+  const registerSelectedSchedules = async () => {
+    if (registerSelected.size === 0) return;
+    setRegistering(true);
     try {
-      await upsertScheduleForDate(emp.id, emp, "대기", dateKey);
-      toast.success(`${emp.name}님 ${formatDate(dateKey)} 근무가 등록되었습니다`);
-      setRegisterOpen(false);
-      setRegisterSearch("");
+      let count = 0;
+      for (const uid of registerSelected) {
+        const emp = employees.find((e) => e.id === uid);
+        if (!emp) continue;
+        await upsertScheduleForDate(emp.id, emp, "대기", dateKey);
+        count += 1;
+      }
+      toast.success(`${count}명의 ${formatDate(dateKey)} 근무가 등록되었습니다`);
+      closeRegisterModal();
       setTab("pending");
     } catch (err) {
       toast.error(`등록에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -375,12 +408,17 @@ export default function AdminMobileSchedule() {
 
       <Modal
         open={registerOpen}
-        onClose={() => setRegisterOpen(false)}
+        onClose={closeRegisterModal}
         title="출근자등록"
         footer={
-          <Button variant="outline" className="w-full" onClick={() => setRegisterOpen(false)}>
-            닫기
-          </Button>
+          <>
+            <Button variant="outline" className="flex-1" onClick={closeRegisterModal}>
+              닫기
+            </Button>
+            <Button className="flex-1" onClick={registerSelectedSchedules} disabled={registerSelected.size === 0 || registering}>
+              {registering ? "등록 중..." : `선택등록 (${registerSelected.size})`}
+            </Button>
+          </>
         }
       >
         <div className="space-y-3">
@@ -397,25 +435,55 @@ export default function AdminMobileSchedule() {
             />
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
           </div>
+          <select
+            value={registerSiteFilter}
+            onChange={(e) => setRegisterSiteFilter(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+          >
+            <option value="all">전체 센터</option>
+            {workSites.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={toggleRegisterSelectAll}
+            className="flex items-center gap-1.5 text-xs font-semibold text-ink"
+          >
+            {registerSelected.size > 0 && registerSelected.size === registerCandidates.length ? (
+              <CheckSquare size={15} className="text-primary" />
+            ) : (
+              <Square size={15} className="text-slate-300" />
+            )}
+            전체선택 ({registerCandidates.length}명)
+          </button>
           <div className="max-h-72 space-y-1.5 overflow-y-auto">
             {registerCandidates.length === 0 && <p className="py-4 text-center text-xs text-muted">검색 결과가 없습니다.</p>}
-            {registerCandidates.map((emp) => (
-              <button
-                key={emp.id}
-                type="button"
-                onClick={() => registerSchedule(emp)}
-                className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-left hover:bg-slate-50"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-light text-xs font-bold text-primary">
-                  {emp.name?.[0] || "?"}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>
-                  <p className="truncate text-xs text-muted">{[emp.team, emp.position].filter(Boolean).join(" · ") || "-"}</p>
-                </div>
-                <Plus size={15} className="shrink-0 text-primary" />
-              </button>
-            ))}
+            {registerCandidates.map((emp) => {
+              const isSelected = registerSelected.has(emp.id);
+              return (
+                <button
+                  key={emp.id}
+                  type="button"
+                  onClick={() => toggleRegisterSelected(emp.id)}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left ${
+                    isSelected ? "border-primary bg-primary-light/40 ring-1 ring-primary" : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-light text-xs font-bold text-primary">
+                    {emp.name?.[0] || "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>
+                    <p className="truncate text-xs text-muted">
+                      {[emp.team, emp.position].filter(Boolean).join(" · ") || "-"}
+                      {siteName(emp.workSiteId) && ` · ${siteName(emp.workSiteId)}`}
+                    </p>
+                  </div>
+                  {isSelected ? <CheckSquare size={17} className="shrink-0 text-primary" /> : <Square size={17} className="shrink-0 text-slate-300" />}
+                </button>
+              );
+            })}
           </div>
         </div>
       </Modal>
