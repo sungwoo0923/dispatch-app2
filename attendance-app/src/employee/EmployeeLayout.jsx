@@ -8,6 +8,7 @@ import HeaderIcons from "./HeaderIcons";
 import Messenger from "../messenger/Messenger";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
+import OfflineBanner from "../components/OfflineBanner";
 
 const TAB_DEFS = [
   { to: "/work-info", labelKey: "nav.workInfo", icon: ClipboardList },
@@ -61,6 +62,7 @@ export default function EmployeeLayout() {
           <HeaderIcons onMessengerClick={() => setShowMessenger(true)} messengerUnread={messengerUnread} />
         </div>
       </header>
+      <OfflineBanner />
 
       {/* 항상 마운트해 안읽음 수를 추적하고, showMessenger로 화면 표시만 전환한다 */}
       <div

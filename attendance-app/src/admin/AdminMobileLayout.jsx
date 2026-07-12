@@ -8,6 +8,7 @@ import { useNavBadges } from "../hooks/useNavBadges";
 import { isMenuAllowed } from "./navConfig";
 import HeaderIcons from "../employee/HeaderIcons";
 import Messenger from "../messenger/Messenger";
+import OfflineBanner from "../components/OfflineBanner";
 
 const TABS = [
   { to: "/", label: "홈", icon: Home, end: true },
@@ -88,6 +89,7 @@ export default function AdminMobileLayout() {
           </button>
         </div>
       </header>
+      <OfflineBanner />
 
       {/* 안읽음 수 추적은 항상 켜두고, showMessenger로 화면 표시만 전환한다
           (직원 모바일 앱과 동일한 패턴 — PC 관리자화면의 <Messenger />와
