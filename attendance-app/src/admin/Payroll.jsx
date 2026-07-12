@@ -8,6 +8,8 @@ import {
   getDoc,
   doc,
   setDoc,
+  deleteDoc,
+  updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import {
@@ -18,9 +20,14 @@ import {
   CalculatorIcon,
   HelpCircle,
   RefreshCw,
+  Trash2,
+  CheckSquare,
+  Settings2,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../hooks/useToast";
+import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
@@ -88,7 +95,12 @@ const EMPTY_FILTERS = {
 
 export default function Payroll() {
   const { profile } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [companyName, setCompanyName] = useState("");
+  const [payrollInfo, setPayrollInfo] = useState({ payday: "", depositTime: "", contactPhone: "" });
+  const [payrollInfoOpen, setPayrollInfoOpen] = useState(false);
+  const [payrollInfoForm, setPayrollInfoForm] = useState({ payday: "", depositTime: "", contactPhone: "" });
   const [month, setMonth] = useState(toMonthKey());
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -121,8 +133,26 @@ export default function Payroll() {
 
   useEffect(() => {
     if (!profile?.companyId) return;
-    getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
+    const unsub = onSnapshot(doc(db, "companies", profile.companyId), (s) => {
+      setCompanyName(s.data()?.name || "");
+      const info = { payday: s.data()?.payrollPayday || "", depositTime: s.data()?.payrollDepositTime || "", contactPhone: s.data()?.payrollContactPhone || "" };
+      setPayrollInfo(info);
+      setPayrollInfoForm(info);
+    });
+    return () => unsub();
   }, [profile?.companyId]);
+
+  // 급여일/입금시간/직통번호 — 직원 모바일 급여관리 화면 상단에 고정으로
+  // 노출되고, 문제가 있을 때 바로 전화/문자할 수 있는 연락처로도 쓰인다.
+  const savePayrollInfo = async () => {
+    await updateDoc(doc(db, "companies", profile.companyId), {
+      payrollPayday: payrollInfoForm.payday,
+      payrollDepositTime: payrollInfoForm.depositTime,
+      payrollContactPhone: payrollInfoForm.contactPhone,
+    });
+    toast.success("저장되었습니다");
+    setPayrollInfoOpen(false);
+  };
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -207,6 +237,38 @@ export default function Payroll() {
 
   const toggleSelectAll = () =>
     setSelected((s) => (s.size === filteredEmployees.length ? new Set() : new Set(filteredEmployees.map((e) => e.id))));
+
+  // 선택정산처리: 체크된 근로자의 정산만 확정 처리한다(전체확정과 달리
+  // 관리자가 고른 대상만 정확히 반영) — 확정되어야 근로자 모바일
+  // 급여관리 화면에도 명세서가 조회된다.
+  const settleSelected = async () => {
+    if (selected.size === 0) return;
+    if (!(await confirm(`선택한 ${selected.size}건을 정산확정 처리하시겠습니까?`, "save"))) return;
+    let count = 0;
+    for (const uid of selected) {
+      const p = payrollFor(uid);
+      if (!p || p.settlementStatus === "confirmed") continue;
+      await setDoc(doc(db, "payrolls", p.id), { settlementStatus: "confirmed", confirmedAt: serverTimestamp() }, { merge: true });
+      count += 1;
+    }
+    toast.success(`${count}건 정산확정되었습니다`);
+  };
+
+  // 삭제(초기화): 잘못 입력된 정산을 처음부터 다시 입력해야 할 때, 해당
+  // payrolls 문서 자체를 지워 미처리 상태로 되돌린다.
+  const deleteSelectedPayrolls = async () => {
+    if (selected.size === 0) return;
+    if (!(await confirm(`선택한 ${selected.size}건의 정산 데이터를 삭제하시겠습니까? 삭제하면 처음부터 다시 입력해야 합니다.`, "delete"))) return;
+    let count = 0;
+    for (const uid of selected) {
+      const p = payrollFor(uid);
+      if (!p) continue;
+      await deleteDoc(doc(db, "payrolls", p.id));
+      count += 1;
+    }
+    setSelected(new Set());
+    toast.success(`${count}건 삭제되었습니다`);
+  };
 
   const openFor = (emp) => {
     setTarget(emp);
@@ -696,6 +758,19 @@ export default function Payroll() {
           </div>
         </Card>
 
+        <Card className="mb-3 flex flex-wrap items-center justify-between gap-3 p-3.5">
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <span className="flex items-center gap-1.5 font-medium text-ink">
+              <Wallet size={14} className="text-primary" /> 급여일 {payrollInfo.payday ? `매월 ${payrollInfo.payday}일` : "미설정"}
+            </span>
+            <span className="text-muted">입금시간 {payrollInfo.depositTime || "미설정"}</span>
+            <span className="text-muted">직통번호 {payrollInfo.contactPhone || "미설정"}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setPayrollInfoOpen(true)}>
+            <Settings2 size={13} /> 급여 안내 설정
+          </Button>
+        </Card>
+
         <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs font-medium text-muted">
             목록 {filteredEmployees.length}
@@ -705,11 +780,17 @@ export default function Payroll() {
             <Button size="sm" onClick={() => setSettleOpen(true)}>
               <CalculatorIcon size={13} /> 정산처리 요청
             </Button>
+            <Button size="sm" variant="outline" onClick={settleSelected} disabled={selected.size === 0}>
+              <CheckSquare size={13} /> 선택정산처리
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setConfirmedFor("confirmed")}>
-              <Lock size={13} /> 정산확정
+              <Lock size={13} /> 전체확정
             </Button>
             <Button size="sm" variant="outline" onClick={() => setConfirmedFor("draft")}>
-              <LockOpen size={13} /> 정산확정취소
+              <LockOpen size={13} /> 확정취소
+            </Button>
+            <Button size="sm" variant="danger" onClick={deleteSelectedPayrolls} disabled={selected.size === 0}>
+              <Trash2 size={13} /> 선택삭제
             </Button>
             <Button size="sm" variant="outline" onClick={exportCsv}>
               <FileSpreadsheet size={13} /> 엑셀
@@ -1078,6 +1159,54 @@ export default function Payroll() {
             </label>
           )}
         </form>
+      </Modal>
+
+      <Modal
+        open={payrollInfoOpen}
+        onClose={() => setPayrollInfoOpen(false)}
+        title="급여 안내 설정"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setPayrollInfoOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={savePayrollInfo}>저장</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-muted">근로자 모바일 급여관리 화면 상단에 항상 표시되고, 급여 문의 시 바로 전화/문자할 수 있는 연락처로 쓰입니다.</p>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">급여일 (매월 며칠)</span>
+            <input
+              type="number"
+              min="1"
+              max="31"
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={payrollInfoForm.payday}
+              onChange={(e) => setPayrollInfoForm((f) => ({ ...f, payday: e.target.value }))}
+              placeholder="예: 25"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">입금시간</span>
+            <input
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={payrollInfoForm.depositTime}
+              onChange={(e) => setPayrollInfoForm((f) => ({ ...f, depositTime: e.target.value }))}
+              placeholder="예: 오전 10시"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">급여 문의 직통번호</span>
+            <input
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={payrollInfoForm.contactPhone}
+              onChange={(e) => setPayrollInfoForm((f) => ({ ...f, contactPhone: e.target.value }))}
+              placeholder="예: 02-000-0000"
+            />
+          </label>
+        </div>
       </Modal>
     </div>
   );

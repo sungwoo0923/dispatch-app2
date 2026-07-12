@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, getDocs, getDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { Search, CalculatorIcon, Lock, LockOpen, Monitor } from "lucide-react";
+import { collection, query, where, onSnapshot, getDocs, getDoc, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { Search, CalculatorIcon, Lock, LockOpen, Monitor, CheckSquare, Square, Trash2, CheckCircle2 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
+import { useConfirm } from "../hooks/useConfirm";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -42,12 +43,15 @@ const EMPTY_FORM = {
 export default function AdminMobilePayroll() {
   const { profile } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const [companyName, setCompanyName] = useState("");
   const [month, setMonth] = useState(toMonthKey());
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [payrolls, setPayrolls] = useState([]);
   const [search, setSearch] = useState("");
+  const [siteFilter, setSiteFilter] = useState("all");
+  const [selected, setSelected] = useState(new Set());
   const [target, setTarget] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -81,9 +85,51 @@ export default function AdminMobilePayroll() {
   const filteredEmployees = useMemo(() => {
     return employees
       .filter((emp) => emp.approved)
+      .filter((emp) => siteFilter === "all" || emp.workSiteId === siteFilter)
       .filter((emp) => !search.trim() || emp.name?.includes(search.trim()) || emp.phone?.includes(search.trim()))
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [employees, search]);
+  }, [employees, search, siteFilter]);
+
+  const toggleSelected = (uid) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelected((prev) => (prev.size === filteredEmployees.length ? new Set() : new Set(filteredEmployees.map((e) => e.id))));
+  };
+
+  const settleSelected = async () => {
+    if (selected.size === 0) return;
+    if (!(await confirm(`선택한 ${selected.size}건을 정산확정 처리하시겠습니까?`, "save"))) return;
+    let count = 0;
+    for (const uid of selected) {
+      const p = payrollFor(uid);
+      if (!p || p.settlementStatus === "confirmed") continue;
+      await setDoc(doc(db, "payrolls", p.id), { settlementStatus: "confirmed", confirmedAt: serverTimestamp() }, { merge: true });
+      count += 1;
+    }
+    toast.success(`${count}건 정산확정되었습니다`);
+    setSelected(new Set());
+  };
+
+  const deleteSelectedPayrolls = async () => {
+    if (selected.size === 0) return;
+    if (!(await confirm(`선택한 ${selected.size}건의 정산 데이터를 삭제하시겠습니까? 삭제하면 처음부터 다시 입력해야 합니다.`, "delete"))) return;
+    let count = 0;
+    for (const uid of selected) {
+      const p = payrollFor(uid);
+      if (!p) continue;
+      await deleteDoc(doc(db, "payrolls", p.id));
+      count += 1;
+    }
+    setSelected(new Set());
+    toast.success(`${count}건 삭제되었습니다`);
+  };
 
   const openFor = (emp) => {
     setTarget(emp);
@@ -247,6 +293,13 @@ export default function AdminMobilePayroll() {
         <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
       </div>
 
+      <select value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+        <option value="all">전체 센터</option>
+        {workSites.map((s) => (
+          <option key={s.id} value={s.id}>{s.name}</option>
+        ))}
+      </select>
+
       <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
         <Button size="sm" onClick={() => setSettleOpen(true)}>
           <CalculatorIcon size={13} /> 정산처리 요청
@@ -259,25 +312,47 @@ export default function AdminMobilePayroll() {
         </Button>
       </div>
 
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+        <button type="button" onClick={toggleSelectAll} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink">
+          {selected.size > 0 && selected.size === filteredEmployees.length ? <CheckSquare size={14} className="text-primary" /> : <Square size={14} className="text-slate-300" />}
+          전체선택 {selected.size > 0 && `(${selected.size})`}
+        </button>
+        <Button size="sm" variant="outline" onClick={settleSelected} disabled={selected.size === 0}>
+          <CheckCircle2 size={13} /> 선택정산처리
+        </Button>
+        <Button size="sm" variant="danger" onClick={deleteSelectedPayrolls} disabled={selected.size === 0}>
+          <Trash2 size={13} /> 선택삭제
+        </Button>
+      </div>
+
       <div className="space-y-2">
         {filteredEmployees.length === 0 && <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-muted">조건에 맞는 근로자가 없습니다.</div>}
         {filteredEmployees.map((emp) => {
           const p = payrollFor(emp.id);
+          const isSelected = selected.has(emp.id);
           return (
-            <button key={emp.id} type="button" onClick={() => openFor(emp)} className="flex w-full flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3.5 text-left active:bg-slate-50">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>
-                  <p className="truncate text-xs text-muted">{siteName_(emp.workSiteId)}</p>
-                </div>
-                {p ? (
-                  p.settlementStatus === "confirmed" ? <Badge tone="success">정산확정</Badge> : <Badge tone="warning">정산처리</Badge>
-                ) : (
-                  <Badge tone="muted">미처리</Badge>
-                )}
+            <div
+              key={emp.id}
+              className={`flex w-full flex-col gap-2 rounded-xl border bg-white p-3.5 transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-slate-200"}`}
+            >
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => toggleSelected(emp.id)} className="shrink-0 p-0.5" aria-label="선택">
+                  {isSelected ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-slate-300" />}
+                </button>
+                <button type="button" onClick={() => openFor(emp)} className="flex flex-1 items-center justify-between gap-2 text-left">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>
+                    <p className="truncate text-xs text-muted">{siteName_(emp.workSiteId)}</p>
+                  </div>
+                  {p ? (
+                    p.settlementStatus === "confirmed" ? <Badge tone="success">정산확정</Badge> : <Badge tone="warning">정산처리</Badge>
+                  ) : (
+                    <Badge tone="muted">미처리</Badge>
+                  )}
+                </button>
               </div>
               {p && (
-                <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 text-center">
+                <button type="button" onClick={() => openFor(emp)} className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 text-center">
                   <div>
                     <p className="text-[11px] text-muted">지급합계</p>
                     <p className="text-xs font-semibold text-ink">{Number(p.grossPay || 0).toLocaleString()}원</p>
@@ -290,9 +365,9 @@ export default function AdminMobilePayroll() {
                     <p className="text-[11px] text-muted">실수령액</p>
                     <p className="text-xs font-bold text-primary">{Number(p.netPay || 0).toLocaleString()}원</p>
                   </div>
-                </div>
+                </button>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
