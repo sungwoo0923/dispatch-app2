@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, updateDoc, doc } from "firebase/firestore";
-import { Search, Phone, ChevronRight, Monitor } from "lucide-react";
+import { Search, Phone, ChevronRight, Monitor, CalendarDays } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -9,9 +9,27 @@ import Modal from "../components/Modal";
 import Badge from "../components/Badge";
 import SmsButton from "../components/SmsButton";
 import { formatPhoneNumber } from "../utils/phoneAuth";
+import { toMonthKey } from "../utils/dateUtils";
 
 const STATUS_TABS = ["전체", "재직", "휴직", "퇴사"];
 const STATUS_TONE = { 재직: "primary", 휴직: "muted", 퇴사: "danger" };
+
+// 입사일부터 오늘까지의 근속기간을 "n년 n개월"로 표시한다.
+function tenureLabel(hireDate) {
+  if (!hireDate) return "-";
+  const start = new Date(`${hireDate}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return "-";
+  const now = new Date();
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  if (now.getDate() < start.getDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years <= 0 && months <= 0) return "1개월 미만";
+  return years > 0 ? `${years}년 ${months}개월` : `${months}개월`;
+}
 
 // 근로자 목록의 모바일 전용 화면 — PC의 넓은 표 대신, 이동 중에도 바로
 // 검색해 연락하거나 재직상태만 빠르게 바꿀 수 있는 카드 목록으로 새로
@@ -26,6 +44,7 @@ export default function AdminMobileEmployeeList() {
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState("전체");
   const [viewing, setViewing] = useState(null);
+  const [viewingAttendance, setViewingAttendance] = useState([]);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -39,6 +58,33 @@ export default function AdminMobileEmployeeList() {
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
+
+  useEffect(() => {
+    if (!viewing?.id || !profile?.companyId) {
+      setViewingAttendance([]);
+      return;
+    }
+    const month = toMonthKey();
+    const unsub = onSnapshot(
+      query(
+        collection(db, "attendance"),
+        where("companyId", "==", profile.companyId),
+        where("uid", "==", viewing.id),
+        where("date", ">=", `${month}-01`),
+        where("date", "<=", `${month}-31`)
+      ),
+      (snap) => setViewingAttendance(snap.docs.map((d) => d.data()))
+    );
+    return () => unsub();
+  }, [viewing?.id, profile?.companyId]);
+
+  const viewingMonthlyStats = useMemo(() => {
+    const out = { 출근: 0, 지각: 0, 결근: 0, 조퇴: 0 };
+    viewingAttendance.forEach((r) => {
+      if (out[r.status] !== undefined) out[r.status] += 1;
+    });
+    return out;
+  }, [viewingAttendance]);
 
   const siteName = (id) => workSites.find((s) => s.id === id)?.name || "";
 
@@ -55,6 +101,21 @@ export default function AdminMobileEmployeeList() {
     employees.forEach((e) => { out[e.employmentStatus || "재직"] = (out[e.employmentStatus || "재직"] || 0) + 1; });
     return out;
   }, [employees]);
+
+  // 상태 탭(재직/휴직/퇴사)을 누르면 해당 상태의 근로자를 센터별로 몇 명씩
+  // 있는지 한눈에 보여준다 — 여러 센터를 관리하는 관리자가 "재직자가 몇 명이고
+  // 어느 센터에 몰려있는지"를 목록을 일일이 스크롤하지 않고 바로 파악하도록.
+  const siteBreakdown = useMemo(() => {
+    if (statusTab === "전체") return [];
+    const counter = new Map();
+    employees
+      .filter((e) => (e.employmentStatus || "재직") === statusTab)
+      .forEach((e) => {
+        const label = siteName(e.workSiteId) || "미배정";
+        counter.set(label, (counter.get(label) || 0) + 1);
+      });
+    return [...counter.entries()].sort((a, b) => b[1] - a[1]);
+  }, [employees, statusTab, workSites]);
 
   const changeStatus = async (emp, status) => {
     if (!(await confirm(`${emp.name}님의 재직상태를 '${status}'(으)로 변경하시겠습니까?`, "save"))) return;
@@ -98,6 +159,19 @@ export default function AdminMobileEmployeeList() {
           </button>
         ))}
       </div>
+
+      {siteBreakdown.length > 0 && (
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+          <p className="mb-2 text-[11px] font-semibold text-muted">센터별 {statusTab} 현황</p>
+          <div className="flex flex-wrap gap-1.5">
+            {siteBreakdown.map(([label, n]) => (
+              <span key={label} className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-ink shadow-sm">
+                {label} <span className="font-bold text-primary">{n}명</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         {filtered.length === 0 && (
@@ -166,9 +240,37 @@ export default function AdminMobileEmployeeList() {
                 <span className="text-xs text-muted">근무지</span>
                 <span className="text-ink">{siteName(viewing.workSiteId) || "-"}</span>
               </div>
-              <div className="flex items-center justify-between py-2 text-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 py-2 text-sm">
                 <span className="text-xs text-muted">입사일</span>
                 <span className="text-ink">{viewing.hireDate || "-"}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 text-sm">
+                <span className="text-xs text-muted">근속연수</span>
+                <span className="text-ink">{tenureLabel(viewing.hireDate)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-100 p-3.5">
+              <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-muted">
+                <CalendarDays size={13} className="text-primary" /> 이번 달 근태정보 ({toMonthKey()})
+              </p>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <p className="text-[11px] text-muted">출근</p>
+                  <p className="mt-0.5 text-sm font-bold text-ink">{viewingMonthlyStats.출근}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">지각</p>
+                  <p className="mt-0.5 text-sm font-bold text-warning">{viewingMonthlyStats.지각}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">결근</p>
+                  <p className="mt-0.5 text-sm font-bold text-danger">{viewingMonthlyStats.결근}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted">조퇴</p>
+                  <p className="mt-0.5 text-sm font-bold text-warning">{viewingMonthlyStats.조퇴}</p>
+                </div>
               </div>
             </div>
 

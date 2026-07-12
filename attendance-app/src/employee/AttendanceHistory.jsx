@@ -29,6 +29,7 @@ export default function AttendanceHistory() {
   const toast = useToast();
   const { t } = useLanguage();
   const [records, setRecords] = useState([]);
+  const [payrolls, setPayrolls] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
   const [detail, setDetail] = useState(null);
   const [requestField, setRequestField] = useState(null); // "checkInTime" | "checkOutTime"
@@ -56,6 +57,14 @@ export default function AttendanceHistory() {
     return () => unsub();
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(query(collection(db, "payrolls"), where("uid", "==", user.uid)), (snap) =>
+      setPayrolls(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [user]);
+
   const grouped = useMemo(() => {
     const map = new Map();
     records.forEach((r) => {
@@ -65,6 +74,35 @@ export default function AttendanceHistory() {
     });
     return [...map.entries()];
   }, [records]);
+
+  // 월별 요약: 근태 통계는 이 화면이 이미 불러온 attendance 기록에서 직접
+  // 집계하고(관리자 정산 여부와 무관하게 항상 최신값), 급여만 정산확정된
+  // payrolls 문서가 있을 때 참고로 곁들인다.
+  const monthlySummary = (month, list) => {
+    let workedMs = 0;
+    let attendCount = 0;
+    let lateCount = 0;
+    let absentCount = 0;
+    let earlyLeaveCount = 0;
+    list.forEach((r) => {
+      if (r.status === "출근" || r.status === "지각") {
+        attendCount += 1;
+        if (r.checkInTime && r.checkOutTime) workedMs += Math.max(0, new Date(r.checkOutTime) - new Date(r.checkInTime));
+      }
+      if (r.status === "지각") lateCount += 1;
+      if (r.status === "결근") absentCount += 1;
+      if (r.status === "조퇴") earlyLeaveCount += 1;
+    });
+    const payroll = payrolls.find((p) => p.month === month && p.settlementStatus === "confirmed");
+    return {
+      workedHours: (workedMs / 3600000).toFixed(1),
+      attendCount,
+      lateCount,
+      absentCount,
+      earlyLeaveCount,
+      netPay: payroll?.netPay,
+    };
+  };
 
   const requestsFor = (date) => changeRequests.filter((c) => c.date === date).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   const latestRequestFor = (date, field) => requestsFor(date).find((c) => c.field === field);
@@ -188,9 +226,37 @@ export default function AttendanceHistory() {
           <p className="text-sm text-muted">{t("attendance.empty")}</p>
         </Card>
       )}
-      {grouped.map(([month, list]) => (
+      {grouped.map(([month, list]) => {
+        const summary = monthlySummary(month, list);
+        return (
         <div key={month} className="space-y-2">
           <p className="px-0.5 text-xs font-bold text-muted">{monthLabel(list[0].date)}</p>
+          <Card className="grid grid-cols-3 gap-y-3 p-4 text-center">
+            <div>
+              <p className="text-[11px] text-muted">총 근무시간</p>
+              <p className="mt-0.5 text-sm font-bold text-ink">{summary.workedHours}시간</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted">월별급여</p>
+              <p className="mt-0.5 text-sm font-bold text-primary">{summary.netPay != null ? `${summary.netPay.toLocaleString()}원` : "미정산"}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted">총 출근횟수</p>
+              <p className="mt-0.5 text-sm font-bold text-ink">{summary.attendCount}회</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted">지각</p>
+              <p className="mt-0.5 text-sm font-bold text-warning">{summary.lateCount}회</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted">결근</p>
+              <p className="mt-0.5 text-sm font-bold text-danger">{summary.absentCount}회</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted">조퇴</p>
+              <p className="mt-0.5 text-sm font-bold text-warning">{summary.earlyLeaveCount}회</p>
+            </div>
+          </Card>
           {list.map((r) => {
             const d = new Date(`${r.date}T00:00:00`);
             const weekday = WEEKDAY_KR[d.getDay()];
@@ -226,7 +292,8 @@ export default function AttendanceHistory() {
             );
           })}
         </div>
-      ))}
+        );
+      })}
 
       <Modal open={Boolean(detail)} onClose={closeDetail} title={t("attendance.detailTitle")} footer={<Button className="w-full" onClick={closeDetail}>{t("common.close")}</Button>}>
         {detail && (
