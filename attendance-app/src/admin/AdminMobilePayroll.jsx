@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, getDocs, getDoc, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { Search, CalculatorIcon, Lock, LockOpen, Monitor, CheckSquare, Square, Trash2, CheckCircle2, Receipt, Printer } from "lucide-react";
+import { Search, CalculatorIcon, Lock, LockOpen, Monitor, CheckSquare, Square, Trash2, CheckCircle2, Receipt, Printer, MoreVertical, X, ListChecks } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -52,6 +52,8 @@ export default function AdminMobilePayroll() {
   const [search, setSearch] = useState("");
   const [siteFilter, setSiteFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [target, setTarget] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -373,30 +375,67 @@ export default function AdminMobilePayroll() {
         ))}
       </select>
 
-      <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
-        <Button size="sm" onClick={() => setSettleOpen(true)}>
-          <CalculatorIcon size={13} /> 정산처리 요청
+      <div className="relative flex items-center gap-2">
+        <Button size="sm" className="flex-1" onClick={() => setSettleOpen(true)}>
+          <CalculatorIcon size={13} /> 정산처리
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setConfirmedFor("confirmed")}>
-          <Lock size={13} /> 전체 확정
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setConfirmedFor("draft")}>
-          <LockOpen size={13} /> 확정취소
-        </Button>
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          className="shrink-0 rounded-xl border border-slate-200 bg-white p-2.5 text-muted active:bg-slate-50"
+          aria-label="더보기"
+        >
+          <MoreVertical size={16} />
+        </button>
+        {moreOpen && (
+          <div className="absolute right-0 top-full z-10 mt-1.5 w-44 space-y-0.5 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+            <button
+              type="button"
+              onClick={() => { setConfirmedFor("confirmed"); setMoreOpen(false); }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-ink active:bg-slate-50"
+            >
+              <Lock size={13} /> 전체 확정
+            </button>
+            <button
+              type="button"
+              onClick={() => { setConfirmedFor("draft"); setMoreOpen(false); }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-ink active:bg-slate-50"
+            >
+              <LockOpen size={13} /> 확정취소
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSelectMode(true); setMoreOpen(false); }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-ink active:bg-slate-50"
+            >
+              <ListChecks size={13} /> 선택 관리 모드
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
-        <button type="button" onClick={toggleSelectAll} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink">
-          {selected.size > 0 && selected.size === filteredEmployees.length ? <CheckSquare size={14} className="text-primary" /> : <Square size={14} className="text-slate-300" />}
-          전체선택 {selected.size > 0 && `(${selected.size})`}
-        </button>
-        <Button size="sm" variant="outline" onClick={settleSelected} disabled={selected.size === 0}>
-          <CheckCircle2 size={13} /> 선택정산처리
-        </Button>
-        <Button size="sm" variant="danger" onClick={deleteSelectedPayrolls} disabled={selected.size === 0}>
-          <Trash2 size={13} /> 선택삭제
-        </Button>
-      </div>
+      {selectMode && (
+        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+          <button type="button" onClick={toggleSelectAll} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink">
+            {selected.size > 0 && selected.size === filteredEmployees.length ? <CheckSquare size={14} className="text-primary" /> : <Square size={14} className="text-slate-300" />}
+            전체선택 {selected.size > 0 && `(${selected.size})`}
+          </button>
+          <Button size="sm" variant="outline" onClick={settleSelected} disabled={selected.size === 0}>
+            <CheckCircle2 size={13} /> 선택정산처리
+          </Button>
+          <Button size="sm" variant="danger" onClick={deleteSelectedPayrolls} disabled={selected.size === 0}>
+            <Trash2 size={13} /> 선택삭제
+          </Button>
+          <button
+            type="button"
+            onClick={() => { setSelectMode(false); setSelected(new Set()); }}
+            className="shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-muted active:bg-slate-50"
+            aria-label="선택 모드 종료"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
       <div className="space-y-2">
         {filteredEmployees.length === 0 && <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-muted">조건에 맞는 근로자가 없습니다.</div>}
@@ -409,9 +448,11 @@ export default function AdminMobilePayroll() {
               className={`flex w-full flex-col gap-2 rounded-xl border bg-white p-3.5 transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-slate-200"}`}
             >
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => toggleSelected(emp.id)} className="shrink-0 p-0.5" aria-label="선택">
-                  {isSelected ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-slate-300" />}
-                </button>
+                {selectMode && (
+                  <button type="button" onClick={() => toggleSelected(emp.id)} className="shrink-0 p-0.5" aria-label="선택">
+                    {isSelected ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-slate-300" />}
+                  </button>
+                )}
                 <button type="button" onClick={() => openFor(emp)} className="flex flex-1 items-center justify-between gap-2 text-left">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>

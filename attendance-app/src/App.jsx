@@ -23,6 +23,10 @@ import AdminMobilePayroll from "./admin/AdminMobilePayroll";
 import AdminMobileSiteInsuranceRates from "./admin/AdminMobileSiteInsuranceRates";
 import AdminMobileStatsSummary from "./admin/AdminMobileStatsSummary";
 import AdminMobileStatsAttendanceCount from "./admin/AdminMobileStatsAttendanceCount";
+import AdminMobileStatsMonthlyGrid from "./admin/AdminMobileStatsMonthlyGrid";
+import AdminMobileStatsMonthlyTime from "./admin/AdminMobileStatsMonthlyTime";
+import AdminMobileStatsSiteAggregate from "./admin/AdminMobileStatsSiteAggregate";
+import AdminMobileLeaveSettings from "./admin/AdminMobileLeaveSettings";
 import AdminMobileBusinessEntities from "./admin/AdminMobileBusinessEntities";
 import AdminMobileVendors from "./admin/AdminMobileVendors";
 import AdminMobileCenters from "./admin/AdminMobileCenters";
@@ -170,10 +174,6 @@ export default function App() {
         <Route path="employees/contracts" element={<Contracts />} />
         <Route path="employees/documents" element={<Documents />} />
         <Route path="employees/inquiries" element={<Inquiries />} />
-        <Route path="leaves/settings" element={<LeaveSettings />} />
-        <Route path="stats/monthly-grid" element={<StatsMonthlyGrid />} />
-        <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
-        <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
         <Route path="board" element={<Board />} />
         <Route path="settings/me" element={<MyInfo />} />
         <Route path="templates" element={<Navigate to="/templates/shift" replace />} />
@@ -199,6 +199,10 @@ export default function App() {
             <Route path="payroll/settings" element={<AdminMobileSiteInsuranceRates />} />
             <Route path="stats" element={<AdminMobileStatsSummary />} />
             <Route path="stats/attendance-count" element={<AdminMobileStatsAttendanceCount />} />
+            <Route path="stats/monthly-grid" element={<AdminMobileStatsMonthlyGrid />} />
+            <Route path="stats/monthly-time" element={<AdminMobileStatsMonthlyTime />} />
+            <Route path="stats/site-aggregate" element={<AdminMobileStatsSiteAggregate />} />
+            <Route path="leaves/settings" element={<AdminMobileLeaveSettings />} />
             <Route path="org/entities" element={<AdminMobileBusinessEntities />} />
             <Route path="org/vendors" element={<AdminMobileVendors />} />
             <Route path="org/centers" element={<AdminMobileCenters />} />
@@ -236,6 +240,10 @@ export default function App() {
           <Route path="payroll/settings" element={<SiteInsuranceRates />} />
           <Route path="stats" element={<StatsSummary />} />
           <Route path="stats/attendance-count" element={<StatsAttendanceCount />} />
+          <Route path="stats/monthly-grid" element={<StatsMonthlyGrid />} />
+          <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
+          <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
+          <Route path="leaves/settings" element={<LeaveSettings />} />
           <Route path="org/entities" element={<BusinessEntities />} />
           <Route path="org/vendors" element={<Vendors />} />
           <Route path="org/centers" element={<Centers />} />

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Home, Users, CalendarDays, MessageSquare, Grid2x2, LogOut, DoorOpen, FileWarning } from "lucide-react";
+import { Home, Users, CalendarDays, MessageSquare, Grid2x2, LogOut, DoorOpen, FileWarning, ChevronLeft } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useNavBadges } from "../hooks/useNavBadges";
-import { isMenuAllowed } from "./navConfig";
+import { isMenuAllowed, resolveBreadcrumb } from "./navConfig";
 import HeaderIcons from "../employee/HeaderIcons";
 import Messenger from "../messenger/Messenger";
 import OfflineBanner from "../components/OfflineBanner";
@@ -17,6 +17,11 @@ const TABS = [
   { to: "/board", label: "게시판", icon: MessageSquare, end: true },
   { to: "/more", label: "전체메뉴", icon: Grid2x2 },
 ];
+
+// 이 경로들은 하단탭에서 바로 들어오는 최상위 화면이라 뒤로 갈 곳이
+// 없다 — 그 외 모든 하위 화면(전체메뉴에서 들어오는 통계/급여/휴가 등)은
+// 헤더에 뒤로가기 버튼을 보여준다.
+const ROOT_PATHS = new Set(["/", "/employees", "/schedule", "/board", "/more"]);
 
 // 관리자 전용 모바일 UI의 뼈대 — PC용 AdminLayout(사이드바+테이블)과 완전히
 // 분리된 트리로, 하단탭 앱 형태의 새 화면들을 위한 헤더/바텀탭/권한가드를
@@ -62,6 +67,8 @@ export default function AdminMobileLayout() {
 
   const totalBadge = Object.values(badgeCounts).reduce((a, b) => a + b, 0);
   const alertCount = earlyLeaveCount + resignationCount;
+  const showBack = !ROOT_PATHS.has(location.pathname);
+  const pageTitle = resolveBreadcrumb(location.pathname).label;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -69,10 +76,21 @@ export default function AdminMobileLayout() {
         className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-2.5"
         style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.625rem)" }}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <img src="/logo.png" alt="KP-Work" className="h-8 w-auto shrink-0" />
-          <p className="truncate text-xs font-semibold text-ink">{company?.name}</p>
-        </div>
+        {showBack ? (
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex min-w-0 items-center gap-1.5 text-ink active:opacity-60"
+          >
+            <ChevronLeft size={20} className="shrink-0 text-muted" />
+            <p className="truncate text-sm font-semibold">{pageTitle}</p>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 min-w-0">
+            <img src="/logo.png" alt="KP-Work" className="h-8 w-auto shrink-0" />
+            <p className="truncate text-xs font-semibold text-ink">{company?.name}</p>
+          </div>
+        )}
         <div className="flex shrink-0 items-center gap-2">
           {alertCount > 0 && (
             <button
