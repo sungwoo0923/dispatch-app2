@@ -8,6 +8,8 @@ export const NATIONALITY_OPTIONS = ["내국인", "외국인"];
 export const EMPLOYMENT_TYPE_OPTIONS = ["상용직", "일용직", "단기직", "파트타임"];
 // 근무구분: which shift band the worker is scheduled into.
 export const SHIFT_TYPE_OPTIONS = ["주간", "야간"];
+// 근무형태: 센터별 근로 계약/스케줄 운영 방식 구분 (근무구분=시간대와는 별개 축).
+export const SHIFT_WORK_TYPE_OPTIONS = ["정규직", "탄력근무", "교대근무", "단시간근로"];
 // 지급구분: settlement cadence, drives which 급여형태 tab a payroll defaults into.
 export const PAY_TYPE_OPTIONS = ["일급", "주급", "월급"];
 // 국가구분: 내국인 선택 시 자동으로 "대한민국"이 지정되므로 항상 옵션에 포함해야

@@ -10,6 +10,7 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { openAddressSearch } from "../utils/daumPostcode";
 import { searchAddressCoords } from "../utils/geocode";
+import { TEAM_OPTIONS, POSITION_OPTIONS, SHIFT_TYPE_OPTIONS, SHIFT_WORK_TYPE_OPTIONS } from "../constants/hr";
 
 const MAX_SITES = 10;
 const TABS = [
@@ -61,8 +62,10 @@ function VendorsTabMobile({ companyId, site, entityName }) {
   );
 }
 
-function OrderedListMobile({ companyId, siteId, collectionName, fieldLabel }) {
+function OrderedListMobile({ companyId, siteId, collectionName, fieldLabel, presetOptions = [] }) {
   const [items, setItems] = useState([]);
+  const [mode, setMode] = useState(presetOptions.length ? "preset" : "custom");
+  const [preset, setPreset] = useState(presetOptions[0] || "");
   const [name, setName] = useState("");
 
   useEffect(() => {
@@ -73,9 +76,11 @@ function OrderedListMobile({ companyId, siteId, collectionName, fieldLabel }) {
     return () => unsub();
   }, [companyId, siteId, collectionName]);
 
+  const currentName = (mode === "preset" ? preset : name).trim();
+
   const add = async () => {
-    if (!name.trim()) return;
-    await addDoc(collection(db, collectionName), { companyId, siteId, name: name.trim(), order: items.length, active: true, createdAt: serverTimestamp() });
+    if (!currentName) return;
+    await addDoc(collection(db, collectionName), { companyId, siteId, name: currentName, order: items.length, active: true, createdAt: serverTimestamp() });
     setName("");
   };
   const move = async (idx, dir) => {
@@ -90,9 +95,27 @@ function OrderedListMobile({ companyId, siteId, collectionName, fieldLabel }) {
 
   return (
     <div className="space-y-2">
+      {presetOptions.length > 0 && (
+        <div className="flex flex-nowrap gap-3 text-xs text-ink">
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={mode === "preset"} onChange={() => setMode("preset")} /> 기본목록
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={mode === "custom"} onChange={() => setMode("custom")} /> 직접입력
+          </label>
+        </div>
+      )}
       <div className="flex gap-1.5">
-        <input className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} placeholder={fieldLabel} />
-        <Button size="sm" onClick={add}>추가</Button>
+        {mode === "preset" && presetOptions.length > 0 ? (
+          <select className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" value={preset} onChange={(e) => setPreset(e.target.value)}>
+            {presetOptions.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        ) : (
+          <input className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} placeholder={`${fieldLabel} 직접입력`} />
+        )}
+        <Button size="sm" onClick={add} disabled={!currentName}>추가</Button>
       </div>
       {items.length === 0 && <p className="py-2 text-center text-xs text-muted">등록된 항목이 없습니다.</p>}
       {items.map((it, i) => (
@@ -362,11 +385,11 @@ export default function AdminMobileCenters() {
             <div className="space-y-4">
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-ink">근무구분 목록</p>
-                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftCategories" fieldLabel="근무구분" />
+                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftCategories" fieldLabel="근무구분" presetOptions={SHIFT_TYPE_OPTIONS} />
               </div>
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-ink">근무형태 목록</p>
-                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftTypes" fieldLabel="근무형태" />
+                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftTypes" fieldLabel="근무형태" presetOptions={SHIFT_WORK_TYPE_OPTIONS} />
               </div>
             </div>
           )}
@@ -374,11 +397,11 @@ export default function AdminMobileCenters() {
             <div className="space-y-4">
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-ink">부서 목록</p>
-                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="siteDepartments" fieldLabel="부서" />
+                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="siteDepartments" fieldLabel="부서" presetOptions={TEAM_OPTIONS} />
               </div>
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-ink">직급 목록</p>
-                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="sitePositions" fieldLabel="직급" />
+                <OrderedListMobile companyId={profile.companyId} siteId={selectedId} collectionName="sitePositions" fieldLabel="직급" presetOptions={POSITION_OPTIONS} />
               </div>
             </div>
           )}

@@ -22,6 +22,7 @@ import Panel from "../components/Panel";
 import { downloadCsv } from "../utils/exportCsv";
 import { openAddressSearch } from "../utils/daumPostcode";
 import { searchAddressCoords } from "../utils/geocode";
+import { TEAM_OPTIONS, POSITION_OPTIONS, SHIFT_TYPE_OPTIONS, SHIFT_WORK_TYPE_OPTIONS } from "../constants/hr";
 
 const MAX_SITES = 10;
 
@@ -431,14 +432,14 @@ export default function Centers() {
               {tab === "vendors" && selectedId && <VendorsTab companyId={profile.companyId} site={selectedSite} entityName={entityName} />}
               {tab === "shift" && selectedId && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftCategories" title="근무구분 목록" fieldLabel="근무구분" />
-                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftTypes" title="근무형태 목록" fieldLabel="근무형태" />
+                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftCategories" title="근무구분 목록" fieldLabel="근무구분" presetOptions={SHIFT_TYPE_OPTIONS} />
+                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="siteShiftTypes" title="근무형태 목록" fieldLabel="근무형태" presetOptions={SHIFT_WORK_TYPE_OPTIONS} />
                 </div>
               )}
               {tab === "deptpos" && selectedId && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="siteDepartments" title="부서 목록" fieldLabel="부서" />
-                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="sitePositions" title="직급 목록" fieldLabel="직급" />
+                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="siteDepartments" title="부서 목록" fieldLabel="부서" presetOptions={TEAM_OPTIONS} />
+                  <OrderedList companyId={profile.companyId} siteId={selectedId} collectionName="sitePositions" title="직급 목록" fieldLabel="직급" presetOptions={POSITION_OPTIONS} />
                 </div>
               )}
               {tab === "holidays" && selectedId && <HolidaysTab companyId={profile.companyId} siteId={selectedId} />}
@@ -610,8 +611,10 @@ function VendorsTab({ companyId, site, entityName }) {
   );
 }
 
-function OrderedList({ companyId, siteId, collectionName, title, fieldLabel }) {
+function OrderedList({ companyId, siteId, collectionName, title, fieldLabel, presetOptions = [] }) {
   const [items, setItems] = useState([]);
+  const [mode, setMode] = useState(presetOptions.length ? "preset" : "custom");
+  const [preset, setPreset] = useState(presetOptions[0] || "");
   const [name, setName] = useState("");
   const [checked, setChecked] = useState(() => new Set());
 
@@ -624,12 +627,14 @@ function OrderedList({ companyId, siteId, collectionName, title, fieldLabel }) {
     return () => unsub();
   }, [companyId, siteId, collectionName]);
 
+  const currentName = (mode === "preset" ? preset : name).trim();
+
   const add = async () => {
-    if (!name.trim()) return;
+    if (!currentName) return;
     await addDoc(collection(db, collectionName), {
       companyId,
       siteId,
-      name: name.trim(),
+      name: currentName,
       order: items.length,
       active: true,
       createdAt: serverTimestamp(),
@@ -719,16 +724,36 @@ function OrderedList({ companyId, siteId, collectionName, title, fieldLabel }) {
           </tbody>
         </table>
       </div>
-      <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
-        <input
-          className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={fieldLabel}
-        />
-        <Button size="sm" onClick={add}>
-          저장
-        </Button>
+      <div className="mt-2 space-y-2">
+        {presetOptions.length > 0 && (
+          <div className="flex flex-nowrap gap-3 text-xs text-ink">
+            <label className="flex items-center gap-1.5">
+              <input type="radio" checked={mode === "preset"} onChange={() => setMode("preset")} /> 기본목록에서 선택
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="radio" checked={mode === "custom"} onChange={() => setMode("custom")} /> 직접입력
+            </label>
+          </div>
+        )}
+        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+          {mode === "preset" && presetOptions.length > 0 ? (
+            <select className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" value={preset} onChange={(e) => setPreset(e.target.value)}>
+              {presetOptions.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={`${fieldLabel} 직접 입력`}
+            />
+          )}
+          <Button size="sm" onClick={add} disabled={!currentName}>
+            저장
+          </Button>
+        </div>
       </div>
     </div>
   );
