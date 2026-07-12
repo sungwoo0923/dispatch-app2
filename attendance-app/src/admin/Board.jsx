@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
-import { Trash2, Plus, MessageSquare, Pin, MessageCircleWarning, Copy, Eye, Wrench } from "lucide-react";
+import { Trash2, Plus, MessageSquare, Pin, MessageCircleWarning, Copy, Eye, Wrench, Users } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -12,6 +12,11 @@ import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import SidePanel from "../components/SidePanel";
 import { formatDate } from "../utils/dateUtils";
+
+const TOP_TABS = [
+  { key: "notice", label: "공지사항" },
+  { key: "free", label: "자유게시판" },
+];
 
 const CATEGORY_OPTIONS = [
   { value: "notice", label: "공지사항" },
@@ -29,6 +34,30 @@ function autoTitle(d = new Date(), category = "notice") {
 const EMPTY_FORM = { content: "", pinned: false, category: "notice", targetMode: "all", targetTeams: [], urgentSms: false, urgentSiteId: "" };
 
 export default function Board() {
+  const [tab, setTab] = useState("notice");
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain">
+        {TOP_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+              tab === t.key ? "bg-primary text-white" : "border border-slate-200 bg-white text-muted hover:bg-slate-50"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "notice" && <NoticeTab />}
+      {tab === "free" && <FreeBoardTab />}
+    </div>
+  );
+}
+
+function NoticeTab() {
   const { profile, user } = useAuth();
   const confirm = useConfirm();
   const toast = useToast();
@@ -150,7 +179,7 @@ export default function Board() {
 
   return (
     <div className="space-y-6">
-      <Panel icon={MessageSquare} title={`게시판 (${sorted.length}건)`}>
+      <Panel icon={MessageSquare} title={`공지사항 (${sorted.length}건)`}>
         <div className="mb-4 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
           <p className="text-xs text-muted">전 직원 또는 특정 팀을 대상으로 공지·점검사항을 작성하고 관리합니다.</p>
           <Button size="sm" onClick={openNew}>
@@ -419,5 +448,168 @@ export default function Board() {
         )}
       </Modal>
     </div>
+  );
+}
+
+// 직원/관리자 누구나 글을 쓸 수 있는 자유게시판 — 공지사항(posts)과 별도
+// 컬렉션(freePosts)을 쓰며, 본인 글은 본인이, 그 외에는 관리자만 삭제할 수 있다.
+function FreeBoardTab() {
+  const { profile, user } = useAuth();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [posts, setPosts] = useState([]);
+  const [viewing, setViewing] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ title: "", content: "" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(query(collection(db, "freePosts"), where("companyId", "==", profile.companyId)), (snap) =>
+      setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [profile?.companyId]);
+
+  const sorted = useMemo(() => [...posts].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)), [posts]);
+
+  const openNew = () => {
+    setForm({ title: "", content: "" });
+    setOpen(true);
+  };
+
+  const submit = async () => {
+    if (!form.title.trim() || !form.content.trim()) return;
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "freePosts"), {
+        companyId: profile.companyId,
+        authorUid: user.uid,
+        authorName: profile.name,
+        authorRole: "admin",
+        title: form.title.trim(),
+        content: form.content.trim(),
+        createdAt: serverTimestamp(),
+      });
+      toast.success("등록되었습니다");
+      setOpen(false);
+    } catch (err) {
+      toast.error(`등록에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (p) => {
+    if (!(await confirm(`"${p.title}" 글을 삭제하시겠습니까?`, "delete"))) return;
+    await deleteDoc(doc(db, "freePosts", p.id));
+    setViewing(null);
+  };
+
+  return (
+    <Panel icon={Users} title={`자유게시판 (${sorted.length}건)`}>
+      <div className="mb-4 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+        <p className="text-xs text-muted">직원/관리자 누구나 자유롭게 글을 쓸 수 있는 게시판입니다.</p>
+        <Button size="sm" onClick={openNew}>
+          <Plus size={13} /> 글쓰기
+        </Button>
+      </div>
+      {sorted.length === 0 ? (
+        <Card className="p-10 text-center">
+          <p className="text-sm font-medium text-ink">등록된 글이 없습니다</p>
+          <p className="mt-1 text-xs text-muted">첫 번째 글을 남겨보세요.</p>
+        </Card>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-primary-dark text-xs font-semibold text-white">
+                <th className="w-24 px-4 py-3 text-center">날짜</th>
+                <th className="px-4 py-3 text-center">제목</th>
+                <th className="w-24 px-4 py-3 text-center">작성구분</th>
+                <th className="w-32 px-4 py-3 text-right">작성자</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((p, idx) => (
+                <tr key={p.id} onClick={() => setViewing(p)} className={`cursor-pointer text-center hover:bg-slate-50 ${idx > 0 ? "border-t border-slate-100" : ""}`}>
+                  <td className="px-4 py-3 text-xs text-muted">
+                    {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)).slice(5) : ""}
+                  </td>
+                  <td className="px-4 py-3 text-left font-semibold text-ink">{p.title}</td>
+                  <td className="px-4 py-3">
+                    <Badge tone={p.authorRole === "admin" ? "primary" : "muted"}>{p.authorRole === "admin" ? "관리자" : "직원"}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right text-xs text-muted">{p.authorName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="자유게시판 글쓰기"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={submit} disabled={saving || !form.title.trim() || !form.content.trim()}>
+              {saving ? "등록 중..." : "등록"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">제목</span>
+            <input
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">내용</span>
+            <textarea
+              rows={6}
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={form.content}
+              onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+            />
+          </label>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(viewing)}
+        onClose={() => setViewing(null)}
+        title="자유게시판 상세"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => remove(viewing)}>
+              <Trash2 size={14} /> 삭제
+            </Button>
+            <Button onClick={() => setViewing(null)}>닫기</Button>
+          </>
+        }
+      >
+        {viewing && (
+          <div className="space-y-3 text-sm">
+            <p className="flex items-center gap-1.5 font-semibold text-ink">
+              <Badge tone={viewing.authorRole === "admin" ? "primary" : "muted"}>{viewing.authorRole === "admin" ? "관리자" : "직원"}</Badge>
+              {viewing.title}
+            </p>
+            <p className="text-xs text-muted">
+              {viewing.authorName} · {viewing.createdAt?.toDate ? formatDate(viewing.createdAt.toDate().toISOString().slice(0, 10)) : ""}
+            </p>
+            <p className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 leading-relaxed text-ink">{viewing.content}</p>
+          </div>
+        )}
+      </Modal>
+    </Panel>
   );
 }

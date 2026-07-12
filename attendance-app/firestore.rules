@@ -378,6 +378,18 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    // 사내 자유게시판: 공지사항(posts, 관리자 전용 작성)과 달리 직원/관리자
+    // 누구나 글을 쓸 수 있는 게시판. 같은 회사 구성원만 읽고 쓸 수 있고,
+    // 본인 글은 본인이, 그 외에는 관리자만 삭제할 수 있다.
+    match /freePosts/{postId} {
+      allow read: if isSignedIn() && myCompanyId() == resource.data.companyId;
+      allow create: if isSignedIn() &&
+        request.resource.data.authorUid == request.auth.uid &&
+        request.resource.data.companyId == myCompanyId();
+      allow delete: if isSignedIn() &&
+        (resource.data.authorUid == request.auth.uid || isAdminOf(resource.data.companyId));
+    }
+
     // Admin's pre-registered e-signature image, used to auto-stamp safety
     // education attendance records alongside the worker's own signature.
     // Kept in its own collection (not `users`) so any signed-in company

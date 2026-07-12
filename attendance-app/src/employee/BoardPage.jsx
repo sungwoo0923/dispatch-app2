@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, arrayUnion, serverTimestamp } from "firebase/firestore";
-import { ChevronRight, MessageSquarePlus, Pin } from "lucide-react";
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, updateDoc, doc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { ChevronRight, MessageSquarePlus, Pin, Plus, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
@@ -10,7 +11,7 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { formatDate } from "../utils/dateUtils";
 
-const TOP_TABS = ["공지", "문의하기"];
+const TOP_TABS = ["공지", "자유게시판", "문의하기"];
 const CATEGORY_LABEL = { notice: "공지사항", inspection: "점검사항" };
 
 export default function BoardPage() {
@@ -30,6 +31,7 @@ export default function BoardPage() {
         ))}
       </div>
       {tab === "공지" && <NoticeTab />}
+      {tab === "자유게시판" && <FreeBoardTab />}
       {tab === "문의하기" && <InquiryTab />}
     </div>
   );
@@ -113,6 +115,160 @@ function NoticeTab() {
             <p className="text-xs text-muted">
               {viewing.authorName} ·{" "}
               {viewing.createdAt?.toDate ? formatDate(viewing.createdAt.toDate().toISOString().slice(0, 10)) : ""}
+            </p>
+            <p className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-ink">{viewing.content}</p>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// 직원/관리자 누구나 글을 쓸 수 있는 자유게시판. 공지사항(posts, 관리자 전용
+// 작성)과 별도 컬렉션(freePosts)을 쓴다.
+function FreeBoardTab() {
+  const { profile, user } = useAuth();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [posts, setPosts] = useState([]);
+  const [viewing, setViewing] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ title: "", content: "" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(query(collection(db, "freePosts"), where("companyId", "==", profile.companyId)), (snap) =>
+      setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [profile?.companyId]);
+
+  const sorted = useMemo(() => [...posts].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)), [posts]);
+
+  const openNew = () => {
+    setForm({ title: "", content: "" });
+    setOpen(true);
+  };
+
+  const submit = async () => {
+    if (!form.title.trim() || !form.content.trim()) return;
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "freePosts"), {
+        companyId: profile.companyId,
+        authorUid: user.uid,
+        authorName: profile.name,
+        authorRole: "employee",
+        title: form.title.trim(),
+        content: form.content.trim(),
+        createdAt: serverTimestamp(),
+      });
+      toast.success("등록되었습니다");
+      setOpen(false);
+    } catch (err) {
+      toast.error(`등록에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (p) => {
+    if (!(await confirm(`"${p.title}" 글을 삭제하시겠습니까?`, "delete"))) return;
+    await deleteDoc(doc(db, "freePosts", p.id));
+    setViewing(null);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="px-0.5">
+        <p className="text-sm font-semibold text-ink">자유게시판</p>
+        <p className="mt-0.5 text-xs text-muted">직원/관리자 누구나 자유롭게 글을 쓸 수 있어요</p>
+      </div>
+      <Button className="w-full" onClick={openNew}>
+        <Plus size={16} /> 글쓰기
+      </Button>
+      {sorted.length === 0 ? (
+        <Card className="flex flex-col items-center gap-1 p-8 text-center">
+          <p className="text-sm font-medium text-ink">등록된 글이 없습니다</p>
+          <p className="text-xs text-muted">첫 번째 글을 남겨보세요.</p>
+        </Card>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {sorted.map((p, idx) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setViewing(p)}
+              className={`flex w-full items-center gap-2 px-4 py-3.5 text-left active:bg-slate-50 ${idx > 0 ? "border-t border-slate-100" : ""}`}
+            >
+              <Badge tone={p.authorRole === "admin" ? "primary" : "muted"}>{p.authorRole === "admin" ? "관리자" : "직원"}</Badge>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{p.title}</span>
+              <span className="shrink-0 text-xs text-muted">
+                {p.createdAt?.toDate ? formatDate(p.createdAt.toDate().toISOString().slice(0, 10)) : ""}
+              </span>
+              <ChevronRight size={15} className="shrink-0 text-muted" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="자유게시판 글쓰기"
+        footer={
+          <Button className="w-full" onClick={submit} disabled={saving || !form.title.trim() || !form.content.trim()}>
+            {saving ? "등록 중..." : "등록"}
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">제목</span>
+            <input
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">내용</span>
+            <textarea
+              rows={5}
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              value={form.content}
+              onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+            />
+          </label>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(viewing)}
+        onClose={() => setViewing(null)}
+        title="자유게시판 상세"
+        footer={
+          <div className="flex w-full gap-2">
+            {viewing?.authorUid === user?.uid && (
+              <Button variant="outline" className="flex-1" onClick={() => remove(viewing)}>
+                <Trash2 size={14} /> 삭제
+              </Button>
+            )}
+            <Button className="flex-1" onClick={() => setViewing(null)}>
+              닫기
+            </Button>
+          </div>
+        }
+      >
+        {viewing && (
+          <div className="space-y-3 text-sm">
+            <p className="flex items-center gap-1.5 font-semibold text-ink">
+              <Badge tone={viewing.authorRole === "admin" ? "primary" : "muted"}>{viewing.authorRole === "admin" ? "관리자" : "직원"}</Badge>
+              {viewing.title}
+            </p>
+            <p className="text-xs text-muted">
+              {viewing.authorName} · {viewing.createdAt?.toDate ? formatDate(viewing.createdAt.toDate().toISOString().slice(0, 10)) : ""}
             </p>
             <p className="whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-ink">{viewing.content}</p>
           </div>
