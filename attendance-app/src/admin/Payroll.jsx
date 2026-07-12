@@ -23,6 +23,8 @@ import {
   Trash2,
   CheckSquare,
   Settings2,
+  Receipt,
+  Printer,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -219,6 +221,79 @@ export default function Payroll() {
   }, [employees, filters]);
 
   const payrollFor = (uid) => payrolls.find((p) => p.uid === uid);
+
+  const [previewFor, setPreviewFor] = useState(null); // { emp, p }
+  const openPreview = (emp) => {
+    const p = payrollFor(emp.id);
+    if (!p) return;
+    setPreviewFor({ emp, p });
+  };
+
+  const printPayslip = () => {
+    if (!previewFor) return;
+    const { emp, p } = previewFor;
+    const d = p.deductions || {};
+    const row = (label, value, strong) =>
+      `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;${strong ? "font-weight:700;border-top:1px dashed #cbd5e1;margin-top:6px;padding-top:10px;" : "color:#475569;"}"><span>${label}</span><span style="color:#0f172a;font-weight:${strong ? 700 : 600}">${Number(value || 0).toLocaleString()}원</span></div>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>급여명세서 - ${emp.name}</title>
+      <style>body{font-family:'Malgun Gothic',sans-serif;max-width:420px;margin:24px auto;color:#0f172a;}
+      .card{border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;margin-bottom:16px;}
+      .head{background:#0f172a;color:#fff;text-align:center;padding:16px;}
+      .info{padding:16px;border-bottom:1px dashed #e2e8f0;font-size:13px;}
+      .info div{display:flex;justify-content:space-between;padding:2px 0;}
+      .net{padding:20px;text-align:center;}
+      .body{padding:16px;}
+      .title{font-weight:700;font-size:13px;margin-bottom:6px;}
+      </style></head><body>
+      <div class="card">
+        <div class="head"><p style="margin:0;font-size:12px;opacity:.7">급여명세서</p><p style="margin:4px 0 0;font-size:17px;font-weight:700">${companyName || ""}</p></div>
+        <div class="info">
+          <div><span>성명</span><span style="font-weight:600">${emp.name}${emp.position ? ` (${emp.position})` : ""}</span></div>
+          <div><span>지급대상기간</span><span style="font-weight:600">${p.month}</span></div>
+          <div><span>발급일</span><span style="font-weight:600">${toDateKey()}</span></div>
+        </div>
+        <div class="net"><span style="background:#eff6ff;color:#2563eb;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600">실수령액</span><p style="font-size:28px;font-weight:800;margin:8px 0 0">${Number(p.netPay || 0).toLocaleString()}원</p></div>
+      </div>
+      <div class="card"><div class="body">
+        <p class="title">지급내역 ${Number(p.grossPay || 0).toLocaleString()}원</p>
+        ${row("기본급", p.base)}${row("연장수당", p.overtimePay)}${row("주휴수당", p.weeklyAllowance)}${row("기타수당", p.allowances)}${row("식대", p.mealAllowance)}${row("지각공제", p.lateDeduction)}${row("조퇴공제", p.earlyLeaveDeduction)}${row("지급합계", p.grossPay, true)}
+      </div></div>
+      <div class="card"><div class="body">
+        <p class="title">공제내역</p>
+        ${row("국민연금", d.pension)}${row("건강보험", d.health)}${row("장기요양보험", d.longTermCare)}${row("고용보험", d.employment)}${row("공제합계", d.total, true)}
+      </div></div>
+      <p style="text-align:center;font-size:11px;color:#94a3b8">본 명세서는 시스템에서 자동 생성되었습니다.</p>
+      </body></html>`;
+    const win = window.open("", "_blank", "width=480,height=720");
+    if (!win) {
+      toast.error("팝업이 차단되었습니다. 팝업 차단을 해제해주세요.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const sharePayslip = async () => {
+    if (!previewFor) return;
+    const { emp, p } = previewFor;
+    const text = `[급여명세서] ${emp.name} · ${p.month} · 실수령액 ${Number(p.netPay || 0).toLocaleString()}원`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "급여명세서", text });
+      } catch {
+        // 사용자가 공유를 취소한 경우
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("클립보드에 복사했습니다");
+    } catch {
+      toast.error("공유하기를 지원하지 않는 환경입니다.");
+    }
+  };
 
   const dailyHoursFor = (uid) => {
     const records = attendance.filter((a) => a.uid === uid && a.status === "출근").sort((a, b) => a.date.localeCompare(b.date));
@@ -917,9 +992,16 @@ export default function Payroll() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <Button size="sm" variant="outline" onClick={() => openFor(emp)}>
-                        <Wallet size={14} /> {p ? "수정" : "생성"}
-                      </Button>
+                      <div className="flex flex-nowrap items-center justify-center gap-1.5">
+                        <Button size="sm" variant="outline" onClick={() => openFor(emp)}>
+                          <Wallet size={14} /> {p ? "수정" : "생성"}
+                        </Button>
+                        {p && (
+                          <Button size="sm" variant="outline" onClick={() => openPreview(emp)}>
+                            <Receipt size={14} /> 명세서
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1207,6 +1289,99 @@ export default function Payroll() {
             />
           </label>
         </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(previewFor)}
+        onClose={() => setPreviewFor(null)}
+        title="급여명세서 미리보기"
+        footer={
+          <>
+            <Button variant="outline" onClick={sharePayslip}>
+              공유
+            </Button>
+            <Button variant="outline" onClick={printPayslip}>
+              <Printer size={13} /> 인쇄/저장
+            </Button>
+            <Button onClick={() => setPreviewFor(null)}>닫기</Button>
+          </>
+        }
+      >
+        {previewFor && (
+          <div className="space-y-4">
+            <Card className="overflow-hidden p-0">
+              <div className="space-y-1 bg-ink px-5 py-4 text-center text-white">
+                <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-white/70">
+                  <Receipt size={13} /> 급여명세서
+                </p>
+                <p className="text-lg font-bold">{companyName || ""}</p>
+              </div>
+              <div className="space-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">성명</span>
+                  <span className="font-semibold text-ink">
+                    {previewFor.emp.name}{previewFor.emp.position ? ` (${previewFor.emp.position})` : ""}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">지급대상기간</span>
+                  <span className="font-semibold text-ink">{previewFor.p.month}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">발급일</span>
+                  <span className="font-semibold text-ink">{toDateKey()}</span>
+                </div>
+              </div>
+              <div className="p-5 text-center">
+                <span className="inline-block rounded-full bg-primary-light px-3 py-1 text-xs font-semibold text-primary">실수령액</span>
+                <p className="mt-2 text-3xl font-extrabold text-ink">{Number(previewFor.p.netPay || 0).toLocaleString()}원</p>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <p className="mb-2 text-sm font-bold text-ink">지급내역 {Number(previewFor.p.grossPay || 0).toLocaleString()}원</p>
+              {[
+                ["기본급", previewFor.p.base],
+                ["연장수당", previewFor.p.overtimePay],
+                ["주휴수당", previewFor.p.weeklyAllowance],
+                ["기타수당", previewFor.p.allowances],
+                ["식대", previewFor.p.mealAllowance],
+                ["지각공제", previewFor.p.lateDeduction],
+                ["조퇴공제", previewFor.p.earlyLeaveDeduction],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
+                  <span>{label}</span>
+                  <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
+                </div>
+              ))}
+              <div className="my-2 border-t border-dashed border-slate-200" />
+              <div className="flex items-center justify-between py-1.5 text-sm font-bold text-ink">
+                <span>지급합계</span>
+                <span>{Number(previewFor.p.grossPay || 0).toLocaleString()}원</span>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <p className="mb-2 text-sm font-semibold text-ink">공제내역</p>
+              {[
+                ["국민연금", previewFor.p.deductions?.pension],
+                ["건강보험", previewFor.p.deductions?.health],
+                ["장기요양보험", previewFor.p.deductions?.longTermCare],
+                ["고용보험", previewFor.p.deductions?.employment],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
+                  <span>{label}</span>
+                  <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
+                </div>
+              ))}
+              <div className="my-2 border-t border-dashed border-slate-200" />
+              <div className="flex items-center justify-between py-1.5 text-sm font-bold text-ink">
+                <span>공제합계</span>
+                <span>{Number(previewFor.p.deductions?.total || 0).toLocaleString()}원</span>
+              </div>
+            </Card>
+          </div>
+        )}
       </Modal>
     </div>
   );
