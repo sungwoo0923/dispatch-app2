@@ -366,7 +366,6 @@ export default function Payroll() {
           ${info("성명", emp.name)}
           ${info("생년월일", birthDateDisplay(emp.residentNumberFront))}
           ${info("입사일", emp.hireDate ? formatDate(emp.hireDate) : "-")}
-          ${info("직책", emp.position || "-")}
           ${info("직급", emp.position || "-")}
           ${info("부서", emp.team || "-")}
           ${info("지급일", payDateFor(p))}
@@ -1585,7 +1584,6 @@ export default function Payroll() {
                   ["성명", previewFor.emp.name],
                   ["생년월일", birthDateDisplay(previewFor.emp.residentNumberFront)],
                   ["입사일", previewFor.emp.hireDate ? formatDate(previewFor.emp.hireDate) : "-"],
-                  ["직책", previewFor.emp.position || "-"],
                   ["직급", previewFor.emp.position || "-"],
                   ["부서", previewFor.emp.team || "-"],
                   ["지급일", payDateFor(previewFor.p)],
