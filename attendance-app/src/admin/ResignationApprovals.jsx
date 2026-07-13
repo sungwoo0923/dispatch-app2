@@ -174,6 +174,7 @@ export default function ResignationApprovals() {
           uid: req.uid,
           title: "사직서 처리가 완료되었습니다",
           message: `${req.resignDate ? formatDate(req.resignDate) : ""} 자로 퇴직 처리되었습니다.`,
+          link: "/contracts",
           read: false,
           createdAt: serverTimestamp(),
         });
@@ -183,6 +184,7 @@ export default function ResignationApprovals() {
           uid: req.uid,
           title: "사직서가 반려되었습니다",
           message: stage === "ceo" ? req.ceoNote || noteText || "" : "대표 결재가 진행 중입니다.",
+          link: "/contracts",
           read: false,
           createdAt: serverTimestamp(),
         });
@@ -192,6 +194,7 @@ export default function ResignationApprovals() {
           uid: req.uid,
           title: "사직서 처리가 보류되었습니다",
           message: noteText || "",
+          link: "/contracts",
           read: false,
           createdAt: serverTimestamp(),
         });

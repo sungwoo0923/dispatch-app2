@@ -190,6 +190,7 @@ export default function AttendanceBoard() {
       uid: req.uid,
       title: "출근기록 변경 요청이 승인되었습니다",
       message: `${formatDate(req.date)} ${req.fieldLabel} → ${req.requestedTime}`,
+      link: "/history",
       read: false,
       createdAt: serverTimestamp(),
     });
@@ -208,6 +209,7 @@ export default function AttendanceBoard() {
       uid: rejectTarget.uid,
       title: "출근기록 변경 요청이 반려되었습니다",
       message: `${formatDate(rejectTarget.date)} ${rejectTarget.fieldLabel}${rejectNote.trim() ? ` · ${rejectNote.trim()}` : ""}`,
+      link: "/history",
       read: false,
       createdAt: serverTimestamp(),
     });

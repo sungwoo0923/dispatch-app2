@@ -77,6 +77,7 @@ export default function AdminMobileLeaveApprovals() {
           uid: detail.leave.uid,
           title: nextStatus === "approved" ? `${detail.leave.type} 신청이 승인되었습니다` : `${detail.leave.type} 신청이 반려되었습니다`,
           message: nextStatus === "rejected" ? note || "" : "",
+          link: "/leave",
           read: false,
           createdAt: serverTimestamp(),
         });

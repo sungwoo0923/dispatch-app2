@@ -104,6 +104,7 @@ export default function LeaveApprovals() {
         uid: lv.uid,
         title: nextStatus === "approved" ? `${lv.type} 신청이 승인되었습니다` : `${lv.type} 신청이 반려되었습니다`,
         message: nextStatus === "rejected" ? note || "" : "",
+        link: "/leave",
         read: false,
         createdAt: serverTimestamp(),
       });
@@ -132,6 +133,7 @@ export default function LeaveApprovals() {
           uid: detailView.leave.uid,
           title: nextStatus === "approved" ? `${detailView.leave.type} 신청이 승인되었습니다` : `${detailView.leave.type} 신청이 반려되었습니다`,
           message: nextStatus === "rejected" ? detailNote || "" : "",
+          link: "/leave",
           read: false,
           createdAt: serverTimestamp(),
         });

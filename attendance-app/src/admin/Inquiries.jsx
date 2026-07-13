@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { MessageSquare } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -44,6 +44,19 @@ export default function Inquiries() {
         repliedBy: profile.name,
         repliedAt: serverTimestamp(),
         status: "답변완료",
+      });
+      // 답변 완료를 문의 작성자에게도 알려야 하는데, 예전에는 inquiries
+      // 문서만 갱신하고 알림을 만들지 않아 직원이 모바일 알림 종/체크탭에서
+      // 답변이 왔는지 알 방법이 없었다.
+      await addDoc(collection(db, "notifications"), {
+        companyId: profile.companyId,
+        uid: replyTarget.fromUid,
+        title: "문의 답변 완료",
+        message: `"${replyTarget.subject}" 문의에 답변이 등록되었습니다.`,
+        type: "inquiry",
+        link: "/board",
+        read: false,
+        createdAt: serverTimestamp(),
       });
       toast.success("답변이 등록되었습니다");
       setReplyTarget(null);

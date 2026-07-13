@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { ArrowLeft, Bell, CheckCheck, Trash2 } from "lucide-react";
 import { db } from "../firebase";
@@ -27,6 +27,7 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
@@ -105,6 +106,7 @@ export default function NotificationsPage() {
       return;
     }
     if (!n.read) updateDoc(doc(db, "notifications", n.id), { read: true });
+    if (n.link) navigate(n.link);
   };
 
   return (

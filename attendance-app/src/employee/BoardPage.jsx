@@ -288,6 +288,7 @@ function InquiryTab() {
   const [viewing, setViewing] = useState(null);
   const [open, setOpen] = useState(false);
   const [adminSearch, setAdminSearch] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [form, setForm] = useState({ toUid: "", subject: "", message: "" });
   const [saving, setSaving] = useState(false);
 
@@ -314,6 +315,7 @@ function InquiryTab() {
   const openNew = () => {
     setForm({ toUid: "", subject: "", message: "" });
     setAdminSearch("");
+    setPickerOpen(false);
     setOpen(true);
   };
 
@@ -406,29 +408,43 @@ function InquiryTab() {
         }
       >
         <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">받는 사람 검색</span>
+          <label className="relative block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">받는 사람</span>
             <input
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
               placeholder="이름으로 검색"
               value={adminSearch}
-              onChange={(e) => setAdminSearch(e.target.value)}
+              onFocus={() => setPickerOpen(true)}
+              onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+              onChange={(e) => {
+                setAdminSearch(e.target.value);
+                setForm((f) => ({ ...f, toUid: "" }));
+                setPickerOpen(true);
+              }}
             />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">받는 사람 선택</span>
-            <select
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={form.toUid}
-              onChange={(e) => setForm((f) => ({ ...f, toUid: e.target.value }))}
-            >
-              <option value="">선택</option>
-              {filteredAdmins.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}{a.position ? ` / ${a.position}` : ""}{a.team ? ` / ${a.team}` : ""}
-                </option>
-              ))}
-            </select>
+            {pickerOpen && (
+              <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                {filteredAdmins.length === 0 ? (
+                  <p className="px-3.5 py-3 text-xs text-muted">일치하는 관리자가 없습니다.</p>
+                ) : (
+                  filteredAdmins.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm hover:bg-slate-50 ${form.toUid === a.id ? "bg-primary-light" : ""}`}
+                      onClick={() => {
+                        setForm((f) => ({ ...f, toUid: a.id }));
+                        setAdminSearch(a.name);
+                        setPickerOpen(false);
+                      }}
+                    >
+                      <span className="text-ink">{a.name}</span>
+                      <span className="text-xs text-muted">{[a.position, a.team].filter(Boolean).join(" / ")}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">제목</span>
