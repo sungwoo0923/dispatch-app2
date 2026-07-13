@@ -36,6 +36,14 @@ const CHECK_OUT_RADIUS_M = 300;
 // 이내에서만 허용한다 — 관리자가 지정한 근무지에 실제로 도착했는지 확인하는
 // 마지막 관문이므로 workSite.radiusM 설정과 무관하게 고정값을 쓴다.
 const MANUAL_CHECK_IN_RADIUS_M = 50;
+// 위치 권한이 "정확한 위치(Precise Location)"가 아닌 대략적 위치로 내려가
+// 있거나, 기기가 실내/지하 등이라 GPS 신호를 못 잡으면 브라우저가 Wi-Fi/IP
+// 기반 위치를 대신 주는데, 이때 accuracy가 수만 m로 찍히면서 실제로는
+// 근무지 안에 있어도 거리 계산이 완전히 틀어져 "반경 밖"으로 보인다. 이런
+// 신뢰할 수 없는 좌표로 반경 판정을 내리지 않도록 accuracy가 이 값보다
+// 나쁘면(클수록 부정확) 자동출퇴근/수동출근 판정에서 제외하고, 화면에는
+// "위치 정확도가 낮습니다" 안내를 보여준다.
+const POOR_ACCURACY_THRESHOLD_M = 300;
 
 async function writeAttendance({ uid, name, companyId, status, extra }) {
   const dateKey = toDateKey();
@@ -95,6 +103,10 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
     async (lat, lng, acc) => {
       if (acc != null) setAccuracy(acc);
       if (!workSite?.lat || !workSite?.lng) return;
+      // 정확도가 너무 낮은(수백m 이상 오차) 좌표는 반경 판정에 쓰지 않는다 —
+      // 화면에는 이전에 확보한 정상 거리값을 그대로 두고, accuracy만 갱신해
+      // "위치 정확도가 낮습니다" 안내가 뜨도록 한다.
+      if (acc != null && acc > POOR_ACCURACY_THRESHOLD_M) return;
       const d = distanceMeters(lat, lng, workSite.lat, workSite.lng);
       setDistance(d);
 
@@ -207,7 +219,10 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
   const manualCheckIn = useCallback(
     async (extraFields = {}) => {
       if (!canCheckIn) return { ok: false, reason: "not-confirmed" };
-      if (distance == null) return { ok: false, reason: "no-location" };
+      if (distance == null) {
+        if (accuracy != null && accuracy > POOR_ACCURACY_THRESHOLD_M) return { ok: false, reason: "poor-accuracy" };
+        return { ok: false, reason: "no-location" };
+      }
       if (distance > MANUAL_CHECK_IN_RADIUS_M) return { ok: false, reason: "too-far" };
 
       const now = new Date();
@@ -231,7 +246,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
       refreshToday();
       return { ok: true };
     },
-    [uid, name, companyId, distance, workSite, refreshToday, canCheckIn, scheduleStartTime]
+    [uid, name, companyId, distance, accuracy, workSite, refreshToday, canCheckIn, scheduleStartTime]
   );
 
   const manualCheckOut = useCallback(async () => {

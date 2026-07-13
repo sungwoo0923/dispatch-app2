@@ -403,6 +403,8 @@ export default function Home() {
     }
     if (result.reason === "too-far") {
       toast.error(`근무지 반경 ${manualCheckInRadiusM}m 이내에서만 출근이 가능합니다.`);
+    } else if (result.reason === "poor-accuracy") {
+      toast.error("위치 정확도가 낮아 확인할 수 없습니다. 위치 서비스에서 '정확한 위치'를 켜거나 실외로 이동해 다시 시도해주세요.");
     } else if (result.reason === "no-location") {
       if (workSite && (workSite.lat == null || workSite.lng == null)) {
         toast.error("이 근무지에는 위치 좌표가 설정되어 있지 않아 출근할 수 없습니다. 관리자에게 문의해주세요.");
@@ -704,6 +706,10 @@ export default function Home() {
             {workSite.lat == null || workSite.lng == null ? (
               <p className="flex items-center gap-1.5 text-xs text-danger">
                 <Navigation size={13} /> 이 근무지에는 위치 좌표가 설정되어 있지 않습니다. 관리자에게 문의해주세요.
+              </p>
+            ) : distance == null && accuracy != null && accuracy > 300 ? (
+              <p className="flex items-center gap-1.5 text-xs text-warning">
+                <Navigation size={13} /> 위치 정확도가 낮습니다 (±{Math.round(accuracy)}m). 휴대폰 설정에서 위치 서비스의 "정확한 위치"가 켜져 있는지 확인하거나, 실외로 이동해 다시 시도해주세요.
               </p>
             ) : distance != null ? (
               <div>

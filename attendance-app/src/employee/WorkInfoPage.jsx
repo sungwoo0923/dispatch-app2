@@ -231,6 +231,11 @@ export default function WorkInfoPage() {
               {" · "}
               {myLocation.updatedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} 기준
             </p>
+            {myLocation.accuracy > 300 && (
+              <p className="text-xs text-warning">
+                위치 정확도가 낮습니다. 실제 거리와 다를 수 있어요 — 휴대폰 설정에서 위치 서비스의 "정확한 위치"를 켜거나 실외로 이동해 다시 갱신해보세요.
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-xs text-muted">{locationError || "위치 갱신 버튼을 눌러 현재 위치를 확인하세요"}</p>
