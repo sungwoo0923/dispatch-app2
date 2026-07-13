@@ -51,3 +51,15 @@ export async function signSafetyAttendance({ attendanceDocId, companyId, siteId,
     supervisorName,
   });
 }
+
+// 관리자가 강제출근처리(또는 반경 자동출근)로 attendance 문서를 만들면
+// 서명 절차 없이 checkInTime이 채워져, 이후 근로자가 정상 출근 버튼을 다시
+// 누를 방법이 없어 근로계약동의서(일용직) 서명이 영구히 누락된다.
+// signSafetyAttendance와 동일하게, 이미 존재하는 attendance 문서에 서명만
+// 나중에 덧붙이는 용도.
+export async function signContractAttendance({ attendanceDocId, signatureDataUrl }) {
+  await updateDoc(doc(db, "attendance", attendanceDocId), {
+    contractSignatureDataUrl: signatureDataUrl,
+    contractSignedAt: new Date().toISOString(),
+  });
+}

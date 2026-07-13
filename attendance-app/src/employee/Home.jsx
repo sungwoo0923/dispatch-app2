@@ -41,8 +41,8 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
-import { formatTime, toDateKey } from "../utils/dateUtils";
-import { getPrimarySafetyManager } from "../utils/safety";
+import { formatTime, toDateKey, attendanceDocId } from "../utils/dateUtils";
+import { getPrimarySafetyManager, signSafetyAttendance, signContractAttendance } from "../utils/safety";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { nextContractCycleAnchor, isWithinLeadWindow } from "../utils/contractCycle";
 import { useToast } from "../hooks/useToast";
@@ -95,6 +95,7 @@ export default function Home() {
   const [videoMuted, setVideoMuted] = useState(true);
   const homeVideoRef = useRef(null);
   const [showChecklist, setShowChecklist] = useState(false);
+  const [retroactiveSign, setRetroactiveSign] = useState(false);
   const [docStep, setDocStep] = useState(0);
   const [docRead, setDocRead] = useState({});
   const [docSignatures, setDocSignatures] = useState({});
@@ -358,7 +359,18 @@ export default function Home() {
   // 일용직은 근로계약동의서까지 매 출근 시 확인/서명해야 하고, 그 외
   // 근무형태는 안전교육일지만 확인/서명하면 된다.
   const requiredDocs = profile?.employmentType === "일용직" ? ["contract", "safety"] : ["safety"];
-  const currentDocKey = requiredDocs[docStep];
+
+  // 관리자 강제출근처리나 반경 자동출근은 서명 절차 없이 checkInTime만
+  // 채우고 끝나버려, 정상 출근 버튼(checkedIn이면 비활성화됨)으로는 다시
+  // 서명할 방법이 없었다 — 오늘 출근 기록에 필요한 서명이 빠져있으면
+  // "사후 서명" 모드로 이 체크리스트를 다시 띄운다.
+  const pendingDailyDocs = checkedIn
+    ? requiredDocs.filter((k) =>
+        k === "safety" ? !todayAttendance?.safetySignature : !todayAttendance?.contractSignatureDataUrl
+      )
+    : [];
+  const activeDocs = retroactiveSign ? pendingDailyDocs : requiredDocs;
+  const currentDocKey = activeDocs[docStep];
 
   const openCheckIn = () => {
     if (!workSite || checkedIn) return;
@@ -370,15 +382,61 @@ export default function Home() {
       toast.error("미이수 안전교육자료가 있습니다. 안전교육 메뉴에서 먼저 이수해주세요.");
       return;
     }
+    setRetroactiveSign(false);
     setDocRead({});
     setDocSignatures({});
     setDocStep(0);
     setShowChecklist(true);
   };
 
+  // 출근이 이미 처리돼있는데(강제출근 등) 서류 서명만 빠진 경우, 체크탭에
+  // 들어올 때마다 자동으로 서명 팝업을 띄운다.
+  useEffect(() => {
+    if (!checkedIn || showChecklist || pendingDailyDocs.length === 0) return;
+    setRetroactiveSign(true);
+    setDocRead({});
+    setDocSignatures({});
+    setDocStep(0);
+    setShowChecklist(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkedIn, pendingDailyDocs.length]);
+
   const markDocRead = () => setDocRead((r) => ({ ...r, [currentDocKey]: true }));
 
+  // 사후 서명 모드에서는 이미 존재하는 오늘자 attendance 문서에 서명
+  // 필드만 덧붙이면 된다 — manualCheckIn은 반경/스케줄 재검증을 동반하는
+  // "지금 출근하기" 흐름이라, 이미 출근 처리된 건을 다시 통과시키려 하면
+  // 위치가 근무지 밖이거나 화면을 꺼둔 사이일 때 불필요하게 실패할 수 있다.
+  const finalizeRetroactiveSign = async (signatures) => {
+    setSavingSignature(true);
+    try {
+      const docId = attendanceDocId(user.uid, todayAttendance?.date || toDateKey());
+      if (signatures.safety) {
+        await signSafetyAttendance({
+          attendanceDocId: docId,
+          companyId: profile.companyId,
+          siteId: workSite?.id,
+          signatureDataUrl: signatures.safety,
+        });
+      }
+      if (signatures.contract) {
+        await signContractAttendance({ attendanceDocId: docId, signatureDataUrl: signatures.contract });
+      }
+      toast.success("서명이 완료되었습니다");
+      setShowChecklist(false);
+      setRetroactiveSign(false);
+    } catch (err) {
+      toast.error(`서명 저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    } finally {
+      setSavingSignature(false);
+    }
+  };
+
   const finalizeCheckIn = async (signatures) => {
+    if (retroactiveSign) {
+      await finalizeRetroactiveSign(signatures);
+      return;
+    }
     let extra = {};
     if (signatures.safety) {
       const manager = workSite ? await getPrimarySafetyManager(profile.companyId, workSite.id) : null;
@@ -440,7 +498,7 @@ export default function Home() {
     setDocSignatures(nextSignatures);
     padRef.current.clear();
 
-    if (docStep + 1 < requiredDocs.length) {
+    if (docStep + 1 < activeDocs.length) {
       setDocStep((s) => s + 1);
       return;
     }
@@ -770,7 +828,7 @@ export default function Home() {
       <Modal
         open={showChecklist}
         onClose={() => setShowChecklist(false)}
-        title={`서류작성 (${docStep + 1}/${requiredDocs.length}) · ${currentDocKey ? DOC_META[currentDocKey].title : ""}`}
+        title={`서류작성 (${docStep + 1}/${activeDocs.length}) · ${currentDocKey ? DOC_META[currentDocKey].title : ""}`}
         footer={
           docRead[currentDocKey] ? null : (
             <Button className="w-full" onClick={markDocRead}>
