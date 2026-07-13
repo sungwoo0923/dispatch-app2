@@ -36,6 +36,7 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
+import SmsButton from "../components/SmsButton";
 import { calcMonthlyPayroll, getSiteInsuranceRates } from "../utils/payroll";
 import { toMonthKey, toDateKey, formatTime, formatDate, birthDateFromResident } from "../utils/dateUtils";
 import { downloadCsv } from "../utils/exportCsv";
@@ -464,6 +465,17 @@ export default function Payroll() {
     }
     setSelected(new Set());
     toast.success(`${count}건 삭제되었습니다`);
+  };
+
+  // 우클릭 메뉴에서 행 하나만 바로 삭제(초기화) — 여러 명을 선택해야만
+  // 지울 수 있던 기존 "선택삭제"와 달리, 잘못 입력한 한 명만 빠르게
+  // 되돌리고 싶을 때 체크박스 선택 없이 바로 처리한다.
+  const deleteOnePayroll = async (emp) => {
+    const p = payrollFor(emp.id);
+    if (!p) return;
+    if (!(await confirm(`${emp.name}님의 ${p.month} 정산 데이터를 삭제하시겠습니까? 삭제하면 처음부터 다시 입력해야 합니다.`, "delete"))) return;
+    await deleteDoc(doc(db, "payrolls", p.id));
+    toast.success("삭제되었습니다");
   };
 
   const openFor = (emp) => {
@@ -1072,6 +1084,8 @@ export default function Payroll() {
                 </th>
                 <th className="px-4 py-3 font-semibold">순번</th>
                 <th className="px-4 py-3 font-semibold">이름</th>
+                <th className="px-4 py-3 font-semibold">전화번호</th>
+                <th className="px-4 py-3 font-semibold">센터</th>
                 <th className="px-4 py-3 font-semibold">근무구분</th>
                 <th className="px-4 py-3 font-semibold">근무형태</th>
                 <th className="px-4 py-3 font-semibold">부서</th>
@@ -1106,6 +1120,13 @@ export default function Payroll() {
                     </td>
                     <td className="px-4 py-3 text-ink">{i + 1}</td>
                     <td className="px-4 py-3 text-ink">{emp.name}</td>
+                    <td className="px-4 py-3 text-ink">
+                      <span className="inline-flex items-center gap-1">
+                        {emp.phone || "-"}
+                        {emp.phone && <SmsButton phone={emp.phone} />}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
                     <td className="px-4 py-3 text-ink">{emp.shiftType || "-"}</td>
                     <td className="px-4 py-3 text-ink">{emp.employmentType || "-"}</td>
                     <td className="px-4 py-3 text-ink">{emp.team || "-"}</td>
@@ -1155,7 +1176,7 @@ export default function Payroll() {
               })}
               {filteredEmployees.length === 0 && (
                 <tr>
-                  <td colSpan={18} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={20} className="px-4 py-6 text-center text-xs text-muted">
                     조건에 맞는 근로자가 없습니다.
                   </td>
                 </tr>
@@ -1209,6 +1230,18 @@ export default function Payroll() {
               }}
             >
               명세서
+            </button>
+          )}
+          {payrollFor(rowMenu.emp.id) && (
+            <button
+              type="button"
+              className="block w-full px-3 py-1.5 text-left text-sm text-danger hover:bg-slate-50"
+              onClick={() => {
+                deleteOnePayroll(rowMenu.emp);
+                closeRowMenu();
+              }}
+            >
+              삭제
             </button>
           )}
         </div>
