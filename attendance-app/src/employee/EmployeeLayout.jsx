@@ -32,7 +32,7 @@ export default function EmployeeLayout() {
   const [messengerUnread, setMessengerUnread] = useState(0);
   const TABS = TAB_DEFS.map((tab) => ({ ...tab, label: t(tab.labelKey) }));
 
-  const { pendingContracts, pendingSafetyCount } = useOnboardingPending(user, profile?.companyId);
+  const { pendingContracts, pendingSafetyCount, loading: pendingLoading } = useOnboardingPending(user, profile?.companyId);
   const [onboardingPrompt, setOnboardingPrompt] = useState(false);
   const prevDoneCountRef = useRef(-1);
 
@@ -65,14 +65,24 @@ export default function EmployeeLayout() {
   // 완료할 때마다(이수완료 카운트가 늘어날 때마다) 다음 미완료 항목을
   // 자동으로 다시 안내한다 — 완료 → 다음 항목 팝업이 이어지는 흐름.
   useEffect(() => {
+    // profile/pendingContracts/pendingSafetyCount가 아직 서버에서 도착하기
+    // 전에는 완료 여부를 판단할 수 없다 — 로딩 중에 판단하면 "아직 서명 안
+    // 했는데 완료로 보였다가 데이터가 오면 다시 미완료로 바뀌는" 깜빡임이
+    // 생긴다. 데이터가 실제로 도착한 뒤에만 판단한다.
+    if (!profile || pendingLoading) return;
     if (onboardingAllDone) return;
     if (skippedToday()) return;
-    if (onboardingDoneCount > prevDoneCountRef.current) {
+    // 완료 항목이 하나 늘었을 때(다음 단계 자동 안내)뿐 아니라, 체크(홈)
+    // 탭에 도착할 때마다도 다시 띄운다 — "나중에 하기"로 닫은 뒤 체크 탭을
+    // 다시 방문하면 매번 안내가 뜨고, "오늘 하루 보지 않기"를 누른 경우만
+    // 뜨지 않는다.
+    const doneIncreased = onboardingDoneCount > prevDoneCountRef.current;
+    const onCheckTab = location.pathname === "/";
+    if (doneIncreased || onCheckTab) {
       prevDoneCountRef.current = onboardingDoneCount;
       setOnboardingPrompt(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onboardingAllDone, onboardingDoneCount]);
+  }, [profile, pendingLoading, onboardingAllDone, onboardingDoneCount, location.pathname]);
 
   const skipOnboardingToday = () => {
     if (skipTodayKey) localStorage.setItem(skipTodayKey, "1");

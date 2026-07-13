@@ -16,6 +16,7 @@ import BiometricSettingsCard from "../components/BiometricSettingsCard";
 import BankAccountFields from "../components/BankAccountFields";
 import { shouldLockInsteadOfSignOut, lockDevice } from "../utils/biometricAuth";
 import { BANK_OPTIONS } from "../constants/hr";
+import { isPlausibleAccountLength } from "../utils/bankAccount";
 import { formatResidentNumber } from "../utils/phoneAuth";
 import { openAddressSearch } from "../utils/daumPostcode";
 
@@ -108,6 +109,12 @@ export default function MyInfoPage() {
       toast.error(t("myInfo.requiredMissing"));
       firstMissing.ref.current?.focus();
       firstMissing.ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (!isPlausibleAccountLength(basic.bankName, basic.bankAccount)) {
+      toast.error(`${basic.bankName} 계좌번호 자릿수가 맞지 않습니다. 다시 확인해주세요.`);
+      bankAccountRef.current?.focus();
+      bankAccountRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     setSaving(true);

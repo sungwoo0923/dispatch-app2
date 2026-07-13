@@ -304,6 +304,13 @@ const STRINGS = {
     zh: "创建聊天室失败。",
     th: "สร้างห้องแชทไม่สำเร็จ",
   },
+  "messenger.sendFailed": {
+    ko: "메시지 전송에 실패했습니다.",
+    en: "Failed to send message.",
+    vi: "Gửi tin nhắn thất bại.",
+    zh: "消息发送失败。",
+    th: "ส่งข้อความไม่สำเร็จ",
+  },
   "messenger.geoUnsupported": {
     ko: "위치 기능을 지원하지 않는 브라우저입니다.",
     en: "This browser doesn't support location.",
@@ -415,6 +422,11 @@ const STRINGS = {
   "messenger.tryAgain": { ko: "다시 시도해주세요", en: "Please try again", vi: "Vui lòng thử lại", zh: "请重试", th: "โปรดลองอีกครั้ง" },
   "messenger.muteOn": { ko: "알림음 끄기", en: "Mute notification sound", vi: "Tắt âm thanh thông báo", zh: "关闭提示音", th: "ปิดเสียงแจ้งเตือน" },
   "messenger.muteOff": { ko: "알림음 켜기", en: "Unmute notification sound", vi: "Bật âm thanh thông báo", zh: "开启提示音", th: "เปิดเสียงแจ้งเตือน" },
+  "messenger.settingsTitle": { ko: "메신저 설정", en: "Messenger settings", vi: "Cài đặt tin nhắn", zh: "消息设置", th: "การตั้งค่าข้อความ" },
+  "messenger.settingsSound": { ko: "알림음", en: "Notification sound", vi: "Âm thanh thông báo", zh: "提示音", th: "เสียงแจ้งเตือน" },
+  "messenger.settingsVibrate": { ko: "진동", en: "Vibration", vi: "Rung", zh: "震动", th: "การสั่น" },
+  "messenger.settingsChimeStyle": { ko: "알림음 종류", en: "Sound style", vi: "Kiểu âm thanh", zh: "提示音类型", th: "รูปแบบเสียง" },
+  "messenger.settingsPreview": { ko: "재생", en: "Play", vi: "Phát", zh: "播放", th: "เล่น" },
 
   "loginCarousel.slide1Title": { ko: "위치 기반 자동출근", en: "Location-based Auto Check-in", vi: "Chấm công tự động theo vị trí", zh: "基于位置的自动打卡", th: "เช็คอินอัตโนมัติตามตำแหน่ง" },
   "loginCarousel.slide1Body": {

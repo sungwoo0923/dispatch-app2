@@ -15,28 +15,38 @@ const ROOMS_COLL = "chat_rooms";
 const MSGS_COLL = "chat_messages";
 const PROFILES_COLL = "chat_profiles";
 const MUTE_KEY = "kpwork_messenger_muted";
+const CHIME_KEY = "kpwork_messenger_chime";
+const VIBRATE_KEY = "kpwork_messenger_vibrate";
 
-// 알림음은 별도 음원 파일 없이 Web Audio API로 짧은 2음 차임을 즉석 생성한다
-// (자산 파일/네트워크 요청 불필요, PC/모바일 브라우저 공통 지원).
-function playChime() {
+// 알림음은 별도 음원 파일 없이 Web Audio API로 즉석 생성한다(자산 파일/
+// 네트워크 요청 불필요, PC/모바일 브라우저 공통 지원). 사용자가 설정에서
+// 고를 수 있게 몇 가지 프리셋(음 구성)을 둔다.
+const CHIME_PRESETS = {
+  default: { label: "기본(2음 차임)", tones: [880, 1320], gap: 0.09, dur: 0.22 },
+  soft: { label: "부드럽게", tones: [660], gap: 0, dur: 0.35 },
+  pop: { label: "짧게(팝)", tones: [1046, 784, 1318], gap: 0.06, dur: 0.12 },
+};
+
+function playChime(preset = "default") {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
+    const cfg = CHIME_PRESETS[preset] || CHIME_PRESETS.default;
     const ctx = new AudioCtx();
     const now = ctx.currentTime;
-    [880, 1320].forEach((freq, i) => {
+    cfg.tones.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, now + i * 0.09);
-      gain.gain.linearRampToValueAtTime(0.18, now + i * 0.09 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.22);
+      gain.gain.setValueAtTime(0, now + i * cfg.gap);
+      gain.gain.linearRampToValueAtTime(0.18, now + i * cfg.gap + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * cfg.gap + cfg.dur);
       osc.connect(gain).connect(ctx.destination);
-      osc.start(now + i * 0.09);
-      osc.stop(now + i * 0.09 + 0.25);
+      osc.start(now + i * cfg.gap);
+      osc.stop(now + i * cfg.gap + cfg.dur + 0.03);
     });
-    setTimeout(() => ctx.close(), 500);
+    setTimeout(() => ctx.close(), 600);
   } catch {}
 }
 
@@ -150,11 +160,25 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
       return next;
     });
   };
+  const [chimeStyle, setChimeStyleState] = useState(() => {
+    try { return localStorage.getItem(CHIME_KEY) || "default"; } catch { return "default"; }
+  });
+  const setChimeStyle = (v) => {
+    setChimeStyleState(v);
+    try { localStorage.setItem(CHIME_KEY, v); } catch {}
+  };
+  const [vibrateEnabled, setVibrateEnabledState] = useState(() => {
+    try { return localStorage.getItem(VIBRATE_KEY) !== "0"; } catch { return true; }
+  });
+  const setVibrateEnabled = (v) => {
+    setVibrateEnabledState(v);
+    try { localStorage.setItem(VIBRATE_KEY, v ? "1" : "0"); } catch {}
+  };
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const msgUnsub = useRef(null);
   const inputRef = useRef(null);
   const photoFileRef = useRef(null);
-  const prevUnreadRef = useRef(0);
   const isVisibleRef = useRef(false);
 
   useEffect(() => {
@@ -267,13 +291,37 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
 
   useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]);
 
+  // 알림음은 totalUnread(파생값) 증가가 아니라, 각 방의 lastAt이 "실제로
+  // 더 최근으로" 갱신됐을 때만 울린다 — totalUnread는 낙관적 갱신/재구독/
+  // 리렌더 등으로 0↔N을 잠깐씩 오갈 수 있어, 그걸 기준으로 삼으면 이미 읽은
+  // 채팅방에 재입장할 때도 "증가"로 오인해 알림음이 반복 재생됐다. 방을
+  // 나갔다 다시 들어가도(새 메시지가 없으면) lastAt이 그대로이므로 다시
+  //울리지 않고, 지금 그 방을 보고 있는 동안 온 메시지도 울리지 않는다.
+  const seenLastAtRef = useRef({});
   useEffect(() => {
-    if (totalUnread > prevUnreadRef.current) {
-      if ("vibrate" in navigator) navigator.vibrate([100, 60, 100]);
-      if (!muted) playChime();
+    if (!myUid || !rooms.length) return;
+    let shouldChime = false;
+    rooms.forEach((room) => {
+      const lastAtMs = room.lastAt?.toMillis?.() || 0;
+      if (!lastAtMs) return;
+      const prevSeen = seenLastAtRef.current[room.id];
+      if (prevSeen === undefined) {
+        // 최초 로드 시점의 기존 메시지는 알림 대상이 아니다 — 기준값만 저장.
+        seenLastAtRef.current[room.id] = lastAtMs;
+        return;
+      }
+      if (lastAtMs > prevSeen) {
+        seenLastAtRef.current[room.id] = lastAtMs;
+        const isIncoming = room.lastSenderUid && room.lastSenderUid !== myUid;
+        const viewingThisRoom = isVisibleRef.current && activeRoom?.id === room.id;
+        if (isIncoming && !viewingThisRoom) shouldChime = true;
+      }
+    });
+    if (shouldChime) {
+      if (vibrateEnabled && "vibrate" in navigator) navigator.vibrate([100, 60, 100]);
+      if (!muted) playChime(chimeStyle);
     }
-    prevUnreadRef.current = totalUnread;
-  }, [totalUnread, muted]);
+  }, [rooms, myUid, muted, chimeStyle, vibrateEnabled, activeRoom?.id]);
 
   useEffect(() => {
     const visible = mobileMode ? (mobileVisible && view === "chat") : (open && activeRoom !== null);
@@ -387,19 +435,29 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     }]);
 
     const others = room.members?.filter((uid) => uid !== myUid) || [];
-    addDoc(collection(db, MSGS_COLL), {
-      roomId: room.id, text, type: "text",
-      senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
-      createdAt: serverTimestamp(), edited: false,
-      readBy: [myUid], totalMembers: room.members?.length || 1,
-      ...replyData,
-    }).catch(() => {});
-    const unreadUpdate = {};
-    others.forEach((uid) => { unreadUpdate[`unreadCount.${uid}`] = increment(1); });
-    updateDoc(doc(db, ROOMS_COLL, room.id), {
-      lastMsg: text, lastAt: serverTimestamp(), lastSenderUid: myUid,
-      [`lastRead.${myUid}`]: serverTimestamp(), ...unreadUpdate,
-    }).catch(() => {});
+    // 예전엔 이 두 쓰기가 실패해도 .catch(()=>{})로 조용히 무시됐다 — 그러면
+    // 보낸 사람 화면에는 이미 위에서 낙관적으로 추가한 말풍선이 "전송 완료"
+    // 처럼 보이지만 실제로는 서버에 저장되지 않아, 상대방(특히 반대 방향)은
+    // 영원히 못 받는 상태가 됐다. 실패하면 그 말풍선을 지우고 실패를
+    // 알려 사용자가 다시 시도할 수 있게 한다.
+    Promise.all([
+      addDoc(collection(db, MSGS_COLL), {
+        roomId: room.id, text, type: "text",
+        senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
+        createdAt: serverTimestamp(), edited: false,
+        readBy: [myUid], totalMembers: room.members?.length || 1,
+        ...replyData,
+      }),
+      updateDoc(doc(db, ROOMS_COLL, room.id), {
+        lastMsg: text, lastAt: serverTimestamp(), lastSenderUid: myUid,
+        [`lastRead.${myUid}`]: serverTimestamp(),
+        ...Object.fromEntries(others.map((uid) => [`unreadCount.${uid}`, increment(1)])),
+      }),
+    ]).catch((err) => {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setInput(text);
+      toast.error(`${t("messenger.sendFailed")} (${err?.code || err?.message || t("messenger.tryAgain")})`);
+    });
   };
 
   const ensureRoom = async () => {
@@ -685,6 +743,9 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     onLeaveRoom: leaveRoom, myUid, mobileMode,
     activeRoomId: activeRoom?.id || (pendingRoom ? "_pending_" : null),
     muted, onToggleMuted: toggleMuted,
+    settingsOpen, onToggleSettings: () => setSettingsOpen((v) => !v),
+    chimeStyle, onChimeStyleChange: setChimeStyle,
+    vibrateEnabled, onVibrateEnabledChange: setVibrateEnabled,
   };
 
   const profileViewProps = {
@@ -884,7 +945,79 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   );
 }
 
-function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, activeRoomId, muted, onToggleMuted }) {
+// 메신저 설정 팝오버 — 알림음 켜기/끄기, 알림음 종류 선택(미리듣기 포함),
+// 진동 켜기/끄기를 한 곳에 모았다. localStorage에 저장되므로 기기별로
+// 독립적으로 적용된다(서버에 저장하지 않음 — 알림음은 순전히 클라이언트
+// 재생 취향이라 계정 간 동기화가 필요 없다).
+function MessengerSettingsPanel({ muted, onToggleMuted, chimeStyle, onChimeStyleChange, vibrateEnabled, onVibrateEnabledChange, onClose }) {
+  const { t } = useLanguage();
+  const panelRef = useRef(null);
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) onClose();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [onClose]);
+
+  const rowStyle = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" };
+  const toggleStyle = (on) => ({
+    width: 38, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
+    background: on ? ACCENT : "#cbd5e1", position: "relative", flexShrink: 0, transition: "background 0.15s",
+  });
+  const knobStyle = (on) => ({
+    position: "absolute", top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: "50%",
+    background: "#fff", transition: "left 0.15s", boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
+  });
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        position: "absolute", top: 36, right: 0, width: 240, background: "#fff", borderRadius: 12,
+        boxShadow: "0 8px 24px rgba(15,23,42,0.18)", padding: "12px 14px", zIndex: 50, color: "#0f172a",
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 800, color: "#64748b", marginBottom: 4 }}>{t("messenger.settingsTitle")}</div>
+      <div style={rowStyle}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{t("messenger.settingsSound")}</span>
+        <button onClick={onToggleMuted} style={toggleStyle(!muted)}>
+          <span style={knobStyle(!muted)} />
+        </button>
+      </div>
+      <div style={rowStyle}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{t("messenger.settingsVibrate")}</span>
+        <button onClick={() => onVibrateEnabledChange(!vibrateEnabled)} style={toggleStyle(vibrateEnabled)}>
+          <span style={knobStyle(vibrateEnabled)} />
+        </button>
+      </div>
+      <div style={{ borderTop: "1px solid #f1f5f9", margin: "8px 0" }} />
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>{t("messenger.settingsChimeStyle")}</div>
+      {Object.entries(CHIME_PRESETS).map(([key, cfg]) => (
+        <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 0" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", flex: 1 }}>
+            <input type="radio" name="chimeStyle" checked={chimeStyle === key} onChange={() => onChimeStyleChange(key)} disabled={muted} />
+            {cfg.label}
+          </label>
+          <button
+            type="button"
+            onClick={() => playChime(key)}
+            disabled={muted}
+            style={{ background: "#eff6ff", border: "none", color: ACCENT, fontSize: 11, fontWeight: 700, borderRadius: 8, padding: "3px 8px", cursor: muted ? "not-allowed" : "pointer", opacity: muted ? 0.5 : 1 }}
+          >
+            {t("messenger.settingsPreview")}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FriendsView({
+  myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom,
+  onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, activeRoomId, muted, onToggleMuted,
+  settingsOpen, onToggleSettings, chimeStyle, onChimeStyleChange, vibrateEnabled, onVibrateEnabledChange,
+}) {
   const { t } = useLanguage();
   const [tab, setTab] = useState("friends");
   const [search, setSearch] = useState("");
@@ -916,13 +1049,19 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{t("messenger.title")}</span>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={onToggleMuted} title={muted ? t("messenger.muteOff") : t("messenger.muteOn")} style={{ background: "rgba(255,255,255,0.16)", border: "none", color: "rgba(255,255,255,0.9)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {muted ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>
+            <div style={{ position: "relative" }}>
+              <button onClick={onToggleSettings} title={t("messenger.settingsTitle")} style={{ background: settingsOpen ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.16)", border: "none", color: "rgba(255,255,255,0.9)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+              </button>
+              {settingsOpen && (
+                <MessengerSettingsPanel
+                  muted={muted} onToggleMuted={onToggleMuted}
+                  chimeStyle={chimeStyle} onChimeStyleChange={onChimeStyleChange}
+                  vibrateEnabled={vibrateEnabled} onVibrateEnabledChange={onVibrateEnabledChange}
+                  onClose={onToggleSettings}
+                />
               )}
-            </button>
+            </div>
             <button onClick={onNewGroup} title={t("messenger.groupChatTitle")} style={{ background: "rgba(255,255,255,0.16)", border: "none", color: "rgba(255,255,255,0.9)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
             </button>

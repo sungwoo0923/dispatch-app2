@@ -10,9 +10,17 @@ import { db } from "../firebase";
 export function useOnboardingPending(user, companyId) {
   const [pendingContracts, setPendingContracts] = useState(0);
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0);
+  // 초기값 0은 "미완료 0건(=완료)"과 "아직 안 불러옴"을 구분하지 못해,
+  // 계약서를 안 봤는데도 최초 렌더에 잠깐 "완료"로 표시됐다가 실제 데이터가
+  // 도착하면 "서명하세요"로 뒤집히는 깜빡임 버그가 있었다 — 두 조회가 실제로
+  // 완료됐는지를 별도 플래그로 추적해, 호출부가 로딩 중에는 "완료" 판정을
+  // 내리지 않도록 한다.
+  const [contractsLoaded, setContractsLoaded] = useState(false);
+  const [safetyLoaded, setSafetyLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) return;
+    setContractsLoaded(false);
     getDocs(query(collection(db, "contracts"), where("uid", "==", user.uid))).then((snap) => {
       // status는 회사 쪽 서명(도장)까지 합쳐진 상태라, 회사가 아직 도장을
       // 안 찍었으면(companySignatureDataUrl 없음) 직원이 이미 서명해도
@@ -21,14 +29,19 @@ export function useOnboardingPending(user, companyId) {
       // 완료 여부는 본인 서명(employeeSignatureDataUrl) 존재 여부로만
       // 판단한다.
       setPendingContracts(snap.docs.filter((d) => !d.data().employeeSignatureDataUrl).length);
+      setContractsLoaded(true);
     });
   }, [user]);
 
   useEffect(() => {
     if (!companyId || !user) return;
-    let materialIds = [];
-    let completedIds = new Set();
-    const recompute = () => setPendingSafetyCount(materialIds.filter((id) => !completedIds.has(id)).length);
+    let materialIds = null;
+    let completedIds = null;
+    const recompute = () => {
+      if (materialIds == null || completedIds == null) return;
+      setPendingSafetyCount(materialIds.filter((id) => !completedIds.has(id)).length);
+      setSafetyLoaded(true);
+    };
     const unsub1 = onSnapshot(
       query(collection(db, "safetyMaterials"), where("companyId", "==", companyId), where("active", "==", true)),
       (snap) => {
@@ -46,5 +59,5 @@ export function useOnboardingPending(user, companyId) {
     };
   }, [companyId, user]);
 
-  return { pendingContracts, pendingSafetyCount };
+  return { pendingContracts, pendingSafetyCount, loading: !contractsLoaded || !safetyLoaded };
 }

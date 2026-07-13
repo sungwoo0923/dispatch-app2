@@ -57,6 +57,7 @@ import { openAddressSearch } from "../utils/daumPostcode";
 import { openReportPreview } from "../utils/reportTemplates";
 import SmsButton, { buildSmsHref } from "../components/SmsButton";
 import BankAccountFields from "../components/BankAccountFields";
+import { isPlausibleAccountLength } from "../utils/bankAccount";
 import { downloadBulkUploadTemplate, parseBulkUploadFile } from "../utils/employeeBulkImport";
 
 const REG_TABS = ["시간템플릿", "수당템플릿", "계약", "계약종료", "첨부서류", "기본 불러오기"];
@@ -987,6 +988,10 @@ export default function EmployeeList() {
       toast.error(`[${missing.label}] 항목을 입력/선택해주세요.`);
       if (missing.tab) setRegTab(missing.tab);
       document.getElementById(`field-${missing.key}`)?.focus();
+      return;
+    }
+    if (registerForm.bankAccount && !isPlausibleAccountLength(registerForm.bankName, registerForm.bankAccount)) {
+      toast.error(`${registerForm.bankName || "선택한 은행"} 계좌번호 자릿수가 맞지 않습니다. 다시 확인해주세요.`);
       return;
     }
 
