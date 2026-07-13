@@ -1241,17 +1241,28 @@ export default function Payroll() {
           </>
         }
       >
-        <p className="mb-3 text-sm text-ink">선택하신 기간 단위로 (재)정산처리됩니다.</p>
-        <p className="mb-3 text-xs text-muted">
+        <p className="mb-1 text-sm font-medium text-ink">선택하신 기간 단위로 (재)정산처리됩니다.</p>
+        <p className="mb-4 text-xs text-muted">
           주단위 정산처리가 필요하신 경우, 필터영역에서 해당 단위로 검색하신 후 정산처리를 진행해주세요.
         </p>
-        <div className="mb-3 rounded-xl bg-primary-light p-3 text-xs text-primary">
-          정산처리조건
-          <br />
-          #사업자: {companyName || "-"} #센터: {siteName_(filters.siteId) !== "-" ? siteName_(filters.siteId) : "전체"}
-        </div>
-        <div className="mb-2">
-          <span className="mb-1.5 block text-xs font-medium text-muted">
+
+        <Card className="mb-4 space-y-2 bg-primary-light/40 p-4">
+          <p className="text-xs font-semibold text-primary">정산처리조건</p>
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-primary shadow-sm">
+              사업자 · {companyName || "-"}
+            </span>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-primary shadow-sm">
+              센터 · {siteName_(filters.siteId) !== "-" ? siteName_(filters.siteId) : "전체"}
+            </span>
+          </div>
+          <p className="pt-1 text-xs text-primary">
+            이 조건으로 <span className="font-bold">{filteredEmployees.length}명</span>이 정산 대상입니다.
+          </p>
+        </Card>
+
+        <div className="mb-4 space-y-1.5">
+          <span className="block text-xs font-medium text-muted">
             급여형태 <span className="text-danger">필수</span>
           </span>
           <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
@@ -1260,7 +1271,7 @@ export default function Payroll() {
                 key={key}
                 type="button"
                 onClick={() => setSettleForm((f) => ({ ...f, periodType: key, ...defaultRangeFor(key) }))}
-                className={`shrink-0 rounded-xl border px-3 py-2 text-sm ${
+                className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
                   settleForm.periodType === key ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted"
                 }`}
               >
@@ -1269,8 +1280,9 @@ export default function Payroll() {
             ))}
           </div>
         </div>
-        <div className="mb-2">
-          <span className="mb-1.5 block text-xs font-medium text-muted">
+
+        <div className="mb-4 space-y-1.5">
+          <span className="block text-xs font-medium text-muted">
             기간선택 <span className="text-danger">필수</span>
           </span>
           <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
@@ -1289,7 +1301,8 @@ export default function Payroll() {
             />
           </div>
         </div>
-        <label className="flex items-center gap-2 text-sm text-ink">
+
+        <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3.5 py-3 text-sm text-ink">
           <input
             type="checkbox"
             checked={settleForm.monthEndOnly}
