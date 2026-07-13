@@ -60,6 +60,32 @@ export default function Centers() {
   const [tab, setTab] = useState("info");
   const [info, setInfo] = useState(EMPTY_INFO);
   const [searchingAddress, setSearchingAddress] = useState(false);
+  const [locatingMe, setLocatingMe] = useState(false);
+
+  // 주소 지오코딩은 도로명주소 DB의 정확도에 좌우돼, 신도시/분구 지역 등은
+  // 건물 단위가 아니라 동 단위 근사 좌표로 떨어질 수 있다(수백~1000m 이상
+  // 오차) — 관리자가 실제 근무지 현장에서 이 버튼을 누르면 기기의 실측
+  // GPS 좌표를 그대로 위도/경도에 채워, 지오코딩 오차와 무관하게 정확한
+  // 반경 기준점을 확보할 수 있다.
+  const useCurrentLocationForCenter = () => {
+    if (!navigator.geolocation) {
+      toast.error("이 기기/브라우저에서는 위치 확인을 지원하지 않습니다.");
+      return;
+    }
+    setLocatingMe(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setInfo((f) => ({ ...f, lat: pos.coords.latitude, lng: pos.coords.longitude }));
+        toast.success(`현재 위치로 좌표를 채웠습니다 (정확도 약 ${Math.round(pos.coords.accuracy)}m)`);
+        setLocatingMe(false);
+      },
+      (err) => {
+        toast.error(`위치를 가져오지 못했습니다: ${err.message}`);
+        setLocatingMe(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+    );
+  };
 
   // "내 회사 등록하기 > 센터 관리"와 동일한 다음(카카오) 우편번호 팝업으로
   // 정확한 실제 주소를 목록에서 골라 받고, 그 도로명주소를 그대로
@@ -406,6 +432,14 @@ export default function Centers() {
                         onChange={(e) => setInfo((f) => ({ ...f, memo: e.target.value }))}
                       />
                     </label>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted">
+                      주소 검색으로 채운 좌표는 주소 데이터베이스의 근사치일 수 있습니다. 실제 근무지에서 직접 눌러 정확한 좌표로 덮어쓸 수 있습니다.
+                    </span>
+                    <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={useCurrentLocationForCenter} disabled={locatingMe}>
+                      <MapPin size={13} /> {locatingMe ? "위치 확인 중..." : "현재 위치로 가져오기"}
+                    </Button>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <label className="block">
