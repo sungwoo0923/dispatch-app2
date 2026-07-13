@@ -4,6 +4,12 @@
 
 html, body, #root {
   height: 100%;
+  /* 모바일(특히 안드로이드 Chrome/PWA)에서 화면 맨 위에서 아래로 당길 때
+     브라우저 기본 pull-to-refresh(새로고침)가 발동해 입력 중이던 폼/스크롤
+     위치가 날아가는 문제를 막는다. contain은 각 스크롤 컨테이너 안에서의
+     정상적인 overscroll bounce는 그대로 두고, 그 바깥(브라우저 차원의
+     새로고침 제스처)으로만 전파되는 것을 막는다. */
+  overscroll-behavior-y: contain;
 }
 
 body {

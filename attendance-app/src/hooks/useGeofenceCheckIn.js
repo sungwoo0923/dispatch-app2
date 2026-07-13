@@ -146,6 +146,29 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
     [uid, name, companyId, workSite, todayAttendance, refreshToday, canCheckIn, scheduleStartTime]
   );
 
+  // 상시 watchPosition과 별개로, 사용자가 "위치 갱신" 버튼을 눌렀을 때 즉시
+  // 한 번 더 측위해 반영한다 — 실내에 있다가 막 실외로 나온 직후처럼 상시
+  // watcher가 아직 갱신되지 않았을 때 기다리지 않고 바로 재시도할 수 있게 한다.
+  const refreshLocation = useCallback(() => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(false);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          handlePosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+          resolve(true);
+        },
+        (err) => {
+          setPermissionError(err.message);
+          resolve(false);
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      );
+    });
+  }, [handlePosition]);
+
   useEffect(() => {
     if (!enabled || !workSite) return;
 
@@ -268,6 +291,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
     manualCheckIn,
     manualCheckOut,
     refreshToday,
+    refreshLocation,
     manualCheckInRadiusM: MANUAL_CHECK_IN_RADIUS_M,
   };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   doc,
@@ -31,6 +31,7 @@ import {
   VolumeX,
   Phone,
   Maximize2,
+  RefreshCw,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -125,18 +126,19 @@ export default function Home() {
     return () => unsub();
   }, [profile?.companyId]);
 
-  useEffect(() => {
-    async function loadSite() {
-      if (!profile?.workSiteId) {
-        setLoadingSite(false);
-        return;
-      }
-      const snap = await getDoc(doc(db, "workSites", profile.workSiteId));
-      setWorkSite(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+  const loadSite = useCallback(async () => {
+    if (!profile?.workSiteId) {
       setLoadingSite(false);
+      return;
     }
-    loadSite();
+    const snap = await getDoc(doc(db, "workSites", profile.workSiteId));
+    setWorkSite(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    setLoadingSite(false);
   }, [profile?.workSiteId]);
+
+  useEffect(() => {
+    loadSite();
+  }, [loadSite]);
 
   useEffect(() => {
     if (!profile?.vendorId) return;
@@ -313,7 +315,7 @@ export default function Home() {
 
   const canCheckIn = todaySchedule?.status === "출근확정";
 
-  const { distance, accuracy, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday, manualCheckInRadiusM } =
+  const { distance, accuracy, todayAttendance, permissionError, manualCheckIn, manualCheckOut, refreshToday, refreshLocation, manualCheckInRadiusM } =
     useGeofenceCheckIn({
       uid: user?.uid,
       name: profile?.name,
@@ -326,6 +328,21 @@ export default function Home() {
 
   const checkedIn = ["출근", "지각"].includes(todayAttendance?.status) && todayAttendance?.checkInTime;
   const checkedOut = Boolean(todayAttendance?.checkOutTime);
+
+  // 출근 상태(attendance)와 근무지(workSite)는 실시간 반영되지만(onSnapshot),
+  // workSite는 최초 1회만 불러오므로 관리자가 센터 정보를 바꾼 직후에는
+  // 화면을 나갔다 와야 반영됐다 — 새로고침 버튼으로 즉시 다시 불러올 수
+  // 있게 한다.
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refreshToday(), loadSite(), refreshLocation()]);
+      toast.success("새로고침되었습니다");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // 출근확정 스케줄 알림은 실제로 출근을 완료하면 더 이상 확인할 필요가
   // 없으므로, 출근 완료(checkedIn) 시점에 자동으로 읽음 처리해 목록에서
@@ -480,8 +497,19 @@ export default function Home() {
             </p>
             <p className="mt-2 text-xs text-white/70">{dateStr}</p>
           </div>
-          <div className={`flex h-11 w-11 items-center justify-center rounded-2xl backdrop-blur ${checkedIn ? "bg-white/20" : "bg-white/10"}`}>
-            {checkedIn ? <CheckCircle2 size={20} /> : <Clock size={20} className="text-white/80" />}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="새로고침"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur disabled:opacity-60"
+            >
+              <RefreshCw size={15} className={refreshing ? "animate-spin" : undefined} />
+            </button>
+            <div className={`flex h-11 w-11 items-center justify-center rounded-2xl backdrop-blur ${checkedIn ? "bg-white/20" : "bg-white/10"}`}>
+              {checkedIn ? <CheckCircle2 size={20} /> : <Clock size={20} className="text-white/80" />}
+            </div>
           </div>
         </div>
 

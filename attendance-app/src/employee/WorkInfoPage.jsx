@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { Building2, FileSignature, Wallet, CalendarClock, Landmark, MapPin, ChevronRight, Phone, RefreshCw } from "lucide-react";
+import { Building2, FileSignature, Wallet, CalendarClock, Landmark, MapPin, ChevronRight, Phone } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useLanguage } from "../hooks/useLanguage";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
-import { distanceMeters } from "../utils/distance";
 
 const MENU = [
   { to: "/contracts", labelKey: "workInfo.menu.contracts", icon: FileSignature, bg: "bg-purple-500" },
@@ -27,9 +26,6 @@ export default function WorkInfoPage() {
   const [changeOpen, setChangeOpen] = useState(false);
   const [changeForm, setChangeForm] = useState({ siteId: "", vendorId: "", reason: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [myLocation, setMyLocation] = useState(null);
-  const [locationError, setLocationError] = useState("");
-  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     if (!profile?.workSiteId) return;
@@ -69,36 +65,6 @@ export default function WorkInfoPage() {
   }, [user]);
 
   const pendingRequest = useMemo(() => changeRequests.find((r) => r.status === "pending"), [changeRequests]);
-
-  const refreshLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError("이 기기에서는 위치 확인을 지원하지 않습니다");
-      return;
-    }
-    setLocating(true);
-    setLocationError("");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setMyLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          updatedAt: new Date(),
-        });
-        setLocating(false);
-      },
-      (err) => {
-        setLocationError(err.message || "위치를 가져오지 못했습니다");
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
-    );
-  };
-
-  const distanceToSite = useMemo(() => {
-    if (!myLocation || !workSite?.lat || !workSite?.lng) return null;
-    return distanceMeters(myLocation.lat, myLocation.lng, workSite.lat, workSite.lng);
-  }, [myLocation, workSite]);
 
   const openChangeModal = () => {
     setChangeForm({ siteId: profile?.workSiteId || "", vendorId: profile?.vendorId || "", reason: "" });
@@ -206,42 +172,6 @@ export default function WorkInfoPage() {
         </div>
       </Card>
 
-      <Card className="p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="flex items-center gap-2 text-xs font-bold text-muted">
-            <MapPin size={13} className="text-primary" /> 현재 위치
-          </p>
-          <button
-            type="button"
-            onClick={refreshLocation}
-            disabled={locating}
-            className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-semibold text-primary disabled:opacity-60"
-          >
-            <RefreshCw size={12} className={locating ? "animate-spin" : undefined} /> {locating ? "확인 중..." : "위치 갱신"}
-          </button>
-        </div>
-        {myLocation ? (
-          <div className="space-y-1 text-sm">
-            <p className="font-semibold text-ink">
-              위도 {myLocation.lat.toFixed(6)}, 경도 {myLocation.lng.toFixed(6)}
-            </p>
-            <p className="text-xs text-muted">
-              정확도 약 {Math.round(myLocation.accuracy)}m
-              {distanceToSite != null && ` · 근무지까지 약 ${Math.round(distanceToSite)}m`}
-              {" · "}
-              {myLocation.updatedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} 기준
-            </p>
-            {myLocation.accuracy > 300 && (
-              <p className="text-xs text-warning">
-                위치 정확도가 낮습니다. 실제 거리와 다를 수 있어요 — 휴대폰 설정에서 위치 서비스의 "정확한 위치"를 켜거나 실외로 이동해 다시 갱신해보세요.
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="text-xs text-muted">{locationError || "위치 갱신 버튼을 눌러 현재 위치를 확인하세요"}</p>
-        )}
-        {locationError && myLocation && <p className="mt-1 text-xs text-danger">{locationError}</p>}
-      </Card>
 
       <div className="grid grid-cols-3 gap-3">
         {MENU.map(({ to, labelKey, icon: Icon, bg }) => (
