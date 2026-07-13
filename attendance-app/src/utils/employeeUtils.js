@@ -1,4 +1,4 @@
-import { doc, updateDoc, setDoc } from "firebase/firestore";
+import { doc, updateDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { toDateKey } from "./dateUtils";
 
@@ -22,6 +22,22 @@ export async function softDeleteEmployees(uids) {
   for (const uid of uids) {
     await updateDoc(doc(db, "users", uid), { deleted: true, deletedAt: today, employmentStatus: "퇴사", resignDate: today });
     setDoc(doc(db, "chat_profiles", uid), { deleted: true }, { merge: true }).catch(() => {});
+  }
+}
+
+// 입퇴사현황(EmployeeStatus.jsx)에서 이미 소프트삭제(deleted=true)된 행을
+// 다시 "선택삭제"하면, softDeleteEmployee를 또 호출해봐야 이미 같은 값이라
+// 화면상 아무 변화가 없어 "삭제가 안 된다"고 느껴진다 — 이미 삭제 처리된
+// 행에 한해서는 문서 자체를 완전히 지워 목록에서 실제로 사라지게 한다.
+export async function hardDeleteEmployee(uid) {
+  await deleteDoc(doc(db, "users", uid));
+  deleteDoc(doc(db, "chat_profiles", uid)).catch(() => {});
+}
+
+export async function hardDeleteEmployees(uids) {
+  for (const uid of uids) {
+    await deleteDoc(doc(db, "users", uid));
+    deleteDoc(doc(db, "chat_profiles", uid)).catch(() => {});
   }
 }
 

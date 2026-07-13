@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { UserCog, Search, Download, Trash2 } from "lucide-react";
+import { UserCog, Search, Download, Trash2, FileText } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -17,8 +17,10 @@ import { usePagination } from "../hooks/usePagination";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_STATUS_OPTIONS, NATIONALITY_OPTIONS, COUNTRY_OPTIONS } from "../constants/hr";
 import { formatDate, toDateKey } from "../utils/dateUtils";
-import { softDeleteEmployee, softDeleteEmployees } from "../utils/employeeUtils";
+import { softDeleteEmployee, softDeleteEmployees, hardDeleteEmployee, hardDeleteEmployees } from "../utils/employeeUtils";
 import SmsButton from "../components/SmsButton";
+import { openReportPreview } from "../utils/reportTemplates";
+import { getManagerResult, getCeoResult } from "../utils/resignationStatus";
 
 const STATUS_TONE = { 재직: "success", 휴직: "warning", 퇴사: "danger" };
 const SEARCH_FIELD_OPTIONS = [
@@ -52,6 +54,7 @@ export default function EmployeeStatus() {
   const [businessEntities, setBusinessEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [resignationRequests, setResignationRequests] = useState([]);
 
   const [draft, setDraft] = useState(emptyDraft());
   const [applied, setApplied] = useState(emptyDraft());
@@ -81,6 +84,9 @@ export default function EmployeeStatus() {
       onSnapshot(query(collection(db, "vendors"), where("companyId", "==", profile.companyId)), (snap) =>
         setVendors(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       ),
+      onSnapshot(query(collection(db, "resignationRequests"), where("companyId", "==", profile.companyId)), (snap) =>
+        setResignationRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
@@ -88,6 +94,29 @@ export default function EmployeeStatus() {
   const entityName_ = (id) => businessEntities.find((b) => b.id === id)?.name || "-";
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
+  // 한 근로자가 반려 후 재작성 등으로 사직서를 여러 번 냈을 수 있으니
+  // 삭제되지 않은 것 중 가장 최근(createdAt) 건을 그 근로자의 사직서로 본다.
+  const resignationFor = (uid) =>
+    resignationRequests
+      .filter((r) => r.uid === uid && !r.deleted)
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0] || null;
+
+  const previewResignation = (req) =>
+    openReportPreview("사직서", "사직서", {
+      siteName: req.siteName,
+      employeeName: req.employeeName,
+      position: req.position,
+      hireDate: req.hireDate,
+      resignDate: req.resignDate,
+      reason: req.reason,
+      employeeSignatureDataUrl: req.employeeSignatureDataUrl,
+      managerSignatureDataUrl: req.managerSignatureDataUrl,
+      managerName: req.managerName,
+      managerResult: getManagerResult(req),
+      ceoSignatureDataUrl: req.ceoSignatureDataUrl,
+      ceoName: req.ceoName,
+      ceoResult: getCeoResult(req),
+    });
 
   const [sort, setSort] = useState({ key: "hireDate", dir: "desc" });
   const STATUS_SORT_ACCESSORS = {
@@ -178,7 +207,17 @@ export default function EmployeeStatus() {
     setBulkReason("");
   };
 
+  // 이미 (근로자목록 등에서) 소프트삭제되어 deleted=true인 행은 여기서
+  // 다시 softDeleteEmployee를 호출해봐야 같은 값을 또 쓰는 것이라 화면에
+  // 아무 변화가 없다 — "삭제했는데 안 없어진다"는 문제의 원인. 이미
+  // 삭제 처리된 행은 이번에는 완전히 지워 목록에서 실제로 사라지게 한다.
   const deleteEmployee = async (emp) => {
+    if (emp.deleted) {
+      if (!(await confirm(`${emp.name} 근로자 기록을 완전히 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`, "delete"))) return;
+      await hardDeleteEmployee(emp.id);
+      toast.success("완전히 삭제되었습니다");
+      return;
+    }
     if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
     await softDeleteEmployee(emp.id);
     toast.success("삭제되었습니다");
@@ -187,9 +226,24 @@ export default function EmployeeStatus() {
   const deleteSelectedEmployees = async () => {
     const targets = filtered.filter((e) => selected.has(e.id));
     if (targets.length === 0) return;
-    if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
-    await softDeleteEmployees(targets.map((e) => e.id));
-    toast.success(`${targets.length}명 삭제되었습니다`);
+    const alreadyDeleted = targets.filter((e) => e.deleted);
+    const active = targets.filter((e) => !e.deleted);
+    if (alreadyDeleted.length > 0) {
+      if (
+        !(await confirm(
+          `선택된 ${targets.length}명 중 ${alreadyDeleted.length}명은 이미 삭제 처리된 기록입니다. 이 기록들은 완전히 삭제되어 되돌릴 수 없습니다.${
+            active.length > 0 ? ` 나머지 ${active.length}명은 삭제(모바일 접속 차단) 처리됩니다.` : ""
+          } 계속하시겠습니까?`,
+          "delete"
+        ))
+      )
+        return;
+    } else if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) {
+      return;
+    }
+    if (alreadyDeleted.length > 0) await hardDeleteEmployees(alreadyDeleted.map((e) => e.id));
+    if (active.length > 0) await softDeleteEmployees(active.map((e) => e.id));
+    toast.success(`${targets.length}명 처리되었습니다`);
     setSelected(new Set());
   };
 
@@ -391,6 +445,7 @@ export default function EmployeeStatus() {
                 <SortableTh sortKey="resignDate" sort={sort} onSort={setSort}>퇴사일자</SortableTh>
                 <th className="px-4 py-3 font-semibold">변경사유</th>
                 <th className="px-4 py-3 font-semibold">상태</th>
+                <th className="px-4 py-3 font-semibold">사직서</th>
                 <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
@@ -420,6 +475,21 @@ export default function EmployeeStatus() {
                     <Badge tone={STATUS_TONE[emp.employmentStatus] || "success"}>{emp.employmentStatus || "재직"}</Badge>
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                    {emp.employmentStatus !== "퇴사" ? (
+                      <span className="text-xs text-muted">-</span>
+                    ) : resignationFor(emp.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => previewResignation(resignationFor(emp.id))}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <FileText size={13} /> 제출완료
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted">미제출</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     {emp.deleted ? (
                       <span className="text-xs text-muted">-</span>
                     ) : (
@@ -437,7 +507,7 @@ export default function EmployeeStatus() {
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={14} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 데이터가 없습니다.
                   </td>
                 </tr>

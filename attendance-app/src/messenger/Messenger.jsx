@@ -122,6 +122,12 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     else setInternalOpen(val);
   };
   const [view, setView] = useState("friends"); // friends | chat | profile
+  // FriendsView는 view가 "chat"/"profile"로 바뀌면 조건부 렌더링에서
+  // 언마운트됐다가 되돌아올 때 다시 마운트된다 — 그 안의 "친구"/"채팅" 탭
+  // 선택은 예전엔 FriendsView 내부 로컬 state였어서, 채팅방에 들어갔다
+  // 뒤로가기를 누르면 항상 기본값인 "친구" 탭으로 리셋됐다. 여기(부모)로
+  // 끌어올려 view가 바뀌어도 유지되게 한다.
+  const [friendsTab, setFriendsTab] = useState("friends"); // friends | chats
   const [myProfile, setMyProfile] = useState(null);
   const [friends, setFriends] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -736,7 +742,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
   const friendsViewProps = {
     myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto,
     onOpenDM: openDM, onOpenSelf: openSelf,
-    onOpenRoom: (room) => { setActiveRoom(room); setPendingRoom(null); if (mobileMode) setView("chat"); },
+    onOpenRoom: (room) => { setActiveRoom(room); setPendingRoom(null); setFriendsTab("chats"); if (mobileMode) setView("chat"); },
     onOpenProfile: () => setView("profile"), onOpenPeerProfile: (f) => setProfileView(f),
     onNewGroup: () => setNewGroupModal(true),
     onClose: mobileMode ? onClose : () => setOpen(false),
@@ -746,6 +752,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     settingsOpen, onToggleSettings: () => setSettingsOpen((v) => !v),
     chimeStyle, onChimeStyleChange: setChimeStyle,
     vibrateEnabled, onVibrateEnabledChange: setVibrateEnabled,
+    tab: friendsTab, onTabChange: setFriendsTab,
   };
 
   const profileViewProps = {
@@ -1017,9 +1024,9 @@ function FriendsView({
   myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom,
   onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, activeRoomId, muted, onToggleMuted,
   settingsOpen, onToggleSettings, chimeStyle, onChimeStyleChange, vibrateEnabled, onVibrateEnabledChange,
+  tab, onTabChange: setTab,
 }) {
   const { t } = useLanguage();
-  const [tab, setTab] = useState("friends");
   const [search, setSearch] = useState("");
   const [contextMenu, setContextMenu] = useState(null);
   const longPressTimer = useRef(null);

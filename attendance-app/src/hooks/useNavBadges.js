@@ -21,8 +21,10 @@ const BADGE_SOURCES = {
   ],
   "/leaves": [{ collection: "leaves", filter: (d) => d.status === "pending" }],
   "/employees/inquiries": [
-    // 문의는 회사 전체가 아니라 "나에게" 온 것만 배지로 잡는다.
-    { collection: "inquiries", filter: (d, adminUid) => d.status === "답변대기" && d.toUid === adminUid },
+    // 문의함(Inquiries.jsx)은 "받는사람"으로 지정된 관리자만이 아니라 회사의
+    // 모든 관리자가 전체 문의를 보고 답변할 수 있게 되어 있다 — 배지도 그와
+    // 일관되게, toUid로 좁히지 않고 회사 전체의 미답변 건수를 잡는다.
+    { collection: "inquiries", filter: (d) => d.status === "답변대기" },
   ],
 };
 
