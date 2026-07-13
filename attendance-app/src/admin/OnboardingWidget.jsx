@@ -16,6 +16,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
 import Button from "../components/Button";
+import Card from "../components/Card";
 import Modal from "../components/Modal";
 import { openAddressSearch } from "../utils/daumPostcode";
 import { searchAddressCoords } from "../utils/geocode";
@@ -223,56 +224,64 @@ export default function OnboardingWidget() {
 
       <Modal open={open} onClose={() => setOpen(false)} title="내 회사 등록하기" size="lg" footer={<Button onClick={() => setOpen(false)}>닫기</Button>}>
         <div className="space-y-4">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">회사명</span>
-            <input disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted" value={company?.name || ""} />
-          </label>
+          <Card className="space-y-3.5 p-4">
+            <p className="flex items-center gap-1.5 text-sm font-bold text-ink">
+              <Building2 size={15} className="text-primary" /> 회사 기본정보
+            </p>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">회사명</span>
+              <input disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted" value={company?.name || ""} />
+            </label>
 
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">사업자등록번호</span>
-            <div className="flex flex-nowrap gap-2">
-              <input
-                className="w-full min-w-0 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-                value={bizRegNo}
-                onChange={(e) => setBizRegNo(e.target.value)}
-                placeholder="000-00-00000"
-              />
-              <Button type="button" variant="outline" className="shrink-0" onClick={saveBizRegNo}>
-                저장
-              </Button>
-            </div>
-            {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
-          </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">사업자등록번호</span>
+              <div className="flex flex-nowrap gap-2">
+                <input
+                  className="w-full min-w-0 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                  value={bizRegNo}
+                  onChange={(e) => setBizRegNo(e.target.value)}
+                  placeholder="000-00-00000"
+                />
+                <Button type="button" variant="outline" className="shrink-0" onClick={saveBizRegNo}>
+                  저장
+                </Button>
+              </div>
+              {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+            </label>
+          </Card>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
-              <Button type="button" variant="outline" className="w-full" onClick={() => setVendorModalOpen(true)}>
-                소속업체 관리 ({vendors.length})
-              </Button>
+          <Card className="space-y-3 p-4">
+            <p className="text-sm font-bold text-ink">조직 세팅</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+                <Button type="button" variant="outline" className="w-full" onClick={() => setVendorModalOpen(true)}>
+                  소속업체 관리 ({vendors.length})
+                </Button>
+              </div>
+              <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+                <Button type="button" variant="outline" className="w-full" onClick={() => setSiteModalOpen(true)}>
+                  센터 관리 ({workSites.length})
+                </Button>
+              </div>
+              <div>
+                <span className="mb-1.5 block text-xs font-medium text-muted">시간템플릿</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setShiftForm(EMPTY_SHIFT_FORM);
+                    setShiftModalOpen(true);
+                  }}
+                >
+                  <Clock size={14} /> 시간템플릿 등록
+                </Button>
+              </div>
             </div>
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
-              <Button type="button" variant="outline" className="w-full" onClick={() => setSiteModalOpen(true)}>
-                센터 관리 ({workSites.length})
-              </Button>
-            </div>
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-muted">시간템플릿</span>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setShiftForm(EMPTY_SHIFT_FORM);
-                  setShiftModalOpen(true);
-                }}
-              >
-                <Clock size={14} /> 시간템플릿 등록
-              </Button>
-            </div>
-          </div>
-          <p className="text-[11px] text-muted">센터의 위치 반경(위경도)은 조직 &gt; 센터에서 나중에 설정할 수 있습니다.</p>
+            <p className="text-[11px] text-muted">센터의 위치 반경(위경도)은 "센터 관리"에서 주소검색으로 바로 채우거나, 조직 &gt; 센터에서 나중에 설정할 수 있습니다.</p>
+          </Card>
         </div>
       </Modal>
 
