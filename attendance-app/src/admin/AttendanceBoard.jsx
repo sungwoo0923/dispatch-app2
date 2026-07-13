@@ -293,8 +293,6 @@ export default function AttendanceBoard() {
         </Badge>
       ),
     },
-    { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
-    { key: "position", label: "직급", render: ({ emp }) => emp.position || "-" },
     {
       key: "phone",
       label: "연락처",
@@ -305,6 +303,10 @@ export default function AttendanceBoard() {
         </span>
       ),
     },
+    { key: "company", label: "사업자", render: () => companyName },
+    { key: "site", label: "센터", render: ({ record: r, emp }) => r.siteName || siteName_(emp.workSiteId) },
+    { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
+    { key: "position", label: "직급", render: ({ emp }) => emp.position || "-" },
     {
       key: "checkIn",
       label: "출근시간",
@@ -315,8 +317,6 @@ export default function AttendanceBoard() {
     },
     { key: "checkOut", label: "퇴근시간", render: ({ record: r }) => (r.checkOutTime ? formatTime(r.checkOutTime) : "-") },
     { key: "date", label: "근무일", render: ({ record: r }) => formatDate(r.date) },
-    { key: "company", label: "사업자", render: () => companyName },
-    { key: "site", label: "센터", render: ({ record: r, emp }) => r.siteName || siteName_(emp.workSiteId) },
     { key: "shiftType", label: "근무구분", render: ({ emp }) => emp.shiftType || "-" },
     { key: "employmentType", label: "근무형태", render: ({ emp }) => emp.employmentType || "-" },
     { key: "gender", label: "성별", render: ({ emp }) => emp.gender || "-" },

@@ -557,15 +557,15 @@ export default function Contracts() {
                 <th className="px-3 py-2.5 font-semibold">계약서</th>
                 <th className="px-3 py-2.5 font-semibold">상세</th>
                 <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
+                <th className="px-3 py-2.5 font-semibold">전화번호</th>
                 <SortableTh sortKey="entity" sort={sort} onSort={setSort}>사업자</SortableTh>
                 <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
-                <th className="px-3 py-2.5 font-semibold">전화번호</th>
+                <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
                 <SortableTh sortKey="nationality" sort={sort} onSort={setSort}>외/내국인</SortableTh>
                 <SortableTh sortKey="gender" sort={sort} onSort={setSort}>성별</SortableTh>
                 <th className="px-3 py-2.5 font-semibold">나이</th>
                 <SortableTh sortKey="cycle" sort={sort} onSort={setSort}>계약주기</SortableTh>
                 <SortableTh sortKey="startDate" sort={sort} onSort={setSort}>계약일자</SortableTh>
-                <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
                 <SortableTh sortKey="shiftType" sort={sort} onSort={setSort}>근무구분</SortableTh>
                 <SortableTh sortKey="employmentType" sort={sort} onSort={setSort}>근무형태</SortableTh>
                 <SortableTh sortKey="team" sort={sort} onSort={setSort}>부서</SortableTh>
@@ -604,20 +604,20 @@ export default function Contracts() {
                     </button>
                   </td>
                   <td className="px-3 py-2.5 text-ink">{emp.name}</td>
-                  <td className="px-3 py-2.5 text-ink">{entityName_(emp.businessEntityId)}</td>
-                  <td className="px-3 py-2.5 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-3 py-2.5 text-ink">
                     <span className="inline-flex items-center gap-1">
                       {emp.phone || "-"}
                       <SmsButton phone={emp.phone} message={smsMessageFor(emp, contract)} />
                     </span>
                   </td>
+                  <td className="px-3 py-2.5 text-ink">{entityName_(emp.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{siteName_(emp.workSiteId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{vendorName_(emp.vendorId)}</td>
                   <td className="px-3 py-2.5 text-ink">{emp.nationality || "내국인"}</td>
                   <td className="px-3 py-2.5 text-ink">{emp.gender || "-"}</td>
                   <td className="px-3 py-2.5 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
                   <td className="px-3 py-2.5 text-ink">{contract?.cycle || "-"}</td>
                   <td className="px-3 py-2.5 text-ink">{contract?.startDate ? formatDate(contract.startDate) : "-"}</td>
-                  <td className="px-3 py-2.5 text-ink">{vendorName_(emp.vendorId)}</td>
                   <td className="px-3 py-2.5 text-ink">{emp.shiftType || "-"}</td>
                   <td className="px-3 py-2.5 text-ink">{emp.employmentType || "-"}</td>
                   <td className="px-3 py-2.5 text-ink">{emp.team || "-"}</td>

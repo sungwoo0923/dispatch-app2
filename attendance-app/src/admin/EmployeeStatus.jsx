@@ -436,10 +436,10 @@ export default function EmployeeStatus() {
                   <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
                 </th>
                 <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
+                <th className="px-4 py-3 font-semibold">전화번호</th>
                 <SortableTh sortKey="entity" sort={sort} onSort={setSort}>사업자</SortableTh>
                 <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
                 <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
-                <th className="px-4 py-3 font-semibold">전화번호</th>
                 <th className="px-4 py-3 font-semibold">마지막근무일</th>
                 <SortableTh sortKey="hireDate" sort={sort} onSort={setSort}>입사일자</SortableTh>
                 <SortableTh sortKey="resignDate" sort={sort} onSort={setSort}>퇴사일자</SortableTh>
@@ -463,10 +463,10 @@ export default function EmployeeStatus() {
                     <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
                   </td>
                   <td className="px-4 py-3 text-ink">{emp.name}</td>
+                  <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone || "-"}<SmsButton phone={emp.phone} /></span></td>
                   <td className="px-4 py-3 text-ink">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
-                  <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone || "-"}<SmsButton phone={emp.phone} /></span></td>
                   <td className="px-4 py-3 text-ink">{emp.lastWorkDate ? formatDate(emp.lastWorkDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
