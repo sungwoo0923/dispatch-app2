@@ -10,7 +10,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { ShieldCheck, Plus, Trash2, RefreshCw, Search, FileSpreadsheet } from "lucide-react";
+import { ShieldCheck, Trash2, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -23,6 +23,7 @@ import { formatDate, toDateKey } from "../utils/dateUtils";
 import { openReportPreview } from "../utils/reportTemplates";
 import { SAFETY_MANAGER_ROLES } from "../utils/safety";
 import { useToast } from "../hooks/useToast";
+import { useConfirm } from "../hooks/useConfirm";
 
 const TABS = [
   { key: "settings", label: "안전관리설정" },
@@ -36,6 +37,7 @@ const EMPTY_REPORT_FORM = { reportId: "", effectiveDate: toDateKey() };
 export default function SafetySettings() {
   const { profile } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const [entities, setEntities] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [admins, setAdmins] = useState([]);
@@ -108,7 +110,12 @@ export default function SafetySettings() {
 
   const saveSettings = async () => {
     if (!selectedId) return;
-    await updateDoc(doc(db, "workSites", selectedId), { safetyManaged: manageYN === "사용" });
+    try {
+      await updateDoc(doc(db, "workSites", selectedId), { safetyManaged: manageYN === "사용" });
+      toast.success("저장되었습니다");
+    } catch (err) {
+      toast.error(`저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
   };
 
   const toggleManagerChecked = (id) =>
@@ -122,24 +129,36 @@ export default function SafetySettings() {
   const addManager = async () => {
     const admin = admins.find((a) => a.id === managerForm.adminUid);
     if (!admin || !selectedId) return;
-    await addDoc(collection(db, "safetyManagers"), {
-      companyId: profile.companyId,
-      siteId: selectedId,
-      siteName: selectedSite?.name || "",
-      adminUid: admin.id,
-      adminName: admin.name,
-      adminEmail: admin.email || "-",
-      role: managerForm.role,
-      effectiveDate: managerForm.effectiveDate,
-      note: managerForm.note,
-      createdAt: serverTimestamp(),
-    });
-    setManagerForm({ ...EMPTY_MANAGER_FORM, effectiveDate: toDateKey() });
+    try {
+      await addDoc(collection(db, "safetyManagers"), {
+        companyId: profile.companyId,
+        siteId: selectedId,
+        siteName: selectedSite?.name || "",
+        adminUid: admin.id,
+        adminName: admin.name,
+        adminEmail: admin.email || "-",
+        role: managerForm.role,
+        effectiveDate: managerForm.effectiveDate,
+        note: managerForm.note,
+        createdAt: serverTimestamp(),
+      });
+      setManagerForm({ ...EMPTY_MANAGER_FORM, effectiveDate: toDateKey() });
+      toast.success("등록되었습니다");
+    } catch (err) {
+      toast.error(`등록에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
   };
 
   const removeManagers = async () => {
-    for (const id of managerChecked) await deleteDoc(doc(db, "safetyManagers", id));
-    setManagerChecked(new Set());
+    if (managerChecked.size === 0) return;
+    if (!(await confirm(`선택한 ${managerChecked.size}명의 안전담당자를 삭제하시겠습니까?`, "delete"))) return;
+    try {
+      for (const id of managerChecked) await deleteDoc(doc(db, "safetyManagers", id));
+      setManagerChecked(new Set());
+      toast.success("삭제되었습니다");
+    } catch (err) {
+      toast.error(`삭제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
   };
 
   const toggleReportChecked = (id) =>
@@ -173,6 +192,8 @@ export default function SafetySettings() {
   };
 
   const removeSiteReports = async () => {
+    if (reportChecked.size === 0) return;
+    if (!(await confirm(`선택한 ${reportChecked.size}건의 안전교육리포트를 삭제하시겠습니까?`, "delete"))) return;
     try {
       for (const id of reportChecked) await deleteDoc(doc(db, "siteSafetyReports", id));
       setReportChecked(new Set());
@@ -238,14 +259,11 @@ export default function SafetySettings() {
               <button
                 type="button"
                 className="rounded-xl border border-slate-200 p-2.5 text-muted hover:bg-slate-50"
-                title="새로고침"
+                title="필터 초기화"
                 onClick={() => setFilters({ businessEntityId: "", siteName: "" })}
               >
                 <RefreshCw size={16} />
               </button>
-              <Button>
-                <Search size={13} /> 검색
-              </Button>
             </div>
           </div>
         </Card>
@@ -380,7 +398,7 @@ export default function SafetySettings() {
                         <th className="w-8 px-2 py-2"></th>
                         <th className="px-2 py-2 font-semibold">적용시점</th>
                         <th className="px-2 py-2 font-semibold">관리자구분</th>
-                        <th className="px-2 py-2 font-semibold">관리자ID</th>
+                        <th className="px-2 py-2 font-semibold">관리자이메일</th>
                         <th className="px-2 py-2 font-semibold">관리자명</th>
                         <th className="px-2 py-2 font-semibold">전자서명</th>
                         <th className="px-2 py-2 font-semibold">상태</th>

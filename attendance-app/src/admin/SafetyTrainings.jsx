@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
-import { ShieldCheck, Printer, FileSpreadsheet, RefreshCw, Search } from "lucide-react";
+import { ShieldCheck, Printer, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
@@ -48,7 +48,7 @@ export default function SafetyTrainings() {
 
   useEffect(() => {
     if (!profile?.companyId) return;
-    getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
+    getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || "")).catch(() => {});
     const unsubs = [
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (snap) =>
         setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -112,8 +112,15 @@ export default function SafetyTrainings() {
       .filter((r) => r.status === "출근" && r.siteId && managedSiteIds.has(r.siteId))
       .map((r) => ({ record: r, emp: employeeByUid.get(r.uid) }))
       .filter(({ emp }) => Boolean(emp))
+      // 센터 필터는 화면에 보이는 "센터" 컬럼(그 출근 기록 당시의
+      // record.siteId/siteName)과 같은 기준으로 걸러야 한다 — 근로자의
+      // 현재 workSiteId로 거르면, 그 사이 배정이 바뀐 경우 화면에 보이는
+      // 센터와 필터 결과가 어긋난다.
+      .filter(({ record }) => {
+        if (filters.siteId && record.siteId !== filters.siteId) return false;
+        return true;
+      })
       .filter(({ emp }) => {
-        if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
         if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
         if (filters.shiftType && emp.shiftType !== filters.shiftType) return false;
         if (filters.employmentType && emp.employmentType !== filters.employmentType) return false;
@@ -138,17 +145,17 @@ export default function SafetyTrainings() {
   }, [records, managedSiteIds, employeeByUid, filters, sort, vendors, companyName]);
 
   const exportCsv = () => {
-    const headers = ["일자", "이름", "사업자", "센터", "소속업체", "근무일자", "근무구분", "근무형태", "전화번호", "성별", "안전교육여부", "안전교육일시"];
+    const headers = ["일자", "이름", "전화번호", "사업자", "센터", "소속업체", "근무일자", "근무구분", "근무형태", "성별", "안전교육여부", "안전교육일시"];
     const rowsOut = rows.map(({ record: r, emp }) => [
       r.date,
       r.name,
+      emp.phone || "-",
       companyName,
       r.siteName || "-",
       vendors.find((v) => v.id === emp.vendorId)?.name || "-",
       r.date,
       emp.shiftType || "-",
       emp.employmentType || "-",
-      emp.phone || "-",
       emp.gender || "-",
       r.safetySignature ? "Y" : "N",
       r.safetySignedAt ? formatTime(r.safetySignedAt) : "-",
@@ -349,14 +356,11 @@ export default function SafetyTrainings() {
             <button
               type="button"
               className="rounded-xl border border-slate-200 p-2.5 text-muted hover:bg-slate-50"
-              title="새로고침"
+              title="필터 초기화"
               onClick={() => setFilters(EMPTY_FILTERS)}
             >
               <RefreshCw size={16} />
             </button>
-            <Button size="sm">
-              <Search size={13} /> 검색
-            </Button>
           </div>
         </Card>
 
@@ -385,13 +389,13 @@ export default function SafetyTrainings() {
                 <th className="px-4 py-3 font-semibold">순번</th>
                 <SortableTh sortKey="date" sort={sort} onSort={setSort}>일자</SortableTh>
                 <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
+                <th className="px-4 py-3 font-semibold">전화번호</th>
                 <SortableTh sortKey="company" sort={sort} onSort={setSort}>사업자</SortableTh>
                 <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
                 <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
                 <th className="px-4 py-3 font-semibold">근무일자</th>
                 <SortableTh sortKey="shiftType" sort={sort} onSort={setSort}>근무구분</SortableTh>
                 <SortableTh sortKey="employmentType" sort={sort} onSort={setSort}>근무형태</SortableTh>
-                <th className="px-4 py-3 font-semibold">전화번호</th>
                 <SortableTh sortKey="gender" sort={sort} onSort={setSort}>성별</SortableTh>
                 <SortableTh sortKey="trained" sort={sort} onSort={setSort}>안전교육여부</SortableTh>
                 <SortableTh sortKey="trainedAt" sort={sort} onSort={setSort}>안전교육일시</SortableTh>
@@ -407,13 +411,13 @@ export default function SafetyTrainings() {
                       {r.name}
                     </button>
                   </td>
+                  <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone || "-"}<SmsButton phone={emp.phone} /></span></td>
                   <td className="px-4 py-3 text-ink">{companyName}</td>
                   <td className="px-4 py-3 text-ink">{r.siteName || "-"}</td>
                   <td className="px-4 py-3 text-ink">{vendors.find((v) => v.id === emp.vendorId)?.name || "-"}</td>
                   <td className="px-4 py-3 text-ink">{formatDate(r.date)}</td>
                   <td className="px-4 py-3 text-ink">{emp.shiftType || "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.employmentType || "-"}</td>
-                  <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{emp.phone || "-"}<SmsButton phone={emp.phone} /></span></td>
                   <td className="px-4 py-3 text-ink">{emp.gender || "-"}</td>
                   <td className="px-4 py-3">
                     {r.safetySignature ? <Badge tone="success">Y</Badge> : <Badge tone="warning">N</Badge>}

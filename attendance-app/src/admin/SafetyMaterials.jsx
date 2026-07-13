@@ -12,6 +12,7 @@ import SidePanel from "../components/SidePanel";
 import { uploadSafetyMaterialFile } from "../utils/safety";
 import { SAFETY_TOPIC_TEMPLATES } from "../utils/safetyTemplates";
 import { formatDate, calculateAge } from "../utils/dateUtils";
+import SmsButton from "../components/SmsButton";
 
 const EMPTY_FORM = { title: "", type: "text", content: "", topicKey: "" };
 
@@ -451,7 +452,7 @@ export default function SafetyMaterials() {
                         <td className="px-3 py-2 text-ink">{calculateAge(e.residentNumberFront) ?? "-"}</td>
                         <td className="px-3 py-2 text-ink">{e.country || e.nationality || "-"}</td>
                         <td className="px-3 py-2 text-ink">{[e.team, e.position].filter(Boolean).join(" / ") || "-"}</td>
-                        <td className="px-3 py-2 text-ink">{e.phone || "-"}</td>
+                        <td className="px-3 py-2 text-ink"><span className="inline-flex items-center gap-1">{e.phone || "-"}<SmsButton phone={e.phone} /></span></td>
                         <td className="px-3 py-2">
                           <Badge tone={c ? "success" : "warning"}>{c ? "이수완료" : "미이수"}</Badge>
                         </td>
