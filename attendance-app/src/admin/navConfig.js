@@ -58,6 +58,7 @@ export const NAV = [
       { to: "/safety", label: "안전교육현황" },
       { to: "/safety/settings", label: "센터별 안전관리" },
       { to: "/safety/materials", label: "안전교육자료" },
+      { to: "/safety/compliance", label: "감사자료" },
     ],
   },
   {

@@ -288,6 +288,99 @@ export function buildGenericHtml({ title, siteName }) {
   return wrapDoc(title, body);
 }
 
+// 안전 > 안전교육자료 > 감사자료(SafetyCompliance.jsx)의 "감사보고서 생성" 탭에서
+// 근로감독관/내부감사 대응용으로 뽑는 인쇄용 문서. 다른 리포트 템플릿과 동일하게
+// wrapDoc/PAGE_STYLE을 그대로 쓰되, 표가 많고 서명 이미지가 섞여 있어 폭을
+// 조금 더 넓게 잡는다.
+export function buildComplianceReportHtml({
+  companyName,
+  businessEntityLabel,
+  scopeLabel,
+  periodStart,
+  periodEnd,
+  generatedAt,
+  summary, // { target, completed, rate, missing }
+  materialRows, // [{ title, type, createdAt, target, completed, rate }]
+  evidenceRows, // [{ name, center, materialTitle, completedAt, signatureDataUrl }]
+  outstandingRows, // [{ name, center, missing: string[] }]
+}) {
+  const body = `
+    <h1 style="letter-spacing:3px;">안전교육 이수 감사자료</h1>
+    <p class="sub">Safety Training Compliance Report</p>
+    <table class="no-border">
+      <tr><td style="width:110px;">회사명</td><td>${esc(companyName || "-")}</td><td style="width:110px;">조회범위</td><td>${esc(scopeLabel || "전체")}</td></tr>
+      <tr><td>사업자정보</td><td>${esc(businessEntityLabel || "-")}</td><td>생성일시</td><td>${esc(generatedAt || "-")}</td></tr>
+      <tr><td>조회기간</td><td colspan="3">${esc(periodStart)} ~ ${esc(periodEnd)}</td></tr>
+    </table>
+
+    <p class="section-title">1. 요약 (Executive Summary)</p>
+    <table>
+      <tr><th>전체 대상인원</th><th>이수완료인원</th><th>이수율</th><th>미이수인원</th></tr>
+      <tr>
+        <td>${summary?.target ?? 0}명</td>
+        <td>${summary?.completed ?? 0}명</td>
+        <td>${summary?.rate ?? 0}%</td>
+        <td>${summary?.missing ?? 0}명</td>
+      </tr>
+    </table>
+
+    <p class="section-title">2. 안전교육자료별 이수현황 (현재 기준)</p>
+    <table>
+      <tr><th>교육명</th><th style="width:70px;">유형</th><th style="width:90px;">등록일</th><th style="width:110px;">이수인원/대상인원</th><th style="width:70px;">이수율</th></tr>
+      ${
+        (materialRows || [])
+          .map(
+            (m) =>
+              `<tr><td>${esc(m.title)}</td><td>${esc(m.type)}</td><td>${esc(m.createdAt)}</td><td>${m.completed}/${m.target}</td><td>${m.rate}%</td></tr>`
+          )
+          .join("") || `<tr><td colspan="5">등록된 안전교육자료가 없습니다.</td></tr>`
+      }
+    </table>
+
+    <p class="section-title">3. 서명 이수 증빙 (${esc(periodStart)} ~ ${esc(periodEnd)} 이수분)</p>
+    <table>
+      <tr><th style="width:80px;">이름</th><th style="width:90px;">소속센터</th><th>교육명</th><th style="width:120px;">이수일시</th><th style="width:100px;">서명</th></tr>
+      ${
+        (evidenceRows || [])
+          .map(
+            (r) =>
+              `<tr><td>${esc(r.name)}</td><td>${esc(r.center)}</td><td>${esc(r.materialTitle)}</td><td>${esc(r.completedAt)}</td><td>${
+                r.signatureDataUrl ? `<img src="${esc(r.signatureDataUrl)}" style="height:26px;max-width:90px;" />` : "-"
+              }</td></tr>`
+          )
+          .join("") || `<tr><td colspan="5">해당 기간 내 이수 서명 기록이 없습니다.</td></tr>`
+      }
+    </table>
+
+    <p class="section-title" style="color:#b91c1c;">4. 미이수자 명단 (현재 기준 · 개선조치 대상)</p>
+    <table>
+      <tr><th style="width:90px;">이름</th><th style="width:100px;">소속센터</th><th>미이수 자료</th></tr>
+      ${
+        (outstandingRows || [])
+          .map((o) => `<tr><td>${esc(o.name)}</td><td>${esc(o.center)}</td><td>${esc((o.missing || []).join(", "))}</td></tr>`)
+          .join("") || `<tr><td colspan="3">미이수자가 없습니다 — 조회범위 내 전 인원 이수 완료.</td></tr>`
+      }
+    </table>
+    <p style="margin-top:18px;color:#666;font-size:11px;">
+      본 문서는 시스템에 기록된 안전교육 이수 데이터(등록 자료 · 이수 서명 · 이수일시)를 기반으로 자동 생성되었습니다.
+    </p>`;
+  return wrapDoc("안전교육 이수 감사자료", body);
+}
+
+// buildContractHtml 등과 동일하게, 데이터로 HTML을 만들고 새 창을 띄워
+// document.write 후 인쇄 대화상자를 여는 흐름을 그대로 재사용한다.
+export function openComplianceReportPreview(data) {
+  const html = buildComplianceReportHtml(data);
+  const win = window.open("", "_blank", "width=900,height=1000");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => {
+    win.focus();
+    win.print();
+  }, 300);
+}
+
 export function openReportPreview(docType, formatName, data) {
   let html;
   if (docType === "계약서") html = buildContractHtml({ ...data, reportFormat: formatName });

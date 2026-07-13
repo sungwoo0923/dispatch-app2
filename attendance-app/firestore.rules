@@ -210,6 +210,15 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    // 안전 > 감사자료 > 점검 이력: 근로감독관/내부감사 방문 기록. 근로자에게
+    // 노출될 이유가 없는 순수 관리자용 행정기록이라, safetyMaterials/
+    // safetyCompletions와 달리 읽기도 관리자 전용으로 좁힌다.
+    match /complianceAuditLogs/{id} {
+      allow read: if isAdminOf(resource.data.companyId);
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     // 휴가 > 휴가템플릿/휴가유형설정/센터별휴가설정: company-wide config docs.
     match /leaveTemplates/{id} {
       allow read: if isSignedIn();

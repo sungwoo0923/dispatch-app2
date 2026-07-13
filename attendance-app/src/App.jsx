@@ -51,6 +51,7 @@ import Inquiries from "./admin/Inquiries";
 import SafetyTrainings from "./admin/SafetyTrainings";
 import SafetySettings from "./admin/SafetySettings";
 import SafetyMaterials from "./admin/SafetyMaterials";
+import SafetyCompliance from "./admin/SafetyCompliance";
 import Board from "./admin/Board";
 import AdminAccounts from "./admin/AdminAccounts";
 import OrgSettings from "./admin/OrgSettings";
@@ -236,6 +237,7 @@ export default function App() {
           <Route path="safety" element={<SafetyTrainings />} />
           <Route path="safety/settings" element={<SafetySettings />} />
           <Route path="safety/materials" element={<SafetyMaterials />} />
+          <Route path="safety/compliance" element={<SafetyCompliance />} />
           <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/settings" element={<SiteInsuranceRates />} />
           <Route path="stats" element={<StatsSummary />} />
