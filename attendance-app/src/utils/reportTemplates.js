@@ -202,13 +202,19 @@ export function buildResignationHtml({
   ceoSignatureDataUrl,
   ceoName,
   ceoResult,
+  stampUrl,
 }) {
+  // 실제 결재 흐름(ResignationApprovals.jsx)에서는 대표가 아직 서명하지
+  // 않았어도 사업자에 등록된 도장(stampUrl)이 있으면 대표 결재란에 자동으로
+  // 찍어 보여준다. 센터별리포트의 "보기" 미리보기도 실제 결재 문서와 동일하게
+  // 보여야 하므로, ceoSignatureDataUrl이 없을 때는 stampUrl을 대신 쓴다.
+  const ceoStamp = ceoSignatureDataUrl || stampUrl;
   const body = `
     <div style="text-align:center;margin-bottom:6px;overflow:visible;">
       ${approvalBoxHtml([
         { role: "신청인", name: employeeName, signatureDataUrl: employeeSignatureDataUrl, result: employeeSignatureDataUrl ? "approved" : null },
         { role: "담당", name: managerName, signatureDataUrl: managerResult === "rejected" ? null : managerSignatureDataUrl, result: managerResult || (managerSignatureDataUrl ? "approved" : null) },
-        { role: "대표", name: ceoName, signatureDataUrl: ceoResult === "rejected" ? null : ceoSignatureDataUrl, result: ceoResult || (ceoSignatureDataUrl ? "approved" : null) },
+        { role: "대표", name: ceoName, signatureDataUrl: ceoResult === "rejected" ? null : ceoStamp, result: ceoResult || (ceoStamp ? "approved" : null) },
       ])}
     </div>
     <h1>사 직 서 (원)</h1>

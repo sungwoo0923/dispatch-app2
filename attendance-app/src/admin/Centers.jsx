@@ -19,6 +19,7 @@ import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
 import { openAddressSearch } from "../utils/daumPostcode";
 import { searchAddressCoords } from "../utils/geocode";
@@ -55,6 +56,7 @@ export default function Centers() {
   const [workSites, setWorkSites] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [tab, setTab] = useState("info");
   const [info, setInfo] = useState(EMPTY_INFO);
   const [searchingAddress, setSearchingAddress] = useState(false);
@@ -116,6 +118,7 @@ export default function Centers() {
     setSelectedId(null);
     setInfo(EMPTY_INFO);
     setTab("info");
+    setPanelOpen(true);
   };
   const tabIndex = TABS.findIndex((t) => t.key === tab);
   const goStep = (dir) => {
@@ -123,12 +126,17 @@ export default function Centers() {
     if (next && (selectedId || next.key === "info")) setTab(next.key);
   };
 
+  const closePanel = () => setPanelOpen(false);
+
   const removeSite = async () => {
     if (!selectedId) return;
     if (!(await confirm(`'${selectedSite?.name}' 센터를 삭제하시겠습니까?`, "delete"))) return;
     await deleteDoc(doc(db, "workSites", selectedId));
     toast.success("삭제되었습니다");
-    startNew();
+    setSelectedId(null);
+    setInfo(EMPTY_INFO);
+    setTab("info");
+    setPanelOpen(false);
   };
 
   const select = (s) => {
@@ -146,6 +154,7 @@ export default function Centers() {
       radiusM: s.radiusM ?? 100,
     });
     setTab("info");
+    setPanelOpen(true);
   };
 
   const saveInfo = async () => {
@@ -245,7 +254,7 @@ export default function Centers() {
             </thead>
             <tbody>
               {rows.map((s, i) => (
-                <tr key={s.id} className="border-b border-slate-50 last:border-0">
+                <tr key={s.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => select(s)}>
                   <td className="px-3 py-2.5 text-ink">{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <button className="text-xs text-primary hover:underline" onClick={() => select(s)}>
@@ -271,6 +280,23 @@ export default function Centers() {
           </table>
         </div>
 
+      </Panel>
+
+      <SidePanel
+        open={panelOpen}
+        onClose={closePanel}
+        title="센터 > 상세"
+        footer={
+          <>
+            {selectedId && (
+              <Button variant="outline" onClick={removeSite}>
+                삭제
+              </Button>
+            )}
+            {tab === "info" && <Button onClick={saveInfo}>저장</Button>}
+          </>
+        }
+      >
         <Card className="p-0">
           <div className="flex flex-col lg:flex-row">
             <div className="border-b border-slate-100 p-4 lg:w-48 lg:border-b-0 lg:border-r">
@@ -418,14 +444,6 @@ export default function Centers() {
                     "주소검색"으로 주소를 검색하면 위도/경도가 자동으로 입력됩니다. 위도/경도가 설정되어 있어야 근로자 모바일
                     앱에서 반경 내 자동/수동 출근이 정상 동작합니다. 필요 시 아래 값을 직접 수정할 수도 있습니다.
                   </p>
-                  <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-                    {selectedId && (
-                      <Button variant="danger" onClick={removeSite}>
-                        <Trash2 size={14} /> 삭제
-                      </Button>
-                    )}
-                    <Button onClick={saveInfo}>저장</Button>
-                  </div>
                   <p className="text-[11px] text-muted">
                     센터 생성 시 근로계약서 / 테블릿 출퇴근 시 얼굴촬영 사용여부 선택하여 사용 관리 가능합니다. 센터정보 하단 세부정보 입력은 센터정보 저장 시
                     활성화 됩니다. 센터의 주소는 전자문서양식(계약서,사직서 등)의 근무장소로 연동됩니다.
@@ -460,7 +478,7 @@ export default function Centers() {
             </div>
           </div>
         </Card>
-      </Panel>
+      </SidePanel>
     </div>
   );
 }

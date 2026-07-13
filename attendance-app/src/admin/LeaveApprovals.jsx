@@ -44,6 +44,8 @@ export default function LeaveApprovals() {
   const [statusAction, setStatusAction] = useState("승인완료");
   const [note, setNote] = useState("");
   const [detailView, setDetailView] = useState(null); // { leave, emp }
+  const [detailNote, setDetailNote] = useState("");
+  const [deciding, setDeciding] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -108,6 +110,36 @@ export default function LeaveApprovals() {
     }
     setSelected(new Set());
     setNote("");
+  };
+
+  const openDetail = (leave, emp) => {
+    setDetailView({ leave, emp });
+    setDetailNote(leave.adminNote || "");
+  };
+
+  // 결재대기 버튼이나 상세보기 팝업 어느 쪽에서 눌러도 같은 로직으로
+  // 해당 휴가신청 1건만 결재 처리한다 — 목록 상단의 체크박스+일괄적용은
+  // 여러 건을 한 번에 처리할 때, 이건 신청 1건을 바로 결재할 때 쓴다.
+  const applyDecision = async (statusKor) => {
+    if (!detailView) return;
+    setDeciding(true);
+    try {
+      const nextStatus = STATUS_MAP_REV[statusKor];
+      await updateDoc(doc(db, "leaves", detailView.leave.id), { status: nextStatus, adminNote: detailNote || null });
+      if (nextStatus !== "pending") {
+        await addDoc(collection(db, "notifications"), {
+          companyId: profile.companyId,
+          uid: detailView.leave.uid,
+          title: nextStatus === "approved" ? `${detailView.leave.type} 신청이 승인되었습니다` : `${detailView.leave.type} 신청이 반려되었습니다`,
+          message: nextStatus === "rejected" ? detailNote || "" : "",
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+      setDetailView(null);
+    } finally {
+      setDeciding(false);
+    }
   };
 
   const exportCsv = () => {
@@ -242,6 +274,7 @@ export default function LeaveApprovals() {
                 <th className="px-4 py-3 font-semibold">사업자</th>
                 <th className="px-4 py-3 font-semibold">센터</th>
                 <th className="px-4 py-3 font-semibold">상태</th>
+                <th className="px-4 py-3 font-semibold">결재</th>
                 <th className="px-4 py-3 font-semibold">신청자</th>
                 <th className="px-4 py-3 font-semibold">휴가일자</th>
                 <th className="px-4 py-3 font-semibold">휴가유형</th>
@@ -255,7 +288,7 @@ export default function LeaveApprovals() {
               {rows.map(({ leave: lv, emp }, i) => (
                 <tr
                   key={lv.id}
-                  onDoubleClick={() => setDetailView({ leave: lv, emp })}
+                  onDoubleClick={() => openDetail(lv, emp)}
                   title="더블클릭하여 휴가신청서 미리보기"
                   className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
                 >
@@ -268,6 +301,21 @@ export default function LeaveApprovals() {
                   <td className="px-4 py-3">
                     <Badge tone={STATUS_TONE[STATUS_MAP[lv.status] || "승인대기"]}>{STATUS_MAP[lv.status] || "승인대기"}</Badge>
                   </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => openDetail(lv, emp)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                        (lv.status || "pending") === "pending"
+                          ? "animate-pulse bg-warning text-white"
+                          : lv.status === "approved"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-red-100 text-danger"
+                      }`}
+                    >
+                      {(lv.status || "pending") === "pending" ? "결재대기" : STATUS_MAP[lv.status]}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-ink">{lv.name}</td>
                   <td className="px-4 py-3 text-ink">{formatDate(lv.startDate)}</td>
                   <td className="px-4 py-3 text-ink">{lv.type}</td>
@@ -279,7 +327,7 @@ export default function LeaveApprovals() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={13} className="px-4 py-6 text-center text-xs text-muted">
                     신청된 휴가가 없습니다.
                   </td>
                 </tr>
@@ -293,7 +341,19 @@ export default function LeaveApprovals() {
         open={Boolean(detailView)}
         onClose={() => setDetailView(null)}
         title="휴가신청서"
-        footer={<Button onClick={() => setDetailView(null)}>닫기</Button>}
+        footer={
+          <>
+            <Button variant="outline" disabled={deciding} onClick={() => applyDecision("승인대기")}>
+              대기
+            </Button>
+            <Button variant="danger" disabled={deciding} onClick={() => applyDecision("반려")}>
+              반려
+            </Button>
+            <Button disabled={deciding} onClick={() => applyDecision("승인완료")}>
+              승인
+            </Button>
+          </>
+        }
       >
         {detailView && (
           <div className="space-y-3">
@@ -332,13 +392,17 @@ export default function LeaveApprovals() {
                 <span className="text-xs text-muted">사유</span>
                 <span>{detailView.leave.reason || "-"}</span>
               </div>
-              {detailView.leave.adminNote && (
-                <div className="flex justify-between border-b border-slate-50 py-1.5">
-                  <span className="text-xs text-muted">관리자비고</span>
-                  <span>{detailView.leave.adminNote}</span>
-                </div>
-              )}
             </div>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">관리자비고</span>
+              <textarea
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                rows={2}
+                value={detailNote}
+                onChange={(e) => setDetailNote(e.target.value)}
+                placeholder="반려 사유 등을 입력하세요"
+              />
+            </label>
           </div>
         )}
       </Modal>

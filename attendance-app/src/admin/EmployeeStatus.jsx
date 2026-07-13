@@ -7,6 +7,7 @@ import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
+import Card from "../components/Card";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import FilterDropdown from "../components/FilterDropdown";
@@ -64,9 +65,12 @@ export default function EmployeeStatus() {
   useEffect(() => {
     if (!profile?.companyId) return;
     const unsubs = [
+      // 삭제(휴지통 처리)된 근로자도 입퇴사 이력의 일부이므로 걸러내지 않고
+      // 그대로 보여준다 — 그래야 "삭제했더니 목록에서 아무 흔적도 안 남는다"는
+      // 문제 없이 삭제 사실 자체가 이 화면의 조회 기록으로 남는다.
       onSnapshot(
         query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")),
-        (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))
+        (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       ),
       onSnapshot(query(collection(db, "businessEntities"), where("companyId", "==", profile.companyId)), (snap) =>
         setBusinessEntities(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -217,116 +221,126 @@ export default function EmployeeStatus() {
   return (
     <div className="space-y-6">
       <Panel icon={UserCog} title="입퇴사현황">
-        <div className="space-y-3">
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
+        <Card className="mb-4 space-y-4 p-4">
+          <div className="flex flex-wrap items-end gap-3">
             <FilterDropdown
-              label="1선택 · 사업자"
+              label="사업자"
               options={businessEntities.map((b) => ({ value: b.id, label: b.name }))}
               selected={draft.entityIds}
               onChange={(v) => setDraft((f) => ({ ...f, entityIds: v }))}
             />
             <FilterDropdown
-              label="2선택 · 센터"
+              label="센터"
               options={workSites.map((s) => ({ value: s.id, label: s.name }))}
               selected={draft.siteIds}
               onChange={(v) => setDraft((f) => ({ ...f, siteIds: v }))}
             />
             <FilterDropdown
-              label="3선택 · 소속업체"
+              label="소속업체"
               options={vendors.map((v) => ({ value: v.id, label: v.name }))}
               selected={draft.vendorIds}
               onChange={(v) => setDraft((f) => ({ ...f, vendorIds: v }))}
             />
             <FilterDropdown
-              label="4선택 · 외/내국인"
+              label="외/내국인"
               options={NATIONALITY_OPTIONS.map((n) => ({ value: n, label: n }))}
               selected={draft.nationalities}
               onChange={(v) => setDraft((f) => ({ ...f, nationalities: v }))}
             />
             <FilterDropdown
-              label="5선택 · 국가구분"
+              label="국가구분"
               options={COUNTRY_OPTIONS.map((c) => ({ value: c, label: c }))}
               selected={draft.countries}
               onChange={(v) => setDraft((f) => ({ ...f, countries: v }))}
             />
           </div>
 
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
-            <span className="shrink-0 text-xs font-medium text-muted">통합검색</span>
-            <select
-              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-              value={draft.searchField}
-              onChange={(e) => setDraft((f) => ({ ...f, searchField: e.target.value }))}
-            >
-              {SEARCH_FIELD_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex shrink-0 flex-nowrap overflow-hidden rounded-xl border border-slate-200">
-              <input
-                className="w-28 border-0 px-3 py-2 text-sm focus:outline-none"
-                placeholder="검색어"
-                value={draft.searchText}
-                onChange={(e) => setDraft((f) => ({ ...f, searchText: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && runSearch()}
-              />
-              <button
-                type="button"
-                onClick={runSearch}
-                className="flex items-center gap-1 border-l border-slate-200 bg-slate-50 px-2.5 text-xs text-muted hover:bg-slate-100"
+          <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">통합검색</span>
+              <div className="flex flex-nowrap overflow-hidden rounded-lg border border-slate-200">
+                <select
+                  className="shrink-0 border-0 border-r border-slate-200 bg-slate-50 px-2.5 py-2 text-sm focus:outline-none"
+                  value={draft.searchField}
+                  onChange={(e) => setDraft((f) => ({ ...f, searchField: e.target.value }))}
+                >
+                  {SEARCH_FIELD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="w-36 border-0 px-3 py-2 text-sm focus:outline-none"
+                  placeholder="검색어"
+                  value={draft.searchText}
+                  onChange={(e) => setDraft((f) => ({ ...f, searchText: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                />
+                <button
+                  type="button"
+                  onClick={runSearch}
+                  className="flex shrink-0 items-center gap-1 border-l border-slate-200 bg-slate-50 px-3 text-xs font-medium text-muted hover:bg-slate-100"
+                >
+                  <Search size={13} /> 조회
+                </button>
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">기간구분</span>
+              <select
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={draft.periodField}
+                onChange={(e) => setDraft((f) => ({ ...f, periodField: e.target.value }))}
               >
-                <Search size={13} /> 조회
-              </button>
+                {PERIOD_FIELD_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">기간</span>
+              <div className="flex flex-nowrap items-center gap-2">
+                <input
+                  type="date"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={draft.periodFrom}
+                  onChange={(e) => setDraft((f) => ({ ...f, periodFrom: e.target.value }))}
+                />
+                <span className="text-muted">~</span>
+                <input
+                  type="date"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={draft.periodTo}
+                  onChange={(e) => setDraft((f) => ({ ...f, periodTo: e.target.value }))}
+                />
+              </div>
+            </label>
+
+            <div className="ml-auto flex flex-nowrap items-center gap-2">
+              <Button variant="outline" onClick={resetSearch}>
+                초기화
+              </Button>
+              <Button variant="outline" onClick={exportExcel}>
+                <Download size={16} /> 엑셀 다운로드
+              </Button>
+              <Button variant="danger" onClick={deleteSelectedEmployees} disabled={selected.size === 0}>
+                <Trash2 size={16} /> 선택삭제 ({selected.size})
+              </Button>
             </div>
-
-            <span className="ml-2 shrink-0 text-xs font-medium text-muted">기간구분</span>
-            <select
-              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-              value={draft.periodField}
-              onChange={(e) => setDraft((f) => ({ ...f, periodField: e.target.value }))}
-            >
-              {PERIOD_FIELD_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-              value={draft.periodFrom}
-              onChange={(e) => setDraft((f) => ({ ...f, periodFrom: e.target.value }))}
-            />
-            <span className="shrink-0 text-muted">~</span>
-            <input
-              type="date"
-              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-              value={draft.periodTo}
-              onChange={(e) => setDraft((f) => ({ ...f, periodTo: e.target.value }))}
-            />
           </div>
-
-          <div className="flex flex-nowrap items-center gap-2">
-            <Button variant="outline" onClick={resetSearch}>
-              초기화
-            </Button>
-            <Button variant="outline" onClick={exportExcel}>
-              <Download size={16} /> 엑셀 다운로드
-            </Button>
-            <Button variant="danger" onClick={deleteSelectedEmployees} disabled={selected.size === 0}>
-              <Trash2 size={16} /> 선택삭제 ({selected.size})
-            </Button>
-          </div>
-        </div>
+        </Card>
 
         <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
           <span>목록 {total}건</span>
           <span className="text-slate-300">·</span>
-          <span className="text-primary">재직 {filtered.filter((e) => (e.employmentStatus || "재직") === "재직").length}</span>
-          <span className="text-slate-500">휴직 {filtered.filter((e) => e.employmentStatus === "휴직").length}</span>
-          <span className="text-danger">퇴사 {filtered.filter((e) => e.employmentStatus === "퇴사").length}</span>
+          <span className="text-primary">재직 {filtered.filter((e) => !e.deleted && (e.employmentStatus || "재직") === "재직").length}</span>
+          <span className="text-slate-500">휴직 {filtered.filter((e) => !e.deleted && e.employmentStatus === "휴직").length}</span>
+          <span className="text-danger">퇴사 {filtered.filter((e) => !e.deleted && e.employmentStatus === "퇴사").length}</span>
+          <span className="text-slate-400">삭제됨 {filtered.filter((e) => e.deleted).length}</span>
         </p>
 
         <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain rounded-xl bg-slate-50 p-3">
@@ -369,6 +383,7 @@ export default function EmployeeStatus() {
                   <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
                 </th>
                 <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
+                <th className="px-4 py-3 font-semibold">상태</th>
                 <SortableTh sortKey="entity" sort={sort} onSort={setSort}>사업자</SortableTh>
                 <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
                 <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
@@ -391,9 +406,21 @@ export default function EmployeeStatus() {
                 >
                   <td className="px-4 py-3 text-ink">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
+                    <input
+                      type="checkbox"
+                      checked={selected.has(emp.id)}
+                      disabled={emp.deleted}
+                      onChange={() => toggleSelect(emp.id)}
+                    />
                   </td>
                   <td className="px-4 py-3 text-ink">{emp.name}</td>
+                  <td className="px-4 py-3">
+                    {emp.deleted ? (
+                      <Badge tone="danger">삭제됨</Badge>
+                    ) : (
+                      <Badge tone={STATUS_TONE[emp.employmentStatus] || "success"}>{emp.employmentStatus || "재직"}</Badge>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-ink">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
@@ -401,22 +428,28 @@ export default function EmployeeStatus() {
                   <td className="px-4 py-3 text-ink">{emp.lastWorkDate ? formatDate(emp.lastWorkDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
-                  <td className="px-4 py-3 text-ink">{emp.changeReason || "-"}</td>
+                  <td className="px-4 py-3 text-ink">
+                    {emp.deleted ? `삭제일 ${emp.deletedAt ? formatDate(emp.deletedAt) : "-"}` : emp.changeReason || "-"}
+                  </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => deleteEmployee(emp)}
-                      title="삭제"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {emp.deleted ? (
+                      <span className="text-xs text-muted">-</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => deleteEmployee(emp)}
+                        title="삭제"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={13} className="px-4 py-6 text-center text-xs text-muted">
                     조회조건에 해당하는 데이터가 없습니다.
                   </td>
                 </tr>

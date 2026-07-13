@@ -294,6 +294,16 @@ export default function AttendanceBoard() {
     { key: "team", label: "부서", render: ({ emp }) => emp.team || "-" },
     { key: "position", label: "직급", render: ({ emp }) => emp.position || "-" },
     {
+      key: "phone",
+      label: "연락처",
+      render: ({ emp }) => (
+        <span className="inline-flex items-center gap-1">
+          {emp.phone || "-"}
+          {emp.phone && <SmsButton phone={emp.phone} />}
+        </span>
+      ),
+    },
+    {
       key: "checkIn",
       label: "출근시간",
       render: ({ record: r }) => {

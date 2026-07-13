@@ -9,6 +9,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
 import Modal from "../components/Modal";
+import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
 
 const RATE_TYPES = ["고용보험요율", "건강보험요율", "소득세", "요양보험요율", "국민연금요율"];
@@ -23,6 +24,7 @@ export default function InsuranceRateTemplates() {
 
   const [selectedMasterId, setSelectedMasterId] = useState(null);
   const [masterForm, setMasterForm] = useState({ businessEntityId: "", name: "", visibility: "보임", memo: "" });
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const [selectedElementId, setSelectedElementId] = useState(null);
   const [elementForm, setElementForm] = useState({ businessEntityId: "", templateId: "", rateType: "", ratePercent: "", insuranceApplicable: "대상" });
@@ -46,11 +48,14 @@ export default function InsuranceRateTemplates() {
   const selectMaster = (m) => {
     setSelectedMasterId(m.id);
     setMasterForm({ businessEntityId: m.businessEntityId || "", name: m.name || "", visibility: m.visibility || "보임", memo: m.memo || "" });
+    setPanelOpen(true);
   };
   const startNewMaster = () => {
     setSelectedMasterId(null);
     setMasterForm({ businessEntityId: "", name: "", visibility: "보임", memo: "" });
+    setPanelOpen(true);
   };
+  const closePanel = () => setPanelOpen(false);
   const saveMaster = async () => {
     if (!masterForm.name.trim()) return;
     if (!(await confirm("저장하시겠습니까?", "save"))) return;
@@ -68,7 +73,9 @@ export default function InsuranceRateTemplates() {
     await deleteDoc(doc(db, "insuranceRateTemplates", selectedMasterId));
     for (const el of elements.filter((e) => e.templateId === selectedMasterId)) await deleteDoc(doc(db, "insuranceRateElements", el.id));
     toast.success("삭제되었습니다");
-    startNewMaster();
+    setSelectedMasterId(null);
+    setMasterForm({ businessEntityId: "", name: "", visibility: "보임", memo: "" });
+    setPanelOpen(false);
   };
   const openCopyMaster = () => {
     setCopyForm({ businessEntityId: masterForm.businessEntityId, name: `${masterForm.name}(복사)` });
@@ -131,103 +138,115 @@ export default function InsuranceRateTemplates() {
       <Panel icon={ShieldPlus} title="보험요율">
         <p className="mb-4 text-xs text-muted">마스터 템플릿을 생성 후 서브상세에서 보험종류별로 요율을 등록할 수 있습니다.</p>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+          <p className="text-xs font-medium text-muted">보험요율 {masters.length}</p>
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
+            <Button size="sm" onClick={startNewMaster}>
+              <Plus size={13} /> 신규
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportMasters}>
+              <FileSpreadsheet size={13} /> 엑셀
+            </Button>
+          </div>
+        </div>
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
+          <table className="w-full min-w-[560px] text-center text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">상세</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">템플릿명</th>
+                <th className="px-3 py-2.5 font-semibold">숨김여부</th>
+              </tr>
+            </thead>
+            <tbody>
+              {masters.map((m, i) => (
+                <tr key={m.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => selectMaster(m)}>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
+                  <td className="px-3 py-2.5">
+                    <button className="text-xs text-primary hover:underline" onClick={() => selectMaster(m)}>
+                      상세
+                    </button>
+                  </td>
+                  <td className="px-3 py-2.5 text-ink">{entityName(m.businessEntityId)}</td>
+                  <td className="px-3 py-2.5 text-ink">{m.name}</td>
+                  <td className="px-3 py-2.5 text-ink">{m.visibility}</td>
+                </tr>
+              ))}
+              {masters.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-xs text-muted">
+                    등록된 보험요율 템플릿이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rounded-xl bg-primary-light/40 p-3.5 text-xs leading-relaxed text-primary">
+          보험요율등록방법
+          <br />
+          Step1. 신규혹은 수정할 템플릿 선택(①) Step2. 보험요율 상세에서 템플릿명을 입력(②) Step3. 보험요율요소 신규 혹은 수정할 보험요율요소 선택(③) Step4.
+          보험요율요소 상세에서 보험요율 세부정보 등록(④)
+        </div>
+      </Panel>
+
+      <SidePanel
+        open={panelOpen}
+        onClose={closePanel}
+        title="보험요율 > 상세"
+        footer={
+          <>
+            <Button variant="outline" onClick={removeMaster} disabled={!selectedMasterId}>
+              삭제
+            </Button>
+            <Button variant="outline" onClick={openCopyMaster} disabled={!selectedMasterId}>
+              복사
+            </Button>
+            <Button onClick={saveMaster}>저장</Button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
+              <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={masterForm.businessEntityId} onChange={(e) => setMasterForm((f) => ({ ...f, businessEntityId: e.target.value }))}>
+                <option value="">선택</option>
+                {entities.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명 *</span>
+              <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={masterForm.name} onChange={(e) => setMasterForm((f) => ({ ...f, name: e.target.value }))} />
+            </label>
+          </div>
           <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
-              <p className="text-xs font-medium text-muted">보험요율 {masters.length}</p>
-              <Button size="sm" variant="outline" onClick={exportMasters}>
-                <FileSpreadsheet size={13} /> 엑셀
+            <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
+            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
+              {["숨김", "보임"].map((v) => (
+                <label key={v} className="flex items-center gap-1.5">
+                  <input type="radio" checked={masterForm.visibility === v} onChange={() => setMasterForm((f) => ({ ...f, visibility: v }))} />
+                  {v}
+                </label>
+              ))}
+              <Button size="sm" variant="outline" onClick={saveMaster}>
+                적용
               </Button>
             </div>
-            <div className="mb-3 max-h-56 overflow-y-auto rounded-xl border border-slate-100">
-              <table className="w-full text-center text-sm">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2 font-semibold">순번</th>
-                    <th className="px-3 py-2 font-semibold">사업자</th>
-                    <th className="px-3 py-2 font-semibold">템플릿명</th>
-                    <th className="px-3 py-2 font-semibold">숨김여부</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {masters.map((m, i) => (
-                    <tr
-                      key={m.id}
-                      onClick={() => selectMaster(m)}
-                      className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedMasterId === m.id ? "bg-primary-light/40" : ""}`}
-                    >
-                      <td className="px-3 py-2 text-ink">{i + 1}</td>
-                      <td className="px-3 py-2 text-ink">{entityName(m.businessEntityId)}</td>
-                      <td className="px-3 py-2 text-ink">{m.name}</td>
-                      <td className="px-3 py-2 text-ink">{m.visibility}</td>
-                    </tr>
-                  ))}
-                  {masters.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-4 text-center text-xs text-muted">
-                        등록된 보험요율 템플릿이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <Card className="space-y-3 p-4">
-              <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
-                <p className="text-sm font-semibold text-ink">보험요율 상세</p>
-                <Button size="sm" variant="outline" onClick={startNewMaster}>
-                  <Plus size={13} /> 신규
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
-                  <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={masterForm.businessEntityId} onChange={(e) => setMasterForm((f) => ({ ...f, businessEntityId: e.target.value }))}>
-                    <option value="">선택</option>
-                    {entities.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">템플릿명 *</span>
-                  <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={masterForm.name} onChange={(e) => setMasterForm((f) => ({ ...f, name: e.target.value }))} />
-                </label>
-              </div>
-              <div>
-                <span className="mb-1.5 block text-xs font-medium text-muted">숨김여부</span>
-                <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overscroll-x-contain text-sm">
-                  {["숨김", "보임"].map((v) => (
-                    <label key={v} className="flex items-center gap-1.5">
-                      <input type="radio" checked={masterForm.visibility === v} onChange={() => setMasterForm((f) => ({ ...f, visibility: v }))} />
-                      {v}
-                    </label>
-                  ))}
-                  <Button size="sm" variant="outline" onClick={saveMaster}>
-                    적용
-                  </Button>
-                </div>
-              </div>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
-                <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={masterForm.memo} onChange={(e) => setMasterForm((f) => ({ ...f, memo: e.target.value }))} />
-              </label>
-              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
-                <Button variant="outline" onClick={removeMaster} disabled={!selectedMasterId}>
-                  삭제
-                </Button>
-                <Button variant="outline" onClick={openCopyMaster} disabled={!selectedMasterId}>
-                  복사
-                </Button>
-                <Button onClick={saveMaster}>저장</Button>
-              </div>
-            </Card>
           </div>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
+            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={masterForm.memo} onChange={(e) => setMasterForm((f) => ({ ...f, memo: e.target.value }))} />
+          </label>
 
-          <div>
+          <div className="border-t border-slate-100 pt-4">
             <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">보험요율요소 {masterElements.length}</p>
               <Button size="sm" variant="outline" onClick={exportElements}>
@@ -337,14 +356,7 @@ export default function InsuranceRateTemplates() {
             </Card>
           </div>
         </div>
-
-        <div className="mt-4 rounded-xl bg-primary-light/40 p-3.5 text-xs leading-relaxed text-primary">
-          보험요율등록방법
-          <br />
-          Step1. 신규혹은 수정할 템플릿 선택(①) Step2. 보험요율 상세에서 템플릿명을 입력(②) Step3. 보험요율요소 신규 혹은 수정할 보험요율요소 선택(③) Step4.
-          보험요율요소 상세에서 보험요율 세부정보 등록(④)
-        </div>
-      </Panel>
+      </SidePanel>
 
       <Modal
         open={copyOpen}

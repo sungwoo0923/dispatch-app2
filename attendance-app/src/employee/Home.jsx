@@ -30,6 +30,7 @@ import {
   Volume2,
   VolumeX,
   Phone,
+  Maximize2,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -91,6 +92,7 @@ export default function Home() {
   const [tipIndex, setTipIndex] = useState(0);
   const [homeSafetyVideoUrl, setHomeSafetyVideoUrl] = useState("");
   const [videoMuted, setVideoMuted] = useState(true);
+  const homeVideoRef = useRef(null);
   const [showChecklist, setShowChecklist] = useState(false);
   const [docStep, setDocStep] = useState(0);
   const [docRead, setDocRead] = useState({});
@@ -577,6 +579,7 @@ export default function Home() {
         {homeSafetyVideoUrl ? (
           <div className="relative">
             <video
+              ref={homeVideoRef}
               key={homeSafetyVideoUrl}
               src={homeSafetyVideoUrl}
               className="aspect-video w-full bg-black object-cover"
@@ -589,14 +592,29 @@ export default function Home() {
             <p className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
               <ShieldAlert size={12} /> 오늘도 안전하게!
             </p>
-            <button
-              type="button"
-              onClick={() => setVideoMuted((v) => !v)}
-              className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-95"
-              aria-label={videoMuted ? "소리 켜기" : "음소거"}
-            >
-              {videoMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-            </button>
+            <div className="absolute bottom-3 right-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = homeVideoRef.current;
+                  if (!el) return;
+                  if (el.requestFullscreen) el.requestFullscreen();
+                  else if (el.webkitEnterFullscreen) el.webkitEnterFullscreen();
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-95"
+                aria-label="크게 보기"
+              >
+                <Maximize2 size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setVideoMuted((v) => !v)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-95"
+                aria-label={videoMuted ? "소리 켜기" : "음소거"}
+              >
+                {videoMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="p-5">

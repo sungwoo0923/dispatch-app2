@@ -271,6 +271,7 @@ export default function EmployeeList() {
   const [businessEntities, setBusinessEntities] = useState([]);
   const [centerReports, setCenterReports] = useState([]);
   const [companyName, setCompanyName] = useState("");
+  const [resignationRequests, setResignationRequests] = useState([]);
 
   const [regTab, setRegTab] = useState("시간템플릿");
   const [stagedDocs, setStagedDocs] = useState([]);
@@ -356,6 +357,10 @@ export default function EmployeeList() {
       query(collection(db, "centerReports"), where("companyId", "==", profile.companyId)),
       (snap) => setCenterReports(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubResignations = onSnapshot(
+      query(collection(db, "resignationRequests"), where("companyId", "==", profile.companyId)),
+      (snap) => setResignationRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
     return () => {
       unsubUsers();
@@ -371,6 +376,7 @@ export default function EmployeeList() {
       unsubInfoChangeReq();
       unsubEntities();
       unsubReports();
+      unsubResignations();
     };
   }, [profile?.companyId]);
 
@@ -716,7 +722,22 @@ export default function EmployeeList() {
     toast.success("삭제되었습니다");
   };
 
+  // 사직서를 제출(=서명 완료)한 근로자는 그대로 삭제 진행하되, 아직 제출하지
+  // 않은 상태에서 삭제하면 사직 처리 없이 근로 이력이 사라져버릴 수 있으므로
+  // "정말 이대로 삭제할지"를 한 번 더 물어본다.
+  const hasSubmittedResignation = (uid) =>
+    resignationRequests.some((r) => r.uid === uid && !r.deleted && r.employeeSignatureDataUrl);
+
   const deleteEmployee = async (emp) => {
+    if (!hasSubmittedResignation(emp.id)) {
+      if (
+        !(await confirm(
+          `${emp.name} 근로자는 아직 사직서를 제출하지 않았습니다. 그래도 삭제하시겠습니까?`,
+          "delete"
+        ))
+      )
+        return;
+    }
     if (!(await confirm(`${emp.name} 근로자를 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
     await softDeleteEmployee(emp.id);
     toast.success("삭제되었습니다");
@@ -725,6 +746,16 @@ export default function EmployeeList() {
   const deleteSelectedEmployees = async () => {
     const targets = filteredEmployees.filter((emp) => selected.has(emp.id));
     if (targets.length === 0) return;
+    const notSubmitted = targets.filter((emp) => !hasSubmittedResignation(emp.id));
+    if (notSubmitted.length > 0) {
+      if (
+        !(await confirm(
+          `선택된 ${targets.length}명 중 ${notSubmitted.length}명은 아직 사직서를 제출하지 않았습니다. 그래도 삭제하시겠습니까?`,
+          "delete"
+        ))
+      )
+        return;
+    }
     if (!(await confirm(`선택된 ${targets.length}명을 삭제하시겠습니까? 삭제하면 모바일 접속이 차단됩니다.`, "delete"))) return;
     try {
       await softDeleteEmployees(targets.map((emp) => emp.id));

@@ -73,23 +73,46 @@ function shortenCandidates(addr) {
   return results;
 }
 
+// 행정구역 개편/신설(예: 인천 서구 검단 신도시 → 검단구 분구)이 도로명주소
+// 데이터베이스에 아직 반영되지 않았거나, 반대로 사용자가 옛 명칭으로 입력한
+// 경우를 모두 대비해 양쪽 이름을 다 시도한다 — 어느 한쪽만 시도하면 실제로는
+// 존재하는 주소인데도 "좌표를 찾지 못함"으로 잘못 처리될 수 있다.
+const DISTRICT_ALIASES = [["검단구", "서구"]];
+
+function withDistrictAliases(addr) {
+  const variants = [addr];
+  for (const [a, b] of DISTRICT_ALIASES) {
+    if (addr.includes(a)) variants.push(addr.replace(a, b));
+    if (addr.includes(b)) variants.push(addr.replace(b, a));
+  }
+  return [...new Set(variants)];
+}
+
+async function tryWithAliases(addr) {
+  for (const variant of withDistrictAliases(addr)) {
+    const found = await tryOne(variant);
+    if (found) return { address: variant, ...found };
+  }
+  return null;
+}
+
 export async function searchAddressCoords(keyword) {
   const kw = keyword.trim();
   if (!kw) return null;
   const cleaned = cleanAddr(kw);
 
-  let found = await tryOne(cleaned);
-  if (found) return { address: cleaned, precise: true, ...found };
+  let found = await tryWithAliases(cleaned);
+  if (found) return { precise: true, ...found };
 
   const noBuilding = stripBuildingNumber(cleaned);
   if (noBuilding && noBuilding !== cleaned) {
-    found = await tryOne(noBuilding);
-    if (found) return { address: noBuilding, precise: true, ...found };
+    found = await tryWithAliases(noBuilding);
+    if (found) return { precise: true, ...found };
   }
 
   for (const candidate of shortenCandidates(cleaned)) {
-    found = await tryOne(candidate);
-    if (found) return { address: candidate, precise: false, ...found };
+    found = await tryWithAliases(candidate);
+    if (found) return { precise: false, ...found };
   }
 
   return null;

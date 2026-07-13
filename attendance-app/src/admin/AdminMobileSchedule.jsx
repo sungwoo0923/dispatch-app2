@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, getDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, doc, setDoc, updateDoc, deleteDoc, getDocs, getDoc, serverTimestamp } from "firebase/firestore";
 import { ChevronLeft, ChevronRight, Search, Phone, Plus, CalendarDays, CheckSquare, Square } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
+import { useConfirm } from "../hooks/useConfirm";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
 import Badge from "../components/Badge";
 import SmsButton from "../components/SmsButton";
-import { toDateKey, formatDate } from "../utils/dateUtils";
+import { toDateKey, formatDate, attendanceDocId } from "../utils/dateUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
 
 const TABS = [
@@ -20,7 +21,7 @@ const TABS = [
 ];
 
 const ROW_MENU_TARGETS = {
-  confirmed: ["대기", "휴무", "퇴사"],
+  confirmed: ["강제출근", "대기", "휴무", "퇴사"],
   pending: ["출근확정", "휴무", "퇴사"],
   leave: ["대기", "출근확정", "퇴사"],
   resigned: ["근무"],
@@ -34,6 +35,7 @@ const ROW_MENU_TARGETS = {
 export default function AdminMobileSchedule() {
   const { profile } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const location = useLocation();
   const navigate = useNavigate();
   const [dateKey, setDateKey] = useState(() => toDateKey());
@@ -189,10 +191,56 @@ export default function AdminMobileSchedule() {
     else notifyScheduleStatus(uid, `${date} 근무 상태가 '대기'로 변경되었습니다.`);
   };
 
+  // 근로자가 출근지에 도착했는데도 시스템/기기 문제로 모바일 출근 버튼이
+  // 안 먹힐 때, 관리자가 대신 출근 처리할 수 있게 한다. 단, 안전교육 등
+  // 필수자료를 아직 다 이수하지 않은 근로자까지 강제로 출근 처리해버리면
+  // 안전관리 사각지대가 생기므로 그 조건만은 그대로 지킨다.
+  const forceCheckIn = async (row) => {
+    const { schedule: s, emp } = row;
+    if (!(await confirm(`${emp.name}님을 관리자가 직접 출근 처리하시겠습니까? 시스템 문제로 정상 출근이 안 될 때만 사용해주세요.`, "save")))
+      return;
+    try {
+      const [materialsSnap, completionsSnap] = await Promise.all([
+        getDocs(query(collection(db, "safetyMaterials"), where("companyId", "==", profile.companyId), where("active", "==", true))),
+        getDocs(query(collection(db, "safetyCompletions"), where("uid", "==", s.uid))),
+      ]);
+      const completedIds = new Set(completionsSnap.docs.map((d) => d.data().materialId));
+      const pendingSafety = materialsSnap.docs.filter((d) => !completedIds.has(d.id)).length;
+      if (pendingSafety > 0) {
+        toast.error(`${emp.name}님은 안전교육 미이수 자료가 ${pendingSafety}건 있어 강제출근 처리할 수 없습니다. 안전교육 이수 후 다시 시도해주세요.`);
+        return;
+      }
+      const dk = s.date || dateKey;
+      await setDoc(
+        doc(db, "attendance", attendanceDocId(s.uid, dk)),
+        {
+          uid: s.uid,
+          name: emp.name,
+          companyId: profile.companyId,
+          date: dk,
+          month: dk.slice(0, 7),
+          status: "출근",
+          checkInTime: new Date().toISOString(),
+          source: "manual",
+          siteId: s.siteId || emp.workSiteId || null,
+          siteName: s.siteName || siteName(emp.workSiteId),
+        },
+        { merge: true }
+      );
+      toast.success(`${emp.name}님을 출근 처리했습니다`);
+    } catch (err) {
+      toast.error(`강제출근 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
+    }
+  };
+
   const runAction = async (target) => {
     if (!actionRow) return;
     const { kind, row } = actionRow;
     setActionRow(null);
+    if (kind === "confirmed" && target === "강제출근") {
+      await forceCheckIn(row);
+      return;
+    }
     try {
       if (kind === "confirmed" || kind === "pending") {
         const { schedule: s, emp } = row;
@@ -396,9 +444,11 @@ export default function AdminMobileSchedule() {
                   key={t}
                   type="button"
                   onClick={() => runAction(t)}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-ink hover:bg-slate-50"
+                  className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-semibold hover:bg-slate-50 ${
+                    t === "강제출근" ? "border-primary text-primary" : "border-slate-200 text-ink"
+                  }`}
                 >
-                  {t}(으)로 변경
+                  {t === "강제출근" ? "강제출근 처리" : `${t}(으)로 변경`}
                 </button>
               ))}
             </div>

@@ -6,6 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Panel from "../components/Panel";
+import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
 import SmsButton from "../components/SmsButton";
 
@@ -25,6 +26,7 @@ export default function BusinessEntities() {
   const [vendors, setVendors] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
@@ -58,6 +60,7 @@ export default function BusinessEntities() {
   const startNew = () => {
     setSelectedId(null);
     setForm(EMPTY_FORM);
+    setPanelOpen(true);
   };
 
   const select = (e) => {
@@ -70,7 +73,10 @@ export default function BusinessEntities() {
       memberDetailYN: e.memberDetailYN || "등록",
       active: e.active || "사용",
     });
+    setPanelOpen(true);
   };
+
+  const closePanel = () => setPanelOpen(false);
 
   const save = async () => {
     if (!form.name.trim() || !form.regNumber.trim()) return;
@@ -84,12 +90,15 @@ export default function BusinessEntities() {
       });
       setSelectedId(ref.id);
     }
+    setPanelOpen(false);
   };
 
   const remove = async () => {
     if (!selectedId || inUse(selectedId)) return;
     await deleteDoc(doc(db, "businessEntities", selectedId));
-    startNew();
+    setSelectedId(null);
+    setForm(EMPTY_FORM);
+    setPanelOpen(false);
   };
 
   const exportCsv = () => {
@@ -125,143 +134,153 @@ export default function BusinessEntities() {
           </div>
         </Card>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_1fr]">
-          <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
-              <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
-              <Button size="sm" variant="outline" onClick={exportCsv}>
-                <FileSpreadsheet size={13} /> 엑셀
-              </Button>
-            </div>
-            <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
-              <table className="w-full min-w-[560px] text-center text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="px-3 py-2.5 font-semibold">순번</th>
-                    <th className="px-3 py-2.5 font-semibold">사업자</th>
-                    <th className="px-3 py-2.5 font-semibold">사업자등록번호</th>
-                    <th className="px-3 py-2.5 font-semibold">사업자전화번호</th>
-                    <th className="px-3 py-2.5 font-semibold">사업자주소</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((e, i) => (
-                    <tr
-                      key={e.id}
-                      onClick={() => select(e)}
-                      className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 ${selectedId === e.id ? "bg-primary-light/40" : ""}`}
-                    >
-                      <td className="px-3 py-2.5 text-ink">{i + 1}</td>
-                      <td className="px-3 py-2.5 text-ink">{e.name}</td>
-                      <td className="px-3 py-2.5 text-ink">{e.regNumber}</td>
-                      <td className="px-3 py-2.5 text-ink"><span className="inline-flex items-center gap-1">{e.phone || "-"}<SmsButton phone={e.phone} /></span></td>
-                      <td className="px-3 py-2.5 text-ink">{e.address || "-"}</td>
-                    </tr>
-                  ))}
-                  {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-xs text-muted">
-                        등록된 사업자가 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
-              <p className="text-xs font-medium text-muted">상세</p>
-              <Button size="sm" variant="outline" onClick={startNew}>
-                <Plus size={13} /> 신규
-              </Button>
-            </div>
-            <Card className="space-y-3 p-4">
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
-                  <input
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted">사업자등록번호 *</span>
-                  <input
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="대시(-)를 제외하고 입력하세요"
-                    value={form.regNumber}
-                    onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))}
-                  />
-                </label>
-              </div>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">사업자전화번호</span>
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted">사업자주소</span>
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  value={form.address}
-                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <span className="mb-1.5 block text-xs font-medium text-muted">회원상세정보등록여부</span>
-                  <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
-                    {["등록", "미등록"].map((v) => (
-                      <label key={v} className="flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          checked={form.memberDetailYN === v}
-                          onChange={() => setForm((f) => ({ ...f, memberDetailYN: v }))}
-                        />
-                        {v}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <span className="mb-1.5 block text-xs font-medium text-muted">사용여부</span>
-                  <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
-                    {["사용", "미사용"].map((v) => (
-                      <label key={v} className="flex items-center gap-1.5">
-                        <input type="radio" checked={form.active === v} onChange={() => setForm((f) => ({ ...f, active: v }))} />
-                        {v}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
-                <Button
-                  variant="outline"
-                  onClick={remove}
-                  disabled={!selectedId || inUse(selectedId)}
-                  title={selectedId && inUse(selectedId) ? "사용 이력이 있어 삭제할 수 없습니다. 미사용 처리해주세요." : ""}
-                >
-                  삭제
-                </Button>
-                <Button onClick={save}>저장</Button>
-              </div>
-            </Card>
+        <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
+          <p className="text-xs font-medium text-muted">목록 {rows.length}</p>
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
+            <Button size="sm" onClick={startNew}>
+              <Plus size={13} /> 신규
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportCsv}>
+              <FileSpreadsheet size={13} /> 엑셀
+            </Button>
           </div>
         </div>
+        <div className="mb-4 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
+          <table className="w-full min-w-[640px] text-center text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-muted">
+                <th className="px-3 py-2.5 font-semibold">순번</th>
+                <th className="px-3 py-2.5 font-semibold">상세</th>
+                <th className="px-3 py-2.5 font-semibold">사업자</th>
+                <th className="px-3 py-2.5 font-semibold">사업자등록번호</th>
+                <th className="px-3 py-2.5 font-semibold">사업자전화번호</th>
+                <th className="px-3 py-2.5 font-semibold">사업자주소</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((e, i) => (
+                <tr key={e.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => select(e)}>
+                  <td className="px-3 py-2.5 text-ink">{i + 1}</td>
+                  <td className="px-3 py-2.5">
+                    <button className="text-xs text-primary hover:underline" onClick={() => select(e)}>
+                      상세
+                    </button>
+                  </td>
+                  <td className="px-3 py-2.5 text-ink">{e.name}</td>
+                  <td className="px-3 py-2.5 text-ink">{e.regNumber}</td>
+                  <td className="px-3 py-2.5 text-ink"><span className="inline-flex items-center gap-1">{e.phone || "-"}<SmsButton phone={e.phone} /></span></td>
+                  <td className="px-3 py-2.5 text-ink">{e.address || "-"}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-xs text-muted">
+                    등록된 사업자가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        <div className="mt-4 rounded-xl bg-primary-light/40 p-3.5 text-xs leading-relaxed text-primary">
+        <div className="rounded-xl bg-primary-light/40 p-3.5 text-xs leading-relaxed text-primary">
           사이트 하위에 있는 사업자를 등록할 수 있으며 사업자등록번호까지 필수로 입력해야 합니다. 기존 사용이력이 있는 사업자는 삭제가 불가능하며 미사용 처리로만 가능합니다.
           <br />
           회원상세정보등록여부 Y/N: 회원 상세 정보 등록여부를 '미등록'으로 선택하면, 모바일에서 회원 가입 시 상세정보에 해당하는 다음 정보를 입력하지 않고 가입할 수 있습니다. (주민번호, 주소, 급여은행, 급여계좌, 예금주)
         </div>
       </Panel>
+
+      <SidePanel
+        open={panelOpen}
+        onClose={closePanel}
+        title="사업자 > 상세"
+        footer={
+          <>
+            {selectedId && (
+              <Button
+                variant="outline"
+                onClick={remove}
+                disabled={inUse(selectedId)}
+                title={inUse(selectedId) ? "사용 이력이 있어 삭제할 수 없습니다. 미사용 처리해주세요." : ""}
+              >
+                삭제
+              </Button>
+            )}
+            <Button onClick={save}>저장</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {selectedId && inUse(selectedId) && (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              사용 이력이 있어 삭제할 수 없습니다. 미사용 처리해주세요.
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">사업자 *</span>
+              <input
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">사업자등록번호 *</span>
+              <input
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder="대시(-)를 제외하고 입력하세요"
+                value={form.regNumber}
+                onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))}
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">사업자전화번호</span>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">사업자주소</span>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={form.address}
+              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-muted">회원상세정보등록여부</span>
+              <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
+                {["등록", "미등록"].map((v) => (
+                  <label key={v} className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={form.memberDetailYN === v}
+                      onChange={() => setForm((f) => ({ ...f, memberDetailYN: v }))}
+                    />
+                    {v}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-muted">사용여부</span>
+              <div className="flex flex-nowrap gap-4 overflow-x-auto overscroll-x-contain text-sm">
+                {["사용", "미사용"].map((v) => (
+                  <label key={v} className="flex items-center gap-1.5">
+                    <input type="radio" checked={form.active === v} onChange={() => setForm((f) => ({ ...f, active: v }))} />
+                    {v}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </SidePanel>
     </div>
   );
 }
