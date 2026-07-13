@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 import { distanceMeters } from "../utils/distance";
 import { toDateKey, attendanceDocId } from "../utils/dateUtils";
@@ -69,6 +69,10 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
   const autoCheckedInRef = useRef(false);
   const watcherIdRef = useRef(null);
 
+  // 관리자가 PC에서 강제출근 등으로 이 근로자의 attendance 문서를 직접
+  // 수정해도, 이미 열려있는 모바일 앱은 실시간으로 반영되어야 한다 —
+  // 예전에는 getDoc 1회 조회라 다른 탭에 갔다 와서 컴포넌트가 다시
+  // 마운트돼야만 최신 상태를 봤다. onSnapshot으로 바꿔 즉시 반영한다.
   const refreshToday = useCallback(async () => {
     if (!uid) return;
     const snap = await getDoc(doc(db, "attendance", attendanceDocId(uid, toDateKey())));
@@ -78,8 +82,14 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
   }, [uid]);
 
   useEffect(() => {
-    refreshToday();
-  }, [refreshToday]);
+    if (!uid) return;
+    const unsub = onSnapshot(doc(db, "attendance", attendanceDocId(uid, toDateKey())), (snap) => {
+      const data = snap.exists() ? snap.data() : null;
+      setTodayAttendance(data);
+      autoCheckedInRef.current = data?.status === "출근" || data?.status === "지각";
+    });
+    return () => unsub();
+  }, [uid]);
 
   const handlePosition = useCallback(
     async (lat, lng, acc) => {

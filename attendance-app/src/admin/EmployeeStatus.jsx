@@ -337,10 +337,9 @@ export default function EmployeeStatus() {
         <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
           <span>목록 {total}건</span>
           <span className="text-slate-300">·</span>
-          <span className="text-primary">재직 {filtered.filter((e) => !e.deleted && (e.employmentStatus || "재직") === "재직").length}</span>
-          <span className="text-slate-500">휴직 {filtered.filter((e) => !e.deleted && e.employmentStatus === "휴직").length}</span>
-          <span className="text-danger">퇴사 {filtered.filter((e) => !e.deleted && e.employmentStatus === "퇴사").length}</span>
-          <span className="text-slate-400">삭제됨 {filtered.filter((e) => e.deleted).length}</span>
+          <span className="text-primary">재직 {filtered.filter((e) => (e.employmentStatus || "재직") === "재직").length}</span>
+          <span className="text-slate-500">휴직 {filtered.filter((e) => e.employmentStatus === "휴직").length}</span>
+          <span className="text-danger">퇴사 {filtered.filter((e) => e.employmentStatus === "퇴사").length}</span>
         </p>
 
         <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain rounded-xl bg-slate-50 p-3">
@@ -383,7 +382,6 @@ export default function EmployeeStatus() {
                   <input type="checkbox" checked={selected.size > 0 && selected.size === pageRows.length} onChange={toggleSelectAll} />
                 </th>
                 <SortableTh sortKey="name" sort={sort} onSort={setSort}>이름</SortableTh>
-                <th className="px-4 py-3 font-semibold">상태</th>
                 <SortableTh sortKey="entity" sort={sort} onSort={setSort}>사업자</SortableTh>
                 <SortableTh sortKey="site" sort={sort} onSort={setSort}>센터</SortableTh>
                 <SortableTh sortKey="vendor" sort={sort} onSort={setSort}>소속업체</SortableTh>
@@ -392,6 +390,7 @@ export default function EmployeeStatus() {
                 <SortableTh sortKey="hireDate" sort={sort} onSort={setSort}>입사일자</SortableTh>
                 <SortableTh sortKey="resignDate" sort={sort} onSort={setSort}>퇴사일자</SortableTh>
                 <th className="px-4 py-3 font-semibold">변경사유</th>
+                <th className="px-4 py-3 font-semibold">상태</th>
                 <th className="px-4 py-3 font-semibold">삭제</th>
               </tr>
             </thead>
@@ -406,21 +405,9 @@ export default function EmployeeStatus() {
                 >
                   <td className="px-4 py-3 text-ink">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(emp.id)}
-                      disabled={emp.deleted}
-                      onChange={() => toggleSelect(emp.id)}
-                    />
+                    <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
                   </td>
                   <td className="px-4 py-3 text-ink">{emp.name}</td>
-                  <td className="px-4 py-3">
-                    {emp.deleted ? (
-                      <Badge tone="danger">삭제됨</Badge>
-                    ) : (
-                      <Badge tone={STATUS_TONE[emp.employmentStatus] || "success"}>{emp.employmentStatus || "재직"}</Badge>
-                    )}
-                  </td>
                   <td className="px-4 py-3 text-ink">{entityName_(emp.businessEntityId)}</td>
                   <td className="px-4 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
                   <td className="px-4 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
@@ -428,8 +415,9 @@ export default function EmployeeStatus() {
                   <td className="px-4 py-3 text-ink">{emp.lastWorkDate ? formatDate(emp.lastWorkDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.hireDate ? formatDate(emp.hireDate) : "-"}</td>
                   <td className="px-4 py-3 text-ink">{emp.resignDate ? formatDate(emp.resignDate) : "-"}</td>
-                  <td className="px-4 py-3 text-ink">
-                    {emp.deleted ? `삭제일 ${emp.deletedAt ? formatDate(emp.deletedAt) : "-"}` : emp.changeReason || "-"}
+                  <td className="px-4 py-3 text-ink">{emp.changeReason || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Badge tone={STATUS_TONE[emp.employmentStatus] || "success"}>{emp.employmentStatus || "재직"}</Badge>
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     {emp.deleted ? (

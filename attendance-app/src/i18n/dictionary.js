@@ -33,11 +33,11 @@ const STRINGS = {
   "layout.greeting": { ko: "안녕하세요", en: "Hello", vi: "Xin chào", zh: "您好", th: "สวัสดี" },
   "layout.nameSuffix": { ko: "{{name}}님", en: "{{name}}", vi: "{{name}}", zh: "{{name}}", th: "คุณ{{name}}" },
   "onboarding.title": {
-    ko: "완료해야 할 항목이 있습니다",
-    en: "You have items to complete",
-    vi: "Bạn có mục cần hoàn thành",
-    zh: "您有待完成的项目",
-    th: "คุณมีรายการที่ต้องทำให้เสร็จ",
+    ko: "가입 절차 안내",
+    en: "Getting started",
+    vi: "Hướng dẫn bắt đầu",
+    zh: "入职引导",
+    th: "คำแนะนำเริ่มต้น",
   },
   "onboarding.body": {
     ko: "아래 항목을 먼저 완료해주세요. 완료 전에는 출근 처리가 되지 않습니다.",
@@ -47,6 +47,13 @@ const STRINGS = {
     th: "โปรดทำรายการด้านล่างให้เสร็จก่อน จะเช็คอินไม่ได้จนกว่าจะทำเสร็จ",
   },
   "onboarding.later": { ko: "나중에 하기", en: "Later", vi: "Để sau", zh: "稍后再说", th: "ทำภายหลัง" },
+  "onboarding.skipToday": {
+    ko: "오늘 하루 보지 않기",
+    en: "Don't show today",
+    vi: "Không hiện lại hôm nay",
+    zh: "今天不再显示",
+    th: "ไม่ต้องแสดงวันนี้",
+  },
   "onboarding.fillMyInfo": {
     ko: "내 정보 입력하기",
     en: "Fill in my info",

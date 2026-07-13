@@ -13,6 +13,7 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import BuildInfo from "../components/BuildInfo";
 import BiometricSettingsCard from "../components/BiometricSettingsCard";
+import BankAccountFields from "../components/BankAccountFields";
 import { shouldLockInsteadOfSignOut, lockDevice } from "../utils/biometricAuth";
 import { BANK_OPTIONS } from "../constants/hr";
 import { formatResidentNumber } from "../utils/phoneAuth";
@@ -279,33 +280,20 @@ export default function MyInfoPage() {
               placeholder={t("myInfo.addressDetailPlaceholder")}
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankName")} <span className="text-danger">*</span></span>
-              <select
-                ref={bankNameRef}
-                disabled={locked}
-                className={fieldCls}
-                value={basic.bankName}
-                onChange={(e) => setBasic((f) => ({ ...f, bankName: e.target.value }))}
-              >
-                <option value="">{t("common.select")}</option>
-                {BANK_OPTIONS.map((b) => (
-                  <option key={b}>{b}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankAccount")} <span className="text-danger">*</span></span>
-              <input
-                ref={bankAccountRef}
-                disabled={locked}
-                className={fieldCls}
-                value={basic.bankAccount}
-                onChange={(e) => setBasic((f) => ({ ...f, bankAccount: e.target.value }))}
-              />
-            </label>
-          </div>
+          <BankAccountFields
+            wrapperClassName="grid grid-cols-2 gap-3"
+            bankName={basic.bankName}
+            bankAccount={basic.bankAccount}
+            onBankNameChange={(v) => setBasic((f) => ({ ...f, bankName: v }))}
+            onBankAccountChange={(v) => setBasic((f) => ({ ...f, bankAccount: v }))}
+            bankLabel={t("myInfo.bankName")}
+            accountLabel={t("myInfo.bankAccount")}
+            required
+            disabled={locked}
+            bankSelectRef={bankNameRef}
+            accountInputRef={bankAccountRef}
+            fieldClassName={fieldCls}
+          />
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.accountHolder")} <span className="text-danger">*</span></span>
             <input

@@ -34,7 +34,7 @@ export default function EmployeeLayout() {
 
   const { pendingContracts, pendingSafetyCount } = useOnboardingPending(user, profile?.companyId);
   const [onboardingPrompt, setOnboardingPrompt] = useState(false);
-  const onboardingShownRef = useRef(false);
+  const prevDoneCountRef = useRef(-1);
 
   // 신규 근로자가 처음 들어왔을 때 뭘 해야 하는지 순서대로 알려주는
   // 체크리스트 — 내 정보 입력 → 근로계약서 서명 → 안전교육 이수 순으로,
@@ -54,18 +54,30 @@ export default function EmployeeLayout() {
     },
   ];
   const onboardingAllDone = onboardingSteps.every((s) => s.done);
+  const onboardingDoneCount = onboardingSteps.filter((s) => s.done).length;
+
+  const skipTodayKey = user ? `onboarding_skip_${user.uid}_${new Date().toISOString().slice(0, 10)}` : null;
+  const skippedToday = () => Boolean(skipTodayKey && localStorage.getItem(skipTodayKey));
 
   // 예전엔 체크(홈) 탭에서만 이 팝업이 떴다 — 다른 탭에 있는 동안에는
   // 완료해야 할 항목이 있어도 안내를 못 받았다. 레이아웃(모든 탭에서
-  // 항상 마운트됨) 레벨로 옮겨 어느 탭에 있든 한 번은 뜨도록 한다.
+  // 항상 마운트됨) 레벨로 옮겨 어느 탭에 있든 뜨도록 한다. 또한 한 항목을
+  // 완료할 때마다(이수완료 카운트가 늘어날 때마다) 다음 미완료 항목을
+  // 자동으로 다시 안내한다 — 완료 → 다음 항목 팝업이 이어지는 흐름.
   useEffect(() => {
-    if (onboardingShownRef.current) return;
-    if (!onboardingAllDone) {
-      onboardingShownRef.current = true;
+    if (onboardingAllDone) return;
+    if (skippedToday()) return;
+    if (onboardingDoneCount > prevDoneCountRef.current) {
+      prevDoneCountRef.current = onboardingDoneCount;
       setOnboardingPrompt(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onboardingAllDone]);
+  }, [onboardingAllDone, onboardingDoneCount]);
+
+  const skipOnboardingToday = () => {
+    if (skipTodayKey) localStorage.setItem(skipTodayKey, "1");
+    setOnboardingPrompt(false);
+  };
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -110,9 +122,14 @@ export default function EmployeeLayout() {
         onClose={() => setOnboardingPrompt(false)}
         title={t("onboarding.title")}
         footer={
-          <Button variant="outline" className="w-full" onClick={() => setOnboardingPrompt(false)}>
-            {t("onboarding.later")}
-          </Button>
+          <>
+            <Button variant="outline" className="flex-1" onClick={() => setOnboardingPrompt(false)}>
+              {t("onboarding.later")}
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={skipOnboardingToday}>
+              {t("onboarding.skipToday")}
+            </Button>
+          </>
         }
       >
         <div className="space-y-3">

@@ -684,6 +684,16 @@ export default function Schedule() {
         siteName: site?.name || "",
         status: editForm.status,
       });
+      // 근로자에게 아직 배정된 근무지가 없었다면, 이 스케줄에서 지정한 센터를
+      // 근로자의 기본 근무지(users.workSiteId)에도 반영한다 — 모바일 앱의
+      // 홈 화면/지오펜스 체크인은 스케줄별 siteId가 아니라 이 필드를 참조하므로,
+      // 여기서만 센터를 지정하면 목록엔 반영돼도 직원 모바일은 계속
+      // "배정된 근무지가 없습니다"로 남는다. 이미 다른 근무지가 지정된
+      // 근로자는 하루짜리 임시 배치일 수 있으므로 덮어쓰지 않는다.
+      const emp = employeeByUid.get(editSchedule.uid);
+      if (editForm.siteId && emp && !emp.workSiteId) {
+        await updateDoc(doc(db, "users", editSchedule.uid), { workSiteId: editForm.siteId });
+      }
       toast.success("수정되었습니다");
       setEditSchedule(null);
     } catch (err) {

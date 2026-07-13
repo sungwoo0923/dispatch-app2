@@ -9,6 +9,7 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
+import CompletionSuccessModal from "../components/CompletionSuccessModal";
 import { formatDate, formatTime } from "../utils/dateUtils";
 import { signSafetyAttendance } from "../utils/safety";
 
@@ -17,6 +18,7 @@ export default function SafetyTrainingsPage() {
   const [records, setRecords] = useState([]);
   const [signing, setSigning] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [signDoneNotice, setSignDoneNotice] = useState(false);
   const padRef = useRef(null);
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export default function SafetyTrainingsPage() {
     });
     setSaving(false);
     setSigning(null);
+    setSignDoneNotice(true);
   };
 
   return (
@@ -86,6 +89,12 @@ export default function SafetyTrainingsPage() {
         <p className="mb-3 text-sm text-ink">{signing && formatDate(signing.date)} 안전교육 서명</p>
         <SignaturePad ref={padRef} onSave={submitSignature} saving={saving} />
       </Modal>
+
+      <CompletionSuccessModal
+        open={signDoneNotice}
+        onClose={() => setSignDoneNotice(false)}
+        message="안전교육 서명이 완료되었습니다."
+      />
     </div>
   );
 }
@@ -103,6 +112,7 @@ function MandatoryMaterials() {
   const [viewing, setViewing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [videoWatched, setVideoWatched] = useState(false);
+  const [doneNotice, setDoneNotice] = useState(false);
   const padRef = useRef(null);
   const maxWatchedRef = useRef(0);
   const videoDurationRef = useRef(0);
@@ -165,6 +175,7 @@ function MandatoryMaterials() {
       });
       toast.success("이수 처리되었습니다");
       setViewing(null);
+      setDoneNotice(true);
     } catch (err) {
       toast.error(`이수 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     } finally {
@@ -252,6 +263,12 @@ function MandatoryMaterials() {
           </div>
         )}
       </Modal>
+
+      <CompletionSuccessModal
+        open={doneNotice}
+        onClose={() => setDoneNotice(false)}
+        message="안전교육 이수가 완료되었습니다."
+      />
     </>
   );
 }

@@ -83,7 +83,17 @@ export default function SafetyMaterials() {
 
   const sorted = [...materials].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-  const completedCountFor = (materialId) => completions.filter((c) => c.materialId === materialId).length;
+  // completions에는 이미 삭제된(퇴사/탈퇴) 근로자의 이수기록도 남아있을 수 있어
+  // (탈퇴 시 completions까지 연쇄삭제하지 않음) 현재 재직 중인 근로자로만
+  // 필터링하지 않으면 이수인원이 대상인원(employees.length)보다 커지는
+  // "3 / 1명" 같은 표시가 생긴다. uid 기준으로도 중복 제거한다.
+  const completedCountFor = (materialId) => {
+    const activeUids = new Set(employees.map((e) => e.id));
+    const uniqueUids = new Set(
+      completions.filter((c) => c.materialId === materialId && activeUids.has(c.uid)).map((c) => c.uid)
+    );
+    return uniqueUids.size;
+  };
 
   const openNew = () => {
     setForm(EMPTY_FORM);

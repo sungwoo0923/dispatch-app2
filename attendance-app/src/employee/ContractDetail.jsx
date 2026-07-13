@@ -7,6 +7,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import SignaturePad from "../components/SignaturePad";
+import CompletionSuccessModal from "../components/CompletionSuccessModal";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 
 export default function ContractDetail() {
@@ -14,6 +15,7 @@ export default function ContractDetail() {
   const [contract, setContract] = useState(null);
   const [signing, setSigning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [doneNotice, setDoneNotice] = useState(false);
   const padRef = useRef(null);
 
   useEffect(() => {
@@ -32,6 +34,7 @@ export default function ContractDetail() {
     setContract((c) => ({ ...c, status, employeeSignatureDataUrl, employeeSignedAt }));
     setSaving(false);
     setSigning(false);
+    setDoneNotice(true);
   };
 
   const downloadContract = () => {
@@ -112,6 +115,8 @@ export default function ContractDetail() {
       >
         <SignaturePad ref={padRef} onSave={submitSignature} saving={saving} />
       </Modal>
+
+      <CompletionSuccessModal open={doneNotice} onClose={() => setDoneNotice(false)} message="근로계약서 서명이 완료되었습니다." />
     </div>
   );
 }

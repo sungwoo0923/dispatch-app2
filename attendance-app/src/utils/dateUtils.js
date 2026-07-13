@@ -53,3 +53,19 @@ export function calculateAge(residentNumberFront) {
   if (!hadBirthdayThisYear) age -= 1;
   return age;
 }
+
+// calculateAge와 동일한 주민/외국인번호 앞자리 파싱 규칙을 재사용해, 나이 대신
+// 생년월일 자체를 "YYYY-MM-DD" dateKey 형식으로 돌려준다(급여명세서 상단
+// 정보표의 생년월일 항목 등에서 사용).
+export function birthDateFromResident(residentNumberFront) {
+  const digits = (residentNumberFront || "").replace(/[^0-9]/g, "");
+  if (digits.length < 7) return "";
+  const century = CENTURY_BY_GENDER_DIGIT[digits[6]];
+  if (!century) return "";
+  const yy = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  const dd = digits.slice(4, 6);
+  const birthDate = new Date(century + Number(yy), Number(mm) - 1, Number(dd));
+  if (Number.isNaN(birthDate.getTime())) return "";
+  return `${century + Number(yy)}-${mm}-${dd}`;
+}

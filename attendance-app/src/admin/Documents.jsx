@@ -35,6 +35,7 @@ export default function Documents() {
   const [employees, setEmployees] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [filterUid, setFilterUid] = useState("");
+  const [search, setSearch] = useState("");
   const [previewDoc, setPreviewDoc] = useState(null);
 
   const [open, setOpen] = useState(false);
@@ -58,7 +59,9 @@ export default function Documents() {
     };
   }, [profile?.companyId]);
 
-  const filtered = filterUid ? documents.filter((d) => d.uid === filterUid) : documents;
+  const filtered = documents
+    .filter((d) => !filterUid || d.uid === filterUid)
+    .filter((d) => !search.trim() || d.employeeName?.includes(search.trim()));
   const sorted = [...filtered].sort((a, b) => (b.uploadedAt?.seconds || 0) - (a.uploadedAt?.seconds || 0));
 
   const submitUpload = async (e) => {
@@ -112,6 +115,15 @@ export default function Documents() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted">이름 검색</span>
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="근로자 이름"
+            />
           </label>
         </Card>
 

@@ -33,7 +33,7 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_KP_WORK: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KP_WORK }}
 
-      - name: Deploy to Firebase (hosting, firestore rules, storage rules)
-        run: npx firebase deploy --only hosting,firestore:rules,storage --project kp-work-4ae99 --non-interactive
+      - name: Deploy to Firebase (hosting, firestore rules/indexes, storage rules)
+        run: npx firebase deploy --only hosting,firestore:rules,firestore:indexes,storage --project kp-work-4ae99 --non-interactive
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json

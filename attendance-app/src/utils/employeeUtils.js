@@ -8,14 +8,19 @@ import { toDateKey } from "./dateUtils";
 // 갱신이 핵심 동작이므로 그건 예외를 던지게 두고, chat_profiles 쪽은
 // (아직 로그인 전이라 문서가 없는 등) 실패해도 삭제 자체를 막지 않도록
 // best-effort로 처리한다.
+// 삭제는 계정 접근을 막는 동시에(deleted=true) 입퇴사현황에서는 평범한
+// '퇴사' 상태로 보이게 한다 — 별도의 "삭제됨" 배지로 목록에 영구히 남기기보다,
+// 퇴사일자가 오늘로 찍힌 퇴사자로 자연스럽게 집계/조회되는 편이 더 명확하다.
 export async function softDeleteEmployee(uid) {
-  await updateDoc(doc(db, "users", uid), { deleted: true, deletedAt: toDateKey() });
+  const today = toDateKey();
+  await updateDoc(doc(db, "users", uid), { deleted: true, deletedAt: today, employmentStatus: "퇴사", resignDate: today });
   setDoc(doc(db, "chat_profiles", uid), { deleted: true }, { merge: true }).catch(() => {});
 }
 
 export async function softDeleteEmployees(uids) {
+  const today = toDateKey();
   for (const uid of uids) {
-    await updateDoc(doc(db, "users", uid), { deleted: true, deletedAt: toDateKey() });
+    await updateDoc(doc(db, "users", uid), { deleted: true, deletedAt: today, employmentStatus: "퇴사", resignDate: today });
     setDoc(doc(db, "chat_profiles", uid), { deleted: true }, { merge: true }).catch(() => {});
   }
 }

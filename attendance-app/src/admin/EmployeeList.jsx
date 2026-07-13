@@ -14,7 +14,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera, SlidersHorizontal, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera, SlidersHorizontal, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, Upload, Download } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -55,7 +55,9 @@ import {
 } from "../utils/documents";
 import { openAddressSearch } from "../utils/daumPostcode";
 import { openReportPreview } from "../utils/reportTemplates";
-import SmsButton from "../components/SmsButton";
+import SmsButton, { buildSmsHref } from "../components/SmsButton";
+import BankAccountFields from "../components/BankAccountFields";
+import { downloadBulkUploadTemplate, parseBulkUploadFile } from "../utils/employeeBulkImport";
 
 const REG_TABS = ["시간템플릿", "수당템플릿", "계약", "계약종료", "첨부서류", "기본 불러오기"];
 
@@ -287,6 +289,26 @@ export default function EmployeeList() {
   const [quickForm, setQuickForm] = useState({ name: "", phone: "" });
 
   const [templateForm, setTemplateForm] = useState({ kind: "시간템플릿", templateId: "", effectiveDate: toDateKey(), deleteMode: false, bulkMode: false });
+
+  // 대용량(대량) 엑셀 업로드: 양식 다운로드 → 파일선택/파싱(미리보기) →
+  // 등록 3단계를 하나의 Modal에서 진행한다. bulkResult가 채워지면(등록 완료)
+  // 미리보기 대신 결과 요약 + "전체 가입코드 발송" 화면으로 바뀐다.
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [bulkFileName, setBulkFileName] = useState("");
+  const [bulkRows, setBulkRows] = useState([]);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null); // { successCount, failCount, created: [{name, phone, code}] }
+  const bulkFileInputRef = useRef(null);
+
+  // 가입코드 SMS 발송 큐 — 근로자목록 선택/대용량업로드 성공/단건 등록 성공
+  // 세 곳에서 모두 openSmsQueue(recipients)만 호출하면 동일한 발송 화면을
+  // 재사용한다. 브라우저는 한 번에 하나의 문자 앱만 열 수 있어 "전체
+  // 자동발송"은 불가능하므로, 목록을 계속 띄워둔 채로 관리자가 한 명씩
+  // 눌러 보내고 돌아오게 한다(발송 여부만 로컬에서 표시, 안 보낸 사람이
+  // 조용히 빠지지 않도록 목록에서 지우지 않는다).
+  const [smsQueueOpen, setSmsQueueOpen] = useState(false);
+  const [smsQueue, setSmsQueue] = useState([]); // [{name, phone, code}]
+  const [smsSentKeys, setSmsSentKeys] = useState(() => new Set());
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -910,6 +932,53 @@ export default function EmployeeList() {
     toast.success("재직 상태로 변경되었습니다");
   };
 
+  // 근로자등록(단건) 저장과 대용량업로드(대량 등록)가 공유하는 가입대기 생성
+  // 로직 — pendingEmployees/{가입코드} 문서를 만들고 발급된 코드를 돌려준다.
+  // 단건 등록에서 쓰던 로직을 그대로 옮긴 것으로, code를 넘기지 않으면
+  // generateInviteCode(7)로 새로 발급한다(대량 등록은 매 행마다 새 코드가
+  // 필요하므로 항상 넘기지 않고 호출한다).
+  const createPendingEmployee = async (formValues, code) => {
+    const inviteCode = code || generateInviteCode(7);
+    await setDoc(doc(db, "pendingEmployees", inviteCode), {
+      companyId: profile.companyId,
+      ...formValues,
+      photoUrl: "",
+      employmentStatus: "재직",
+      createdAt: serverTimestamp(),
+    });
+    return inviteCode;
+  };
+
+  // 가입코드 SMS 발송 문구 — Feature 2(가입코드 SMS 발송)의 세 진입점(목록
+  // 선택발송/대량등록 성공 후 전체발송/단건등록 성공화면)이 모두 이 문구를
+  // 그대로 재사용한다.
+  const buildInviteSmsMessage = (code) =>
+    `[KP-work] ${companyName || "회사"} 가입 안내\n아래 가입코드로 모바일 앱에서 가입해주세요.\n가입코드: ${code}\n앱: ${window.location.origin}`;
+
+  const openSmsQueue = (recipients) => {
+    const targets = (recipients || []).filter((r) => r.phone);
+    if (targets.length === 0) {
+      toast.error("연락처가 있는 대상이 없습니다.");
+      return;
+    }
+    setSmsQueue(targets);
+    setSmsSentKeys(new Set());
+    setSmsQueueOpen(true);
+  };
+  const closeSmsQueue = () => setSmsQueueOpen(false);
+  const markSmsSent = (key) => setSmsSentKeys((prev) => new Set(prev).add(key));
+
+  // 근로자목록에서 체크박스로 선택한 근로자들에게 가입코드 SMS 발송을
+  // 시작한다. 이미 가입 완료된 근로자들이라 pendingEmployees의 실제
+  // 로그인용 가입코드는 더 이상 없으므로(가입 시 소진), 목록 표의 "가입코드"
+  // 컬럼과 동일하게 employeeCode(사원코드)를 코드로 보여준다.
+  const sendInviteCodesToSelected = async () => {
+    const targets = filteredEmployees.filter((emp) => selected.has(emp.id));
+    if (targets.length === 0) return;
+    if (!(await confirm(`선택한 ${targets.length}명에게 가입코드 SMS 발송을 시작하시겠습니까?`, "send"))) return;
+    openSmsQueue(targets.map((emp) => ({ name: emp.name, phone: emp.phone, code: emp.employeeCode || "-" })));
+  };
+
   const submitRegister = async (e) => {
     e.preventDefault();
 
@@ -964,14 +1033,7 @@ export default function EmployeeList() {
         return;
       }
 
-      const code = manualCode || generateInviteCode(7);
-      await setDoc(doc(db, "pendingEmployees", code), {
-        companyId: profile.companyId,
-        ...registerForm,
-        photoUrl: "",
-        employmentStatus: "재직",
-        createdAt: serverTimestamp(),
-      });
+      const code = await createPendingEmployee(registerForm, manualCode);
       toast.success("저장되었습니다");
       setIssuedCode(code);
 
@@ -1175,7 +1237,7 @@ export default function EmployeeList() {
       setQuickForm({ name: "", phone: "" });
       setCopyOpen(true);
     } else if (listAction === "SMS발송") {
-      window.alert(`${selected.size}명에게 가입코드 SMS를 발송했습니다. (테스트 환경에서는 실제 발송되지 않습니다)`);
+      sendInviteCodesToSelected();
     }
   };
 
@@ -1235,6 +1297,86 @@ export default function EmployeeList() {
     toast.success("적용되었습니다");
   };
 
+  // 대용량업로드 팝업을 완전히 초기화하며 닫는다(양식 다운로드/파일선택
+  // 단계로 다시 열 수 있도록).
+  const closeBulkUpload = () => {
+    setBulkUploadOpen(false);
+    setBulkFileName("");
+    setBulkRows([]);
+    setBulkResult(null);
+  };
+
+  const handleBulkFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBulkFileName(file.name);
+    setBulkResult(null);
+    try {
+      const rows = await parseBulkUploadFile(file, { businessEntities, workSites, vendors });
+      setBulkRows(rows);
+      if (rows.length === 0) toast.error("엑셀 파일에서 데이터를 찾지 못했습니다.");
+    } catch (err) {
+      console.error(err);
+      toast.error("엑셀 파일을 읽는 중 오류가 발생했습니다. 다운로드한 양식을 그대로 사용해주세요.");
+    }
+  };
+
+  const bulkValidRows = bulkRows.filter((r) => r.valid);
+
+  // 미리보기에서 유효한(이름+연락처가 채워진) 행만 골라 한 건씩
+  // createPendingEmployee(가입코드 발급 로직 재사용)로 등록한다. 사업자/센터/
+  // 소속업체명이 매칭되지 않은 값은 이미 parseBulkUploadFile 단계에서 빈
+  // id로 처리되어 있으므로 그대로 두고(등록은 진행), 완료 후 요약에 실패
+  // 건수만 보여준다.
+  const submitBulkUpload = async () => {
+    if (bulkValidRows.length === 0) return;
+    const invalidCount = bulkRows.length - bulkValidRows.length;
+    if (
+      !(await confirm(
+        `유효한 ${bulkValidRows.length}건을 일괄 등록하시겠습니까?${invalidCount > 0 ? ` (이름/연락처 누락 ${invalidCount}건은 제외됩니다)` : ""}`,
+        "save"
+      ))
+    )
+      return;
+
+    setBulkSubmitting(true);
+    const created = [];
+    let failCount = invalidCount;
+    for (const row of bulkValidRows) {
+      try {
+        const formValues = {
+          ...EMPTY_REGISTER_FORM,
+          name: row.name,
+          phone: formatPhoneNumber(row.phone),
+          businessEntityId: row.businessEntityId,
+          workSiteId: row.workSiteId,
+          vendorId: row.vendorId,
+          team: row.team,
+          position: row.position,
+          hireDate: row.hireDate || toDateKey(),
+          workStartDate: row.hireDate || toDateKey(),
+          employmentType: row.employmentType || EMPTY_REGISTER_FORM.employmentType,
+          shiftType: row.shiftType || EMPTY_REGISTER_FORM.shiftType,
+          nationality: row.nationality || EMPTY_REGISTER_FORM.nationality,
+          country: row.country || EMPTY_REGISTER_FORM.country,
+          gender: row.gender || EMPTY_REGISTER_FORM.gender,
+          bankName: row.bankName,
+          bankAccount: row.bankAccount,
+        };
+        const code = await createPendingEmployee(formValues);
+        created.push({ name: row.name, phone: formValues.phone, code });
+      } catch (err) {
+        console.error(err);
+        failCount += 1;
+      }
+    }
+    setBulkSubmitting(false);
+    setBulkRows([]);
+    setBulkResult({ successCount: created.length, failCount, created });
+    toast.success(`${created.length}명 등록되었습니다, ${failCount}건 실패`);
+  };
+
   return (
     <div className="space-y-6">
       <Panel
@@ -1247,6 +1389,9 @@ export default function EmployeeList() {
             </Button>
             <Button variant="outline" onClick={() => setSiteModalOpen(true)}>
               <MapPin size={16} /> 근무지 추가
+            </Button>
+            <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
+              <Upload size={16} /> 대용량업로드
             </Button>
             <Button onClick={openNewRegister}>
               <UserPlus size={16} /> 신규 근로자 등록
@@ -1446,8 +1591,14 @@ export default function EmployeeList() {
             <Button size="sm" variant="outline" onClick={runListAction} disabled={selected.size === 0 || listAction === "선택"}>
               실행
             </Button>
-            <Button size="sm" variant="outline" onClick={() => window.alert(`${selected.size || 0}명에게 SMS를 발송했습니다.`)} disabled={selected.size === 0}>
-              <Send size={13} /> SMS발송
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={sendInviteCodesToSelected}
+              disabled={selected.size === 0}
+              title="선택한 근로자에게 가입코드 안내 SMS를 발송합니다"
+            >
+              <Send size={13} /> 가입코드 발송
             </Button>
             <Button size="sm" variant="danger" onClick={deleteSelectedEmployees} disabled={selected.size === 0}>
               <Trash2 size={13} /> 삭제
@@ -2026,6 +2177,19 @@ export default function EmployeeList() {
                 <Copy size={18} />
               </button>
             </div>
+            {registerForm.phone ? (
+              <Button
+                as="a"
+                href={buildSmsHref(registerForm.phone, buildInviteSmsMessage(issuedCode))}
+                variant="outline"
+                className="mt-3 w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Send size={15} /> 가입코드 문자발송
+              </Button>
+            ) : (
+              <p className="mt-3 text-[11px] text-muted">전화번호가 없어 문자로 바로 보낼 수 없습니다.</p>
+            )}
           </div>
         ) : (
           <form onSubmit={submitRegister} className="space-y-5">
@@ -2223,27 +2387,15 @@ export default function EmployeeList() {
                       placeholder="클릭해서 주소 검색"
                     />
                   </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-muted">급여은행</span>
-                    <select
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
-                      value={registerForm.bankName}
-                      onChange={(e) => setRegisterForm((f) => ({ ...f, bankName: e.target.value }))}
-                    >
-                      <option value="">선택</option>
-                      {BANK_OPTIONS.map((b) => (
-                        <option key={b}>{b}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-muted">급여계좌</span>
-                    <input
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
-                      value={registerForm.bankAccount}
-                      onChange={(e) => setRegisterForm((f) => ({ ...f, bankAccount: e.target.value }))}
-                    />
-                  </label>
+                  <BankAccountFields
+                    bankName={registerForm.bankName}
+                    bankAccount={registerForm.bankAccount}
+                    onBankNameChange={(v) => setRegisterForm((f) => ({ ...f, bankName: v }))}
+                    onBankAccountChange={(v) => setRegisterForm((f) => ({ ...f, bankAccount: v }))}
+                    bankLabel="급여은행"
+                    accountLabel="급여계좌"
+                    fieldClassName="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
+                  />
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-medium text-muted">예금주</span>
                     <input

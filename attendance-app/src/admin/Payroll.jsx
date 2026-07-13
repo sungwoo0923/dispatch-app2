@@ -36,7 +36,7 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import { calcMonthlyPayroll, getSiteInsuranceRates } from "../utils/payroll";
-import { toMonthKey, toDateKey, formatTime } from "../utils/dateUtils";
+import { toMonthKey, toDateKey, formatTime, formatDate, birthDateFromResident } from "../utils/dateUtils";
 import { downloadCsv } from "../utils/exportCsv";
 import {
   EMPLOYMENT_TYPE_OPTIONS,
@@ -49,6 +49,67 @@ import {
 const PERIOD_LABELS = { daily: "일급", weekly: "주급", monthly: "월급" };
 const INSURANCE_ITEMS = ["국민연금", "건강보험", "요양보험", "고용보험"];
 const DEDUCTION_ITEMS = ["지각공제", "조퇴공제", "기타공제"];
+
+// 급여명세서 지급/공제 항목 확장 — 기존 base/overtimePay/weeklyAllowance/
+// allowances/mealAllowance/lateDeduction/earlyLeaveDeduction(지급) 및
+// deductions.{pension,health,longTermCare,employment}(공제) 계산 로직은
+// 그대로 두고, 관리자가 수동으로 입력하는 추가 항목만 최상위(지급)/
+// deductions 하위(공제)에 옵션 필드로 얹는다. 값이 없으면 명세서에 해당
+// 줄 자체를 렌더링하지 않아 기존 정산 데이터도 그대로 문제없이 보인다.
+const PAYMENT_EXTRA_FIELDS = [
+  ["bonus", "상여"],
+  ["positionAllowance", "직책수당"],
+  ["annualLeaveAllowance", "연차수당"],
+  ["specialBonus", "특별상여"],
+  ["holidayPay", "휴일근로수당"],
+  ["businessTripAllowance", "출장수당"],
+  ["longServiceAllowance", "장기근속수당"],
+  ["commAllowance", "통신비지원금"],
+];
+const DEDUCTION_EXTRA_FIELDS = [
+  ["otherDeduction", "기타공제액"],
+  ["healthAdjustment", "건강보험정산"],
+  ["advancePayment", "선지급금"],
+  ["incomeTax", "소득세"],
+  ["localIncomeTax", "지방소득세"],
+  ["yearEndIncomeTax", "연말정산소득세"],
+  ["yearEndLocalIncomeTax", "연말정산지방소득세"],
+];
+
+function emptyExtraForm() {
+  const out = {};
+  PAYMENT_EXTRA_FIELDS.forEach(([k]) => (out[k] = 0));
+  DEDUCTION_EXTRA_FIELDS.forEach(([k]) => (out[k] = 0));
+  return out;
+}
+
+// calcMonthlyPayroll()이 돌려주는 result(base/overtimePay/... + grossPay/
+// deductions/netPay)에, 위 확장 항목들의 합계를 얹어 grossPay/deductions.total/
+// netPay를 다시 계산한다. paymentSource/deductionSource는 각각 확장 지급/공제
+// 필드를 담고 있는 아무 객체(폼 state, 기존 payrolls 문서, 기존 문서의
+// deductions 하위 객체 등)나 받을 수 있어 save()/runSettlement()/
+// applyAdjustment() 세 곳에서 동일하게 재사용한다.
+function withExtraTotals(result, paymentSource, deductionSource) {
+  const extraPayments = Object.fromEntries(PAYMENT_EXTRA_FIELDS.map(([k]) => [k, Number(paymentSource?.[k] || 0)]));
+  const extraDeductions = Object.fromEntries(DEDUCTION_EXTRA_FIELDS.map(([k]) => [k, Number(deductionSource?.[k] || 0)]));
+  const extraPaymentsTotal = Object.values(extraPayments).reduce((s, v) => s + v, 0);
+  const extraDeductionsTotal = Object.values(extraDeductions).reduce((s, v) => s + v, 0);
+  const grossPay = result.grossPay + extraPaymentsTotal;
+  const deductionsTotal = result.deductions.total + extraDeductionsTotal;
+  return {
+    ...result,
+    ...extraPayments,
+    grossPay,
+    netPay: grossPay - deductionsTotal,
+    deductions: { ...result.deductions, ...extraDeductions, total: deductionsTotal },
+  };
+}
+
+// 주민/외국인번호 앞자리에서 생년월일을 뽑아 급여명세서 상단 정보표에 쓴다.
+function birthDateDisplay(residentNumberFront) {
+  const key = birthDateFromResident(residentNumberFront);
+  return key ? formatDate(key) : "-";
+}
 
 const GUIDE_NOTES = [
   "급여 형태 및 기간 선택: 일급,주급,월급을 선택할 수 있으며 기간별로 정산 조회가 가능합니다.",
@@ -122,6 +183,7 @@ export default function Payroll() {
     mealAllowance: 0,
     lateDeduction: 0,
     earlyLeaveDeduction: 0,
+    ...emptyExtraForm(),
   });
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -229,12 +291,41 @@ export default function Payroll() {
     setPreviewFor({ emp, p });
   };
 
+  // 근로자목록/스케줄 화면과 동일한 우클릭 컨텍스트 메뉴 패턴 — 정산 데이터가
+  // 없는 근로자는 "수정"을 선택(또는 행을 더블클릭)하면 급여입력 팝업이
+  // 생성 모드로, 있는 근로자는 수정 모드로 동일하게 뜬다.
+  const [rowMenu, setRowMenu] = useState(null); // { x, y, emp }
+  const openRowMenu = (e, emp) => {
+    e.preventDefault();
+    setRowMenu({ x: e.clientX, y: e.clientY, emp });
+  };
+  const closeRowMenu = () => setRowMenu(null);
+
+  useEffect(() => {
+    if (!rowMenu) return;
+    const onDocClick = () => closeRowMenu();
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("scroll", onDocClick, true);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("scroll", onDocClick, true);
+    };
+  }, [rowMenu]);
+
+  // 급여명세서 지급일 — 사업자에 급여일(payrollInfo.payday, 매월 며칠)이
+  // 설정되어 있으면 해당 정산월과 조합해 실제 날짜로 보여주고, 미설정이면
+  // 발급일(오늘)로 대체한다.
+  const payDateFor = (p) =>
+    payrollInfo.payday ? `${p.month}-${String(payrollInfo.payday).padStart(2, "0")}` : toDateKey();
+
   const printPayslip = () => {
     if (!previewFor) return;
     const { emp, p } = previewFor;
     const d = p.deductions || {};
     const row = (label, value, strong) =>
       `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;${strong ? "font-weight:700;border-top:1px dashed #cbd5e1;margin-top:6px;padding-top:10px;" : "color:#475569;"}"><span>${label}</span><span style="color:#0f172a;font-weight:${strong ? 700 : 600}">${Number(value || 0).toLocaleString()}원</span></div>`;
+    const rowIf = (label, value, strong) => (Number(value || 0) ? row(label, value, strong) : "");
+    const info = (label, value) => `<div><span>${label}</span><span style="font-weight:600">${value ?? "-"}</span></div>`;
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>급여명세서 - ${emp.name}</title>
       <style>body{font-family:'Malgun Gothic',sans-serif;max-width:420px;margin:24px auto;color:#0f172a;}
       .card{border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;margin-bottom:16px;}
@@ -248,19 +339,27 @@ export default function Payroll() {
       <div class="card">
         <div class="head"><p style="margin:0;font-size:12px;opacity:.7">급여명세서</p><p style="margin:4px 0 0;font-size:17px;font-weight:700">${companyName || ""}</p></div>
         <div class="info">
-          <div><span>성명</span><span style="font-weight:600">${emp.name}${emp.position ? ` (${emp.position})` : ""}</span></div>
-          <div><span>지급대상기간</span><span style="font-weight:600">${p.month}</span></div>
-          <div><span>발급일</span><span style="font-weight:600">${toDateKey()}</span></div>
+          ${info("회사명", companyName || "-")}
+          ${info("성명", emp.name)}
+          ${info("생년월일", birthDateDisplay(emp.residentNumberFront))}
+          ${info("입사일", emp.hireDate ? formatDate(emp.hireDate) : "-")}
+          ${info("직책", emp.position || "-")}
+          ${info("직급", emp.position || "-")}
+          ${info("부서", emp.team || "-")}
+          ${info("지급일", payDateFor(p))}
+          ${info("지급대상기간", p.month)}
+          ${info("발급일", toDateKey())}
+          ${info("비고", p.note || "-")}
         </div>
         <div class="net"><span style="background:#eff6ff;color:#2563eb;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600">실수령액</span><p style="font-size:28px;font-weight:800;margin:8px 0 0">${Number(p.netPay || 0).toLocaleString()}원</p></div>
       </div>
       <div class="card"><div class="body">
         <p class="title">지급내역 ${Number(p.grossPay || 0).toLocaleString()}원</p>
-        ${row("기본급", p.base)}${row("연장수당", p.overtimePay)}${row("주휴수당", p.weeklyAllowance)}${row("기타수당", p.allowances)}${row("식대", p.mealAllowance)}${row("지각공제", p.lateDeduction)}${row("조퇴공제", p.earlyLeaveDeduction)}${row("지급합계", p.grossPay, true)}
+        ${row("기본급", p.base)}${rowIf("상여", p.bonus)}${rowIf("직책수당", p.positionAllowance)}${rowIf("연차수당", p.annualLeaveAllowance)}${row("주휴수당", p.weeklyAllowance)}${row("기타수당", p.allowances)}${row("식대", p.mealAllowance)}${rowIf("특별상여", p.specialBonus)}${row("연장근로수당", p.overtimePay)}${rowIf("휴일근로수당", p.holidayPay)}${rowIf("출장수당", p.businessTripAllowance)}${rowIf("장기근속수당", p.longServiceAllowance)}${rowIf("통신비지원금", p.commAllowance)}${row("지각공제", p.lateDeduction)}${row("조퇴공제", p.earlyLeaveDeduction)}${row("지급합계", p.grossPay, true)}
       </div></div>
       <div class="card"><div class="body">
         <p class="title">공제내역</p>
-        ${row("국민연금", d.pension)}${row("건강보험", d.health)}${row("장기요양보험", d.longTermCare)}${row("고용보험", d.employment)}${row("공제합계", d.total, true)}
+        ${row("국민연금", d.pension)}${row("건강보험", d.health)}${row("장기요양보험", d.longTermCare)}${row("고용보험", d.employment)}${rowIf("기타공제액", d.otherDeduction)}${rowIf("건강보험정산", d.healthAdjustment)}${rowIf("선지급금", d.advancePayment)}${rowIf("소득세", d.incomeTax)}${rowIf("지방소득세", d.localIncomeTax)}${rowIf("연말정산소득세", d.yearEndIncomeTax)}${rowIf("연말정산지방소득세", d.yearEndLocalIncomeTax)}${row("공제합계", d.total, true)}
       </div></div>
       <p style="text-align:center;font-size:11px;color:#94a3b8">본 명세서는 시스템에서 자동 생성되었습니다.</p>
       </body></html>`;
@@ -359,6 +458,8 @@ export default function Payroll() {
         mealAllowance: existing.mealAllowance || 0,
         lateDeduction: existing.lateDeduction || 0,
         earlyLeaveDeduction: existing.earlyLeaveDeduction || 0,
+        ...Object.fromEntries(PAYMENT_EXTRA_FIELDS.map(([k]) => [k, existing[k] || 0])),
+        ...Object.fromEntries(DEDUCTION_EXTRA_FIELDS.map(([k]) => [k, existing.deductions?.[k] || 0])),
       });
     } else {
       setForm({
@@ -371,6 +472,7 @@ export default function Payroll() {
         mealAllowance: 0,
         lateDeduction: 0,
         earlyLeaveDeduction: 0,
+        ...emptyExtraForm(),
       });
     }
   };
@@ -391,6 +493,9 @@ export default function Payroll() {
       earlyLeaveDeduction: Number(form.earlyLeaveDeduction),
       rates,
     });
+    // form에 담긴 상여/직책수당 등 확장 지급항목과 소득세/선지급금 등 확장
+    // 공제항목을 grossPay/deductions.total/netPay 합계에 반영한다.
+    const withExtras = withExtraTotals(result, form, form);
 
     await setDoc(doc(db, "payrolls", `${month}_${target.id}`), {
       companyId: profile.companyId,
@@ -405,7 +510,7 @@ export default function Payroll() {
       overtimeHours: Number(form.overtimeHours),
       weeklyEligibleWeeks: Number(form.weeklyEligibleWeeks),
       settlementStatus: existing?.settlementStatus || "draft",
-      ...result,
+      ...withExtras,
       updatedAt: serverTimestamp(),
     });
     setTarget(null);
@@ -463,6 +568,10 @@ export default function Payroll() {
         earlyLeaveDeduction,
         rates,
       });
+      // 재정산 시에도 관리자가 급여수정 팝업에서 수동 입력해둔 상여/수당/
+      // 소득세 등 확장 항목은 기존 baseWage/allowances처럼 그대로 이어받아
+      // setDoc(merge 없이 전체 덮어쓰기)로 인해 값이 사라지지 않게 한다.
+      const withExtras = withExtraTotals(result, existing, existing?.deductions);
 
       await setDoc(doc(db, "payrolls", `${targetMonth}_${emp.id}`), {
         companyId: profile.companyId,
@@ -480,7 +589,7 @@ export default function Payroll() {
         periodStart: start,
         periodEnd: end,
         settlementStatus: "draft",
-        ...result,
+        ...withExtras,
         updatedAt: serverTimestamp(),
       });
     }
@@ -530,6 +639,9 @@ export default function Payroll() {
         earlyLeaveDeduction: p.earlyLeaveDeduction || 0,
         rates,
       });
+      // merge:true라 확장 필드 자체는 남아있지만, grossPay/netPay/deductions.total은
+      // 다시 계산해서 써주지 않으면 상여/소득세 등이 반영되지 않은 값으로 되돌아간다.
+      const withExtras = withExtraTotals(result, p, p.deductions);
       await setDoc(
         doc(db, "payrolls", p.id),
         {
@@ -537,7 +649,7 @@ export default function Payroll() {
           note: adjustForm.note || p.note || "",
           appliedInsuranceItem: adjustForm.insuranceItem || null,
           appliedDeductionItem: adjustForm.deductionItem || null,
-          ...result,
+          ...withExtras,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -930,7 +1042,7 @@ export default function Payroll() {
         </Card>
 
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
-          <table className="w-full min-w-[1080px] text-center text-sm">
+          <table className="w-full min-w-[1320px] text-center text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-muted">
                 <th className="px-4 py-3 font-semibold">
@@ -943,6 +1055,9 @@ export default function Payroll() {
                 <th className="px-4 py-3 font-semibold">부서</th>
                 <th className="px-4 py-3 font-semibold">직급</th>
                 <th className="px-4 py-3 font-semibold">4대보험</th>
+                <th className="px-4 py-3 font-semibold">은행</th>
+                <th className="px-4 py-3 font-semibold">예금주</th>
+                <th className="px-4 py-3 font-semibold">계좌번호</th>
                 {filters.showDailyHours === "Y" && <th className="px-4 py-3 font-semibold">요일별 근무시간</th>}
                 {filters.showTemplateInfo === "포함" && <th className="px-4 py-3 font-semibold">템플릿정보</th>}
                 <th className="px-4 py-3 font-semibold">지급합계</th>
@@ -956,7 +1071,14 @@ export default function Payroll() {
               {filteredEmployees.map((emp, i) => {
                 const p = payrollFor(emp.id);
                 return (
-                  <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                  <tr
+                    key={emp.id}
+                    className="border-b border-slate-50 last:border-0"
+                    onContextMenu={(e) => openRowMenu(e, emp)}
+                    onDoubleClick={() => {
+                      if (!p) openFor(emp);
+                    }}
+                  >
                     <td className="px-4 py-3">
                       <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelected(emp.id)} />
                     </td>
@@ -967,6 +1089,9 @@ export default function Payroll() {
                     <td className="px-4 py-3 text-ink">{emp.team || "-"}</td>
                     <td className="px-4 py-3 text-ink">{emp.position || "-"}</td>
                     <td className="px-4 py-3 text-ink">{emp.insuranceApplied || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.bankName || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.accountHolder || "-"}</td>
+                    <td className="px-4 py-3 text-ink">{emp.bankAccount || "-"}</td>
                     {filters.showDailyHours === "Y" && (
                       <td className="max-w-[220px] truncate px-4 py-3 text-[11px] text-ink" title={dailyHoursFor(emp.id)}>
                         {dailyHoursFor(emp.id) || "-"}
@@ -1008,14 +1133,14 @@ export default function Payroll() {
               })}
               {filteredEmployees.length === 0 && (
                 <tr>
-                  <td colSpan={14} className="px-4 py-6 text-center text-xs text-muted">
+                  <td colSpan={18} className="px-4 py-6 text-center text-xs text-muted">
                     조건에 맞는 근로자가 없습니다.
                   </td>
                 </tr>
               )}
               {filters.subtotalView === "포함" && filteredEmployees.length > 0 && (
                 <tr className="bg-slate-50 font-semibold text-ink">
-                  <td colSpan={filters.showDailyHours === "Y" || filters.showTemplateInfo === "포함" ? 9 : 8} className="px-4 py-3 text-right text-xs">
+                  <td colSpan={filters.showDailyHours === "Y" || filters.showTemplateInfo === "포함" ? 12 : 11} className="px-4 py-3 text-right text-xs">
                     소계
                   </td>
                   <td className="px-4 py-3">
@@ -1035,6 +1160,38 @@ export default function Payroll() {
         </div>
       </Panel>
 
+      {rowMenu && (
+        <div
+          className="fixed z-50 w-36 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg"
+          style={{ left: rowMenu.x, top: rowMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="truncate px-3 py-1 text-[11px] text-muted">{rowMenu.emp.name}</p>
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-left text-sm text-ink hover:bg-slate-50"
+            onClick={() => {
+              openFor(rowMenu.emp);
+              closeRowMenu();
+            }}
+          >
+            {payrollFor(rowMenu.emp.id) ? "수정" : "생성"}
+          </button>
+          {payrollFor(rowMenu.emp.id) && (
+            <button
+              type="button"
+              className="block w-full px-3 py-1.5 text-left text-sm text-ink hover:bg-slate-50"
+              onClick={() => {
+                openPreview(rowMenu.emp);
+                closeRowMenu();
+              }}
+            >
+              명세서
+            </button>
+          )}
+        </div>
+      )}
+
       <Modal open={showGuide} onClose={() => setShowGuide(false)} title="급여 사용법" size="lg" footer={<Button onClick={() => setShowGuide(false)}>닫기</Button>}>
         <ol className="space-y-2 text-xs text-muted">
           {GUIDE_NOTES.map((note, i) => (
@@ -1050,6 +1207,7 @@ export default function Payroll() {
         open={settleOpen}
         onClose={() => setSettleOpen(false)}
         title="정산처리 요청"
+        size="lg"
         footer={
           <>
             <Button variant="outline" onClick={() => setSettleOpen(false)}>
@@ -1070,30 +1228,37 @@ export default function Payroll() {
           <br />
           #사업자: {companyName || "-"} #센터: {siteName_(filters.siteId) !== "-" ? siteName_(filters.siteId) : "전체"}
         </div>
-        <label className="mb-2 block">
+        <div className="mb-2">
           <span className="mb-1.5 block text-xs font-medium text-muted">
-            급여형태 및 기간선택 <span className="text-danger">필수</span>
+            급여형태 <span className="text-danger">필수</span>
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
             {Object.entries(PERIOD_LABELS).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setSettleForm((f) => ({ ...f, periodType: key, ...defaultRangeFor(key) }))}
-                className={`rounded-xl border px-3 py-2 text-sm ${
+                className={`shrink-0 rounded-xl border px-3 py-2 text-sm ${
                   settleForm.periodType === key ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-muted"
                 }`}
               >
                 {label}
               </button>
             ))}
+          </div>
+        </div>
+        <div className="mb-2">
+          <span className="mb-1.5 block text-xs font-medium text-muted">
+            기간선택 <span className="text-danger">필수</span>
+          </span>
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
             <input
               type="date"
               className="rounded-xl border border-slate-200 px-2.5 py-2 text-sm"
               value={settleForm.start}
               onChange={(e) => setSettleForm((f) => ({ ...f, start: e.target.value }))}
             />
-            <span className="text-muted">~</span>
+            <span className="shrink-0 text-muted">~</span>
             <input
               type="date"
               className="rounded-xl border border-slate-200 px-2.5 py-2 text-sm"
@@ -1101,7 +1266,7 @@ export default function Payroll() {
               onChange={(e) => setSettleForm((f) => ({ ...f, end: e.target.value }))}
             />
           </div>
-        </label>
+        </div>
         <label className="flex items-center gap-2 text-sm text-ink">
           <input
             type="checkbox"
@@ -1116,6 +1281,7 @@ export default function Payroll() {
         open={Boolean(target)}
         onClose={() => setTarget(null)}
         title={`${target?.name} · ${month} 급여 입력`}
+        size="lg"
         footer={
           <>
             <Button variant="outline" onClick={() => setTarget(null)}>
@@ -1126,6 +1292,23 @@ export default function Payroll() {
         }
       >
         <form onSubmit={save} className="space-y-3">
+          {/* 급여계좌는 근로자 등록정보(users.bankName 등)가 원본이므로 여기서는
+              읽기전용으로 참고만 보여준다 — 정산 처리 중 계좌를 확인/전달할 때 편의용. */}
+          <div className="space-y-1 rounded-xl bg-slate-50 p-3 text-xs">
+            <p className="mb-1 font-semibold text-ink">급여계좌 (근로자 등록정보 · 참고용)</p>
+            <div className="flex items-center justify-between">
+              <span className="text-muted">은행</span>
+              <span className="font-medium text-ink">{target?.bankName || "-"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted">예금주</span>
+              <span className="font-medium text-ink">{target?.accountHolder || "-"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted">계좌번호</span>
+              <span className="font-medium text-ink">{target?.bankAccount || "-"}</span>
+            </div>
+          </div>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">급여 형태</span>
             <select
@@ -1219,6 +1402,40 @@ export default function Payroll() {
               />
             </label>
           </div>
+          <div className="border-t border-slate-100 pt-3">
+            <p className="mb-2 text-xs font-semibold text-ink">지급항목</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {PAYMENT_EXTRA_FIELDS.map(([key, label]) => (
+                <label key={key} className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">{label}(원)</span>
+                  <input
+                    type="number"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={form[key]}
+                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-3">
+            <p className="mb-2 text-xs font-semibold text-ink">공제항목</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {DEDUCTION_EXTRA_FIELDS.map(([key, label]) => (
+                <label key={key} className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">{label}(원)</span>
+                  <input
+                    type="number"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={form[key]}
+                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+
           {allowanceTemplates.length > 0 && (
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">수당템플릿 추가</span>
@@ -1295,6 +1512,7 @@ export default function Payroll() {
         open={Boolean(previewFor)}
         onClose={() => setPreviewFor(null)}
         title="급여명세서 미리보기"
+        size="lg"
         footer={
           <>
             <Button variant="outline" onClick={sharePayslip}>
@@ -1316,21 +1534,25 @@ export default function Payroll() {
                 </p>
                 <p className="text-lg font-bold">{companyName || ""}</p>
               </div>
-              <div className="space-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">성명</span>
-                  <span className="font-semibold text-ink">
-                    {previewFor.emp.name}{previewFor.emp.position ? ` (${previewFor.emp.position})` : ""}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">지급대상기간</span>
-                  <span className="font-semibold text-ink">{previewFor.p.month}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">발급일</span>
-                  <span className="font-semibold text-ink">{toDateKey()}</span>
-                </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
+                {[
+                  ["회사명", companyName || "-"],
+                  ["성명", previewFor.emp.name],
+                  ["생년월일", birthDateDisplay(previewFor.emp.residentNumberFront)],
+                  ["입사일", previewFor.emp.hireDate ? formatDate(previewFor.emp.hireDate) : "-"],
+                  ["직책", previewFor.emp.position || "-"],
+                  ["직급", previewFor.emp.position || "-"],
+                  ["부서", previewFor.emp.team || "-"],
+                  ["지급일", payDateFor(previewFor.p)],
+                  ["지급대상기간", previewFor.p.month],
+                  ["발급일", toDateKey()],
+                  ["비고", previewFor.p.note || "-"],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between gap-2">
+                    <span className="text-muted">{label}</span>
+                    <span className="truncate font-semibold text-ink">{value}</span>
+                  </div>
+                ))}
               </div>
               <div className="p-5 text-center">
                 <span className="inline-block rounded-full bg-primary-light px-3 py-1 text-xs font-semibold text-primary">실수령액</span>
@@ -1341,19 +1563,29 @@ export default function Payroll() {
             <Card className="p-5">
               <p className="mb-2 text-sm font-bold text-ink">지급내역 {Number(previewFor.p.grossPay || 0).toLocaleString()}원</p>
               {[
-                ["기본급", previewFor.p.base],
-                ["연장수당", previewFor.p.overtimePay],
-                ["주휴수당", previewFor.p.weeklyAllowance],
-                ["기타수당", previewFor.p.allowances],
-                ["식대", previewFor.p.mealAllowance],
-                ["지각공제", previewFor.p.lateDeduction],
-                ["조퇴공제", previewFor.p.earlyLeaveDeduction],
-              ].map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
-                  <span>{label}</span>
-                  <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
-                </div>
-              ))}
+                ["기본급", previewFor.p.base, false],
+                ["상여", previewFor.p.bonus, true],
+                ["직책수당", previewFor.p.positionAllowance, true],
+                ["연차수당", previewFor.p.annualLeaveAllowance, true],
+                ["주휴수당", previewFor.p.weeklyAllowance, false],
+                ["기타수당", previewFor.p.allowances, false],
+                ["식대", previewFor.p.mealAllowance, false],
+                ["특별상여", previewFor.p.specialBonus, true],
+                ["연장근로수당", previewFor.p.overtimePay, false],
+                ["휴일근로수당", previewFor.p.holidayPay, true],
+                ["출장수당", previewFor.p.businessTripAllowance, true],
+                ["장기근속수당", previewFor.p.longServiceAllowance, true],
+                ["통신비지원금", previewFor.p.commAllowance, true],
+                ["지각공제", previewFor.p.lateDeduction, false],
+                ["조퇴공제", previewFor.p.earlyLeaveDeduction, false],
+              ]
+                .filter(([, value, optional]) => !optional || Number(value || 0))
+                .map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
+                    <span>{label}</span>
+                    <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
+                  </div>
+                ))}
               <div className="my-2 border-t border-dashed border-slate-200" />
               <div className="flex items-center justify-between py-1.5 text-sm font-bold text-ink">
                 <span>지급합계</span>
@@ -1364,16 +1596,25 @@ export default function Payroll() {
             <Card className="p-5">
               <p className="mb-2 text-sm font-semibold text-ink">공제내역</p>
               {[
-                ["국민연금", previewFor.p.deductions?.pension],
-                ["건강보험", previewFor.p.deductions?.health],
-                ["장기요양보험", previewFor.p.deductions?.longTermCare],
-                ["고용보험", previewFor.p.deductions?.employment],
-              ].map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
-                  <span>{label}</span>
-                  <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
-                </div>
-              ))}
+                ["국민연금", previewFor.p.deductions?.pension, false],
+                ["건강보험", previewFor.p.deductions?.health, false],
+                ["장기요양보험", previewFor.p.deductions?.longTermCare, false],
+                ["고용보험", previewFor.p.deductions?.employment, false],
+                ["기타공제액", previewFor.p.deductions?.otherDeduction, true],
+                ["건강보험정산", previewFor.p.deductions?.healthAdjustment, true],
+                ["선지급금", previewFor.p.deductions?.advancePayment, true],
+                ["소득세", previewFor.p.deductions?.incomeTax, true],
+                ["지방소득세", previewFor.p.deductions?.localIncomeTax, true],
+                ["연말정산소득세", previewFor.p.deductions?.yearEndIncomeTax, true],
+                ["연말정산지방소득세", previewFor.p.deductions?.yearEndLocalIncomeTax, true],
+              ]
+                .filter(([, value, optional]) => !optional || Number(value || 0))
+                .map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
+                    <span>{label}</span>
+                    <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
+                  </div>
+                ))}
               <div className="my-2 border-t border-dashed border-slate-200" />
               <div className="flex items-center justify-between py-1.5 text-sm font-bold text-ink">
                 <span>공제합계</span>
