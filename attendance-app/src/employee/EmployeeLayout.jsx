@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User, FileSignature, ShieldAlert } from "lucide-react";
+import { ClipboardList, CalendarCheck, CheckCircle2, MessageSquare, User, FileSignature, ShieldAlert, UserRound, ChevronRight, Check } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useLanguage } from "../hooks/useLanguage";
 import { useOnboardingPending } from "../hooks/useOnboardingPending";
@@ -36,16 +36,36 @@ export default function EmployeeLayout() {
   const [onboardingPrompt, setOnboardingPrompt] = useState(false);
   const onboardingShownRef = useRef(false);
 
+  // 신규 근로자가 처음 들어왔을 때 뭘 해야 하는지 순서대로 알려주는
+  // 체크리스트 — 내 정보 입력 → 근로계약서 서명 → 안전교육 이수 순으로,
+  // 완료한 항목은 지우지 않고 체크 표시로 남겨 진행 상황을 보여준다.
+  // 나이 있는 사용자도 "어디를 눌러야 하는지" 바로 학습할 수 있게 하기
+  // 위한 튜토리얼 성격의 팝업이라, 전부 완료되기 전까지는 계속 안내한다.
+  const onboardingSteps = [
+    { key: "myInfo", done: Boolean(profile?.basicInfoSubmitted), labelKey: "onboarding.fillMyInfo", icon: UserRound, to: "/my-info" },
+    { key: "contract", done: pendingContracts === 0, labelKey: "onboarding.signContract", icon: FileSignature, to: "/contracts" },
+    {
+      key: "safety",
+      done: pendingSafetyCount === 0,
+      labelKey: "onboarding.completeSafety",
+      labelParams: { count: pendingSafetyCount },
+      icon: ShieldAlert,
+      to: "/safety",
+    },
+  ];
+  const onboardingAllDone = onboardingSteps.every((s) => s.done);
+
   // 예전엔 체크(홈) 탭에서만 이 팝업이 떴다 — 다른 탭에 있는 동안에는
   // 완료해야 할 항목이 있어도 안내를 못 받았다. 레이아웃(모든 탭에서
   // 항상 마운트됨) 레벨로 옮겨 어느 탭에 있든 한 번은 뜨도록 한다.
   useEffect(() => {
     if (onboardingShownRef.current) return;
-    if (pendingContracts > 0 || pendingSafetyCount > 0) {
+    if (!onboardingAllDone) {
       onboardingShownRef.current = true;
       setOnboardingPrompt(true);
     }
-  }, [pendingContracts, pendingSafetyCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboardingAllDone]);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -97,32 +117,41 @@ export default function EmployeeLayout() {
       >
         <div className="space-y-3">
           <p className="text-sm text-ink">{t("onboarding.body")}</p>
-          {pendingContracts > 0 && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light p-4 text-left"
-              onClick={() => {
-                setOnboardingPrompt(false);
-                navigate("/contracts");
-              }}
-            >
-              <FileSignature size={18} className="shrink-0 text-primary" />
-              <span className="flex-1 text-sm text-ink">{t("onboarding.signContract")}</span>
-            </button>
-          )}
-          {pendingSafetyCount > 0 && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-xl border border-danger/20 bg-red-50 p-4 text-left"
-              onClick={() => {
-                setOnboardingPrompt(false);
-                navigate("/safety");
-              }}
-            >
-              <ShieldAlert size={18} className="shrink-0 text-danger" />
-              <span className="flex-1 text-sm text-ink">{t("onboarding.completeSafety", { count: pendingSafetyCount })}</span>
-            </button>
-          )}
+          <div className="space-y-2">
+            {onboardingSteps.map((step, idx) => {
+              const Icon = step.icon;
+              const label = step.labelParams ? t(step.labelKey, step.labelParams) : t(step.labelKey);
+              if (step.done) {
+                return (
+                  <div key={step.key} className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                      <Check size={15} />
+                    </span>
+                    <span className="flex-1 text-sm font-medium text-emerald-700 line-through decoration-emerald-400">{label}</span>
+                    <span className="shrink-0 text-xs font-semibold text-emerald-600">{t("onboarding.stepDone")}</span>
+                  </div>
+                );
+              }
+              return (
+                <button
+                  key={step.key}
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-primary-light p-4 text-left"
+                  onClick={() => {
+                    setOnboardingPrompt(false);
+                    navigate(step.to);
+                  }}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                    {idx + 1}
+                  </span>
+                  <Icon size={18} className="shrink-0 text-primary" />
+                  <span className="flex-1 text-sm text-ink">{label}</span>
+                  <ChevronRight size={16} className="shrink-0 text-primary" />
+                </button>
+              );
+            })}
+          </div>
         </div>
       </Modal>
 

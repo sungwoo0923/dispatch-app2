@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, updateDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 import { FolderOpen, ShieldCheck, ChevronRight, LogOut, UserRound, Search, Lock, Send, Globe, Bell } from "lucide-react";
@@ -58,6 +58,10 @@ export default function MyInfoPage() {
   const [requesting, setRequesting] = useState(false);
   const [, bumpBiometric] = useState(0);
   const [basicExpanded, setBasicExpanded] = useState(false);
+  const residentNumberRef = useRef(null);
+  const bankNameRef = useRef(null);
+  const bankAccountRef = useRef(null);
+  const accountHolderRef = useRef(null);
 
   // 관리자용 근로자등록 화면의 "KP-Work 앱에 가입을 하지 않은 지원자만
   // 입력합니다" 카드와 동일한 필드 — 이미 가입한 근로자는 여기서 본인이
@@ -92,6 +96,19 @@ export default function MyInfoPage() {
   };
 
   const saveBasic = async () => {
+    const requiredChecks = [
+      { value: basic.residentNumberFront, ref: residentNumberRef },
+      { value: basic.bankName, ref: bankNameRef },
+      { value: basic.bankAccount, ref: bankAccountRef },
+      { value: basic.accountHolder, ref: accountHolderRef },
+    ];
+    const firstMissing = requiredChecks.find((f) => !String(f.value || "").trim());
+    if (firstMissing) {
+      toast.error(t("myInfo.requiredMissing"));
+      firstMissing.ref.current?.focus();
+      firstMissing.ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     setSaving(true);
     try {
       await updateDoc(doc(db, "users", user.uid), { ...basic, basicInfoSubmitted: true });
@@ -223,8 +240,9 @@ export default function MyInfoPage() {
             <input disabled className={fieldCls} value={basic.externalId} />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.residentNumber")}</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.residentNumber")} <span className="text-danger">*</span></span>
             <input
+              ref={residentNumberRef}
               disabled={locked}
               className={fieldCls}
               value={basic.residentNumberFront}
@@ -263,8 +281,9 @@ export default function MyInfoPage() {
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankName")}</span>
+              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankName")} <span className="text-danger">*</span></span>
               <select
+                ref={bankNameRef}
                 disabled={locked}
                 className={fieldCls}
                 value={basic.bankName}
@@ -277,8 +296,9 @@ export default function MyInfoPage() {
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankAccount")}</span>
+              <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.bankAccount")} <span className="text-danger">*</span></span>
               <input
+                ref={bankAccountRef}
                 disabled={locked}
                 className={fieldCls}
                 value={basic.bankAccount}
@@ -287,8 +307,9 @@ export default function MyInfoPage() {
             </label>
           </div>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.accountHolder")}</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted">{t("myInfo.accountHolder")} <span className="text-danger">*</span></span>
             <input
+              ref={accountHolderRef}
               disabled={locked}
               className={fieldCls}
               value={basic.accountHolder}

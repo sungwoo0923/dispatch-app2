@@ -39,6 +39,7 @@ export default function ResignationApprovals() {
   const confirm = useConfirm();
   const toast = useToast();
   const [rows, setRows] = useState([]);
+  const [businessEntities, setBusinessEntities] = useState([]);
   const [signTarget, setSignTarget] = useState(null); // { req, stage: "manager" | "ceo" }
   const [viewTarget, setViewTarget] = useState(null); // 결재상황(읽기 전용)으로 보는 사직서
   const [previewMode, setPreviewMode] = useState(false);
@@ -52,6 +53,15 @@ export default function ResignationApprovals() {
     const unsub = onSnapshot(
       query(collection(db, "resignationRequests"), where("companyId", "==", profile.companyId)),
       (snap) => setRows(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [profile?.companyId]);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const unsub = onSnapshot(
+      query(collection(db, "businessEntities"), where("companyId", "==", profile.companyId)),
+      (snap) => setBusinessEntities(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
     return () => unsub();
   }, [profile?.companyId]);
@@ -136,6 +146,22 @@ export default function ResignationApprovals() {
             ceoSignatureDataUrl: signatureDataUrl,
             ceoDecisionCount: (req.ceoDecisionCount || 0) + 1,
           };
+
+    // 담당이 승인하면, 사업자 도장이 등록되어 있는 경우 대표 결재를 직접
+    // 받지 않고 그 도장으로 자동 승인 처리한다 — 도장이 없으면 예전처럼
+    // 대표가 직접 서명해야 한다.
+    if (stage === "manager" && result === "approved" && !getCeoResult(req)) {
+      const entityStampUrl = businessEntities.find((e) => e.id === req.businessEntityId)?.stampUrl;
+      if (entityStampUrl) {
+        patch.ceoResult = "approved";
+        patch.ceoName = "대표(도장 자동승인)";
+        patch.ceoSignedAt = today;
+        patch.ceoNote = "";
+        patch.ceoSignatureDataUrl = entityStampUrl;
+        patch.ceoDecisionCount = (req.ceoDecisionCount || 0) + 1;
+      }
+    }
+
     const merged = { ...req, ...patch };
     const newStatus = computeResignationStatus(merged);
     patch.status = newStatus;
@@ -170,7 +196,13 @@ export default function ResignationApprovals() {
           createdAt: serverTimestamp(),
         });
       }
-      toast.success(stage === "ceo" ? "대표 결재가 반영되었습니다" : "담당 결재가 반영되었습니다");
+      toast.success(
+        stage === "ceo"
+          ? "대표 결재가 반영되었습니다"
+          : patch.ceoResult === "approved"
+            ? "담당 결재가 반영되었습니다. 사업자 도장으로 대표 결재까지 자동 승인되어 처리완료되었습니다."
+            : "담당 결재가 반영되었습니다"
+      );
       setSignTarget(null);
     } catch (err) {
       toast.error(`결재 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);

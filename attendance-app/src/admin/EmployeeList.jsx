@@ -382,7 +382,33 @@ export default function EmployeeList() {
 
   const selectCls = "rounded-lg border border-slate-200 px-2 py-1 text-xs";
   const employeeColumns = [
+    {
+      key: "phone",
+      label: "연락처",
+      render: (emp) => (
+        <span className="inline-flex items-center gap-1">
+          {emp.phone}
+          <SmsButton phone={emp.phone} />
+        </span>
+      ),
+    },
     { key: "entity", label: "사업자", render: (emp) => entityName_(emp.businessEntityId) },
+    {
+      key: "employmentStatus",
+      label: "재직상태",
+      interactive: true,
+      render: (emp) => (
+        <select
+          className={`${selectCls} font-medium ${EMPLOYMENT_STATUS_SELECT_CLS[emp.employmentStatus || "재직"] || ""}`}
+          value={emp.employmentStatus || "재직"}
+          onChange={(e) => updateFieldWithConfirm(emp.id, "employmentStatus", e.target.value)}
+        >
+          {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
+      ),
+    },
     {
       key: "site",
       label: "센터",
@@ -396,16 +422,6 @@ export default function EmployeeList() {
             </option>
           ))}
         </select>
-      ),
-    },
-    {
-      key: "phone",
-      label: "연락처",
-      render: (emp) => (
-        <span className="inline-flex items-center gap-1">
-          {emp.phone}
-          <SmsButton phone={emp.phone} />
-        </span>
       ),
     },
     { key: "gender", label: "성별", render: (emp) => emp.gender || "-" },
@@ -474,22 +490,6 @@ export default function EmployeeList() {
     { key: "resignTemplate", label: "사직서템플릿", render: (emp) => emp.resignTemplateName || "-" },
     { key: "nationality", label: "외/내국인", render: (emp) => emp.nationality || "-" },
     { key: "country", label: "국적", render: (emp) => emp.country || "-" },
-    {
-      key: "employmentStatus",
-      label: "재직상태",
-      interactive: true,
-      render: (emp) => (
-        <select
-          className={`${selectCls} font-medium ${EMPLOYMENT_STATUS_SELECT_CLS[emp.employmentStatus || "재직"] || ""}`}
-          value={emp.employmentStatus || "재직"}
-          onChange={(e) => updateFieldWithConfirm(emp.id, "employmentStatus", e.target.value)}
-        >
-          {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-      ),
-    },
     { key: "hireDate", label: "입사일", render: (emp) => (emp.hireDate ? formatDate(emp.hireDate) : "-") },
     { key: "resignDate", label: "퇴사일", render: (emp) => (emp.resignDate ? formatDate(emp.resignDate) : "-") },
     { key: "signup", label: "회원가입", render: () => "Y" },
@@ -634,9 +634,13 @@ export default function EmployeeList() {
     logChange(uid, "정보수정", `${label}: ${display(beforeRaw)} → ${display(afterRaw)}`);
   };
 
-  const assignSite = (uid, workSiteId) => {
-    const before = employees.find((e) => e.id === uid)?.workSiteId;
-    updateDoc(doc(db, "users", uid), { workSiteId: workSiteId || null });
+  const assignSite = async (uid, workSiteId) => {
+    const emp = employees.find((e) => e.id === uid);
+    const before = emp?.workSiteId;
+    if ((before || "") === (workSiteId || "")) return;
+    if (!(await confirm(`${emp?.name}님의 센터를 "${siteName_(before) || "없음"}"에서 "${siteName_(workSiteId) || "없음"}"(으)로 변경하시겠습니까?`, "edit")))
+      return;
+    await updateDoc(doc(db, "users", uid), { workSiteId: workSiteId || null });
     logFieldChange(uid, "workSiteId", before, workSiteId);
   };
   const updateField = (uid, field, value) => {
@@ -1017,6 +1021,7 @@ export default function EmployeeList() {
       await addDoc(collection(db, "resignationRequests"), {
         companyId: profile.companyId,
         uid: editingUid,
+        businessEntityId: registerForm.businessEntityId || "",
         employeeName: registerForm.name,
         position: registerForm.position || "",
         siteName: siteName_(registerForm.workSiteId),

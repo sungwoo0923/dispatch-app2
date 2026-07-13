@@ -267,7 +267,11 @@ export default function CenterReports() {
     try {
       const url = await uploadBusinessEntityStamp({ companyId: profile.companyId, entityId: form.businessEntityId, file });
       await updateDoc(doc(db, "businessEntities", form.businessEntityId), { stampUrl: url });
-      toast.success("도장이 등록되었습니다. 이 사업자의 계약서 문서에 자동으로 반영됩니다.");
+      toast.success(
+        form.docType === "사직서"
+          ? "도장이 등록되었습니다. 이 사업자의 사직서 대표 결재란에 자동으로 반영됩니다."
+          : "도장이 등록되었습니다. 이 사업자의 계약서 문서에 자동으로 반영됩니다."
+      );
     } catch (err) {
       toast.error("도장 업로드에 실패했습니다. 다시 시도해주세요.");
     }
@@ -533,25 +537,37 @@ export default function CenterReports() {
             </label>
           </div>
 
-          {form.docType === "계약서" && (
+          {(form.docType === "계약서" || form.docType === "사직서") && (
             <div>
-              <input ref={fileInputRef} type="file" accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFile} />
               <input ref={stampInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadStamp} />
+              {form.docType === "계약서" && (
+                <input ref={fileInputRef} type="file" accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFile} />
+              )}
               <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
-                <Button size="sm" variant="outline" type="button" onClick={triggerUpload}>
-                  <Upload size={13} /> 양식 업로드
-                </Button>
+                {form.docType === "계약서" && (
+                  <Button size="sm" variant="outline" type="button" onClick={triggerUpload}>
+                    <Upload size={13} /> 양식 업로드
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" type="button" onClick={triggerStampUpload}>
                   <Stamp size={13} /> 도장 업로드
                 </Button>
-                <Button size="sm" variant="outline" type="button" onClick={() => setLawOpen(true)}>
-                  <Scale size={13} /> 근로기준법
-                </Button>
+                {form.docType === "계약서" && (
+                  <Button size="sm" variant="outline" type="button" onClick={() => setLawOpen(true)}>
+                    <Scale size={13} /> 근로기준법
+                  </Button>
+                )}
               </div>
               <p className="mt-1.5 text-[11px] text-muted">
-                txt/csv/pdf/엑셀 형식의 다른 표준근로계약서 문서를 업로드하면 업무의 내용/임금/사회보험/기타 항목을 인식해 아래 내용에 반영합니다. (한글(hwp)·워드 문서는 이 앱에서 텍스트 추출을 지원하지 않습니다)
-                <br />
-                도장 업로드는 선택한 사업자의 인감으로 등록되어, 이 사업자의 계약서 문서에서 대표자 서명란에 자동으로 표시됩니다.
+                {form.docType === "계약서" ? (
+                  <>
+                    txt/csv/pdf/엑셀 형식의 다른 표준근로계약서 문서를 업로드하면 업무의 내용/임금/사회보험/기타 항목을 인식해 아래 내용에 반영합니다. (한글(hwp)·워드 문서는 이 앱에서 텍스트 추출을 지원하지 않습니다)
+                    <br />
+                    도장 업로드는 선택한 사업자의 인감으로 등록되어, 이 사업자의 계약서 문서에서 대표자 서명란에 자동으로 표시됩니다.
+                  </>
+                ) : (
+                  "도장 업로드는 선택한 사업자의 인감으로 등록되어, 사직서 결재 시 대표 결재란에 자동으로 표시되고 대표 결재가 자동 승인 처리됩니다. 도장을 등록하지 않으면 기존처럼 대표가 직접 결재해야 합니다."
+                )}
               </p>
             </div>
           )}

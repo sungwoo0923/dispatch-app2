@@ -72,6 +72,9 @@ export default function Centers() {
       const geo = await searchAddressCoords(result.address);
       if (geo) {
         setInfo((f) => ({ ...f, lat: geo.lat, lng: geo.lng }));
+        if (!geo.precise) {
+          toast.error("건물번지까지 정확히 일치하는 좌표를 찾지 못해 인근 지역 좌표로 채워졌습니다. 출근 반경이 좁다면(50~100m) 위도/경도를 직접 미세조정해주세요.");
+        }
       } else {
         toast.error("좌표를 자동으로 찾지 못했습니다. 위도/경도를 직접 입력해주세요.");
       }

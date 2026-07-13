@@ -47,6 +47,13 @@ const STRINGS = {
     th: "โปรดทำรายการด้านล่างให้เสร็จก่อน จะเช็คอินไม่ได้จนกว่าจะทำเสร็จ",
   },
   "onboarding.later": { ko: "나중에 하기", en: "Later", vi: "Để sau", zh: "稍后再说", th: "ทำภายหลัง" },
+  "onboarding.fillMyInfo": {
+    ko: "내 정보 입력하기",
+    en: "Fill in my info",
+    vi: "Nhập thông tin của tôi",
+    zh: "填写我的信息",
+    th: "กรอกข้อมูลของฉัน",
+  },
   "onboarding.signContract": {
     ko: "근로계약서 서명하기",
     en: "Sign employment contract",
@@ -60,6 +67,14 @@ const STRINGS = {
     vi: "Hoàn thành đào tạo an toàn ({{count}})",
     zh: "完成安全教育（{{count}}项）",
     th: "ทำการอบรมความปลอดภัยให้เสร็จ ({{count}})",
+  },
+  "onboarding.stepDone": { ko: "완료", en: "Done", vi: "Đã xong", zh: "已完成", th: "เสร็จสิ้น" },
+  "onboarding.allDoneHint": {
+    ko: "완료한 항목은 눌러도 이동하지 않습니다.",
+    en: "Completed items won't navigate when tapped.",
+    vi: "Các mục đã hoàn thành sẽ không chuyển trang khi nhấn.",
+    zh: "已完成的项目点击后不会跳转。",
+    th: "รายการที่เสร็จแล้วแตะแล้วจะไม่เปลี่ยนหน้า",
   },
 
   // MyInfoPage
@@ -122,6 +137,13 @@ const STRINGS = {
     vi: "Đã lưu. Nếu cần thay đổi sau này, vui lòng dùng yêu cầu chỉnh sửa.",
     zh: "已保存。如需修改，请使用修改申请功能。",
     th: "บันทึกแล้ว หากต้องแก้ไขภายหลัง โปรดใช้การขอแก้ไข",
+  },
+  "myInfo.requiredMissing": {
+    ko: "주민/외국인번호, 급여은행, 급여계좌, 예금주는 필수입니다.",
+    en: "Resident/foreigner number, bank, account, and account holder are required.",
+    vi: "Số CMND/người nước ngoài, ngân hàng, số tài khoản và chủ tài khoản là bắt buộc.",
+    zh: "身份证/外国人登记号、开户银行、账户、户名为必填项。",
+    th: "เลขบัตรประชาชน/คนต่างชาติ ธนาคาร บัญชี และชื่อบัญชีเป็นข้อมูลจำเป็น",
   },
   "myInfo.requestSubmitted": {
     ko: "수정요청이 접수되었습니다. 관리자 확인 후 반영됩니다.",

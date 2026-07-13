@@ -18,6 +18,7 @@ import { useToast } from "../hooks/useToast";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { openAddressSearch } from "../utils/daumPostcode";
+import { searchAddressCoords } from "../utils/geocode";
 
 const WEEKDAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
 const EMPTY_SHIFT_FORM = {
@@ -196,9 +197,22 @@ export default function OnboardingWidget() {
     }
   };
 
+  // 여기서 고른 주소를 조직 > 센터에서 다시 검색해야만 위도/경도가 채워지던
+  // 문제를 없애기 위해, Centers.jsx와 동일하게 주소검색 직후 바로 지오코딩까지
+  // 끝내 lat/lng를 함께 저장한다.
   const searchSiteAddress = async (setExtra) => {
     const result = await openAddressSearch();
-    if (result) setExtra((f) => ({ ...f, address: result.address }));
+    if (!result) return;
+    setExtra((f) => ({ ...f, address: result.address }));
+    const geo = await searchAddressCoords(result.address);
+    if (geo) {
+      setExtra((f) => ({ ...f, lat: geo.lat, lng: geo.lng }));
+      if (!geo.precise) {
+        toast.error("건물번지까지 정확히 일치하는 좌표를 찾지 못해 인근 지역 좌표로 채워졌습니다. 조직 > 센터에서 위도/경도를 확인·미세조정해주세요.");
+      }
+    } else {
+      toast.error("좌표를 자동으로 찾지 못했습니다. 조직 > 센터에서 위도/경도를 직접 입력해주세요.");
+    }
   };
 
   return (
@@ -283,13 +297,19 @@ export default function OnboardingWidget() {
             businessEntityId: businessEntities[0]?.id || "",
             name,
             address: extra.address || "",
-            lat: null,
-            lng: null,
+            lat: extra.lat ?? null,
+            lng: extra.lng ?? null,
             radiusM: 100,
             createdAt: serverTimestamp(),
           })
         }
-        onRename={(id, name, extra) => updateDoc(doc(db, "workSites", id), { name, address: extra.address || "" })}
+        onRename={(id, name, extra) =>
+          updateDoc(doc(db, "workSites", id), {
+            name,
+            address: extra.address || "",
+            ...(extra.lat != null && extra.lng != null ? { lat: extra.lat, lng: extra.lng } : {}),
+          })
+        }
         onRemove={(id) => deleteDoc(doc(db, "workSites", id))}
         extraFields={(extra, setExtra) => (
           <label className="block">
