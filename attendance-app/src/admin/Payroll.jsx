@@ -31,6 +31,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { useConfirm } from "../hooks/useConfirm";
 import Card from "../components/Card";
+import CurrencyInput from "../components/CurrencyInput";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -111,6 +112,20 @@ function birthDateDisplay(residentNumberFront) {
   return key ? formatDate(key) : "-";
 }
 
+// 저장된 입금시간은 "오전 10:00" 같은 단일 문자열(직원 모바일 화면이 그대로
+// 표시)이라, 오전/오후·시·분 select로 편집하려면 문자열을 구조로 되돌려야
+// 한다. 예전 자유 텍스트("오전 10시" 등)로 저장된 값은 정확히 파싱되지
+// 않을 수 있어 그런 경우엔 기본값(오전 10:00)으로 보여준다 — 어차피
+// 저장하는 순간 항상 새 구조화된 문자열로 정규화된다.
+function parseDepositTime(str) {
+  const m = String(str || "").match(/^(오전|오후)\s*(\d{1,2}):(\d{2})$/);
+  if (m) return { depositMeridiem: m[1], depositHour: String(Number(m[2])), depositMinute: m[3] };
+  return { depositMeridiem: "오전", depositHour: "10", depositMinute: "00" };
+}
+function buildDepositTime({ depositMeridiem, depositHour, depositMinute }) {
+  return `${depositMeridiem} ${depositHour}:${depositMinute}`;
+}
+
 const GUIDE_NOTES = [
   "급여 형태 및 기간 선택: 일급,주급,월급을 선택할 수 있으며 기간별로 정산 조회가 가능합니다.",
   "4대보험 Y/N: 4대보험 여부에 따라 정산 조회가 가능합니다.",
@@ -163,7 +178,14 @@ export default function Payroll() {
   const [companyName, setCompanyName] = useState("");
   const [payrollInfo, setPayrollInfo] = useState({ payday: "", depositTime: "", contactPhone: "" });
   const [payrollInfoOpen, setPayrollInfoOpen] = useState(false);
-  const [payrollInfoForm, setPayrollInfoForm] = useState({ payday: "", depositTime: "", contactPhone: "" });
+  const [payrollInfoForm, setPayrollInfoForm] = useState({
+    payday: "",
+    depositTime: "",
+    contactPhone: "",
+    depositMeridiem: "오전",
+    depositHour: "10",
+    depositMinute: "00",
+  });
   const [month, setMonth] = useState(toMonthKey());
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -199,9 +221,10 @@ export default function Payroll() {
     if (!profile?.companyId) return;
     const unsub = onSnapshot(doc(db, "companies", profile.companyId), (s) => {
       setCompanyName(s.data()?.name || "");
-      const info = { payday: s.data()?.payrollPayday || "", depositTime: s.data()?.payrollDepositTime || "", contactPhone: s.data()?.payrollContactPhone || "" };
+      const depositTime = s.data()?.payrollDepositTime || "";
+      const info = { payday: s.data()?.payrollPayday || "", depositTime, contactPhone: s.data()?.payrollContactPhone || "" };
       setPayrollInfo(info);
-      setPayrollInfoForm(info);
+      setPayrollInfoForm({ ...info, ...parseDepositTime(depositTime) });
     });
     return () => unsub();
   }, [profile?.companyId]);
@@ -211,7 +234,7 @@ export default function Payroll() {
   const savePayrollInfo = async () => {
     await updateDoc(doc(db, "companies", profile.companyId), {
       payrollPayday: payrollInfoForm.payday,
-      payrollDepositTime: payrollInfoForm.depositTime,
+      payrollDepositTime: buildDepositTime(payrollInfoForm),
       payrollContactPhone: payrollInfoForm.contactPhone,
     });
     toast.success("저장되었습니다");
@@ -1324,11 +1347,10 @@ export default function Payroll() {
             <span className="mb-1.5 block text-xs font-medium text-muted">
               {form.wageType === "hourly" ? "시급(원)" : "월 기본급(원)"}
             </span>
-            <input
-              type="number"
+            <CurrencyInput
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
               value={form.baseWage}
-              onChange={(e) => setForm((f) => ({ ...f, baseWage: e.target.value }))}
+              onChange={(v) => setForm((f) => ({ ...f, baseWage: v }))}
             />
           </label>
           {form.wageType === "hourly" && (
@@ -1365,40 +1387,36 @@ export default function Payroll() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">기타수당(원)</span>
-              <input
-                type="number"
+              <CurrencyInput
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                 value={form.allowances}
-                onChange={(e) => setForm((f) => ({ ...f, allowances: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, allowances: v }))}
               />
             </label>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">식대(원)</span>
-              <input
-                type="number"
+              <CurrencyInput
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                 value={form.mealAllowance}
-                onChange={(e) => setForm((f) => ({ ...f, mealAllowance: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, mealAllowance: v }))}
               />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">지각공제(원)</span>
-              <input
-                type="number"
+              <CurrencyInput
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                 value={form.lateDeduction}
-                onChange={(e) => setForm((f) => ({ ...f, lateDeduction: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, lateDeduction: v }))}
               />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">조퇴공제(원)</span>
-              <input
-                type="number"
+              <CurrencyInput
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                 value={form.earlyLeaveDeduction}
-                onChange={(e) => setForm((f) => ({ ...f, earlyLeaveDeduction: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, earlyLeaveDeduction: v }))}
               />
             </label>
           </div>
@@ -1408,11 +1426,10 @@ export default function Payroll() {
               {PAYMENT_EXTRA_FIELDS.map(([key, label]) => (
                 <label key={key} className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">{label}(원)</span>
-                  <input
-                    type="number"
+                  <CurrencyInput
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={form[key]}
-                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, [key]: v }))}
                   />
                 </label>
               ))}
@@ -1425,11 +1442,10 @@ export default function Payroll() {
               {DEDUCTION_EXTRA_FIELDS.map(([key, label]) => (
                 <label key={key} className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">{label}(원)</span>
-                  <input
-                    type="number"
+                  <CurrencyInput
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={form[key]}
-                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, [key]: v }))}
                   />
                 </label>
               ))}
@@ -1477,24 +1493,53 @@ export default function Payroll() {
           <p className="text-xs text-muted">근로자 모바일 급여관리 화면 상단에 항상 표시되고, 급여 문의 시 바로 전화/문자할 수 있는 연락처로 쓰입니다.</p>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">급여일 (매월 며칠)</span>
-            <input
-              type="number"
-              min="1"
-              max="31"
+            <select
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
               value={payrollInfoForm.payday}
               onChange={(e) => setPayrollInfoForm((f) => ({ ...f, payday: e.target.value }))}
-              placeholder="예: 25"
-            />
+            >
+              <option value="">선택</option>
+              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  매월 {d}일
+                </option>
+              ))}
+            </select>
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">입금시간</span>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
-              value={payrollInfoForm.depositTime}
-              onChange={(e) => setPayrollInfoForm((f) => ({ ...f, depositTime: e.target.value }))}
-              placeholder="예: 오전 10시"
-            />
+            <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+              <select
+                className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                value={payrollInfoForm.depositMeridiem}
+                onChange={(e) => setPayrollInfoForm((f) => ({ ...f, depositMeridiem: e.target.value }))}
+              >
+                <option value="오전">오전</option>
+                <option value="오후">오후</option>
+              </select>
+              <select
+                className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                value={payrollInfoForm.depositHour}
+                onChange={(e) => setPayrollInfoForm((f) => ({ ...f, depositHour: e.target.value }))}
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                  <option key={h} value={h}>
+                    {h}시
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                value={payrollInfoForm.depositMinute}
+                onChange={(e) => setPayrollInfoForm((f) => ({ ...f, depositMinute: e.target.value }))}
+              >
+                {["00", "10", "20", "30", "40", "50"].map((m) => (
+                  <option key={m} value={m}>
+                    {m}분
+                  </option>
+                ))}
+              </select>
+            </div>
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">급여 문의 직통번호</span>

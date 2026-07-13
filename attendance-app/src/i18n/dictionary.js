@@ -135,7 +135,7 @@ const STRINGS = {
   "myInfo.requestReason": { ko: "수정 사유(선택)", en: "Reason (optional)", vi: "Lý do (không bắt buộc)", zh: "修改原因（选填）", th: "เหตุผล (ไม่บังคับ)" },
   "myInfo.documents": { ko: "서류함", en: "Documents", vi: "Hồ sơ", zh: "文件夹", th: "เอกสาร" },
   "myInfo.safety": { ko: "안전교육", en: "Safety Training", vi: "Đào tạo an toàn", zh: "安全教育", th: "การอบรมความปลอดภัย" },
-  "myInfo.safetyArchive": { ko: "안전교육자료", en: "Safety Materials", vi: "Tài liệu an toàn", zh: "安全教育资料", th: "เอกสารความปลอดภัย" },
+  "myInfo.safetyArchive": { ko: "안전교육자료함", en: "Safety Materials Archive", vi: "Kho tài liệu an toàn", zh: "安全教育资料库", th: "คลังเอกสารความปลอดภัย" },
   "myInfo.lock": { ko: "잠금", en: "Lock", vi: "Khóa", zh: "锁定", th: "ล็อก" },
   "myInfo.logout": { ko: "로그아웃", en: "Log Out", vi: "Đăng xuất", zh: "退出登录", th: "ออกจากระบบ" },
   "myInfo.basicSaved": {

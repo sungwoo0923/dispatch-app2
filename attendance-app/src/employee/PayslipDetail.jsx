@@ -5,17 +5,54 @@ import { ArrowLeft, Printer, Share2, Receipt } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
-import { formatDate, toDateKey } from "../utils/dateUtils";
+import { formatDate, toDateKey, birthDateFromResident } from "../utils/dateUtils";
 import Card from "../components/Card";
 import Button from "../components/Button";
 
-function Row({ label, value, strong, negative }) {
-  const display =
-    typeof value === "number" ? `${negative && value > 0 ? "-" : ""}${value.toLocaleString()}원` : value;
+// PC 관리자용 급여명세서 미리보기(Payroll.jsx)와 동일한 항목 구성 — 값이
+// 없으면(0) 해당 줄을 아예 표시하지 않아, 기본 항목만 쓰는 회사는 예전과
+// 같은 간단한 명세서로 보인다.
+const PAYMENT_ROWS = [
+  ["기본급", "base", false],
+  ["상여", "bonus", true],
+  ["직책수당", "positionAllowance", true],
+  ["연차수당", "annualLeaveAllowance", true],
+  ["주휴수당", "weeklyAllowance", false],
+  ["기타수당", "allowances", false],
+  ["식대", "mealAllowance", false],
+  ["특별상여", "specialBonus", true],
+  ["연장근로수당", "overtimePay", false],
+  ["휴일근로수당", "holidayPay", true],
+  ["출장수당", "businessTripAllowance", true],
+  ["장기근속수당", "longServiceAllowance", true],
+  ["통신비지원금", "commAllowance", true],
+  ["지각공제", "lateDeduction", false],
+  ["조퇴공제", "earlyLeaveDeduction", false],
+];
+const DEDUCTION_ROWS = [
+  ["국민연금", "pension", false],
+  ["건강보험", "health", false],
+  ["장기요양보험", "longTermCare", false],
+  ["고용보험", "employment", false],
+  ["기타공제액", "otherDeduction", true],
+  ["건강보험정산", "healthAdjustment", true],
+  ["선지급금", "advancePayment", true],
+  ["소득세", "incomeTax", true],
+  ["지방소득세", "localIncomeTax", true],
+  ["연말정산소득세", "yearEndIncomeTax", true],
+  ["연말정산지방소득세", "yearEndLocalIncomeTax", true],
+];
+
+function birthDateDisplay(residentNumberFront) {
+  const key = birthDateFromResident(residentNumberFront);
+  return key ? formatDate(key) : "-";
+}
+
+function Row({ label, value, strong }) {
   return (
     <div className={`flex items-center justify-between py-1.5 text-sm ${strong ? "font-bold text-ink" : "font-medium text-muted"}`}>
       <span>{label}</span>
-      <span className={strong ? "text-ink" : "font-semibold text-ink"}>{display}</span>
+      <span className={strong ? "text-ink" : "font-semibold text-ink"}>{Number(value || 0).toLocaleString()}원</span>
     </div>
   );
 }
@@ -31,6 +68,8 @@ export default function PayslipDetail() {
       if (snap.exists()) setPayroll({ id: snap.id, ...snap.data() });
     });
   }, [payrollId]);
+
+  const payDate = company?.payrollPayday ? `${payroll?.month}-${String(company.payrollPayday).padStart(2, "0")}` : toDateKey();
 
   const share = async () => {
     const text = `[급여명세서] ${payroll.month} · 실수령액 ${payroll.netPay?.toLocaleString()}원`;
@@ -64,6 +103,18 @@ export default function PayslipDetail() {
   }
 
   const d = payroll.deductions || {};
+  const infoRows = [
+    ["회사명", company?.name || "-"],
+    ["성명", profile?.name],
+    ["생년월일", birthDateDisplay(profile?.residentNumberFront)],
+    ["입사일", profile?.hireDate ? formatDate(profile.hireDate) : "-"],
+    ["직급", profile?.position || "-"],
+    ["부서", profile?.team || "-"],
+    ["지급일", payDate],
+    ["지급대상기간", payroll.month],
+    ["발급일", formatDate(toDateKey())],
+    ["비고", payroll.note || "-"],
+  ];
 
   return (
     <div className="space-y-4 px-4 pt-4">
@@ -88,19 +139,13 @@ export default function PayslipDetail() {
           </p>
           <p className="text-lg font-bold">{company?.name || ""}</p>
         </div>
-        <div className="space-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-muted">성명</span>
-            <span className="font-semibold text-ink">{profile?.name}{profile?.position ? ` (${profile.position})` : ""}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted">지급대상기간</span>
-            <span className="font-semibold text-ink">{payroll.month}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted">발급일</span>
-            <span className="font-semibold text-ink">{formatDate(toDateKey())}</span>
-          </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
+          {infoRows.map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between gap-2">
+              <span className="text-muted">{label}</span>
+              <span className="truncate font-semibold text-ink">{value}</span>
+            </div>
+          ))}
         </div>
         <div className="p-5 text-center">
           <span className="inline-block rounded-full bg-primary-light px-3 py-1 text-xs font-semibold text-primary">실수령액</span>
@@ -110,23 +155,18 @@ export default function PayslipDetail() {
 
       <Card className="p-5">
         <p className="mb-2 text-sm font-bold text-ink">지급내역 {payroll.grossPay?.toLocaleString()}원</p>
-        <Row label="기본급" value={payroll.base} />
-        <Row label="연장수당" value={payroll.overtimePay} />
-        <Row label="주휴수당" value={payroll.weeklyAllowance} />
-        <Row label="기타수당" value={payroll.allowances} />
-        <Row label="식대" value={payroll.mealAllowance || 0} />
-        <Row label="지각공제" value={payroll.lateDeduction || 0} negative />
-        <Row label="조퇴공제" value={payroll.earlyLeaveDeduction || 0} negative />
+        {PAYMENT_ROWS.filter(([, key, optional]) => !optional || Number(payroll[key] || 0)).map(([label, key]) => (
+          <Row key={key} label={label} value={payroll[key]} />
+        ))}
         <div className="my-2 border-t border-dashed border-slate-200" />
         <Row label="지급합계" value={payroll.grossPay} strong />
       </Card>
 
       <Card className="p-5">
         <p className="mb-2 text-sm font-semibold text-ink">공제내역</p>
-        <Row label="국민연금" value={d.pension || 0} />
-        <Row label="건강보험" value={d.health || 0} />
-        <Row label="장기요양보험" value={d.longTermCare || 0} />
-        <Row label="고용보험" value={d.employment || 0} />
+        {DEDUCTION_ROWS.filter(([, key, optional]) => !optional || Number(d[key] || 0)).map(([label, key]) => (
+          <Row key={key} label={label} value={d[key]} />
+        ))}
         <div className="my-2 border-t border-dashed border-slate-200" />
         <Row label="공제합계" value={d.total || 0} strong />
       </Card>

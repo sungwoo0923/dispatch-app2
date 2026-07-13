@@ -1,4 +1,8 @@
-import * as XLSX from "xlsx";
+// xlsx는 무겁고(수백KB) 대용량업로드를 실제로 열 때만 필요하므로, 정적
+// import 대신 함수 안에서 지연 로드해 메인 번들에 항상 딸려오지 않게 한다.
+async function loadXlsx() {
+  return import("xlsx");
+}
 
 // EmployeeList.jsx의 "대용량업로드" 기능이 쓰는 엑셀 양식/파싱 로직을 한
 // 곳에 모아둔다. 근로자등록 폼(EMPTY_REGISTER_FORM)의 핵심 필드만 다루고,
@@ -47,7 +51,8 @@ const SAMPLE_ROW = {
   계좌번호: "",
 };
 
-export function downloadBulkUploadTemplate(filename = "근로자등록_양식.xlsx") {
+export async function downloadBulkUploadTemplate(filename = "근로자등록_양식.xlsx") {
+  const XLSX = await loadXlsx();
   const sheet = XLSX.utils.json_to_sheet([SAMPLE_ROW], { header: BULK_UPLOAD_HEADERS });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, "근로자등록");
@@ -64,7 +69,7 @@ function toDateKeyLocal(date) {
 // 입사일 셀은 엑셀에서 문자열("2026-01-01", "2026.1.1")로 오기도 하고, 셀
 // 서식이 "날짜"면 Date 객체나 1900 기준 serial 숫자로 오기도 한다 —
 // 어떤 형태로 들어와도 registerForm이 기대하는 yyyy-mm-dd 문자열로 맞춘다.
-function normalizeDateCell(value) {
+function normalizeDateCell(value, XLSX) {
   if (value === undefined || value === null || value === "") return "";
   if (value instanceof Date) return toDateKeyLocal(value);
   if (typeof value === "number" && XLSX.SSF?.parse_date_code) {
@@ -81,6 +86,7 @@ function normalizeDateCell(value) {
 // 사업자/센터/소속업체의 매칭된 id, 그리고 검증 결과(valid/unmatched)를
 // 함께 담는다 — 미리보기 테이블과 실제 등록 루프가 이 결과를 그대로 쓴다.
 export async function parseBulkUploadFile(file, { businessEntities = [], workSites = [], vendors = [] } = {}) {
+  const XLSX = await loadXlsx();
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
@@ -123,7 +129,7 @@ export async function parseBulkUploadFile(file, { businessEntities = [], workSit
       vendorId: vendor?.id || "",
       team: get("부서"),
       position: get("직급"),
-      hireDate: normalizeDateCell(raw["입사일"]),
+      hireDate: normalizeDateCell(raw["입사일"], XLSX),
       employmentType: get("고용구분"),
       shiftType: get("근무구분"),
       nationality: get("국적"),

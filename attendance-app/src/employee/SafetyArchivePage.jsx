@@ -25,9 +25,10 @@ async function downloadFile(url, fileName) {
   }
 }
 
-// 이미 이수한 안전교육자료도 언제든 다시 열람할 수 있는 보관함. 재시청은
-// 이수 여부와 무관하게 열람만 가능하고(재서명 불필요), 영상은 다운로드도
-// 가능하다.
+// 이수를 마친 안전교육자료만 모아두는 보관함 — 아직 이수하지 않은 자료는
+// "안전교육" 탭(SafetyTrainingsPage)에서만 보이고, 여기 자료함에는 실제로
+// 이수(서명)를 완료한 시점에만 들어온다. 재시청은 이수 여부와 무관하게
+// 열람만 가능하고(재서명 불필요), 영상은 다운로드도 가능하다.
 export default function SafetyArchivePage() {
   const { user, profile } = useAuth();
   const [materials, setMaterials] = useState([]);
@@ -48,17 +49,18 @@ export default function SafetyArchivePage() {
   }, [profile?.companyId, user?.uid]);
 
   const completedMap = new Map(completions.map((c) => [c.materialId, c]));
+  const archivedMaterials = materials.filter((m) => completedMap.has(m.id));
 
   return (
     <div className="space-y-3 px-4 pt-4">
       <Link to="/my-info" className="flex items-center gap-1 text-xs text-muted">
         <ArrowLeft size={14} /> 내정보
       </Link>
-      <h2 className="text-sm font-semibold text-ink">안전교육자료</h2>
-      <p className="text-xs text-muted">이미 이수한 자료도 언제든 다시 열람할 수 있습니다.</p>
+      <h2 className="text-sm font-semibold text-ink">안전교육자료함</h2>
+      <p className="text-xs text-muted">이수를 완료한 안전교육자료가 여기에 모입니다. 언제든 다시 열람할 수 있습니다.</p>
 
-      {materials.length === 0 && <p className="text-xs text-muted">등록된 안전교육자료가 없습니다.</p>}
-      {materials.map((m) => {
+      {archivedMaterials.length === 0 && <p className="text-xs text-muted">아직 이수한 안전교육자료가 없습니다.</p>}
+      {archivedMaterials.map((m) => {
         const c = completedMap.get(m.id);
         return (
           <Card key={m.id} className="p-4">
@@ -68,9 +70,9 @@ export default function SafetyArchivePage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink">{m.title}</p>
-                <p className="text-xs text-muted">{c ? `이수완료 · ${c.completedAt?.toDate ? c.completedAt.toDate().toISOString().slice(0, 10) : ""}` : "미이수"}</p>
+                <p className="text-xs text-muted">이수완료 · {c.completedAt?.toDate ? c.completedAt.toDate().toISOString().slice(0, 10) : ""}</p>
               </div>
-              <Badge tone={c ? "success" : "warning"}>{c ? "이수완료" : "미이수"}</Badge>
+              <Badge tone="success">이수완료</Badge>
             </button>
           </Card>
         );

@@ -14,7 +14,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera, SlidersHorizontal, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, Upload, Download } from "lucide-react";
+import { MapPin, Check, Copy, Trash2, UserPlus, Building2, Users, Send, History, ArrowLeftRight, X, Search, Paperclip, RotateCcw, Camera, SlidersHorizontal, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -3016,6 +3016,187 @@ export default function EmployeeList() {
             )}
           </div>
         )}
+      </Modal>
+
+      <SidePanel
+        open={bulkUploadOpen}
+        onClose={closeBulkUpload}
+        title="근로자등록 > 대용량업로드"
+        footer={
+          bulkResult ? (
+            <>
+              <Button variant="outline" onClick={closeBulkUpload}>
+                닫기
+              </Button>
+              {bulkResult.created.length > 0 && (
+                <Button
+                  onClick={() =>
+                    openSmsQueue(bulkResult.created.map((c) => ({ name: c.name, phone: c.phone, code: c.code })))
+                  }
+                >
+                  <Send size={15} /> 전체 가입코드 발송
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={closeBulkUpload}>
+                취소
+              </Button>
+              <Button onClick={submitBulkUpload} disabled={bulkValidRows.length === 0 || bulkSubmitting}>
+                {bulkSubmitting ? "등록 중..." : `${bulkValidRows.length}건 등록`}
+              </Button>
+            </>
+          )
+        }
+      >
+        {bulkResult ? (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-primary-light p-4 text-sm text-primary">
+              {bulkResult.successCount}명 등록 완료{bulkResult.failCount > 0 && `, ${bulkResult.failCount}건 실패`}
+            </div>
+            {bulkResult.created.length > 0 && (
+              <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100">
+                <table className="w-full min-w-[420px] text-center text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs text-muted">
+                      <th className="px-3 py-2 font-semibold">이름</th>
+                      <th className="px-3 py-2 font-semibold">연락처</th>
+                      <th className="px-3 py-2 font-semibold">가입코드</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkResult.created.map((c, i) => (
+                      <tr key={i} className="border-b border-slate-50 last:border-0">
+                        <td className="px-3 py-2 text-ink">{c.name}</td>
+                        <td className="px-3 py-2 text-ink">{c.phone || "-"}</td>
+                        <td className="px-3 py-2 font-semibold text-primary">{c.code}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-xl bg-primary-light/40 p-3.5 text-xs leading-relaxed text-primary">
+              여러 근로자를 한 번에 등록할 때 사용합니다. 먼저 양식을 다운로드해 이름/연락처 등을 채운 뒤 업로드해주세요.
+              이름과 연락처는 필수이며, 사업자/센터/소속업체는 이 회사에 등록된 이름과 정확히 일치해야 자동으로 연결됩니다.
+            </div>
+            <Button variant="outline" onClick={() => downloadBulkUploadTemplate()}>
+              <FileSpreadsheet size={15} /> 엑셀 양식 다운로드
+            </Button>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">양식 파일 업로드</span>
+              <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+                <input
+                  ref={bulkFileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleBulkFileChange}
+                />
+                <Button variant="outline" onClick={() => bulkFileInputRef.current?.click()}>
+                  <Upload size={15} /> 파일 선택
+                </Button>
+                {bulkFileName && <span className="truncate text-xs text-muted">{bulkFileName}</span>}
+              </div>
+            </label>
+
+            {bulkRows.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted">
+                  미리보기 {bulkRows.length}건 · 등록가능 {bulkValidRows.length}건
+                </p>
+                <div className="max-h-96 overflow-x-auto overflow-y-auto overscroll-contain rounded-xl border border-slate-100">
+                  <table className="w-full min-w-[720px] text-center text-sm">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="border-b border-slate-100 text-xs text-muted">
+                        <th className="px-3 py-2 font-semibold">상태</th>
+                        <th className="px-3 py-2 font-semibold">이름</th>
+                        <th className="px-3 py-2 font-semibold">연락처</th>
+                        <th className="px-3 py-2 font-semibold">사업자</th>
+                        <th className="px-3 py-2 font-semibold">센터</th>
+                        <th className="px-3 py-2 font-semibold">소속업체</th>
+                        <th className="px-3 py-2 font-semibold">입사일</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkRows.map((r) => (
+                        <tr key={r.rowIndex} className={`border-b border-slate-50 last:border-0 ${!r.valid ? "bg-red-50" : ""}`}>
+                          <td className="px-3 py-2">
+                            {r.missingRequired ? (
+                              <Badge tone="danger">이름/연락처 누락</Badge>
+                            ) : r.unmatched.length > 0 ? (
+                              <Badge tone="warning">{r.unmatched.join(", ")} 불일치</Badge>
+                            ) : (
+                              <Badge tone="success">정상</Badge>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-ink">{r.name || "-"}</td>
+                          <td className="px-3 py-2 text-ink">{r.phone || "-"}</td>
+                          <td className="px-3 py-2 text-ink">{r.businessEntityName || "-"}</td>
+                          <td className="px-3 py-2 text-ink">{r.workSiteName || "-"}</td>
+                          <td className="px-3 py-2 text-ink">{r.vendorName || "-"}</td>
+                          <td className="px-3 py-2 text-ink">{r.hireDate || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </SidePanel>
+
+      <Modal
+        open={smsQueueOpen}
+        onClose={closeSmsQueue}
+        title="가입코드 문자발송"
+        footer={
+          <Button variant="outline" className="w-full" onClick={closeSmsQueue}>
+            닫기
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-muted">
+            브라우저는 한 번에 하나의 문자 앱만 열 수 있어요. 한 명씩 "문자발송"을 눌러 보내주세요 — 목록은 창을 닫기
+            전까지 그대로 남아있습니다.
+          </p>
+          <div className="max-h-96 space-y-2 overflow-y-auto">
+            {smsQueue.map((r, i) => {
+              const key = `${r.phone}-${i}`;
+              const sent = smsSentKeys.has(key);
+              return (
+                <div
+                  key={key}
+                  className={`flex items-center justify-between rounded-xl border p-3 ${
+                    sent ? "border-emerald-200 bg-emerald-50" : "border-slate-200"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-ink">{r.name}</p>
+                    <p className="truncate text-xs text-muted">
+                      {r.phone || "연락처 없음"} · 코드 {r.code}
+                    </p>
+                  </div>
+                  <Button
+                    as="a"
+                    size="sm"
+                    variant={sent ? "outline" : "primary"}
+                    href={buildSmsHref(r.phone, buildInviteSmsMessage(r.code))}
+                    onClick={() => markSmsSent(key)}
+                  >
+                    {sent ? "재발송" : "문자발송"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </Modal>
     </div>
   );

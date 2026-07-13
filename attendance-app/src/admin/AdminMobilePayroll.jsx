@@ -8,10 +8,49 @@ import { useConfirm } from "../hooks/useConfirm";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import CurrencyInput from "../components/CurrencyInput";
 import { calcMonthlyPayroll, getSiteInsuranceRates } from "../utils/payroll";
-import { toMonthKey, toDateKey } from "../utils/dateUtils";
+import { toMonthKey, toDateKey, formatDate, birthDateFromResident } from "../utils/dateUtils";
 
 const PERIOD_LABELS = { daily: "일급", weekly: "주급", monthly: "월급" };
+
+// PC Payroll.jsx 미리보기와 동일한 항목 구성 — 값이 없으면(0) 해당 줄을
+// 표시하지 않아 기본 항목만 쓰는 회사는 예전과 같은 간단한 명세서로 보인다.
+const PAYMENT_ROWS = [
+  ["기본급", "base", false],
+  ["상여", "bonus", true],
+  ["직책수당", "positionAllowance", true],
+  ["연차수당", "annualLeaveAllowance", true],
+  ["주휴수당", "weeklyAllowance", false],
+  ["기타수당", "allowances", false],
+  ["식대", "mealAllowance", false],
+  ["특별상여", "specialBonus", true],
+  ["연장근로수당", "overtimePay", false],
+  ["휴일근로수당", "holidayPay", true],
+  ["출장수당", "businessTripAllowance", true],
+  ["장기근속수당", "longServiceAllowance", true],
+  ["통신비지원금", "commAllowance", true],
+  ["지각공제", "lateDeduction", false],
+  ["조퇴공제", "earlyLeaveDeduction", false],
+];
+const DEDUCTION_ROWS = [
+  ["국민연금", "pension", false],
+  ["건강보험", "health", false],
+  ["장기요양보험", "longTermCare", false],
+  ["고용보험", "employment", false],
+  ["기타공제액", "otherDeduction", true],
+  ["건강보험정산", "healthAdjustment", true],
+  ["선지급금", "advancePayment", true],
+  ["소득세", "incomeTax", true],
+  ["지방소득세", "localIncomeTax", true],
+  ["연말정산소득세", "yearEndIncomeTax", true],
+  ["연말정산지방소득세", "yearEndLocalIncomeTax", true],
+];
+
+function birthDateDisplay(residentNumberFront) {
+  const key = birthDateFromResident(residentNumberFront);
+  return key ? formatDate(key) : "-";
+}
 
 function defaultRangeFor(periodType, base = toDateKey()) {
   const end = new Date(`${base}T00:00:00`);
@@ -45,6 +84,7 @@ export default function AdminMobilePayroll() {
   const toast = useToast();
   const confirm = useConfirm();
   const [companyName, setCompanyName] = useState("");
+  const [payrollPayday, setPayrollPayday] = useState("");
   const [month, setMonth] = useState(toMonthKey());
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
@@ -64,7 +104,10 @@ export default function AdminMobilePayroll() {
 
   useEffect(() => {
     if (!profile?.companyId) return;
-    getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
+    getDoc(doc(db, "companies", profile.companyId)).then((s) => {
+      setCompanyName(s.data()?.name || "");
+      setPayrollPayday(s.data()?.payrollPayday || "");
+    });
     const unsubs = [
       onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (s) => setEmployees(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (s) => setWorkSites(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
@@ -91,12 +134,16 @@ export default function AdminMobilePayroll() {
     setPreviewFor({ emp, p });
   };
 
+  const payDateFor = (p) => (payrollPayday ? `${p.month}-${String(payrollPayday).padStart(2, "0")}` : toDateKey());
+
   const printPayslip = () => {
     if (!previewFor) return;
     const { emp, p } = previewFor;
     const d = p.deductions || {};
     const row = (label, value, strong) =>
       `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;${strong ? "font-weight:700;border-top:1px dashed #cbd5e1;margin-top:6px;padding-top:10px;" : "color:#475569;"}"><span>${label}</span><span style="color:#0f172a;font-weight:${strong ? 700 : 600}">${Number(value || 0).toLocaleString()}원</span></div>`;
+    const rowIf = (label, value, strong) => (Number(value || 0) ? row(label, value, strong) : "");
+    const info = (label, value) => `<div><span>${label}</span><span style="font-weight:600">${value ?? "-"}</span></div>`;
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>급여명세서 - ${emp.name}</title>
       <style>body{font-family:'Malgun Gothic',sans-serif;max-width:420px;margin:24px auto;color:#0f172a;}
       .card{border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;margin-bottom:16px;}
@@ -110,19 +157,26 @@ export default function AdminMobilePayroll() {
       <div class="card">
         <div class="head"><p style="margin:0;font-size:12px;opacity:.7">급여명세서</p><p style="margin:4px 0 0;font-size:17px;font-weight:700">${companyName || ""}</p></div>
         <div class="info">
-          <div><span>성명</span><span style="font-weight:600">${emp.name}${emp.position ? ` (${emp.position})` : ""}</span></div>
-          <div><span>지급대상기간</span><span style="font-weight:600">${p.month}</span></div>
-          <div><span>발급일</span><span style="font-weight:600">${toDateKey()}</span></div>
+          ${info("회사명", companyName || "-")}
+          ${info("성명", emp.name)}
+          ${info("생년월일", birthDateDisplay(emp.residentNumberFront))}
+          ${info("입사일", emp.hireDate ? formatDate(emp.hireDate) : "-")}
+          ${info("직급", emp.position || "-")}
+          ${info("부서", emp.team || "-")}
+          ${info("지급일", payDateFor(p))}
+          ${info("지급대상기간", p.month)}
+          ${info("발급일", toDateKey())}
+          ${info("비고", p.note || "-")}
         </div>
         <div class="net"><span style="background:#eff6ff;color:#2563eb;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600">실수령액</span><p style="font-size:28px;font-weight:800;margin:8px 0 0">${Number(p.netPay || 0).toLocaleString()}원</p></div>
       </div>
       <div class="card"><div class="body">
         <p class="title">지급내역 ${Number(p.grossPay || 0).toLocaleString()}원</p>
-        ${row("기본급", p.base)}${row("연장수당", p.overtimePay)}${row("주휴수당", p.weeklyAllowance)}${row("기타수당", p.allowances)}${row("식대", p.mealAllowance)}${row("지각공제", p.lateDeduction)}${row("조퇴공제", p.earlyLeaveDeduction)}${row("지급합계", p.grossPay, true)}
+        ${row("기본급", p.base)}${rowIf("상여", p.bonus)}${rowIf("직책수당", p.positionAllowance)}${rowIf("연차수당", p.annualLeaveAllowance)}${row("주휴수당", p.weeklyAllowance)}${row("기타수당", p.allowances)}${row("식대", p.mealAllowance)}${rowIf("특별상여", p.specialBonus)}${row("연장근로수당", p.overtimePay)}${rowIf("휴일근로수당", p.holidayPay)}${rowIf("출장수당", p.businessTripAllowance)}${rowIf("장기근속수당", p.longServiceAllowance)}${rowIf("통신비지원금", p.commAllowance)}${row("지각공제", p.lateDeduction)}${row("조퇴공제", p.earlyLeaveDeduction)}${row("지급합계", p.grossPay, true)}
       </div></div>
       <div class="card"><div class="body">
         <p class="title">공제내역</p>
-        ${row("국민연금", d.pension)}${row("건강보험", d.health)}${row("장기요양보험", d.longTermCare)}${row("고용보험", d.employment)}${row("공제합계", d.total, true)}
+        ${row("국민연금", d.pension)}${row("건강보험", d.health)}${row("장기요양보험", d.longTermCare)}${row("고용보험", d.employment)}${rowIf("기타공제액", d.otherDeduction)}${rowIf("건강보험정산", d.healthAdjustment)}${rowIf("선지급금", d.advancePayment)}${rowIf("소득세", d.incomeTax)}${rowIf("지방소득세", d.localIncomeTax)}${rowIf("연말정산소득세", d.yearEndIncomeTax)}${rowIf("연말정산지방소득세", d.yearEndLocalIncomeTax)}${row("공제합계", d.total, true)}
       </div></div>
       <p style="text-align:center;font-size:11px;color:#94a3b8">본 명세서는 시스템에서 자동 생성되었습니다.</p>
       </body></html>`;
@@ -541,7 +595,7 @@ export default function AdminMobilePayroll() {
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">{form.wageType === "hourly" ? "시급(원)" : "월 기본급(원)"}</span>
-            <input type="number" className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.baseWage} onChange={(e) => setForm((f) => ({ ...f, baseWage: e.target.value }))} />
+            <CurrencyInput className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.baseWage} onChange={(v) => setForm((f) => ({ ...f, baseWage: v }))} />
           </label>
           {form.wageType === "hourly" && (
             <div className="grid grid-cols-2 gap-2">
@@ -562,21 +616,21 @@ export default function AdminMobilePayroll() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">기타수당(원)</span>
-              <input type="number" className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.allowances} onChange={(e) => setForm((f) => ({ ...f, allowances: e.target.value }))} />
+              <CurrencyInput className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.allowances} onChange={(v) => setForm((f) => ({ ...f, allowances: v }))} />
             </label>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">식대(원)</span>
-              <input type="number" className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.mealAllowance} onChange={(e) => setForm((f) => ({ ...f, mealAllowance: e.target.value }))} />
+              <CurrencyInput className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.mealAllowance} onChange={(v) => setForm((f) => ({ ...f, mealAllowance: v }))} />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">지각공제(원)</span>
-              <input type="number" className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.lateDeduction} onChange={(e) => setForm((f) => ({ ...f, lateDeduction: e.target.value }))} />
+              <CurrencyInput className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.lateDeduction} onChange={(v) => setForm((f) => ({ ...f, lateDeduction: v }))} />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted">조퇴공제(원)</span>
-              <input type="number" className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.earlyLeaveDeduction} onChange={(e) => setForm((f) => ({ ...f, earlyLeaveDeduction: e.target.value }))} />
+              <CurrencyInput className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm" value={form.earlyLeaveDeduction} onChange={(v) => setForm((f) => ({ ...f, earlyLeaveDeduction: v }))} />
             </label>
           </div>
           <Button className="w-full" onClick={save} disabled={saving}>
@@ -609,21 +663,24 @@ export default function AdminMobilePayroll() {
                 </p>
                 <p className="text-lg font-bold">{companyName || ""}</p>
               </div>
-              <div className="space-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">성명</span>
-                  <span className="font-semibold text-ink">
-                    {previewFor.emp.name}{previewFor.emp.position ? ` (${previewFor.emp.position})` : ""}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">지급대상기간</span>
-                  <span className="font-semibold text-ink">{previewFor.p.month}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">발급일</span>
-                  <span className="font-semibold text-ink">{toDateKey()}</span>
-                </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
+                {[
+                  ["회사명", companyName || "-"],
+                  ["성명", previewFor.emp.name],
+                  ["생년월일", birthDateDisplay(previewFor.emp.residentNumberFront)],
+                  ["입사일", previewFor.emp.hireDate ? formatDate(previewFor.emp.hireDate) : "-"],
+                  ["직급", previewFor.emp.position || "-"],
+                  ["부서", previewFor.emp.team || "-"],
+                  ["지급일", payDateFor(previewFor.p)],
+                  ["지급대상기간", previewFor.p.month],
+                  ["발급일", toDateKey()],
+                  ["비고", previewFor.p.note || "-"],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between gap-2">
+                    <span className="text-muted">{label}</span>
+                    <span className="truncate font-semibold text-ink">{value}</span>
+                  </div>
+                ))}
               </div>
               <div className="p-5 text-center">
                 <span className="inline-block rounded-full bg-primary-light px-3 py-1 text-xs font-semibold text-primary">실수령액</span>
@@ -633,18 +690,10 @@ export default function AdminMobilePayroll() {
 
             <div className="rounded-2xl border border-slate-100 bg-white p-5">
               <p className="mb-2 text-sm font-bold text-ink">지급내역 {Number(previewFor.p.grossPay || 0).toLocaleString()}원</p>
-              {[
-                ["기본급", previewFor.p.base],
-                ["연장수당", previewFor.p.overtimePay],
-                ["주휴수당", previewFor.p.weeklyAllowance],
-                ["기타수당", previewFor.p.allowances],
-                ["식대", previewFor.p.mealAllowance],
-                ["지각공제", previewFor.p.lateDeduction],
-                ["조퇴공제", previewFor.p.earlyLeaveDeduction],
-              ].map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
+              {PAYMENT_ROWS.filter(([, key, optional]) => !optional || Number(previewFor.p[key] || 0)).map(([label, key]) => (
+                <div key={key} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
                   <span>{label}</span>
-                  <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
+                  <span className="font-semibold text-ink">{Number(previewFor.p[key] || 0).toLocaleString()}원</span>
                 </div>
               ))}
               <div className="my-2 border-t border-dashed border-slate-200" />
@@ -656,15 +705,10 @@ export default function AdminMobilePayroll() {
 
             <div className="rounded-2xl border border-slate-100 bg-white p-5">
               <p className="mb-2 text-sm font-semibold text-ink">공제내역</p>
-              {[
-                ["국민연금", previewFor.p.deductions?.pension],
-                ["건강보험", previewFor.p.deductions?.health],
-                ["장기요양보험", previewFor.p.deductions?.longTermCare],
-                ["고용보험", previewFor.p.deductions?.employment],
-              ].map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
+              {DEDUCTION_ROWS.filter(([, key, optional]) => !optional || Number(previewFor.p.deductions?.[key] || 0)).map(([label, key]) => (
+                <div key={key} className="flex items-center justify-between py-1.5 text-sm font-medium text-muted">
                   <span>{label}</span>
-                  <span className="font-semibold text-ink">{Number(value || 0).toLocaleString()}원</span>
+                  <span className="font-semibold text-ink">{Number(previewFor.p.deductions?.[key] || 0).toLocaleString()}원</span>
                 </div>
               ))}
               <div className="my-2 border-t border-dashed border-slate-200" />
