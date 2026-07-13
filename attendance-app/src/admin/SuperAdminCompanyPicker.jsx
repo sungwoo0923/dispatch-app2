@@ -5,11 +5,7 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import AuthShell from "../auth/AuthShell";
 import Button from "../components/Button";
-import Badge from "../components/Badge";
 import { SUPER_ADMIN_PICK_COMPANY_KEY } from "../constants/session";
-
-const STATUS_LABEL = { pending: "승인대기", approved: "승인됨", rejected: "거절됨", suspended: "탈퇴처리됨" };
-const STATUS_TONE = { pending: "warning", approved: "success", rejected: "danger", suspended: "danger" };
 
 // Shown right after the super-admin authenticates (see AdminLoginPage +
 // App.jsx's SUPER_ADMIN_PICK_COMPANY_KEY handoff): search by company name
@@ -26,9 +22,13 @@ export default function SuperAdminCompanyPicker() {
     return () => unsub();
   }, []);
 
+  // 탈퇴(이용정지)/승인대기/거절된 회사는 여기서 고를 대상이 아니다 —
+  // 탈퇴 등 상태 관리는 가입자관리(PlatformCompanies.jsx)에서 별도로
+  // 한다. 여기 목록에는 실제로 접속 가능한 승인된 회사만 남긴다.
   const rows = useMemo(() => {
+    const approved = companies.filter((c) => (c.status || "approved") === "approved");
     const term = search.trim();
-    const filtered = term ? companies.filter((c) => c.name?.includes(term) || c.id.includes(term.toUpperCase())) : companies;
+    const filtered = term ? approved.filter((c) => c.name?.includes(term) || c.id.includes(term.toUpperCase())) : approved;
     return filtered.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [companies, search]);
 
@@ -74,10 +74,7 @@ export default function SuperAdminCompanyPicker() {
                 <p className="font-mono text-[11px] text-muted">{c.id}</p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Badge tone={STATUS_TONE[c.status || "approved"] || "muted"}>{STATUS_LABEL[c.status || "approved"]}</Badge>
-              <ArrowRight size={14} className="text-muted" />
-            </div>
+            <ArrowRight size={14} className="shrink-0 text-muted" />
           </button>
         ))}
         {rows.length === 0 && <p className="py-6 text-center text-sm text-muted">일치하는 회사가 없습니다.</p>}

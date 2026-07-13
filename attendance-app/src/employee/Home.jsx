@@ -127,19 +127,22 @@ export default function Home() {
     return () => unsub();
   }, [profile?.companyId]);
 
-  const loadSite = useCallback(async () => {
+  // 관리자가 센터의 위도/경도를 잘못 지오코딩된 값에서 실제 좌표로
+  // 수정해도, 예전에는 getDoc 1회 조회라 이미 열려있는 직원 화면에는
+  // 반영되지 않아 "반경 안에 있는데도 계속 반경 밖"으로 나오는 원인이
+  // 됐다 — onSnapshot으로 바꿔 관리자가 저장하는 즉시 반영되게 한다.
+  useEffect(() => {
     if (!profile?.workSiteId) {
+      setWorkSite(null);
       setLoadingSite(false);
       return;
     }
-    const snap = await getDoc(doc(db, "workSites", profile.workSiteId));
-    setWorkSite(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-    setLoadingSite(false);
+    const unsub = onSnapshot(doc(db, "workSites", profile.workSiteId), (snap) => {
+      setWorkSite(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      setLoadingSite(false);
+    });
+    return () => unsub();
   }, [profile?.workSiteId]);
-
-  useEffect(() => {
-    loadSite();
-  }, [loadSite]);
 
   useEffect(() => {
     if (!profile?.vendorId) return;
@@ -330,15 +333,14 @@ export default function Home() {
   const checkedIn = ["출근", "지각"].includes(todayAttendance?.status) && todayAttendance?.checkInTime;
   const checkedOut = Boolean(todayAttendance?.checkOutTime);
 
-  // 출근 상태(attendance)와 근무지(workSite)는 실시간 반영되지만(onSnapshot),
-  // workSite는 최초 1회만 불러오므로 관리자가 센터 정보를 바꾼 직후에는
-  // 화면을 나갔다 와야 반영됐다 — 새로고침 버튼으로 즉시 다시 불러올 수
-  // 있게 한다.
+  // 출근 상태(attendance)와 근무지(workSite) 모두 실시간 반영되지만, GPS
+  // 좌표는 상시 watcher가 갱신하기 전에 즉시 다시 한 번 측위하고 싶을 때를
+  // 위해 새로고침 버튼으로 위치만 다시 가져올 수 있게 한다.
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refreshToday(), loadSite(), refreshLocation()]);
+      await Promise.all([refreshToday(), refreshLocation()]);
       toast.success("새로고침되었습니다");
     } finally {
       setRefreshing(false);

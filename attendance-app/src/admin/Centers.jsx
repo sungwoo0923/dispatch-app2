@@ -46,6 +46,7 @@ const EMPTY_INFO = {
   lat: "",
   lng: "",
   radiusM: 100,
+  coordsPrecise: null,
 };
 
 export default function Centers() {
@@ -75,7 +76,7 @@ export default function Centers() {
     setLocatingMe(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setInfo((f) => ({ ...f, lat: pos.coords.latitude, lng: pos.coords.longitude }));
+        setInfo((f) => ({ ...f, lat: pos.coords.latitude, lng: pos.coords.longitude, coordsPrecise: true }));
         toast.success(`현재 위치로 좌표를 채웠습니다 (정확도 약 ${Math.round(pos.coords.accuracy)}m)`);
         setLocatingMe(false);
       },
@@ -99,9 +100,13 @@ export default function Centers() {
     try {
       const geo = await searchAddressCoords(result.address);
       if (geo) {
-        setInfo((f) => ({ ...f, lat: geo.lat, lng: geo.lng }));
+        // geo.precise === false면 동/구 단위 근사 좌표라, 이 값 그대로 반경
+        // 판정에 쓰면 실제로는 근무지 안에 있는 직원도 수백m~수km "반경
+        // 밖"으로 잘못 표시될 수 있다 — 목록/상세 화면에 계속 경고가
+        // 남도록 coordsPrecise를 센터 문서에 함께 저장해둔다.
+        setInfo((f) => ({ ...f, lat: geo.lat, lng: geo.lng, coordsPrecise: geo.precise }));
         if (!geo.precise) {
-          toast.error("건물번지까지 정확히 일치하는 좌표를 찾지 못해 인근 지역 좌표로 채워졌습니다. 출근 반경이 좁다면(50~100m) 위도/경도를 직접 미세조정해주세요.");
+          toast.error("건물번지까지 정확히 일치하는 좌표를 찾지 못해 인근 지역 좌표로 채워졌습니다. 출근 반경이 좁다면(50~100m) 위도/경도를 직접 미세조정하거나 '현재 위치로 가져오기'를 이용해주세요.");
         }
       } else {
         toast.error("좌표를 자동으로 찾지 못했습니다. 위도/경도를 직접 입력해주세요.");
@@ -178,6 +183,7 @@ export default function Centers() {
       lat: s.lat ?? "",
       lng: s.lng ?? "",
       radiusM: s.radiusM ?? 100,
+      coordsPrecise: s.coordsPrecise ?? null,
     });
     setTab("info");
     setPanelOpen(true);
@@ -301,7 +307,14 @@ export default function Centers() {
                   </td>
                   <td className="px-3 py-2.5 text-ink">{entityName(s.businessEntityId)}</td>
                   <td className="px-3 py-2.5 text-ink">{s.name}</td>
-                  <td className="px-3 py-2.5 text-ink">{s.address || "-"}</td>
+                  <td className="px-3 py-2.5 text-ink">
+                    <span className="inline-flex items-center gap-1">
+                      {s.address || "-"}
+                      {s.coordsPrecise === false && (
+                        <span title="좌표가 근사값입니다 — 반경 오작동 가능. 상세에서 확인해주세요." className="text-danger">⚠</span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-ink">Y</td>
                   <td className="px-3 py-2.5 text-ink">{s.contractYN === "사용" ? "Y" : "N"}</td>
                   <td className="px-3 py-2.5 text-ink">{s.faceYN || "-"}</td>
@@ -453,6 +466,13 @@ export default function Centers() {
                       <MapPin size={13} /> {locatingMe ? "위치 확인 중..." : "현재 위치로 가져오기"}
                     </Button>
                   </div>
+                  {info.coordsPrecise === false && (
+                    <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                      이 좌표는 건물번지 일치 실패로 인근 지역(동/구 단위) 근사값입니다. 실제 위치와 최대 수 km까지 차이가 날 수 있어
+                      근로자가 근무지 안에 있어도 "반경 밖"으로 잘못 표시될 수 있습니다. 현장에서 "현재 위치로 가져오기"를 눌러
+                      정확한 좌표로 덮어써주세요.
+                    </p>
+                  )}
                   <div className="grid grid-cols-3 gap-3">
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-muted">위도(lat) *</span>
@@ -461,7 +481,7 @@ export default function Centers() {
                         step="0.000001"
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                         value={info.lat}
-                        onChange={(e) => setInfo((f) => ({ ...f, lat: e.target.value }))}
+                        onChange={(e) => setInfo((f) => ({ ...f, lat: e.target.value, coordsPrecise: true }))}
                         placeholder="예: 37.5665"
                       />
                     </label>
@@ -472,7 +492,7 @@ export default function Centers() {
                         step="0.000001"
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                         value={info.lng}
-                        onChange={(e) => setInfo((f) => ({ ...f, lng: e.target.value }))}
+                        onChange={(e) => setInfo((f) => ({ ...f, lng: e.target.value, coordsPrecise: true }))}
                         placeholder="예: 126.9780"
                       />
                     </label>

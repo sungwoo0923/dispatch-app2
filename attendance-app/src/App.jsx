@@ -19,6 +19,7 @@ import AdminMobileLeaveUsage from "./admin/AdminMobileLeaveUsage";
 import AdminMobileSafetyTrainings from "./admin/AdminMobileSafetyTrainings";
 import AdminMobileSafetySettings from "./admin/AdminMobileSafetySettings";
 import AdminMobileSafetyMaterials from "./admin/AdminMobileSafetyMaterials";
+import AdminMobileSafetyCompliance from "./admin/AdminMobileSafetyCompliance";
 import AdminMobilePayroll from "./admin/AdminMobilePayroll";
 import AdminMobileSiteInsuranceRates from "./admin/AdminMobileSiteInsuranceRates";
 import AdminMobileStatsSummary from "./admin/AdminMobileStatsSummary";
@@ -196,6 +197,7 @@ export default function App() {
             <Route path="safety" element={<AdminMobileSafetyTrainings />} />
             <Route path="safety/settings" element={<AdminMobileSafetySettings />} />
             <Route path="safety/materials" element={<AdminMobileSafetyMaterials />} />
+            <Route path="safety/compliance" element={<AdminMobileSafetyCompliance />} />
             <Route path="payroll" element={<AdminMobilePayroll />} />
             <Route path="payroll/settings" element={<AdminMobileSiteInsuranceRates />} />
             <Route path="stats" element={<AdminMobileStatsSummary />} />

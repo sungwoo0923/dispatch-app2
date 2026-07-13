@@ -17,10 +17,25 @@ body {
   font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-overflow-scrolling: touch;
+  /* 안드로이드 웹뷰에서 텍스트를 길게 누르면 기본 텍스트 선택 + "Google
+     검색" 팝업이 뜬다. 네이티브 앱처럼 느껴지게 하기 위해 전역적으로
+     끄고, 실제로 값을 선택/복사해야 하는 입력란만 아래에서 다시 켠다. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 input, select, textarea {
   font-size: 16px; /* prevents iOS auto-zoom on focus */
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+[contenteditable], [data-selectable] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 @layer base {
