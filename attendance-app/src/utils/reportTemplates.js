@@ -134,7 +134,9 @@ const PAGE_STYLE = `
   .blank-line { border-bottom: 1px solid #999; display: inline-block; min-width: 90px; }
   .sign-block { margin-top: 28px; }
   .sign-block .row > div { padding: 3px 0; }
-  @media print { body { padding: 12mm 14mm; } }
+  .print-bar { position: sticky; top: 0; display: flex; justify-content: flex-end; gap: 8px; margin: -24px -28px 16px; padding: 10px 28px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+  .print-bar button { cursor: pointer; border: 1px solid #2563eb; background: #2563eb; color: #fff; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; }
+  @media print { body { padding: 12mm 14mm; } .print-bar { display: none !important; } }
 `;
 
 function wrapDoc(title, bodyHtml) {
@@ -305,6 +307,7 @@ export function buildComplianceReportHtml({
   outstandingRows, // [{ name, center, missing: string[] }]
 }) {
   const body = `
+    <div class="print-bar"><button onclick="window.print()">인쇄 / PDF로 저장</button></div>
     <h1 style="letter-spacing:3px;">안전교육 이수 감사자료</h1>
     <p class="sub">Safety Training Compliance Report</p>
     <table class="no-border">
@@ -367,18 +370,19 @@ export function buildComplianceReportHtml({
   return wrapDoc("안전교육 이수 감사자료", body);
 }
 
-// buildContractHtml 등과 동일하게, 데이터로 HTML을 만들고 새 창을 띄워
-// document.write 후 인쇄 대화상자를 여는 흐름을 그대로 재사용한다.
+// buildContractHtml 등과 다르게, 감사보고서는 표/서명이미지가 많아 인쇄
+// 전에 내용을 먼저 검토할 수 있어야 한다 — 열자마자 자동으로 인쇄창을
+// 띄우는 대신, 미리보기 창 안에 "인쇄 / PDF로 저장" 버튼을 심어 관리자가
+// 검토 후 원할 때 인쇄하도록 한다. 팝업이 차단된 경우도 이제 호출부가
+// 알 수 있도록 성공 여부(boolean)를 반환한다.
 export function openComplianceReportPreview(data) {
   const html = buildComplianceReportHtml(data);
   const win = window.open("", "_blank", "width=900,height=1000");
-  if (!win) return;
+  if (!win) return false;
   win.document.write(html);
   win.document.close();
-  setTimeout(() => {
-    win.focus();
-    win.print();
-  }, 300);
+  win.focus();
+  return true;
 }
 
 export function openReportPreview(docType, formatName, data) {

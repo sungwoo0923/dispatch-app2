@@ -330,6 +330,7 @@ function ReportTab({
   onReportGenerated,
   onJumpToLog,
 }) {
+  const toast = useToast();
   const today = toDateKey();
   const [filters, setFilters] = useState({ start: monthsAgoKey(today, 12), end: today, siteId: "" });
   const [lastGenerated, setLastGenerated] = useState(null);
@@ -392,7 +393,7 @@ function ReportTab({
     const scopeLabel = filters.siteId ? siteName(filters.siteId) : "전체 센터";
     const generatedAt = new Date().toLocaleString("ko-KR");
 
-    openComplianceReportPreview({
+    const opened = openComplianceReportPreview({
       companyName,
       businessEntityLabel,
       scopeLabel,
@@ -404,6 +405,10 @@ function ReportTab({
       evidenceRows,
       outstandingRows,
     });
+    if (!opened) {
+      toast.error("팝업이 차단되어 보고서를 열 수 없습니다. 브라우저의 팝업 차단을 해제해주세요.");
+      return;
+    }
 
     const summaryText = `${filters.start} ~ ${filters.end} · ${scopeLabel} · 생성 ${generatedAt}`;
     setLastGenerated(summaryText);
@@ -450,7 +455,8 @@ function ReportTab({
         </div>
         <p className="text-[11px] text-muted">
           보고서에는 회사/사업자 정보, 이수율 요약, 안전교육자료별 이수현황, 조회기간 내 서명 증빙(전자서명 이미지 포함), 미이수자
-          명단이 함께 출력됩니다. 생성 후 브라우저 인쇄창에서 PDF로 저장할 수 있습니다.
+          명단이 함께 출력됩니다. "보고서 생성"을 누르면 새 창에서 내용을 먼저 확인할 수 있고, 창 상단의 "인쇄 / PDF로 저장"
+          버튼을 누르면 인쇄하거나 브라우저 인쇄창에서 PDF 파일로 저장할 수 있습니다.
         </p>
         <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-3">
           <Button size="sm" onClick={generate}>
