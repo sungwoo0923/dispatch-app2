@@ -183,8 +183,16 @@ export default function Centers() {
     setPanelOpen(true);
   };
 
+  // 이전에는 저장 실패 시(필수값 누락, 권한/네트워크 오류 등) 화면에 아무
+  // 표시도 없이 조용히 끝났다 — 그래서 "위도/경도를 수정하고 저장했는데
+  // 다시 열어보니 안 바뀌어있다"는 증상이 실제로는 저장 자체가 실패한
+  // 것인데도 사용자에게는 원인을 알 방법이 없었다. 모든 실패 경로에
+  // 에러 토스트를 붙여, 실패하면 반드시 화면에 이유가 뜨게 한다.
   const saveInfo = async () => {
-    if (!info.businessEntityId || !info.name.trim()) return;
+    if (!info.businessEntityId || !info.name.trim()) {
+      toast.error("사업자와 센터 이름은 필수입니다");
+      return;
+    }
     if (!(await confirm("저장하시겠습니까?", "save"))) return;
     const payload = {
       ...info,
@@ -192,17 +200,21 @@ export default function Centers() {
       lng: info.lng === "" ? null : parseFloat(info.lng),
       radiusM: Number(info.radiusM) || 100,
     };
-    if (selectedId) {
-      await updateDoc(doc(db, "workSites", selectedId), payload);
-    } else {
-      const ref_ = await addDoc(collection(db, "workSites"), {
-        companyId: profile.companyId,
-        ...payload,
-        createdAt: serverTimestamp(),
-      });
-      setSelectedId(ref_.id);
+    try {
+      if (selectedId) {
+        await updateDoc(doc(db, "workSites", selectedId), payload);
+      } else {
+        const ref_ = await addDoc(collection(db, "workSites"), {
+          companyId: profile.companyId,
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+        setSelectedId(ref_.id);
+      }
+      toast.success("저장되었습니다");
+    } catch (err) {
+      toast.error(`저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }
-    toast.success("저장되었습니다");
   };
 
   const exportCsv = () => {
