@@ -413,6 +413,8 @@ const STRINGS = {
   "messenger.photo": { ko: "사진", en: "Photo", vi: "Ảnh", zh: "照片", th: "รูปภาพ" },
   "messenger.file": { ko: "파일", en: "File", vi: "Tệp", zh: "文件", th: "ไฟล์" },
   "messenger.save": { ko: "저장", en: "Save", vi: "Lưu", zh: "保存", th: "บันทึก" },
+  "messenger.share": { ko: "공유", en: "Share", vi: "Chia sẻ", zh: "分享", th: "แชร์" },
+  "messenger.saveFailed": { ko: "저장에 실패했습니다", en: "Save failed", vi: "Lưu thất bại", zh: "保存失败", th: "บันทึกไม่สำเร็จ" },
   "messenger.close": { ko: "닫기", en: "Close", vi: "Đóng", zh: "关闭", th: "ปิด" },
   "messenger.sentToSelfToast": { ko: "나에게 보냈습니다", en: "Sent to yourself", vi: "Đã gửi cho chính bạn", zh: "已发送给自己", th: "ส่งถึงตัวเองแล้ว" },
   "messenger.myProfileTitle": { ko: "내 프로필", en: "My Profile", vi: "Hồ sơ của tôi", zh: "我的资料", th: "โปรไฟล์ของฉัน" },

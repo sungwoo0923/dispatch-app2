@@ -1181,9 +1181,11 @@ function FriendsView({
 
 function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, onDeleteForMe, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, mobileMode, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf }) {
   const { t } = useLanguage();
+  const toast = useToast();
   const [showSearch, setShowSearch] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
+  const [imgActionBusy, setImgActionBusy] = useState(false);
   const [ctxMenu, setCtxMenu] = useState(null);
   const [selfSentToast, setSelfSentToast] = useState(false);
   const longPressTimer = useRef(null);
@@ -1196,6 +1198,51 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
     document.addEventListener("touchstart", handler, { passive: true });
     return () => { document.removeEventListener("mousedown", handler); document.removeEventListener("touchstart", handler); };
   }, [ctxMenu]);
+
+  // <a download>는 같은 출처(origin)의 파일에만 동작한다 — Firebase Storage는
+  // 앱과 다른 출처라 브라우저가 download 속성을 무시하고 그냥 새 탭에서
+  // 이미지를 열기만 했다("저장"을 눌러도 실제로 저장되지 않는 문제의 원인).
+  // fetch로 blob을 직접 받아 로컬 objectURL을 만들면 출처와 무관하게 실제
+  // 다운로드가 동작한다.
+  const saveImagePreview = async () => {
+    if (!imgPreview || imgActionBusy) return;
+    setImgActionBusy(true);
+    try {
+      const res = await fetch(imgPreview);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `kp-work-${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast.error(t("messenger.saveFailed"));
+    } finally {
+      setImgActionBusy(false);
+    }
+  };
+
+  const shareImagePreview = async () => {
+    if (!imgPreview || imgActionBusy) return;
+    setImgActionBusy(true);
+    try {
+      const res = await fetch(imgPreview);
+      const blob = await res.blob();
+      const file = new File([blob], `kp-work-${Date.now()}.jpg`, { type: blob.type || "image/jpeg" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+      } else if (navigator.share) {
+        await navigator.share({ url: imgPreview });
+      }
+    } catch {
+      // 사용자가 공유 시트를 취소한 경우도 이 catch로 오므로 별도 에러 표시는 하지 않는다.
+    } finally {
+      setImgActionBusy(false);
+    }
+  };
 
   const handleMsgContextMenu = (e, msg) => {
     e.preventDefault(); e.stopPropagation();
@@ -1462,7 +1509,10 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
       {imgPreview && (
         <div style={{ position: "fixed", inset: 0, zIndex: 200000, background: "rgba(15,23,42,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }} onClick={() => setImgPreview(null)}>
           <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 10 }} onClick={(e) => e.stopPropagation()}>
-            <a href={imgPreview} download target="_blank" rel="noopener noreferrer" style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "none" }}>{t("messenger.save")}</a>
+            {typeof navigator !== "undefined" && navigator.share && (
+              <button onClick={shareImagePreview} disabled={imgActionBusy} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t("messenger.share")}</button>
+            )}
+            <button onClick={saveImagePreview} disabled={imgActionBusy} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t("messenger.save")}</button>
             <button onClick={() => setImgPreview(null)} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t("messenger.close")}</button>
           </div>
           <img src={imgPreview} style={{ maxWidth: "90vw", maxHeight: "80vh", borderRadius: 12, objectFit: "contain" }} onClick={(e) => e.stopPropagation()} />
