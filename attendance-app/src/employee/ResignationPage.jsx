@@ -12,6 +12,7 @@ import SignaturePad from "../components/SignaturePad";
 import ApprovalBox from "../components/ApprovalBox";
 import { toDateKey, formatDate } from "../utils/dateUtils";
 import { getManagerResult, getCeoResult, computeResignationStatus } from "../utils/resignationStatus";
+import { notifyAdmins } from "../utils/notifyAdmins";
 
 const STATUS_LABEL = {
   employee_pending: ["서명 필요", "warning"],
@@ -62,6 +63,7 @@ export default function ResignationPage() {
         reason,
         status: "submitted",
       });
+      notifyAdmins(profile.companyId, { title: "사직서 제출", message: `${profile.name}님이 사직서를 제출했습니다.`, link: "/contracts" }).catch(() => {});
       toast.success("사직서가 제출되었습니다. 관리자 결재를 기다려주세요.");
       setSigning(false);
     } catch {

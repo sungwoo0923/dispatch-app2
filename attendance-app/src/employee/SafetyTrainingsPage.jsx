@@ -12,6 +12,7 @@ import SignaturePad from "../components/SignaturePad";
 import CompletionSuccessModal from "../components/CompletionSuccessModal";
 import { formatDate, formatTime } from "../utils/dateUtils";
 import { signSafetyAttendance } from "../utils/safety";
+import { notifyAdmins } from "../utils/notifyAdmins";
 
 export default function SafetyTrainingsPage() {
   const { user, profile } = useAuth();
@@ -173,6 +174,7 @@ function MandatoryMaterials() {
         completedAt: serverTimestamp(),
         ...watchInfo,
       });
+      notifyAdmins(profile.companyId, { title: "안전교육 이수 완료", message: `${profile.name}님이 "${viewing.title}" 안전교육을 이수했습니다.`, link: "/safety/materials" }).catch(() => {});
       toast.success("이수 처리되었습니다");
       setViewing(null);
       setDoneNotice(true);

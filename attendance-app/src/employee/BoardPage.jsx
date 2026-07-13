@@ -10,6 +10,7 @@ import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { formatDate } from "../utils/dateUtils";
+import { notifyAdmins } from "../utils/notifyAdmins";
 
 const TOP_TABS = ["공지", "자유게시판", "문의하기"];
 const CATEGORY_LABEL = { notice: "공지사항", inspection: "점검사항" };
@@ -338,6 +339,7 @@ function InquiryTab() {
         reply: "",
         createdAt: serverTimestamp(),
       });
+      notifyAdmins(profile.companyId, { title: "새 문의 등록", message: `${profile.name}님이 문의를 등록했습니다: ${form.subject}`, link: "/employees/inquiries" }).catch(() => {});
       toast.success("문의가 접수되었습니다");
       setOpen(false);
     } catch (err) {

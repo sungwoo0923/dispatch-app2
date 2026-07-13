@@ -12,6 +12,7 @@ import Modal from "../components/Modal";
 import MonthRangeSearch from "../components/MonthRangeSearch";
 import { calcLeaveBalance, LEAVE_TYPES } from "../utils/leave";
 import { toDateKey, formatDate } from "../utils/dateUtils";
+import { notifyAdmins } from "../utils/notifyAdmins";
 
 const STATUS_LABEL = { pending: ["승인대기", "warning"], approved: ["승인완료", "success"], rejected: ["반려", "danger"] };
 const EMPTY_FORM = { type: "연차", startDate: toDateKey(), endDate: toDateKey(), reason: "" };
@@ -79,6 +80,7 @@ export default function LeaveRequestPage() {
           status: "pending",
           createdAt: serverTimestamp(),
         });
+        notifyAdmins(profile.companyId, { title: "휴가 신청", message: `${profile.name}님이 ${form.type}를 신청했습니다.`, link: "/leaves" }).catch(() => {});
         toast.success("신청되었습니다");
       }
       setOpen(false);

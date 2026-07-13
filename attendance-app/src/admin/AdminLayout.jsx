@@ -8,6 +8,7 @@ import { useNavBadges } from "../hooks/useNavBadges";
 import Breadcrumb from "../components/Breadcrumb";
 import BuildInfo from "../components/BuildInfo";
 import Messenger from "../messenger/Messenger";
+import AdminNotificationBell from "./AdminNotificationBell";
 import { toDateKey } from "../utils/dateUtils";
 
 // 스케줄 출근시각 이후 이만큼(분) 지나도 체크인 기록이 없으면 결근(노쇼)
@@ -282,6 +283,7 @@ export default function AdminLayout() {
                 <FileWarning size={14} /> 사직서 결재대기 {resignationCount}건이 있습니다
               </button>
             )}
+            <AdminNotificationBell adminUid={user?.uid} />
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
               {profile?.name?.[0] || "K"}
             </div>

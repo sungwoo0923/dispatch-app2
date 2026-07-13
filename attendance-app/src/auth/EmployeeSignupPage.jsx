@@ -7,6 +7,7 @@ import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
 import { toDateKey } from "../utils/dateUtils";
 import { phoneToAuthEmail, normalizePhone } from "../utils/phoneAuth";
+import { notifyAdmins } from "../utils/notifyAdmins";
 import BuildInfo from "../components/BuildInfo";
 
 export default function EmployeeSignupPage() {
@@ -87,6 +88,7 @@ export default function EmployeeSignupPage() {
           workSiteId: null,
           createdAt: serverTimestamp(),
         });
+        notifyAdmins(companyId, { title: "신규 가입 승인 대기", message: `${form.name}님이 가입코드로 회원가입했습니다.`, link: "/employees" }).catch(() => {});
       }
     } catch (err) {
       setError(err.code === "auth/email-already-in-use" ? "이미 가입된 휴대전화번호입니다." : "회원가입에 실패했습니다. 다시 시도해주세요.");

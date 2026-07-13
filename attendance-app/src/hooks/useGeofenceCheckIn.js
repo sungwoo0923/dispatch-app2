@@ -7,10 +7,14 @@ import { LATE_GRACE_MINUTES, minutesLate } from "../utils/attendanceStatus";
 
 // 지각 체크인이 발생하면 같은 회사 관리자 전원에게 알림을 broadcast한다
 // (SafetyMaterials.jsx의 전 직원 broadcast와 동일한 패턴, 대상만 관리자로 바뀜).
+// users 컬렉션의 list 조회는 관리자만 허용되어 있어, 이 함수처럼 직원
+// 세션에서 호출되면 users로는 관리자 목록을 가져올 수 없다(권한거부로
+// 계속 조용히 실패하고 있었다) — 회사 구성원 누구나 읽을 수 있는
+// chat_profiles에서 role==admin을 찾는다(utils/notifyAdmins.js와 동일 패턴).
 async function notifyAdminsOfLateCheckIn({ companyId, name, late }) {
   if (!companyId) return;
   try {
-    const snap = await getDocs(query(collection(db, "users"), where("companyId", "==", companyId), where("role", "==", "admin")));
+    const snap = await getDocs(query(collection(db, "chat_profiles"), where("company", "==", companyId), where("role", "==", "admin")));
     if (snap.empty) return;
     const batch = writeBatch(db);
     snap.docs.forEach((d) => {
