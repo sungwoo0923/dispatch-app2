@@ -587,6 +587,24 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     }).catch(() => {});
   };
 
+  // 공지를 채팅방 상단에 고정해두면(pinnedNotice), 방에 새로 들어오거나
+  // 스크롤을 많이 내린 사람도 대화 목록 최상단에서 바로 확인할 수 있다.
+  // 채팅 메시지 자체를 옮기지 않고 room 문서에 스냅샷만 별도로 저장하는
+  // 방식이라, 고정 후 원본 공지가 삭제되어도 고정 배너는 그대로 남는다.
+  const pinNotice = async (msg) => {
+    if (!activeRoom) return;
+    await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
+      pinnedNotice: { text: msg.text || "", senderName: msg.senderName || "", pinnedBy: myProfile?.name || "", pinnedAt: Date.now() },
+    }).catch((err) => toast.error(`고정에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`));
+  };
+
+  const unpinNotice = async () => {
+    if (!activeRoom) return;
+    await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), { pinnedNotice: null }).catch((err) =>
+      toast.error(`고정 해제에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`)
+    );
+  };
+
   const addReaction = async (msgId, emoji) => {
     if (!myUid || !msgId) return;
     const msgRef = doc(db, MSGS_COLL, msgId);
@@ -737,6 +755,7 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
     fileUploading, friends, mobileMode,
     replyTo, setReplyTo, onReply: (msg) => setReplyTo({ id: msg.id, text: msg.text, senderName: msg.senderName }),
     onAddReaction: addReaction, onSendToSelf: sendToSelf,
+    pinnedNotice: activeRoom?.pinnedNotice || null, onPinNotice: pinNotice, onUnpinNotice: unpinNotice,
   } : null;
 
   const friendsViewProps = {
@@ -1179,7 +1198,7 @@ function FriendsView({
   );
 }
 
-function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, onDeleteForMe, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, mobileMode, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, onDeleteForMe, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, mobileMode, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, pinnedNotice, onPinNotice, onUnpinNotice }) {
   const { t } = useLanguage();
   const toast = useToast();
   const [showSearch, setShowSearch] = useState(false);
@@ -1280,6 +1299,17 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
         <div style={{ padding: "8px 12px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
           <input value={msgSearch} onChange={(e) => setMsgSearch(e.target.value)} placeholder={t("messenger.searchMessages")} autoFocus
             style={{ width: "100%", border: "1px solid #e2e8f0", borderRadius: 20, padding: "5px 12px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+        </div>
+      )}
+
+      {pinnedNotice && (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 14px", background: "#fffbeb", borderBottom: "1px solid #fde68a", flexShrink: 0 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: 2 }}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#b45309", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("messenger.pinnedNoticeLabel")}</div>
+            <div style={{ fontSize: 12.5, color: "#78350f", wordBreak: "break-word" }}>{pinnedNotice.text}</div>
+          </div>
+          <button onClick={onUnpinNotice} title={t("messenger.unpinNotice")} style={{ background: "none", border: "none", color: "#b45309", cursor: "pointer", padding: 2, flexShrink: 0 }}>✕</button>
         </div>
       )}
 
@@ -1441,6 +1471,9 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, input, setInput,
               { label: t("messenger.reply"), action: () => { onReply?.(msg); setCtxMenu(null); } },
               { label: t("messenger.sendToSelf"), action: () => { onSendToSelf?.(msg.text); setCtxMenu(null); setSelfSentToast(true); setTimeout(() => setSelfSentToast(false), 2500); } },
               { label: t("messenger.copy"), action: () => { navigator.clipboard?.writeText(msg.text || ""); setCtxMenu(null); } },
+              ...(msg.type === "notice" ? [
+                { label: t("messenger.pinNotice"), action: () => { onPinNotice?.(msg); setCtxMenu(null); } },
+              ] : []),
               ...(isMine ? [
                 { label: t("messenger.edit"), action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } },
                 { label: t("messenger.deleteAll"), action: () => { onDeleteMsg(msg); setCtxMenu(null); }, danger: true },
