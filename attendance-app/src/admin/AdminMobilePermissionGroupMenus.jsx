@@ -50,6 +50,18 @@ export default function AdminMobilePermissionGroupMenus() {
       return next;
     });
 
+  const toggleGroup = (group) => {
+    const items = MENU_ITEMS.filter((m) => m.group === group);
+    setChecked((s) => {
+      const allChecked = items.every((m) => s.has(m.id));
+      const next = new Set(s);
+      items.forEach((m) => (allChecked ? next.delete(m.id) : next.add(m.id)));
+      return next;
+    });
+  };
+
+  const toggleAll = () => setChecked((s) => (s.size === MENU_ITEMS.length ? new Set() : new Set(MENU_ITEMS.map((m) => m.id))));
+
   const save = async () => {
     if (!selectedId) return;
     setSaving(true);
@@ -100,20 +112,32 @@ export default function AdminMobilePermissionGroupMenus() {
 
           {selectedId ? (
             <>
+              <div className="flex justify-end">
+                <button type="button" onClick={toggleAll} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-ink">
+                  {checked.size === MENU_ITEMS.length ? "전체해제" : "전체선택"}
+                </button>
+              </div>
               <div className="space-y-3">
-                {MENU_GROUPS.map((group) => (
-                  <div key={group} className="rounded-xl border border-slate-200 bg-white p-3.5">
-                    <p className="mb-2 text-xs font-semibold text-ink">{group}</p>
-                    <div className="space-y-1.5">
-                      {MENU_ITEMS.filter((m) => m.group === group).map((m) => (
-                        <label key={m.id} className="flex items-center gap-2.5 py-1 text-sm text-ink">
-                          <input type="checkbox" checked={checked.has(m.id)} onChange={() => toggle(m.id)} />
-                          {m.label}
-                        </label>
-                      ))}
+                {MENU_GROUPS.map((group) => {
+                  const items = MENU_ITEMS.filter((m) => m.group === group);
+                  const groupChecked = items.every((m) => checked.has(m.id));
+                  return (
+                    <div key={group} className="rounded-xl border border-slate-200 bg-white p-3.5">
+                      <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink">
+                        <input type="checkbox" checked={groupChecked} onChange={() => toggleGroup(group)} />
+                        {group}
+                      </label>
+                      <div className="space-y-1.5">
+                        {items.map((m) => (
+                          <label key={m.id} className="flex items-center gap-2.5 py-1 text-sm text-ink">
+                            <input type="checkbox" checked={checked.has(m.id)} onChange={() => toggle(m.id)} />
+                            {m.label}
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="sticky bottom-16 pt-1">
                 <Button className="w-full shadow-lg" onClick={save} disabled={saving}>

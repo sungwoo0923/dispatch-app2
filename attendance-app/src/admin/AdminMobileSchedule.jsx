@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { collection, query, where, onSnapshot, addDoc, doc, setDoc, updateDoc, deleteDoc, getDocs, getDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, doc, setDoc, updateDoc, deleteDoc, getDocs, getDoc, serverTimestamp, deleteField } from "firebase/firestore";
 import { ChevronLeft, ChevronRight, Search, Phone, Plus, CalendarDays, CheckSquare, Square } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -167,6 +167,11 @@ export default function AdminMobileSchedule() {
           createdAt: serverTimestamp(),
         });
       }
+    } else if (status === "대기") {
+      // "대기"로 되돌리면 그날 근무 자체가 취소된 것이므로, 강제출근/자동출근으로
+      // 이미 남아있는 출퇴근 기록도 함께 지운다 — 안 지우면 모바일 체크 화면에는
+      // 여전히 "출근완료"가 남는다.
+      await deleteDoc(doc(db, "attendance", attendanceDocId(sched.uid, sched.date))).catch(() => {});
     }
   };
 
@@ -227,6 +232,10 @@ export default function AdminMobileSchedule() {
           month: dk.slice(0, 7),
           status,
           checkInTime: now.toISOString(),
+          // 재출근 처리 시 이전에 남아있던 퇴근기록이 그대로 남아 옛 퇴근시각이
+          // 계속 표시되는 문제가 있었다 — 새로 출근 처리할 때는 항상 지운다.
+          checkOutTime: deleteField(),
+          checkOutSource: deleteField(),
           source: "manual",
           siteId: s.siteId || emp.workSiteId || null,
           siteName: s.siteName || siteName(emp.workSiteId),

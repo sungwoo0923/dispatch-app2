@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, setDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { LayoutGrid, RefreshCw, FileSpreadsheet, Save } from "lucide-react";
 import { db } from "../firebase";
@@ -11,6 +11,15 @@ import { NAV } from "./navConfig";
 
 const MENU_ITEMS = NAV.flatMap((item) =>
   item.children ? item.children.map((c) => ({ id: c.to, group: item.label, label: c.label })) : [{ id: item.to, group: item.label, label: item.label }]
+);
+
+// 항목이 40개 가까이 되다 보니 하나씩 체크하기 번거로워, 대메뉴(그룹) 단위로
+// 묶어 그룹 헤더에서 한 번에 켜고 끌 수 있게 한다.
+const MENU_GROUPS = Object.values(
+  MENU_ITEMS.reduce((acc, m) => {
+    (acc[m.group] ||= { group: m.group, items: [] }).items.push(m);
+    return acc;
+  }, {})
 );
 
 export default function PermissionGroupMenus() {
@@ -55,6 +64,16 @@ export default function PermissionGroupMenus() {
       else next.add(menuId);
       return next;
     });
+
+  const toggleGroup = (groupItems) =>
+    setChecked((s) => {
+      const allChecked = groupItems.every((m) => s.has(m.id));
+      const next = new Set(s);
+      groupItems.forEach((m) => (allChecked ? next.delete(m.id) : next.add(m.id)));
+      return next;
+    });
+
+  const toggleAll = () => setChecked((s) => (s.size === MENU_ITEMS.length ? new Set() : new Set(MENU_ITEMS.map((m) => m.id))));
 
   const save = async () => {
     if (!selectedId) return;
@@ -152,6 +171,9 @@ export default function PermissionGroupMenus() {
             <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">메뉴목록 {MENU_ITEMS.length}</p>
               <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain">
+                <Button size="sm" variant="outline" onClick={toggleAll} disabled={!selectedId}>
+                  {checked.size === MENU_ITEMS.length ? "전체해제" : "전체선택"}
+                </Button>
                 <Button size="sm" variant="outline" onClick={exportCsv}>
                   <FileSpreadsheet size={13} /> 엑셀
                 </Button>
@@ -171,16 +193,38 @@ export default function PermissionGroupMenus() {
                   </tr>
                 </thead>
                 <tbody>
-                  {MENU_ITEMS.map((m, i) => (
-                    <tr key={m.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-2.5">
-                        <input type="checkbox" checked={checked.has(m.id)} disabled={!selectedId} onChange={() => toggle(m.id)} />
-                      </td>
-                      <td className="px-3 py-2.5 text-ink">{i + 1}</td>
-                      <td className="px-3 py-2.5 text-ink">{m.group}</td>
-                      <td className="px-3 py-2.5 text-ink">{m.label}</td>
-                    </tr>
-                  ))}
+                  {MENU_GROUPS.map((g) => {
+                    const groupChecked = g.items.every((m) => checked.has(m.id));
+                    const groupPartial = !groupChecked && g.items.some((m) => checked.has(m.id));
+                    return (
+                      <Fragment key={g.group}>
+                        <tr className="border-b border-slate-100 bg-slate-50/80">
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              checked={groupChecked}
+                              ref={(el) => el && (el.indeterminate = groupPartial)}
+                              disabled={!selectedId}
+                              onChange={() => toggleGroup(g.items)}
+                            />
+                          </td>
+                          <td colSpan={3} className="px-3 py-2 text-left text-xs font-bold text-ink">
+                            {g.group}
+                          </td>
+                        </tr>
+                        {g.items.map((m) => (
+                          <tr key={m.id} className="border-b border-slate-50 last:border-0">
+                            <td className="px-3 py-2.5">
+                              <input type="checkbox" checked={checked.has(m.id)} disabled={!selectedId} onChange={() => toggle(m.id)} />
+                            </td>
+                            <td className="px-3 py-2.5 text-ink">{MENU_ITEMS.indexOf(m) + 1}</td>
+                            <td className="px-3 py-2.5 text-muted">{m.group}</td>
+                            <td className="px-3 py-2.5 text-ink">{m.label}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

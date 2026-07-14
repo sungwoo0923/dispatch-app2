@@ -13,6 +13,7 @@ import {
   getDocs,
   getDoc,
   serverTimestamp,
+  deleteField,
 } from "firebase/firestore";
 import {
   Plus,
@@ -648,6 +649,11 @@ export default function Schedule() {
       for (const c of autoContracts.docs) {
         if (c.data().status !== "signed") await deleteDoc(doc(db, "contracts", c.id));
       }
+    } else if (status === "대기") {
+      // "대기"로 되돌리면 그날 근무 자체가 취소된 것이므로, 강제출근/자동출근 등으로
+      // 이미 남아있는 출퇴근 기록도 함께 지워야 한다 — 안 지우면 스케줄은 대기인데
+      // 모바일 체크 화면에는 여전히 "출근완료"가 남아 혼란을 준다.
+      await deleteDoc(doc(db, "attendance", attendanceDocId(s.uid, s.date))).catch(() => {});
     }
   };
 
@@ -794,6 +800,12 @@ export default function Schedule() {
           month: dateKey.slice(0, 7),
           status,
           checkInTime: now.toISOString(),
+          // 대기로 되돌렸다가 다시 강제출근시키는 등, 같은 날짜에 재출근
+          // 처리하는 경우 이전에 남아있던 퇴근기록(checkOutTime)이 그대로
+          // 남아 "출근완료 · 09:54 · 퇴근 10:06"처럼 옛 퇴근시각이 계속
+          // 표시되는 문제가 있었다 — 새로 출근 처리할 때는 항상 지운다.
+          checkOutTime: deleteField(),
+          checkOutSource: deleteField(),
           source: "manual",
           siteId: s.siteId || emp.workSiteId || null,
           siteName: s.siteName || siteName_(emp.workSiteId),
