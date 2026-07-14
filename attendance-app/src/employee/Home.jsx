@@ -333,6 +333,34 @@ export default function Home() {
   const checkedIn = ["출근", "지각"].includes(todayAttendance?.status) && todayAttendance?.checkInTime;
   const checkedOut = Boolean(todayAttendance?.checkOutTime);
 
+  // 퇴근 버튼은 예전에는 출근만 했으면 언제든 눌러 바로 퇴근 처리됐다 —
+  // 9~18시 근무인데 10시에 퇴근을 눌러도 그대로 처리되는 식. 스케줄에 등록된
+  // 퇴근예정시각(todaySchedule.endTime) 전에는 버튼을 잠가두고, 그 시각이
+  // 되어야 흰색으로 활성화되게 한다. 다만 조퇴가 승인된 경우는 그 규칙과
+  // 무관하게 바로 퇴근할 수 있어야 하므로 예외로 둔다.
+  const earlyLeaveApproved = myEarlyLeaveToday?.status === "approved";
+  const isPastScheduledEnd = (() => {
+    const endTime = todaySchedule?.endTime;
+    if (!endTime) return true; // 스케줄에 퇴근시각이 없으면 제한하지 않는다
+    const [h, m] = endTime.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return true;
+    const target = new Date(now);
+    target.setHours(h, m, 0, 0);
+    return now.getTime() >= target.getTime();
+  })();
+  const canCheckOut = checkedIn && !checkedOut && (earlyLeaveApproved || isPastScheduledEnd);
+  const handleCheckOutClick = () => {
+    if (!canCheckOut) {
+      toast.error(
+        todaySchedule?.endTime
+          ? `${todaySchedule.endTime}부터 퇴근할 수 있습니다. 그 전에 퇴근해야 하면 아래 "조퇴 신청"을 이용해주세요.`
+          : "아직 퇴근할 수 없습니다."
+      );
+      return;
+    }
+    manualCheckOut();
+  };
+
   // 출근 상태(attendance)와 근무지(workSite) 모두 실시간 반영되지만, GPS
   // 좌표는 상시 watcher가 갱신하기 전에 즉시 다시 한 번 측위하고 싶을 때를
   // 위해 새로고침 버튼으로 위치만 다시 가져올 수 있게 한다.
@@ -608,14 +636,22 @@ export default function Home() {
           </button>
           <button
             type="button"
-            onClick={manualCheckOut}
+            onClick={handleCheckOutClick}
             disabled={!checkedIn || checkedOut}
-            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-white/10 py-5 font-semibold text-white transition-colors hover:bg-white/20 disabled:text-white/40"
+            className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-5 font-semibold transition-colors disabled:cursor-not-allowed ${
+              canCheckOut
+                ? "bg-white text-primary shadow-lg shadow-black/10 hover:bg-white/90"
+                : "bg-white/10 text-white transition-colors hover:bg-white/20 disabled:text-white/40"
+            }`}
           >
             <span className="flex items-center gap-1.5 text-base">
               <LogOut size={18} /> {t("home.checkOut")}
             </span>
-            <span className="text-[11px] font-medium tracking-wide opacity-70">OUT</span>
+            <span className="text-[11px] font-medium tracking-wide opacity-70">
+              {checkedIn && !checkedOut && !canCheckOut && todaySchedule?.endTime
+                ? `${todaySchedule.endTime} 부터`
+                : "OUT"}
+            </span>
           </button>
         </div>
 

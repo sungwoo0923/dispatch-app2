@@ -54,6 +54,13 @@ function resolveCheckInRadius(workSite) {
 // 나쁘면(클수록 부정확) 자동출퇴근/수동출근 판정에서 제외하고, 화면에는
 // "위치 정확도가 낮습니다" 안내를 보여준다.
 const POOR_ACCURACY_THRESHOLD_M = 300;
+// GPS는 실내/건물 사이 등에서 순간적으로 튀어 실제로는 근무지 안에 있는데도
+// 반경 밖 좌표가 단 한 번 찍히는 경우가 있다 — 예전에는 그 한 번의 튐만으로도
+// 바로 자동퇴근 처리를 해버려, 9시54분에 출근한 근로자가 10시06분처럼 얼마
+// 지나지도 않아 자동퇴근되는 오탐이 발생했다. 배차앱의 "반경 밖으로 벗어난
+// 상태를 연속으로 확인해야 확정" 패턴을 참고해, 연속으로 이 횟수만큼 반경
+// 밖으로 확인되어야만 실제 자동퇴근을 확정한다.
+const AUTO_CHECKOUT_CONFIRM_STREAK = 3;
 
 async function writeAttendance({ uid, name, companyId, status, extra }) {
   const dateKey = toDateKey();
@@ -86,6 +93,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
   const [permissionError, setPermissionError] = useState(null);
   const autoCheckedInRef = useRef(false);
   const watcherIdRef = useRef(null);
+  const farStreakRef = useRef(0);
 
   // 관리자가 PC에서 강제출근 등으로 이 근로자의 attendance 문서를 직접
   // 수정해도, 이미 열려있는 모바일 앱은 실시간으로 반영되어야 한다 —
@@ -97,6 +105,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
     const data = snap.exists() ? snap.data() : null;
     setTodayAttendance(data);
     autoCheckedInRef.current = data?.status === "출근" || data?.status === "지각";
+    farStreakRef.current = 0;
   }, [uid]);
 
   useEffect(() => {
@@ -105,6 +114,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
       const data = snap.exists() ? snap.data() : null;
       setTodayAttendance(data);
       autoCheckedInRef.current = data?.status === "출근" || data?.status === "지각";
+      farStreakRef.current = 0;
     });
     return () => unsub();
   }, [uid]);
@@ -125,6 +135,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
 
       if (canCheckIn && !autoCheckedInRef.current && d <= radiusIn) {
         autoCheckedInRef.current = true;
+        farStreakRef.current = 0;
         const now = new Date();
         const late = minutesLate(scheduleStartTime, now);
         await writeAttendance({
@@ -142,15 +153,26 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
         });
         if (late > LATE_GRACE_MINUTES) notifyAdminsOfLateCheckIn({ companyId, name, late });
         refreshToday();
-      } else if (autoCheckedInRef.current && d > radiusOut && !todayAttendance?.checkOutTime) {
-        await writeAttendance({
-          uid,
-          name,
-          companyId,
-          status: todayAttendance?.status || "출근", // preserve 지각/출근 as recorded at check-in
-          extra: { checkOutTime: new Date().toISOString(), checkOutSource: "auto" },
-        });
-        refreshToday();
+      } else if (autoCheckedInRef.current && !todayAttendance?.checkOutTime) {
+        if (d > radiusOut) {
+          // 단발성 GPS 튐으로 반경 밖 좌표가 한 번 찍혔다고 바로 자동퇴근
+          // 처리하지 않고, 연속으로 AUTO_CHECKOUT_CONFIRM_STREAK번 이상
+          // 반경 밖으로 확인되어야만 실제 자동퇴근을 확정한다.
+          farStreakRef.current += 1;
+          if (farStreakRef.current >= AUTO_CHECKOUT_CONFIRM_STREAK) {
+            farStreakRef.current = 0;
+            await writeAttendance({
+              uid,
+              name,
+              companyId,
+              status: todayAttendance?.status || "출근", // preserve 지각/출근 as recorded at check-in
+              extra: { checkOutTime: new Date().toISOString(), checkOutSource: "auto" },
+            });
+            refreshToday();
+          }
+        } else {
+          farStreakRef.current = 0;
+        }
       }
     },
     [uid, name, companyId, workSite, todayAttendance, refreshToday, canCheckIn, scheduleStartTime]

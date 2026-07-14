@@ -234,6 +234,12 @@ export default function AdminMobileSchedule() {
         { merge: true }
       );
       toast.success(status === "지각" ? `${emp.name}님을 지각 출근 처리했습니다` : `${emp.name}님을 출근 처리했습니다`);
+      notifyScheduleStatus(
+        s.uid,
+        status === "지각"
+          ? "관리자에 의해 출근 처리되었습니다. (지각)"
+          : "관리자에 의해 출근 처리되었습니다."
+      );
     } catch (err) {
       toast.error(`강제출근 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }

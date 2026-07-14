@@ -56,12 +56,40 @@ export function calcMonthlyPayroll({
   };
 }
 
+function ratesFromItems(items) {
+  const pct = (label) => {
+    const item = (items || []).find((i) => i.rateType === label);
+    return item ? Number(item.ratePercent) / 100 : null;
+  };
+  return {
+    ...DEFAULT_PAYROLL_RATES,
+    nationalPension: pct("국민연금요율") ?? DEFAULT_PAYROLL_RATES.nationalPension,
+    healthInsurance: pct("건강보험요율") ?? DEFAULT_PAYROLL_RATES.healthInsurance,
+    longTermCare: pct("요양보험요율") ?? DEFAULT_PAYROLL_RATES.longTermCare,
+    employmentInsurance: pct("고용보험요율") ?? DEFAULT_PAYROLL_RATES.employmentInsurance,
+  };
+}
+
 // Picks the insurance rate assignment in effect for a site as of a given
 // date (the most recent entry whose effectiveDate has already passed),
 // falling back to the company-wide placeholder rates when the site has no
 // assignment yet.
-export async function getSiteInsuranceRates(companyId, siteId, asOfDate) {
-  if (!companyId || !siteId) return DEFAULT_PAYROLL_RATES;
+//
+// 센터 전체에는 같은 조건을 적용하는 게 보통이지만, 그 센터 소속이어도
+// 계약조건이 다른 근로자(예: 별도 협의된 요율)가 있을 수 있다 —
+// employeeOverrideTemplateId가 있으면 센터 기본값 대신 그 근로자에게
+// 지정된 보험요율템플릿을 그대로 우선 적용한다.
+export async function getSiteInsuranceRates(companyId, siteId, asOfDate, employeeOverrideTemplateId) {
+  if (!companyId) return DEFAULT_PAYROLL_RATES;
+
+  if (employeeOverrideTemplateId) {
+    const elSnap = await getDocs(
+      query(collection(db, "insuranceRateElements"), where("companyId", "==", companyId), where("templateId", "==", employeeOverrideTemplateId))
+    );
+    if (!elSnap.empty) return ratesFromItems(elSnap.docs.map((d) => d.data()));
+  }
+
+  if (!siteId) return DEFAULT_PAYROLL_RATES;
   const snap = await getDocs(
     query(collection(db, "siteInsuranceRates"), where("companyId", "==", companyId), where("siteId", "==", siteId))
   );
@@ -75,17 +103,5 @@ export async function getSiteInsuranceRates(companyId, siteId, asOfDate) {
   // 보험요율) rather than a fixed shape, so pull out the four rates this
   // calculator understands by Korean rate-type label; anything else (e.g.
   // 소득세) is ignored here. Percentages are stored as whole numbers (4.5 == 4.5%).
-  const items = candidates[0].rateItems || [];
-  const pct = (label) => {
-    const item = items.find((i) => i.rateType === label);
-    return item ? Number(item.ratePercent) / 100 : null;
-  };
-
-  return {
-    ...DEFAULT_PAYROLL_RATES,
-    nationalPension: pct("국민연금요율") ?? DEFAULT_PAYROLL_RATES.nationalPension,
-    healthInsurance: pct("건강보험요율") ?? DEFAULT_PAYROLL_RATES.healthInsurance,
-    longTermCare: pct("요양보험요율") ?? DEFAULT_PAYROLL_RATES.longTermCare,
-    employmentInsurance: pct("고용보험요율") ?? DEFAULT_PAYROLL_RATES.employmentInsurance,
-  };
+  return ratesFromItems(candidates[0].rateItems || []);
 }
