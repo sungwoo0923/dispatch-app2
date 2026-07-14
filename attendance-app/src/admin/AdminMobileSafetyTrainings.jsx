@@ -25,7 +25,7 @@ export default function AdminMobileSafetyTrainings() {
     if (!profile?.companyId) return;
     const unsubs = [
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (snap) => setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
-      onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))),
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);

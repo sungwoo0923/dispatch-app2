@@ -60,7 +60,10 @@ export default function AdminMobileSchedule() {
     getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
     const unsubs = [
       onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (snap) =>
-        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        // 삭제(탈퇴)된 근로자는 목록에서 아예 빠져야 스케줄 화면에 남은 스케줄이
+        // 계속 표시되지 않는다 — PC 스케줄등록(Schedule.jsx)은 이미 이렇게
+        // 필터링하고 있었는데 모바일판만 빠져있었다.
+        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))
       ),
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (snap) =>
         setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))

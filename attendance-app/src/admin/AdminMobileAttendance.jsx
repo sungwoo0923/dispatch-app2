@@ -44,7 +44,7 @@ export default function AdminMobileAttendance() {
     if (!profile?.companyId) return;
     const unsubs = [
       onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (snap) =>
-        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))
       ),
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (snap) =>
         setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))

@@ -1,18 +1,53 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, updateDoc, doc } from "firebase/firestore";
-import { Search, Phone, ChevronRight, Monitor, CalendarDays } from "lucide-react";
+import { collection, query, where, onSnapshot, updateDoc, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { Search, Phone, ChevronRight, Monitor, CalendarDays, UserPlus, Copy, Send } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
 import Modal from "../components/Modal";
 import Badge from "../components/Badge";
-import SmsButton from "../components/SmsButton";
+import Button from "../components/Button";
+import SmsButton, { buildSmsHref } from "../components/SmsButton";
 import { formatPhoneNumber } from "../utils/phoneAuth";
-import { toMonthKey } from "../utils/dateUtils";
+import { toDateKey, toMonthKey } from "../utils/dateUtils";
+import { generateInviteCode } from "../utils/ids";
+import {
+  EMPLOYMENT_TYPE_OPTIONS,
+  SHIFT_TYPE_OPTIONS,
+  PAY_TYPE_OPTIONS,
+  TEAM_OPTIONS,
+  POSITION_OPTIONS,
+  NATIONALITY_OPTIONS,
+} from "../constants/hr";
 
 const STATUS_TABS = ["전체", "재직", "휴직", "퇴사"];
 const STATUS_TONE = { 재직: "primary", 휴직: "muted", 퇴사: "danger" };
+
+const EMPTY_REG_FORM = {
+  name: "",
+  phone: "",
+  gender: "남",
+  nationality: "내국인",
+  vendorId: "",
+  workSiteId: "",
+  hireDate: toDateKey(),
+  workStartDate: toDateKey(),
+  employmentType: "상용직",
+  shiftType: "주간",
+  payType: "월급",
+  team: "",
+  position: "",
+  careerYears: "",
+  shiftTemplateId: "",
+  allowanceTemplateId: "",
+  contractTemplateId: "",
+  contractTemplateName: "",
+  resignTemplateId: "",
+  resignTemplateName: "",
+  insuranceApplied: "Y",
+  active: "Y",
+};
 
 // 입사일부터 오늘까지의 근속기간을 "n년 n개월"로 표시한다.
 function tenureLabel(hireDate) {
@@ -41,10 +76,21 @@ export default function AdminMobileEmployeeList() {
   const toast = useToast();
   const [employees, setEmployees] = useState([]);
   const [workSites, setWorkSites] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [businessEntities, setBusinessEntities] = useState([]);
+  const [shiftTemplates, setShiftTemplates] = useState([]);
+  const [allowanceTemplates, setAllowanceTemplates] = useState([]);
+  const [centerReports, setCenterReports] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [companyName, setCompanyName] = useState("");
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState("전체");
   const [viewing, setViewing] = useState(null);
   const [viewingAttendance, setViewingAttendance] = useState([]);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [regForm, setRegForm] = useState(EMPTY_REG_FORM);
+  const [issuedCode, setIssuedCode] = useState("");
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -55,9 +101,82 @@ export default function AdminMobileEmployeeList() {
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (snap) =>
         setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       ),
+      onSnapshot(query(collection(db, "vendors"), where("companyId", "==", profile.companyId)), (snap) =>
+        setVendors(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "businessEntities"), where("companyId", "==", profile.companyId)), (snap) =>
+        setBusinessEntities(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "shiftTemplates"), where("companyId", "==", profile.companyId)), (snap) =>
+        setShiftTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "allowanceTemplates"), where("companyId", "==", profile.companyId)), (snap) =>
+        setAllowanceTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "centerReports"), where("companyId", "==", profile.companyId)), (snap) =>
+        setCenterReports(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
+      onSnapshot(query(collection(db, "pendingEmployees"), where("companyId", "==", profile.companyId)), (snap) =>
+        setPending(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
+
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
+  }, [profile?.companyId]);
+
+  const contractReportOptions = useMemo(() => centerReports.filter((r) => r.docType === "계약서"), [centerReports]);
+  const resignReportOptions = useMemo(() => centerReports.filter((r) => r.docType === "사직서"), [centerReports]);
+
+  const openRegister = () => {
+    const defaultEntity = businessEntities.find((b) => b.name === companyName);
+    setRegForm({ ...EMPTY_REG_FORM, businessEntityId: defaultEntity?.id || "" });
+    setIssuedCode("");
+    setRegisterOpen(true);
+  };
+
+  const REQUIRED_REG_FIELDS = [
+    { key: "name", label: "이름" },
+    { key: "phone", label: "전화번호" },
+    { key: "vendorId", label: "소속업체" },
+    { key: "workSiteId", label: "센터" },
+    { key: "hireDate", label: "입사일자" },
+    { key: "workStartDate", label: "근무시작일" },
+    { key: "shiftTemplateId", label: "시간템플릿" },
+    { key: "allowanceTemplateId", label: "수당템플릿" },
+    { key: "contractTemplateId", label: "계약서템플릿" },
+    { key: "resignTemplateId", label: "사직서템플릿" },
+  ];
+
+  const submitRegister = async () => {
+    const missing = REQUIRED_REG_FIELDS.find((f) => !regForm[f.key]);
+    if (missing) {
+      toast.error(`[${missing.label}] 항목을 입력/선택해주세요.`);
+      return;
+    }
+    setRegistering(true);
+    try {
+      const inviteCode = generateInviteCode(7);
+      const seq = String(employees.length + pending.length + 1).padStart(4, "0");
+      await setDoc(doc(db, "pendingEmployees", inviteCode), {
+        companyId: profile.companyId,
+        ...regForm,
+        employeeCode: `EMP${new Date().getFullYear()}${seq}`,
+        photoUrl: "",
+        employmentStatus: "재직",
+        createdAt: serverTimestamp(),
+      });
+      setIssuedCode(inviteCode);
+      toast.success("근로자가 등록되었습니다");
+    } catch (err) {
+      toast.error(`등록에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setRegistering(false);
+    }
+  };
 
   useEffect(() => {
     if (!viewing?.id || !profile?.companyId) {
@@ -130,9 +249,14 @@ export default function AdminMobileEmployeeList() {
 
   return (
     <div className="space-y-3 px-4 pt-4">
-      <div>
-        <p className="text-sm font-semibold text-ink">근로자 ({counts.전체}명)</p>
-        <p className="mt-0.5 text-xs text-muted">검색하거나 상태를 눌러 빠르게 확인하세요</p>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-ink">근로자 ({counts.전체}명)</p>
+          <p className="mt-0.5 text-xs text-muted">검색하거나 상태를 눌러 빠르게 확인하세요</p>
+        </div>
+        <Button size="sm" onClick={openRegister}>
+          <UserPlus size={14} /> 등록
+        </Button>
       </div>
 
       <div className="relative">
@@ -294,7 +418,230 @@ export default function AdminMobileEmployeeList() {
 
             <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-xs text-muted">
               <Monitor size={14} className="shrink-0" />
-              신규 등록·상세 정보 수정·변경이력은 PC 화면에서 이용해주세요.
+              상세 정보 수정·변경이력은 PC 화면에서 이용해주세요.
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={registerOpen}
+        onClose={() => setRegisterOpen(false)}
+        title={issuedCode ? "가입코드 발급 완료" : "근로자등록"}
+        footer={
+          issuedCode ? (
+            <Button className="w-full" onClick={() => setRegisterOpen(false)}>
+              닫기
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setRegisterOpen(false)}>
+                취소
+              </Button>
+              <Button onClick={submitRegister} disabled={registering}>
+                {registering ? "등록 중..." : "근로자등록"}
+              </Button>
+            </>
+          )
+        }
+      >
+        {issuedCode ? (
+          <div>
+            <p className="mb-2 text-sm text-muted">
+              아래 가입코드를 근로자에게 전달해주세요. 근로자가 앱 설치 후 이 코드로 로그인 비밀번호만 설정하면 바로 사용할 수 있습니다.
+            </p>
+            <div className="flex items-center justify-between rounded-xl bg-primary-light px-4 py-3">
+              <span className="text-2xl font-bold tracking-widest text-primary">{issuedCode}</span>
+              <button className="text-primary" onClick={() => navigator.clipboard?.writeText(issuedCode)} title="복사">
+                <Copy size={18} />
+              </button>
+            </div>
+            {regForm.phone ? (
+              <a
+                href={buildSmsHref(regForm.phone, `[KP-work] ${companyName || "회사"} 가입 안내\n아래 가입코드로 모바일 앱에서 가입해주세요.\n가입코드: ${issuedCode}\n앱: ${window.location.origin}`)}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-ink"
+              >
+                <Send size={15} /> 가입코드 문자발송
+              </a>
+            ) : (
+              <p className="mt-3 text-[11px] text-muted">전화번호가 없어 문자로 바로 보낼 수 없습니다.</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">이름 *</span>
+                <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.name} onChange={(e) => setRegForm((f) => ({ ...f, name: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">전화번호 *</span>
+                <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.phone} onChange={(e) => setRegForm((f) => ({ ...f, phone: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">성별</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.gender} onChange={(e) => setRegForm((f) => ({ ...f, gender: e.target.value }))}>
+                  <option value="남">남</option>
+                  <option value="여">여</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">국적구분</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.nationality} onChange={(e) => setRegForm((f) => ({ ...f, nationality: e.target.value }))}>
+                  {NATIONALITY_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">소속업체 *</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.vendorId} onChange={(e) => setRegForm((f) => ({ ...f, vendorId: e.target.value }))}>
+                  <option value="">선택</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">센터 *</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={regForm.workSiteId}
+                  onChange={(e) => setRegForm((f) => ({ ...f, workSiteId: e.target.value }))}
+                >
+                  <option value="">선택</option>
+                  {workSites.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">입사일자 *</span>
+                <input type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.hireDate} onChange={(e) => setRegForm((f) => ({ ...f, hireDate: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">근무시작일 *</span>
+                <input type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.workStartDate} onChange={(e) => setRegForm((f) => ({ ...f, workStartDate: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">경력인정연수</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={regForm.careerYears}
+                  onChange={(e) => setRegForm((f) => ({ ...f, careerYears: e.target.value }))}
+                  placeholder="경력직 인정연차"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">고용구분</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.employmentType} onChange={(e) => setRegForm((f) => ({ ...f, employmentType: e.target.value }))}>
+                  {EMPLOYMENT_TYPE_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">근무구분</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.shiftType} onChange={(e) => setRegForm((f) => ({ ...f, shiftType: e.target.value }))}>
+                  {SHIFT_TYPE_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">지급구분</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.payType} onChange={(e) => setRegForm((f) => ({ ...f, payType: e.target.value }))}>
+                  {PAY_TYPE_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">팀</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.team} onChange={(e) => setRegForm((f) => ({ ...f, team: e.target.value }))}>
+                  <option value="">선택</option>
+                  {TEAM_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">직급</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.position} onChange={(e) => setRegForm((f) => ({ ...f, position: e.target.value }))}>
+                  <option value="">선택</option>
+                  {POSITION_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3">
+              <p className="mb-2 text-xs font-semibold text-ink">템플릿 (필수)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">시간템플릿 *</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={regForm.shiftTemplateId}
+                    onChange={(e) => setRegForm((f) => ({ ...f, shiftTemplateId: e.target.value }))}
+                  >
+                    <option value="">선택</option>
+                    {shiftTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">수당템플릿 *</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={regForm.allowanceTemplateId}
+                    onChange={(e) => setRegForm((f) => ({ ...f, allowanceTemplateId: e.target.value }))}
+                  >
+                    <option value="">선택</option>
+                    {allowanceTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">계약서템플릿 *</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={regForm.contractTemplateId}
+                    onChange={(e) => {
+                      const report = contractReportOptions.find((r) => r.id === e.target.value);
+                      setRegForm((f) => ({ ...f, contractTemplateId: e.target.value, contractTemplateName: report?.templateName || "" }));
+                    }}
+                  >
+                    <option value="">선택</option>
+                    {contractReportOptions.map((r) => (
+                      <option key={r.id} value={r.id}>{r.templateName}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted">사직서템플릿 *</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={regForm.resignTemplateId}
+                    onChange={(e) => {
+                      const report = resignReportOptions.find((r) => r.id === e.target.value);
+                      setRegForm((f) => ({ ...f, resignTemplateId: e.target.value, resignTemplateName: report?.templateName || "" }));
+                    }}
+                  >
+                    <option value="">선택</option>
+                    {resignReportOptions.map((r) => (
+                      <option key={r.id} value={r.id}>{r.templateName}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="mt-2 text-[11px] text-muted">템플릿이 목록에 없다면 PC의 템플릿 메뉴에서 먼저 등록해주세요.</p>
             </div>
           </div>
         )}
