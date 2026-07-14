@@ -8,8 +8,7 @@ import { useToast } from "../hooks/useToast";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
-import { openAddressSearch } from "../utils/daumPostcode";
-import { searchAddressCoords } from "../utils/geocode";
+import AddressGeocodeModal from "../components/AddressGeocodeModal";
 import { TEAM_OPTIONS, POSITION_OPTIONS, SHIFT_TYPE_OPTIONS, SHIFT_WORK_TYPE_OPTIONS } from "../constants/hr";
 
 const MAX_SITES = 10;
@@ -183,7 +182,7 @@ export default function AdminMobileCenters() {
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("info");
   const [info, setInfo] = useState(EMPTY_INFO);
-  const [searchingAddress, setSearchingAddress] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -198,18 +197,12 @@ export default function AdminMobileCenters() {
   const rows = useMemo(() => workSites.filter((s) => !search.trim() || s.name?.includes(search.trim())).sort((a, b) => (a.name || "").localeCompare(b.name || "")), [workSites, search]);
   const selectedSite = workSites.find((s) => s.id === selectedId) || null;
 
-  const searchCenterAddress = async () => {
-    const result = await openAddressSearch();
-    if (!result) return;
-    setInfo((f) => ({ ...f, address: result.address }));
-    setSearchingAddress(true);
-    try {
-      const geo = await searchAddressCoords(result.address);
-      if (geo) setInfo((f) => ({ ...f, lat: geo.lat, lng: geo.lng }));
-      else toast.error("좌표를 자동으로 찾지 못했습니다. 위도/경도를 직접 입력해주세요.");
-    } finally {
-      setSearchingAddress(false);
+  const applyCenterAddress = (geo) => {
+    setInfo((f) => ({ ...f, address: geo.address, lat: geo.lat, lng: geo.lng, coordsPrecise: geo.precise }));
+    if (!geo.precise) {
+      toast.error("건물번지까지 정확히 일치하는 좌표를 찾지 못해 인근 지역 좌표로 채워졌습니다.");
     }
+    setAddressModalOpen(false);
   };
 
   const startNew = () => {
@@ -341,8 +334,8 @@ export default function AdminMobileCenters() {
                 <span className="mb-1.5 block text-xs font-medium text-muted">주소</span>
                 <div className="flex gap-2">
                   <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm" value={info.address} placeholder="주소검색 버튼으로 입력" />
-                  <Button size="sm" variant="outline" className="shrink-0" onClick={searchCenterAddress} disabled={searchingAddress}>
-                    <Search size={13} /> {searchingAddress ? "검색중" : "검색"}
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => setAddressModalOpen(true)}>
+                    <Search size={13} /> 검색
                   </Button>
                 </div>
               </label>
@@ -408,6 +401,14 @@ export default function AdminMobileCenters() {
           {tab === "holidays" && selectedId && <HolidaysTabMobile companyId={profile.companyId} siteId={selectedId} />}
         </div>
       </Modal>
+
+      <AddressGeocodeModal
+        open={addressModalOpen}
+        title="센터 출근지 주소 설정"
+        initialAddress={info.address}
+        onSave={applyCenterAddress}
+        onClose={() => setAddressModalOpen(false)}
+      />
     </div>
   );
 }

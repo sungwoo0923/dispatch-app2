@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, addDoc, doc, setDoc, updateDoc, deleteDoc, getDocs, getDoc, serverTimestamp, deleteField } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, Search, Phone, Plus, CalendarDays, CheckSquare, Square } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Phone, Plus, CalendarDays, CheckSquare, Square, CalendarRange, LayoutList, Eraser } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -10,9 +10,13 @@ import Modal from "../components/Modal";
 import Button from "../components/Button";
 import Badge from "../components/Badge";
 import SmsButton from "../components/SmsButton";
-import { toDateKey, formatDate, attendanceDocId } from "../utils/dateUtils";
+import MiniMonthCalendar from "../components/MiniMonthCalendar";
+import { toDateKey, toMonthKey, formatDate, attendanceDocId } from "../utils/dateUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
 import { computeCheckInStatus } from "../utils/attendanceStatus";
+import { daysInMonth, WEEKDAY_LABELS } from "../utils/statsShared";
+import { isKrHoliday } from "../utils/holidaysKR";
+import { GRID_STATUS_KEYS, GRID_STATUS_LABELS, GRID_CELL_META, resolveDayStatus, writeDayStatus } from "../utils/scheduleGrid";
 
 const TABS = [
   { key: "pending", label: "대기", tone: "muted" },
@@ -55,6 +59,20 @@ export default function AdminMobileSchedule() {
   const [registerSelected, setRegisterSelected] = useState(new Set());
   const [registering, setRegistering] = useState(false);
 
+  // 월간보기 — PC 출근현황의 월별 스케줄표를 모바일 폭에 맞춰 "근로자 1명
+  // 선택 → 그 달 캘린더 한 눈에 보기 + 날짜 탭해서 바로 수정"으로 재구성한
+  // 화면. attendance/leaves/schedules를 PC와 완전히 같은 컬렉션·형태로
+  // 읽고 쓰므로 PC 화면과 항상 자동으로 동기화된다.
+  const [screenMode, setScreenMode] = useState("list"); // 'list' | 'month'
+  const [monthEmpSearch, setMonthEmpSearch] = useState("");
+  const [monthEmpUid, setMonthEmpUid] = useState(null);
+  const [gridMonth, setGridMonth] = useState(() => toMonthKey());
+  const [gridAttendance, setGridAttendance] = useState([]);
+  const [gridLeaves, setGridLeaves] = useState([]);
+  const [gridSchedules, setGridSchedules] = useState([]);
+  const [gridEditDay, setGridEditDay] = useState(null); // { day, dateKey, current }
+  const [gridSaving, setGridSaving] = useState(false);
+
   useEffect(() => {
     if (!profile?.companyId) return;
     getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
@@ -78,14 +96,88 @@ export default function AdminMobileSchedule() {
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);
 
+  // schedulesLoaded는 PC판(Schedule.jsx)과 동일한 이유로 필요하다 — 대용량
+  // 업로드 직후 등 스냅샷 첫 페이로드가 아직 안 온 빈 배열을 "0건"으로
+  // 오판하지 않기 위한 구분 플래그.
+  const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   useEffect(() => {
     if (!profile?.companyId) return;
+    setSchedulesLoaded(false);
     const unsub = onSnapshot(
       query(collection(db, "schedules"), where("companyId", "==", profile.companyId), where("date", "==", dateKey)),
-      (snap) => setSchedules(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      (snap) => {
+        setSchedules(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setSchedulesLoaded(true);
+      }
     );
     return () => unsub();
   }, [profile?.companyId, dateKey]);
+
+  // 같은 uid+date로 중복 등록된 스케줄을 PC와 동일한 규칙(대기 아닌 것
+  // 우선 보존, 그다음 먼저 생성된 것 보존)으로 자동 정리한다. PC를 먼저
+  // 열지 않고 모바일만 쓰는 관리자도 여기서 바로 정리되도록 별도로 둔다.
+  const dedupingRef = useRef(false);
+  useEffect(() => {
+    if (!profile?.companyId || !schedulesLoaded || dedupingRef.current) return;
+    const groups = new Map();
+    for (const s of schedules) {
+      const key = `${s.uid}_${s.date}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+    const toDelete = [];
+    for (const group of groups.values()) {
+      if (group.length <= 1) continue;
+      const sorted = [...group].sort((a, b) => {
+        const aPending = (a.status || "대기") === "대기" ? 1 : 0;
+        const bPending = (b.status || "대기") === "대기" ? 1 : 0;
+        if (aPending !== bPending) return aPending - bPending;
+        return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+      });
+      toDelete.push(...sorted.slice(1));
+    }
+    if (toDelete.length === 0) return;
+    dedupingRef.current = true;
+    (async () => {
+      try {
+        for (const s of toDelete) await deleteDoc(doc(db, "schedules", s.id)).catch(() => {});
+        toast.success(`중복 등록된 스케줄 ${toDelete.length}건을 정리했습니다`);
+      } finally {
+        dedupingRef.current = false;
+      }
+    })();
+  }, [profile?.companyId, schedules, schedulesLoaded]);
+
+  // 월간보기 전용 데이터 — PC 월별 스케줄표와 동일하게 그 달의 attendance/
+  // leaves/schedules 전체를 구독한다(일별 목록의 dateKey 단일 조회와는
+  // 별개). 월간보기를 열었을 때만 구독해 평소 일별 목록에는 부담을 주지 않는다.
+  useEffect(() => {
+    if (!profile?.companyId || screenMode !== "month") return;
+    const unsubAtt = onSnapshot(
+      query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("month", "==", gridMonth)),
+      (snap) => setGridAttendance(snap.docs.map((d) => d.data()))
+    );
+    const unsubLeaves = onSnapshot(
+      query(collection(db, "leaves"), where("companyId", "==", profile.companyId), where("status", "==", "approved")),
+      (snap) => setGridLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    const monthStart = `${gridMonth}-01`;
+    const monthEnd = `${gridMonth}-31`;
+    const unsubSched = onSnapshot(
+      query(
+        collection(db, "schedules"),
+        where("companyId", "==", profile.companyId),
+        where("date", ">=", monthStart),
+        where("date", "<=", monthEnd)
+      ),
+      (snap) => setGridSchedules(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => {
+      unsubAtt();
+      unsubLeaves();
+      unsubSched();
+    };
+  }, [profile?.companyId, screenMode, gridMonth]);
 
   // EmployeeList 우클릭 "스케줄등록"으로 넘어온 경우 바로 등록 화면을 연다.
   useEffect(() => {
@@ -98,6 +190,86 @@ export default function AdminMobileSchedule() {
 
   const empByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName = (id) => workSites.find((s) => s.id === id)?.name || "";
+
+  // ── 월간보기 ───────────────────────────────────────────────────
+  const monthEmpCandidates = useMemo(() => {
+    const kw = monthEmpSearch.trim();
+    return employees
+      .filter((e) => e.employmentStatus !== "퇴사" && !e.deleted)
+      .filter((e) => !kw || e.name?.includes(kw))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+      .slice(0, 50);
+  }, [employees, monthEmpSearch]);
+  const monthEmp = monthEmpUid ? empByUid.get(monthEmpUid) : null;
+  const gridTodayKey = toDateKey();
+  const gridNumDays = daysInMonth(gridMonth);
+  const gridDayStatus = (day) => {
+    if (!monthEmp) return "";
+    const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+    return resolveDayStatus(monthEmp.id, monthEmp, dateKey, gridAttendance, gridLeaves, gridTodayKey);
+  };
+  const gridCells = Array.from({ length: gridNumDays }, (_, i) => {
+    const day = i + 1;
+    const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+    const status = gridDayStatus(day);
+    const meta = GRID_CELL_META[status] || (status ? { label: status.slice(0, 1), className: "bg-slate-100 text-slate-600" } : GRID_CELL_META[""]);
+    const isOut = status === "OUT";
+    const wd = WEEKDAY_LABELS[new Date(`${dateKey}T00:00:00`).getDay()];
+    const holiday = !isOut && (isKrHoliday(dateKey) || wd === "일" || wd === "토");
+    return {
+      day,
+      disabled: isOut,
+      className: isOut ? meta.className : `${meta.className || ""} ${holiday && !meta.className?.includes("bg-") ? "bg-red-50" : ""} border border-slate-100`,
+    };
+  });
+  const gridMonthSummary = useMemo(() => {
+    if (!monthEmp) return null;
+    let present = 0, absent = 0, off = 0, annual = 0, overtime = 0, sick = 0;
+    for (let day = 1; day <= gridNumDays; day += 1) {
+      const status = gridDayStatus(day);
+      if (status === "OUT") continue;
+      if (status === "출근" || status === "지각") present += 1;
+      else if (status === "특근") overtime += 1;
+      else if (status === "연차") annual += 1;
+      else if (status === "오전반차" || status === "오후반차") annual += 0.5;
+      else if (status === "병가") sick += 1;
+      else if (status === "결근") absent += 1;
+      else if (status) off += 1;
+    }
+    return { present, absent, off, annual, overtime, sick };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthEmp, gridAttendance, gridLeaves, gridMonth, gridNumDays]);
+
+  const openGridDay = (day) => {
+    if (!monthEmp) return;
+    const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+    setGridEditDay({ day, dateKey, current: gridDayStatus(day) });
+  };
+  const gridEmpLeaves = useMemo(() => (monthEmp ? gridLeaves.filter((l) => l.uid === monthEmp.id) : []), [gridLeaves, monthEmp]);
+  const gridEmpSchedules = useMemo(() => (monthEmp ? gridSchedules.filter((s) => s.uid === monthEmp.id) : []), [gridSchedules, monthEmp]);
+  const applyGridStatus = async (statusKey) => {
+    if (!gridEditDay || !monthEmp) return;
+    setGridSaving(true);
+    try {
+      await writeDayStatus(db, {
+        companyId: profile.companyId,
+        uid: monthEmp.id,
+        name: monthEmp.name,
+        dateKey: gridEditDay.dateKey,
+        statusKey,
+        emp: monthEmp,
+        existingLeaves: gridEmpLeaves,
+        existingSchedules: gridEmpSchedules,
+        siteName: siteName(monthEmp.workSiteId),
+      });
+      toast.success(statusKey ? `${statusKey}(으)로 표시했습니다` : "기록을 지웠습니다");
+      setGridEditDay(null);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setGridSaving(false);
+    }
+  };
 
   const pendingRows = useMemo(
     () => schedules.filter((s) => (s.status || "대기") === "대기").map((s) => ({ schedule: s, emp: empByUid.get(s.uid) })).filter((r) => r.emp),
@@ -372,90 +544,231 @@ export default function AdminMobileSchedule() {
         </button>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-2 py-2">
-        <button type="button" onClick={() => shiftDate(-1)} className="rounded-lg p-1.5 text-muted hover:bg-slate-50">
-          <ChevronLeft size={18} />
+      <div className="flex rounded-xl border border-slate-200 bg-white p-1">
+        <button
+          type="button"
+          onClick={() => setScreenMode("list")}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold ${
+            screenMode === "list" ? "bg-primary text-white" : "text-muted"
+          }`}
+        >
+          <LayoutList size={14} /> 일별목록
         </button>
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-          <CalendarDays size={14} className="text-primary" /> {formatDate(dateKey)}
-        </span>
-        <button type="button" onClick={() => shiftDate(1)} className="rounded-lg p-1.5 text-muted hover:bg-slate-50">
-          <ChevronRight size={18} />
+        <button
+          type="button"
+          onClick={() => setScreenMode("month")}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold ${
+            screenMode === "month" ? "bg-primary text-white" : "text-muted"
+          }`}
+        >
+          <CalendarRange size={14} /> 월간보기
         </button>
       </div>
-      {dateKey !== toDateKey() && (
-        <button type="button" onClick={() => setDateKey(toDateKey())} className="text-xs font-medium text-primary">
-          오늘로 이동
-        </button>
+
+      {screenMode === "list" && (
+        <>
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-2 py-2">
+            <button type="button" onClick={() => shiftDate(-1)} className="rounded-lg p-1.5 text-muted hover:bg-slate-50">
+              <ChevronLeft size={18} />
+            </button>
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <CalendarDays size={14} className="text-primary" /> {formatDate(dateKey)}
+            </span>
+            <button type="button" onClick={() => shiftDate(1)} className="rounded-lg p-1.5 text-muted hover:bg-slate-50">
+              <ChevronRight size={18} />
+            </button>
+          </div>
+          {dateKey !== toDateKey() && (
+            <button type="button" onClick={() => setDateKey(toDateKey())} className="text-xs font-medium text-primary">
+              오늘로 이동
+            </button>
+          )}
+
+          <div className="relative">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="이름 검색"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
+            />
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+          </div>
+
+          <div className="flex flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  tab === t.key ? "bg-primary text-white" : "bg-white text-muted border border-slate-200"
+                }`}
+              >
+                {t.label} {(rowsByTab[t.key] || []).length}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            {filteredRows.length === 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-muted">해당하는 근로자가 없습니다.</div>
+            )}
+            {filteredRows.map((row) => {
+              const emp = row.emp || row;
+              const key = row.schedule?.id || row.leave?.id || row.id;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActionRow({ kind: tab, row })}
+                  className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left active:bg-slate-50"
+                >
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-light text-sm font-bold text-primary">
+                    {emp.name?.[0] || "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold text-ink">{emp.name}</span>
+                      <Badge tone={TABS.find((t) => t.key === tab)?.tone}>{TABS.find((t) => t.key === tab)?.label}</Badge>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {tab === "leave"
+                        ? `${formatDate(row.leave.startDate)} ~ ${formatDate(row.leave.endDate || row.leave.startDate)}`
+                        : tab === "resigned"
+                          ? `퇴사일 ${row.resignDate ? formatDate(row.resignDate) : "-"}`
+                          : `${row.schedule.startTime || "-"} ~ ${row.schedule.endTime || "-"} · ${siteName(emp.workSiteId) || row.schedule.siteName || "-"}`}
+                    </p>
+                  </div>
+                  {emp.phone && (
+                    <div className="flex shrink-0 items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
+                      <a href={`tel:${emp.phone}`} className="rounded-lg p-1.5 text-primary hover:bg-primary-light">
+                        <Phone size={15} />
+                      </a>
+                      <SmsButton phone={emp.phone} />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
-      <div className="relative">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="이름 검색"
-          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
-        />
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-      </div>
-
-      <div className="flex flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-              tab === t.key ? "bg-primary text-white" : "bg-white text-muted border border-slate-200"
-            }`}
-          >
-            {t.label} {(rowsByTab[t.key] || []).length}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        {filteredRows.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-muted">해당하는 근로자가 없습니다.</div>
-        )}
-        {filteredRows.map((row) => {
-          const emp = row.emp || row;
-          const key = row.schedule?.id || row.leave?.id || row.id;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setActionRow({ kind: tab, row })}
-              className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left active:bg-slate-50"
-            >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-light text-sm font-bold text-primary">
-                {emp.name?.[0] || "?"}
+      {screenMode === "month" && (
+        <div className="space-y-3">
+          {!monthEmp ? (
+            <>
+              <div className="relative">
+                <input
+                  value={monthEmpSearch}
+                  onChange={(e) => setMonthEmpSearch(e.target.value)}
+                  placeholder="근로자 이름 검색"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm"
+                  autoFocus
+                />
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate text-sm font-semibold text-ink">{emp.name}</span>
-                  <Badge tone={TABS.find((t) => t.key === tab)?.tone}>{TABS.find((t) => t.key === tab)?.label}</Badge>
-                </div>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  {tab === "leave"
-                    ? `${formatDate(row.leave.startDate)} ~ ${formatDate(row.leave.endDate || row.leave.startDate)}`
-                    : tab === "resigned"
-                      ? `퇴사일 ${row.resignDate ? formatDate(row.resignDate) : "-"}`
-                      : `${row.schedule.startTime || "-"} ~ ${row.schedule.endTime || "-"} · ${siteName(emp.workSiteId) || row.schedule.siteName || "-"}`}
-                </p>
+              <p className="text-xs text-muted">근로자를 선택하면 그 달의 스케줄을 한눈에 보고 바로 수정할 수 있어요.</p>
+              <div className="space-y-1.5">
+                {monthEmpCandidates.length === 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-muted">검색 결과가 없습니다.</div>
+                )}
+                {monthEmpCandidates.map((emp) => (
+                  <button
+                    key={emp.id}
+                    type="button"
+                    onClick={() => setMonthEmpUid(emp.id)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left active:bg-slate-50"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-light text-sm font-bold text-primary">
+                      {emp.name?.[0] || "?"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>
+                      <p className="truncate text-xs text-muted">{siteName(emp.workSiteId) || "-"}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
-              {emp.phone && (
-                <div className="flex shrink-0 items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
-                  <a href={`tel:${emp.phone}`} className="rounded-lg p-1.5 text-primary hover:bg-primary-light">
-                    <Phone size={15} />
-                  </a>
-                  <SmsButton phone={emp.phone} />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => setMonthEmpUid(null)}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-ink"
+                >
+                  <ChevronLeft size={16} /> {monthEmp.name}
+                </button>
+                <input
+                  type="month"
+                  value={gridMonth}
+                  onChange={(e) => setGridMonth(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                />
+              </div>
+
+              {gridMonthSummary && (
+                <div className="grid grid-cols-4 gap-1.5 text-center text-[11px]">
+                  <div className="rounded-lg bg-primary-light py-1.5"><p className="font-bold text-primary">{gridMonthSummary.present}</p><p className="text-muted">출근</p></div>
+                  <div className="rounded-lg bg-red-50 py-1.5"><p className="font-bold text-danger">{gridMonthSummary.absent}</p><p className="text-muted">결근</p></div>
+                  <div className="rounded-lg bg-amber-50 py-1.5"><p className="font-bold text-amber-600">{gridMonthSummary.annual}</p><p className="text-muted">연차</p></div>
+                  <div className="rounded-lg bg-slate-100 py-1.5"><p className="font-bold text-ink">{gridMonthSummary.off}</p><p className="text-muted">휴무</p></div>
                 </div>
               )}
+
+              <MiniMonthCalendar month={gridMonth} cells={gridCells} onDayClick={openGridDay} />
+
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+                {GRID_STATUS_KEYS.map((k) => (
+                  <span key={k} className="flex items-center gap-1">
+                    <span className={`inline-block h-2.5 w-2.5 rounded-sm ${GRID_STATUS_LABELS[k].tone.split(" ")[0]}`} /> {k}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <Modal
+        open={Boolean(gridEditDay)}
+        onClose={() => setGridEditDay(null)}
+        title={monthEmp && gridEditDay ? `${monthEmp.name} · ${gridMonth.split("-")[1]}월 ${gridEditDay.day}일` : ""}
+      >
+        {gridEditDay && (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-muted">
+              현재 상태:{" "}
+              <span className="font-semibold text-ink">{gridEditDay.current ? GRID_STATUS_LABELS[gridEditDay.current]?.label || gridEditDay.current : "미정"}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {GRID_STATUS_KEYS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  disabled={gridSaving}
+                  onClick={() => applyGridStatus(k)}
+                  className={`rounded-xl border px-3 py-2.5 text-left text-sm font-semibold disabled:opacity-50 ${
+                    gridEditDay.current === k ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-ink"
+                  }`}
+                >
+                  {GRID_STATUS_LABELS[k].label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={gridSaving}
+              onClick={() => applyGridStatus("")}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-sm text-muted disabled:opacity-50"
+            >
+              <Eraser size={14} /> 기록 지우기 (미정으로 초기화)
             </button>
-          );
-        })}
-      </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={Boolean(actionRow)} onClose={() => setActionRow(null)} title="근무 상태 변경">
         {actionRow && (
