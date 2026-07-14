@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, setDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { FileSpreadsheet, CalendarDays } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../hooks/useToast";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
-import { toMonthKey } from "../utils/dateUtils";
+import Modal from "../components/Modal";
+import Button from "../components/Button";
+import { toMonthKey, attendanceDocId } from "../utils/dateUtils";
 import { downloadCsv } from "../utils/exportCsv";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS } from "../constants/hr";
 import SmsButton from "../components/SmsButton";
@@ -42,11 +45,18 @@ const CELL_LABEL = { present: "1", paidLeave: "휴", unpaidLeave: "휴", absent:
 
 export default function StatsMonthlyGrid() {
   const { profile } = useAuth();
+  const toast = useToast();
   const lookups = useCompanyLookups(profile?.companyId);
   const [filters, setFilters] = useState({ siteId: "", vendorId: "", shiftType: "", employmentType: "", team: "", search: "" });
   const [month, setMonth] = useState(toMonthKey());
   const [attendance, setAttendance] = useState([]);
   const [leaves, setLeaves] = useState([]);
+  // 도급팀이 실제로 관리하던 엑셀(근로자 x 1~31일 달력형 표, 셀을 직접
+  // 채워넣는 방식)을 참고해, 이 그리드도 셀을 눌러 그날 상태를 바로
+  // 수정할 수 있게 한다 — 순수 조회용 집계표에 머물지 않고 실제 근태를
+  // 여기서 계획/정정할 수 있는 화면으로 만든다.
+  const [editCell, setEditCell] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -56,7 +66,7 @@ export default function StatsMonthlyGrid() {
     );
     const unsubLeaves = onSnapshot(
       query(collection(db, "leaves"), where("companyId", "==", profile.companyId), where("status", "==", "approved")),
-      (snap) => setLeaves(snap.docs.map((d) => d.data()))
+      (snap) => setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
     return () => {
       unsubAtt();
@@ -79,6 +89,80 @@ export default function StatsMonthlyGrid() {
   const statusFor = (uid, day) => {
     const dateKey = `${month}-${String(day).padStart(2, "0")}`;
     return dayStatus({ uid, dateKey, attendance, leaves, leaveTypes: lookups.leaveTypes, isFuture: dateKey > todayKey });
+  };
+
+  const openCellEditor = (emp, day) => {
+    const dateKey = `${month}-${String(day).padStart(2, "0")}`;
+    setEditCell({ uid: emp.id, name: emp.name, day, dateKey });
+  };
+
+  const markPresent = async () => {
+    if (!editCell) return;
+    setSaving(true);
+    try {
+      await setDoc(
+        doc(db, "attendance", attendanceDocId(editCell.uid, editCell.dateKey)),
+        {
+          uid: editCell.uid,
+          name: editCell.name,
+          companyId: profile.companyId,
+          date: editCell.dateKey,
+          month: editCell.dateKey.slice(0, 7),
+          status: "출근",
+          checkInTime: `${editCell.dateKey}T09:00:00`,
+          source: "manual",
+        },
+        { merge: true }
+      );
+      toast.success("출근으로 표시했습니다");
+      setEditCell(null);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markLeave = async () => {
+    if (!editCell) return;
+    setSaving(true);
+    try {
+      await deleteDoc(doc(db, "attendance", attendanceDocId(editCell.uid, editCell.dateKey))).catch(() => {});
+      await addDoc(collection(db, "leaves"), {
+        companyId: profile.companyId,
+        uid: editCell.uid,
+        name: editCell.name,
+        type: "관리자 처리",
+        startDate: editCell.dateKey,
+        endDate: editCell.dateKey,
+        status: "approved",
+        createdAt: serverTimestamp(),
+      });
+      toast.success("휴무로 표시했습니다");
+      setEditCell(null);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clearDay = async () => {
+    if (!editCell) return;
+    setSaving(true);
+    try {
+      await deleteDoc(doc(db, "attendance", attendanceDocId(editCell.uid, editCell.dateKey))).catch(() => {});
+      const toRemove = leaves.filter(
+        (l) => l.uid === editCell.uid && l.status === "approved" && editCell.dateKey >= l.startDate && editCell.dateKey <= (l.endDate || l.startDate)
+      );
+      for (const l of toRemove) await deleteDoc(doc(db, "leaves", l.id)).catch(() => {});
+      toast.success("기록을 지웠습니다");
+      setEditCell(null);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const exportCsv = () => {
@@ -215,7 +299,14 @@ export default function StatsMonthlyGrid() {
                   <td className="px-3 py-2 text-ink"><span className="inline-flex items-center gap-1">{emp.phone}<SmsButton phone={emp.phone} /></span></td>
                   {marks.map((s, i) => (
                     <td key={i} className="px-1 py-2 text-center">
-                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] ${CELL_STYLE[s]}`}>{CELL_LABEL[s]}</span>
+                      <button
+                        type="button"
+                        onClick={() => openCellEditor(emp, dayList[i])}
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] hover:ring-2 hover:ring-primary/50 ${CELL_STYLE[s]}`}
+                        title="클릭해서 이 날짜 상태 수정"
+                      >
+                        {CELL_LABEL[s]}
+                      </button>
                     </td>
                   ))}
                   <td className="px-3 py-2 text-center font-semibold text-ink">{total}</td>
@@ -239,6 +330,26 @@ export default function StatsMonthlyGrid() {
           </tbody>
         </table>
       </div>
+
+      <Modal
+        open={Boolean(editCell)}
+        onClose={() => setEditCell(null)}
+        title={editCell ? `${editCell.name} · ${month.split("-")[1]}월 ${editCell.day}일` : ""}
+      >
+        {editCell && (
+          <div className="space-y-2">
+            <Button className="w-full" onClick={markPresent} disabled={saving}>
+              출근으로 표시
+            </Button>
+            <Button className="w-full" variant="outline" onClick={markLeave} disabled={saving}>
+              휴무로 표시
+            </Button>
+            <Button className="w-full" variant="danger" onClick={clearDay} disabled={saving}>
+              기록 삭제 (결근)
+            </Button>
+          </div>
+        )}
+      </Modal>
     </Panel>
   );
 }
