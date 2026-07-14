@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { CheckCircle2, Clock, CalendarOff, Users, Search } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { CheckCircle2, Clock, CalendarOff, Users, Search, AlertTriangle, TrendingUp } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import Badge from "../components/Badge";
@@ -12,6 +12,7 @@ const TONES = {
   primary: "bg-primary-light text-primary",
   success: "bg-emerald-50 text-emerald-600",
   warning: "bg-amber-50 text-amber-600",
+  danger: "bg-rose-50 text-rose-600",
   muted: "bg-slate-100 text-slate-500",
 };
 
@@ -81,19 +82,36 @@ export default function AdminMobileStatsSummary() {
     const present = todayStatusRows.filter((r) => r.status.kind === "present").length;
     const onLeave = todayStatusRows.filter((r) => r.status.kind === "leave").length;
     const absent = todayStatusRows.filter((r) => r.status.kind === "absent").length;
-    return { total: activeEmployees.length, present, onLeave, absent };
-  }, [todayStatusRows, activeEmployees.length]);
+    const late = todayAttendance.filter((a) => a.status === "지각").length;
+    return { total: activeEmployees.length, present, onLeave, absent, late };
+  }, [todayStatusRows, activeEmployees.length, todayAttendance]);
+
+  const attendanceRate = counts.total ? Math.round((counts.present / counts.total) * 100) : 0;
 
   const dailyData = useMemo(() => {
     const byDate = {};
     for (const a of monthAttendance) {
       const day = a.date?.slice(8, 10);
       if (!day || !a.checkInTime) continue;
-      byDate[day] = byDate[day] || { day, 출근: 0 };
-      byDate[day].출근 += 1;
+      byDate[day] = byDate[day] || { day, 정상출근: 0, 지각: 0 };
+      if (a.status === "지각") byDate[day].지각 += 1;
+      else byDate[day].정상출근 += 1;
     }
     return Object.values(byDate).sort((a, b) => a.day.localeCompare(b.day));
   }, [monthAttendance]);
+
+  const topLateEmployees = useMemo(() => {
+    const countByUid = {};
+    for (const a of monthAttendance) {
+      if (a.status !== "지각") continue;
+      countByUid[a.uid] = (countByUid[a.uid] || 0) + 1;
+    }
+    return Object.entries(countByUid)
+      .map(([uid, lateCount]) => ({ emp: lookups.employees.find((e) => e.id === uid), lateCount }))
+      .filter((r) => r.emp)
+      .sort((a, b) => b.lateCount - a.lateCount)
+      .slice(0, 5);
+  }, [monthAttendance, lookups.employees]);
 
   return (
     <div className="space-y-3 px-4 pt-4">
@@ -104,7 +122,9 @@ export default function AdminMobileStatsSummary() {
 
       <div className="grid grid-cols-2 gap-2">
         <StatTile icon={Users} label="전체 재직인원" value={counts.total} tone="primary" />
+        <StatTile icon={TrendingUp} label="출근율" value={`${attendanceRate}%`} tone="primary" />
         <StatTile icon={CheckCircle2} label="오늘 출근" value={counts.present} tone="success" />
+        <StatTile icon={AlertTriangle} label="오늘 지각" value={counts.late} tone="danger" />
         <StatTile icon={Clock} label="오늘 미출근" value={counts.absent} tone="warning" />
         <StatTile icon={CalendarOff} label="오늘 휴가/휴무" value={counts.onLeave} tone="muted" />
       </div>
@@ -143,10 +163,33 @@ export default function AdminMobileStatsSummary() {
               <XAxis dataKey="day" tick={{ fontSize: 10 }} />
               <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={24} />
               <Tooltip />
-              <Bar dataKey="출근" fill="#2563EB" radius={[4, 4, 0, 0]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="정상출근" stackId="a" fill="#2563EB" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="지각" stackId="a" fill="#e11d48" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+        <p className="mb-3 text-sm font-semibold text-ink">이번 달 지각 잦은 근로자 TOP 5</p>
+        {topLateEmployees.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted">이번 달 지각 기록이 없습니다.</p>
+        ) : (
+          <ul className="space-y-2">
+            {topLateEmployees.map(({ emp, lateCount }, i) => (
+              <li key={emp.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                <span className="flex items-center gap-2 text-sm font-medium text-ink">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-[11px] font-bold text-rose-600">
+                    {i + 1}
+                  </span>
+                  {emp.name}
+                </span>
+                <Badge tone="danger">지각 {lateCount}회</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
