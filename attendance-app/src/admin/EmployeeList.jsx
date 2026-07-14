@@ -1233,27 +1233,39 @@ export default function EmployeeList() {
   const approvePending = async (p) => {
     if (approvedPendingIds.has(p.id)) return;
     const { id, companyId, ...rest } = p;
-    await setDoc(
-      doc(db, "users", id),
-      {
-        ...rest,
-        companyId,
-        role: "employee",
-        approved: true,
-        employmentStatus: rest.employmentStatus || "재직",
-        hireDate: rest.hireDate || toDateKey(),
-        pendingSignupCode: id,
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-    toast.success(`${p.name}님을 가입 전 임시 승인 처리했습니다`);
+    try {
+      await setDoc(
+        doc(db, "users", id),
+        {
+          ...rest,
+          companyId,
+          role: "employee",
+          approved: true,
+          employmentStatus: rest.employmentStatus || "재직",
+          hireDate: rest.hireDate || toDateKey(),
+          pendingSignupCode: id,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      toast.success(`${p.name}님을 가입 전 임시 승인 처리했습니다`);
+    } catch (err) {
+      toast.error(`${p.name}님 승인에 실패했습니다: ${err.code || err.message}`);
+      throw err;
+    }
   };
   const approveAllPending = async () => {
     const targets = pending.filter((p) => !approvedPendingIds.has(p.id));
     if (targets.length === 0) return;
     if (!(await confirm(`가입 대기 중인 ${targets.length}명을 전부 가입 전 임시 승인 처리하시겠습니까?`, "save"))) return;
-    for (const p of targets) await approvePending(p);
+    let failed = 0;
+    for (const p of targets) {
+      await approvePending(p).catch(() => {
+        failed += 1;
+      });
+    }
+    if (failed === 0) toast.success(`${targets.length}명을 모두 임시 승인 처리했습니다`);
+    else toast.error(`${targets.length - failed}명 성공, ${failed}명 실패했습니다`);
   };
 
   const toggleSelected = (id) =>
