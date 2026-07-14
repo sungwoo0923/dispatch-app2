@@ -26,7 +26,7 @@ export default function MiniMonthCalendar({ month, cells, onDayClick }) {
             key={c.day}
             type="button"
             onClick={() => onDayClick?.(c.day)}
-            disabled={!onDayClick}
+            disabled={!onDayClick || c.disabled}
             className={`flex aspect-square items-center justify-center rounded-md text-[11px] font-semibold ${c.className}`}
           >
             {c.day}

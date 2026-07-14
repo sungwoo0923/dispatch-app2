@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   collection,
@@ -201,8 +201,15 @@ export default function Schedule() {
     };
   }, [profile?.companyId]);
 
+  // schedules onSnapshot의 "첫 페이로드가 아직 안 온" 상태를 구분해야 한다
+  // — 비어있는 초기값([])과 "진짜로 0건"을 구분 못 하면, 아래 자동보정
+  // 로직이 텅 빈 스냅샷을 보고 재직자 전원을 "누락"으로 오판해 실제로는
+  // 이미 존재하는 스케줄까지 중복 생성해버린다(대용량업로드 직후 126명
+  // 전원이 대기 인원 현황에 중복 등록된 사고의 원인).
+  const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   useEffect(() => {
     if (!profile?.companyId) return;
+    setSchedulesLoaded(false);
     const monthRange =
       view === "calendar"
         ? { start: `${calendarMonth}-01`, end: `${calendarMonth}-31` }
@@ -214,19 +221,60 @@ export default function Schedule() {
         where("date", ">=", monthRange.start),
         where("date", "<=", monthRange.end)
       ),
-      (snap) => setSchedules(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      (snap) => {
+        setSchedules(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setSchedulesLoaded(true);
+      }
     );
     return () => unsubSchedules();
   }, [profile?.companyId, range.start, range.end, view, calendarMonth]);
+
+  // 같은 uid+date로 여러 건이 중복 등록되어 있으면 자동으로 정리한다 —
+  // 대기가 아닌(이미 진행된) 것을 우선 남기고, 그것도 없으면 가장 먼저
+  // 만들어진 것만 남긴다. dedupingRef로 자기 자신이 만든 삭제가 다시
+  // onSnapshot을 트리거해 중복 실행되는 것을 막는다.
+  const dedupingRef = useRef(false);
+  useEffect(() => {
+    if (!profile?.companyId || !schedulesLoaded || dedupingRef.current) return;
+    const groups = new Map();
+    for (const s of schedules) {
+      const key = `${s.uid}_${s.date}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+    const toDelete = [];
+    for (const group of groups.values()) {
+      if (group.length <= 1) continue;
+      const sorted = [...group].sort((a, b) => {
+        const aPending = (a.status || "대기") === "대기" ? 1 : 0;
+        const bPending = (b.status || "대기") === "대기" ? 1 : 0;
+        if (aPending !== bPending) return aPending - bPending;
+        return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+      });
+      toDelete.push(...sorted.slice(1));
+    }
+    if (toDelete.length === 0) return;
+    dedupingRef.current = true;
+    (async () => {
+      try {
+        for (const s of toDelete) await deleteDoc(doc(db, "schedules", s.id)).catch(() => {});
+        toast.success(`중복 등록된 스케줄 ${toDelete.length}건을 정리했습니다`);
+      } finally {
+        dedupingRef.current = false;
+      }
+    })();
+  }, [profile?.companyId, schedules, schedulesLoaded]);
 
   // 출근현황(월별 스케줄표)에서 그날 상태를 따로 지정하지 않은 재직 중인
   // 근로자도 매일 스케줄등록의 어딘가(기본은 대기)에는 항상 잡혀 있어야
   // 한다 — 오늘 날짜로 조회 중인데 아직 schedules 문서가 없는 근로자가
   // 있으면 "대기" 상태로 하나씩 채워 넣는다. 서버 크론이 없는 구조라
   // 관리자가 스케줄등록 화면을 열 때마다(=오늘 날짜를 조회할 때) 이
-  // 보정이 일어난다.
+  // 보정이 일어난다. backfillingRef로 자신이 만든 addDoc이 다시
+  // onSnapshot을 트리거해 같은 루프가 중복 실행되는 것을 막는다.
+  const backfillingRef = useRef(false);
   useEffect(() => {
-    if (!profile?.companyId) return;
+    if (!profile?.companyId || !schedulesLoaded || backfillingRef.current) return;
     const today = toDateKey();
     if (range.start !== today || range.end !== today) return;
     const existingKeys = new Set(schedules.map((s) => `${s.uid}_${s.date}`));
@@ -234,23 +282,28 @@ export default function Schedule() {
       (emp) => !emp.deleted && emp.employmentStatus !== "퇴사" && !existingKeys.has(`${emp.id}_${today}`)
     );
     if (missing.length === 0) return;
+    backfillingRef.current = true;
     (async () => {
-      for (const emp of missing) {
-        await addDoc(collection(db, "schedules"), {
-          companyId: profile.companyId,
-          uid: emp.id,
-          name: emp.name,
-          date: today,
-          startTime: "09:00",
-          endTime: "18:00",
-          siteId: emp.workSiteId || null,
-          siteName: siteName_(emp.workSiteId),
-          status: "대기",
-          createdAt: serverTimestamp(),
-        }).catch(() => {});
+      try {
+        for (const emp of missing) {
+          await addDoc(collection(db, "schedules"), {
+            companyId: profile.companyId,
+            uid: emp.id,
+            name: emp.name,
+            date: today,
+            startTime: "09:00",
+            endTime: "18:00",
+            siteId: emp.workSiteId || null,
+            siteName: siteName_(emp.workSiteId),
+            status: "대기",
+            createdAt: serverTimestamp(),
+          }).catch(() => {});
+        }
+      } finally {
+        backfillingRef.current = false;
       }
     })();
-  }, [profile?.companyId, employees, schedules, range.start, range.end]);
+  }, [profile?.companyId, employees, schedules, schedulesLoaded, range.start, range.end]);
 
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
@@ -393,6 +446,54 @@ export default function Schedule() {
     const list = employees.filter((emp) => emp.employmentStatus === "퇴사" && matchesFilters(emp, filters));
     return sortRows(list, resignedSort, resignedRowSortValue);
   }, [employees, filters, resignedSort]);
+
+  // 4개 현황 모두 10명씩 페이지로 끊어서 보여준다 — 대량업로드 등으로
+  // 목록이 길어지면 끝없이 스크롤해야 했던 문제를 없앤다. 체크박스
+  // 전체선택/일괄처리는 계속 전체 목록 기준으로 동작하고, 화면에 그리는
+  // 것만 현재 페이지 구간으로 자른다.
+  const SCHEDULE_PAGE_SIZE = 10;
+  const [confirmedPage, setConfirmedPage] = useState(1);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [leavePage, setLeavePage] = useState(1);
+  const [resignedPage, setResignedPage] = useState(1);
+  const paginate = (list, page) => {
+    const totalPages = Math.max(1, Math.ceil(list.length / SCHEDULE_PAGE_SIZE));
+    const clamped = Math.min(page, totalPages);
+    return {
+      paged: list.slice((clamped - 1) * SCHEDULE_PAGE_SIZE, clamped * SCHEDULE_PAGE_SIZE),
+      totalPages,
+      clamped,
+      offset: (clamped - 1) * SCHEDULE_PAGE_SIZE,
+    };
+  };
+  const confirmedPaged = paginate(confirmedRows, confirmedPage);
+  const pendingPaged = paginate(pendingRows, pendingPage);
+  const leavePaged = paginate(leaveRows, leavePage);
+  const resignedPaged = paginate(resignedRows, resignedPage);
+  const PagerControls = ({ pageInfo, onChange }) =>
+    pageInfo.totalPages > 1 ? (
+      <div className="mt-3 flex items-center justify-center gap-1">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(1, pageInfo.clamped - 1))}
+          disabled={pageInfo.clamped === 1}
+          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-muted disabled:opacity-40"
+        >
+          이전
+        </button>
+        <span className="px-2 text-xs text-muted">
+          {pageInfo.clamped} / {pageInfo.totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(pageInfo.totalPages, pageInfo.clamped + 1))}
+          disabled={pageInfo.clamped === pageInfo.totalPages}
+          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-muted disabled:opacity-40"
+        >
+          다음
+        </button>
+      </div>
+    ) : null;
 
   const scheduleColumns = [
     { key: "company", label: "사업자", render: () => companyName },
@@ -1315,7 +1416,7 @@ export default function Schedule() {
                   </tr>
                 </thead>
                 <tbody>
-                  {confirmedRows.map((row, i) => {
+                  {confirmedPaged.paged.map((row, i) => {
                     const { schedule: s } = row;
                     return (
                       <tr
@@ -1328,7 +1429,7 @@ export default function Schedule() {
                         <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3">
                           <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
                         </td>
-                        <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
+                        <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{confirmedPaged.offset + i + 1}</td>
                         <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{s.name}</td>
                         {visibleScheduleColumns.map((c) => (
                           <td key={c.key} className="px-4 py-3 text-ink">
@@ -1348,6 +1449,7 @@ export default function Schedule() {
                 </tbody>
               </table>
             </div>
+            <PagerControls pageInfo={confirmedPaged} onChange={setConfirmedPage} />
           </>
         ) : (
           <CalendarView month={calendarMonth} setMonth={setCalendarMonth} rows={confirmedRows} />
@@ -1390,7 +1492,7 @@ export default function Schedule() {
               </tr>
             </thead>
             <tbody>
-              {pendingRows.map((row, i) => (
+              {pendingPaged.paged.map((row, i) => (
                 <tr
                   key={row.schedule.id}
                   className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${selected.has(row.schedule.id) ? "bg-primary-light/60" : ""}`}
@@ -1401,7 +1503,7 @@ export default function Schedule() {
                   <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3">
                     <input type="checkbox" checked={selected.has(row.schedule.id)} onChange={() => toggleSelected(row.schedule.id)} />
                   </td>
-                  <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
+                  <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{pendingPaged.offset + i + 1}</td>
                   <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{row.schedule.name}</td>
                   {visibleScheduleColumns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-ink">
@@ -1420,6 +1522,7 @@ export default function Schedule() {
             </tbody>
           </table>
         </div>
+        <PagerControls pageInfo={pendingPaged} onChange={setPendingPage} />
       </Card>
 
       <Card className="p-4">
@@ -1467,7 +1570,7 @@ export default function Schedule() {
               </tr>
             </thead>
             <tbody>
-              {leaveRows.map((row, i) => (
+              {leavePaged.paged.map((row, i) => (
                 <tr
                   key={row.leave.id}
                   className={`border-b border-slate-50 last:border-0 ${selectedLeaves.has(row.leave.id) ? "bg-primary-light/60" : ""}`}
@@ -1480,7 +1583,7 @@ export default function Schedule() {
                       onChange={() => toggleOne(setSelectedLeaves, row.leave.id)}
                     />
                   </td>
-                  <td className="px-4 py-3 text-ink">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{leavePaged.offset + i + 1}</td>
                   {visibleLeaveColumns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-ink">
                       {c.render(row)}
@@ -1498,6 +1601,7 @@ export default function Schedule() {
             </tbody>
           </table>
         </div>
+        <PagerControls pageInfo={leavePaged} onChange={setLeavePage} />
       </Card>
 
       <Card className="p-4">
@@ -1545,7 +1649,7 @@ export default function Schedule() {
               </tr>
             </thead>
             <tbody>
-              {resignedRows.map((emp, i) => (
+              {resignedPaged.paged.map((emp, i) => (
                 <tr
                   key={emp.id}
                   className={`border-b border-slate-50 last:border-0 ${selectedResigned.has(emp.id) ? "bg-primary-light/60" : ""}`}
@@ -1558,7 +1662,7 @@ export default function Schedule() {
                       onChange={() => toggleOne(setSelectedResigned, emp.id)}
                     />
                   </td>
-                  <td className="px-4 py-3 text-ink">{i + 1}</td>
+                  <td className="px-4 py-3 text-ink">{resignedPaged.offset + i + 1}</td>
                   {visibleResignedColumns.map((c) => (
                     <td key={c.key} className="px-4 py-3 text-ink">
                       {c.render(emp)}
@@ -1576,6 +1680,7 @@ export default function Schedule() {
             </tbody>
           </table>
         </div>
+        <PagerControls pageInfo={resignedPaged} onChange={setResignedPage} />
       </Card>
 
       {rowMenu && (

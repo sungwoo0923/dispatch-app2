@@ -529,19 +529,23 @@ export default function AttendanceBoard() {
   // 하루치 상태 하나를 결정한다 — 출근기록(attendance) > 휴가기록(leaves,
   // 이 회사의 승인된 모든 유형: 휴무/연차/반차/병가/결근/경조사/외근 등) >
   // 미래 날짜(빈칸) > 과거인데 아무 기록도 없으면 결근으로 간주하는 순서.
-  const gridDayStatus = (uid, day) => {
-    const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
-    const emp = employeeByUid.get(uid);
-    // 입사 전 / 퇴사 후는 애초에 근무 대상 기간이 아니므로 결근으로 잡히면
-    // 안 된다 — 통짜 회색 공백으로 표시하고 아래 요약 집계에서도 뺀다.
+  // 월별 스케줄표(gridMonth 고정)와 근로자별 스케줄 일괄편집(임의의 달)이
+  // 모두 이 로직을 공유해야 "이미 출근/휴무로 찍힌 날짜"가 두 화면에서
+  // 항상 똑같이 보인다 — 그래서 emp/attendance/leaves를 인자로 받는 순수
+  // 함수로 뽑아두고, 각 화면은 자신의 데이터 소스만 다르게 넘긴다.
+  const resolveDayStatus = (uid, emp, dateKey, attendanceList, leavesList) => {
     if (emp?.hireDate && dateKey < emp.hireDate) return "OUT";
     if (emp?.resignDate && dateKey > emp.resignDate) return "OUT";
-    const att = gridAttendance.find((a) => a.uid === uid && a.date === dateKey);
+    const att = attendanceList.find((a) => a.uid === uid && a.date === dateKey);
     if (att && (att.status === "출근" || att.status === "지각" || att.status === "특근")) return att.status;
-    const leave = leaveStatusOn(gridLeaves, [], uid, dateKey);
+    const leave = leaveStatusOn(leavesList, [], uid, dateKey);
     if (leave) return leave.type;
     if (dateKey > gridTodayKey) return "";
     return "결근";
+  };
+  const gridDayStatus = (uid, day) => {
+    const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+    return resolveDayStatus(uid, employeeByUid.get(uid), dateKey, gridAttendance, gridLeaves);
   };
   const gridCellMeta = (statusKey) => GRID_CELL_META[statusKey] || (statusKey ? { label: statusKey.slice(0, 1), className: "bg-slate-100 text-slate-600" } : GRID_CELL_META[""]);
 
@@ -723,29 +727,69 @@ export default function AttendanceBoard() {
     }
   };
 
-  // ── 근로자별 다음달 스케줄 일괄편집 ──────────────────────────────
-  // 미리 받은 엑셀 휴무계획표를 하나씩 옮겨 적는 대신, 휴무/연차/병가/결근
-  // 등으로 지정할 날짜만 달력에서 콕콕 찍어두고 저장하면 나머지 날짜는
-  // 전부 출근으로 자동 채운다. 저장 후에도 낱개 셀은 그대로 다시 눌러
-  // 바꿀 수 있어 중간에 스케줄이 바뀌어도 대응할 수 있다.
+  // ── 근로자별 스케줄 일괄편집 ──────────────────────────────
+  // 빈 달력에서 새로 계획을 짜는 용도만이 아니라, 이미 지나간/진행 중인
+  // 달을 열었을 때도 그 근로자가 실제로 언제 출근했고 언제 쉬었는지가
+  // 달력에 그대로 보여야 한다 — 그래서 모달을 열 때 해당 월의 실제
+  // 출근/휴가 기록을 먼저 조회해 bulkDayMap을 채워두고, 이후 사용자가
+  // 날짜를 다시 눌러 바꾸면 그 값이 그대로 저장된다. 아직 상태가 정해지지
+  // 않은 미래 날짜만 "지정하지 않으면 출근으로 채운다"는 기존 편의가 남는다.
+  const [bulkPrefillLoading, setBulkPrefillLoading] = useState(false);
+
+  const loadBulkPrefill = async (emp, monthKey) => {
+    setBulkPrefillLoading(true);
+    try {
+      let attList = gridAttendance;
+      let leavesList = gridLeaves;
+      if (monthKey !== gridMonth) {
+        const [attSnap, leavesSnap] = await Promise.all([
+          getDocs(query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("month", "==", monthKey))),
+          getDocs(query(collection(db, "leaves"), where("companyId", "==", profile.companyId), where("status", "==", "approved"))),
+        ]);
+        attList = attSnap.docs.map((d) => d.data());
+        leavesList = leavesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      const numDays = daysInMonth(monthKey);
+      const map = {};
+      for (let day = 1; day <= numDays; day += 1) {
+        const dateKey = `${monthKey}-${String(day).padStart(2, "0")}`;
+        const status = resolveDayStatus(emp.id, emp, dateKey, attList, leavesList);
+        if (status && status !== "OUT") map[day] = status;
+      }
+      setBulkDayMap(map);
+    } finally {
+      setBulkPrefillLoading(false);
+    }
+  };
+
   const openBulkEdit = (emp) => {
     setBulkTarget(emp);
-    setBulkMonth(nextMonthKey(gridMonth));
+    setBulkMonth(gridMonth);
     setBulkActiveStatus("휴무");
     setBulkDayMap({});
+    loadBulkPrefill(emp, gridMonth);
+  };
+  const changeBulkMonth = (monthKey) => {
+    setBulkMonth(monthKey);
+    setBulkDayMap({});
+    if (bulkTarget) loadBulkPrefill(bulkTarget, monthKey);
   };
   const bulkNumDays = bulkTarget ? daysInMonth(bulkMonth) : 0;
   const bulkDayCells = Array.from({ length: bulkNumDays }, (_, i) => {
     const day = i + 1;
+    const dateKey = `${bulkMonth}-${String(day).padStart(2, "0")}`;
+    const isOut = (bulkTarget?.hireDate && dateKey < bulkTarget.hireDate) || (bulkTarget?.resignDate && dateKey > bulkTarget.resignDate);
     const assigned = bulkDayMap[day];
     const meta = assigned ? GRID_STATUS_OPTIONS.find((o) => o.key === assigned) : null;
-    const dateKey = `${bulkMonth}-${String(day).padStart(2, "0")}`;
     const wd = WEEKDAY_LABELS[new Date(`${dateKey}T00:00:00`).getDay()];
     const holiday = isKrHoliday(dateKey) || wd === "일";
     const weekendClass = holiday ? "text-danger" : wd === "토" ? "text-primary" : "text-ink";
     return {
       day,
-      className: meta
+      disabled: isOut,
+      className: isOut
+        ? "bg-slate-200/70 text-slate-300"
+        : meta
         ? `${meta.tone} ring-2 ring-offset-1 ring-primary/40`
         : `${holiday ? "bg-red-50" : "bg-slate-50"} ${weekendClass} hover:bg-slate-100`,
     };
@@ -764,6 +808,7 @@ export default function AttendanceBoard() {
     try {
       for (let day = 1; day <= bulkNumDays; day += 1) {
         const dateKey = `${bulkMonth}-${String(day).padStart(2, "0")}`;
+        if ((bulkTarget.hireDate && dateKey < bulkTarget.hireDate) || (bulkTarget.resignDate && dateKey > bulkTarget.resignDate)) continue;
         const statusKey = bulkDayMap[day] || "출근";
         await writeDayStatus(bulkTarget.id, bulkTarget.name, dateKey, statusKey);
       }
@@ -2022,22 +2067,19 @@ export default function AttendanceBoard() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted">
-                대상 월의 날짜를 눌러 아래 선택된 상태를 지정하세요. 지정하지 않은 날짜는 저장 시 전부{" "}
-                <span className="font-semibold text-primary">출근</span>으로 채워집니다.
+                이 달에 실제로 출근/휴무했던 날짜가 아래 달력에 그대로 표시됩니다. 바꾸고 싶은 날짜를 눌러 원하는 상태로
+                다시 지정하세요. 아직 지정되지 않은 미래 날짜는 저장 시 전부 <span className="font-semibold text-primary">출근</span>으로 채워집니다.
               </p>
               <input
                 type="month"
                 value={bulkMonth}
-                onChange={(e) => {
-                  setBulkMonth(e.target.value);
-                  setBulkDayMap({});
-                }}
+                onChange={(e) => changeBulkMonth(e.target.value)}
                 className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
               />
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {GRID_STATUS_OPTIONS.filter((o) => o.key !== "출근").map((o) => (
+              {GRID_STATUS_OPTIONS.map((o) => (
                 <button
                   key={o.key}
                   type="button"
@@ -2051,19 +2093,21 @@ export default function AttendanceBoard() {
               ))}
             </div>
 
-            <MiniMonthCalendar month={bulkMonth} cells={bulkDayCells} onDayClick={toggleBulkDay} />
+            {bulkPrefillLoading ? (
+              <p className="py-6 text-center text-xs text-muted">기존 스케줄을 불러오는 중...</p>
+            ) : (
+              <MiniMonthCalendar month={bulkMonth} cells={bulkDayCells} onDayClick={toggleBulkDay} />
+            )}
 
             {Object.keys(bulkDayMap).length > 0 && (
               <div className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-muted">
-                지정된 날짜{" "}
-                {GRID_STATUS_OPTIONS.filter((o) => o.key !== "출근")
-                  .map((o) => {
-                    const days = Object.entries(bulkDayMap)
-                      .filter(([, v]) => v === o.key)
-                      .map(([d]) => d)
-                      .sort((a, b) => Number(a) - Number(b));
-                    return days.length ? `${o.label} ${days.join(",")}일` : null;
-                  })
+                {GRID_STATUS_OPTIONS.map((o) => {
+                  const days = Object.entries(bulkDayMap)
+                    .filter(([, v]) => v === o.key)
+                    .map(([d]) => d)
+                    .sort((a, b) => Number(a) - Number(b));
+                  return days.length ? `${o.label} ${days.join(",")}일` : null;
+                })
                   .filter(Boolean)
                   .join(" · ")}
               </div>
