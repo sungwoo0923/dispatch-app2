@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc, setDoc, deleteDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
@@ -59,6 +59,11 @@ export default function EmployeeSignupPage() {
   // — 관리자가 근로자등록만 해둔 시점(pendingEmployees)엔 uid가 없어 스케줄을
   // 만들 수 없으므로, 실제 계정이 생기는 이 시점이 유일하게 가능한 지점이다.
   const createInitialSchedule = async (uid, name, cid, workSiteId) => {
+    const dateKey = toDateKey();
+    const existing = await getDocs(
+      query(collection(db, "schedules"), where("uid", "==", uid), where("date", "==", dateKey))
+    ).catch(() => null);
+    if (existing && !existing.empty) return;
     await addDoc(collection(db, "schedules"), {
       companyId: cid,
       uid,

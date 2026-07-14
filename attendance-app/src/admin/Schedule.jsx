@@ -508,6 +508,11 @@ export default function Schedule() {
   const toggleBulkSelectAll = () =>
     setBulkSelected((s) => (s.size === bulkResults.length ? new Set() : new Set(bulkResults.map((e) => e.id))));
 
+  // 같은 근로자의 같은 날짜에 스케줄 문서가 두 개 이상 생기면 대기/출근확정
+  // 등 서로 다른 상태로 동시에 나타나는 중복 버그가 생긴다 — 새로 만들기
+  // 전에 항상 이미 있는지부터 확인한다.
+  const scheduleExistsFor = (uid, date) => schedules.some((x) => x.uid === uid && x.date === date);
+
   const submitBulkSchedule = async () => {
     if (bulkSelected.size === 0 || !bulkRange.start || !bulkRange.end) return;
     const dates = [];
@@ -521,7 +526,9 @@ export default function Schedule() {
       const emp = employees.find((x) => x.id === uid);
       if (!emp) continue;
       const site = workSites.find((x) => x.id === emp.workSiteId);
+      let created = 0;
       for (const date of dates) {
+        if (scheduleExistsFor(uid, date)) continue;
         await addDoc(collection(db, "schedules"), {
           companyId: profile.companyId,
           uid: emp.id,
@@ -534,8 +541,9 @@ export default function Schedule() {
           status: "대기",
           createdAt: serverTimestamp(),
         });
+        created += 1;
       }
-      notifyScheduleStatus(emp.id, `근무 스케줄 ${dates.length}건이 등록되었습니다. (대기 상태)`);
+      if (created > 0) notifyScheduleStatus(emp.id, `근무 스케줄 ${created}건이 등록되었습니다. (대기 상태)`);
     }
     setOpen(false);
   };
@@ -933,6 +941,7 @@ export default function Schedule() {
     if (targets.length === 0 || selectedSchedules.length === 0) return;
     for (const { schedule: s } of selectedSchedules) {
       for (const targetDate of targets) {
+        if (scheduleExistsFor(s.uid, targetDate)) continue;
         await addDoc(collection(db, "schedules"), {
           companyId: profile.companyId,
           uid: s.uid,

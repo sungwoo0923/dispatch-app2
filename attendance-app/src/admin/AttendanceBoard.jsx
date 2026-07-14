@@ -36,7 +36,7 @@ import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
 import MiniMonthCalendar from "../components/MiniMonthCalendar";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { downloadCsv } from "../utils/exportCsv";
-import { toDateKey, toMonthKey, formatTime, formatDate, attendanceDocId } from "../utils/dateUtils";
+import { toDateKey, toMonthKey, formatTime, formatDate, attendanceDocId, calculateAge } from "../utils/dateUtils";
 import { computeCheckInStatus } from "../utils/attendanceStatus";
 import { calcLeaveBalance } from "../utils/leave";
 import { isKrHoliday } from "../utils/holidaysKR";
@@ -412,11 +412,25 @@ export default function AttendanceBoard() {
   const todayKeyForCards = toDateKey();
   const todayCardRows = useMemo(() => rows.filter(({ record }) => record.date === todayKeyForCards), [rows, todayKeyForCards]);
 
-  // 출근현황 근무자 목록 리스트 — 10명씩 페이지네이션.
+  // 출근현황 근무자 목록 리스트 — 출근 기록이 있는 사람만이 아니라 등록된
+  // 근로자 전원이 항상 나와야 한다. 오늘 출근 기록이 있으면 같이 붙여서
+  // 보여주되(카드 배지용) 목록 자체는 근로자 기준으로 만든다.
+  const attendanceRoster = useMemo(() => {
+    return employees
+      .filter((emp) => (emp.employmentStatus || "재직") !== "퇴사")
+      .filter((emp) => {
+        if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
+        if (filters.name && !emp.name?.includes(filters.name)) return false;
+        return true;
+      })
+      .map((emp) => ({ emp, record: attendance.find((a) => a.uid === emp.id && a.date === todayKeyForCards) || null }))
+      .sort((a, b) => (a.emp.name || "").localeCompare(b.emp.name || ""));
+  }, [employees, filters, attendance, todayKeyForCards]);
+
   const ATTENDANCE_PAGE_SIZE = 10;
-  const attendanceTotalPages = Math.max(1, Math.ceil(rows.length / ATTENDANCE_PAGE_SIZE));
+  const attendanceTotalPages = Math.max(1, Math.ceil(attendanceRoster.length / ATTENDANCE_PAGE_SIZE));
   const attendancePageClamped = Math.min(attendancePage, attendanceTotalPages);
-  const pagedAttendanceRows = rows.slice(
+  const pagedAttendanceRows = attendanceRoster.slice(
     (attendancePageClamped - 1) * ATTENDANCE_PAGE_SIZE,
     attendancePageClamped * ATTENDANCE_PAGE_SIZE
   );
@@ -476,9 +490,11 @@ export default function AttendanceBoard() {
     let annual = 0;
     let overtime = 0;
     let sick = 0;
+    let scheduledDays = 0; // 입사~퇴사(재직) 구간에 속하는 날짜 수 = 만근 시 기준 일수.
     for (const day of gridDayList) {
       const status = gridDayStatus(uid, day);
       if (status === "OUT") continue; // 입사 전/퇴사 후는 집계 대상이 아니다.
+      scheduledDays += 1;
       if (status === "출근" || status === "지각") present += 1;
       else if (status === "특근") overtime += 1;
       else if (status === "연차") annual += 1;
@@ -487,8 +503,9 @@ export default function AttendanceBoard() {
       else if (status === "결근") absent += 1;
       else if (status) off += 1; // 휴무/관리자 처리/경조사/외근 등
     }
-    const worked = present + overtime;
-    const fullAttendance = absent === 0 && worked > 0 ? worked : 0;
+    // 만근 = 결근 없이 재직 구간 전체를 채웠을 때의 총 근무 대상 일수
+    // (예: 이번 달 14일 입사자라면 14~31일 = 18일이 만근 일수).
+    const fullAttendance = absent === 0 && scheduledDays > 0 ? scheduledDays : 0;
     return { present, absent, off, annual, overtime, sick, fullAttendance };
   };
 
@@ -920,8 +937,8 @@ export default function AttendanceBoard() {
     downloadCsv(`출근현황_${range.start}~${range.end}`, headers, rowsOut);
   };
 
-  const lateCount = rows.filter(({ record }) => record.status === "지각").length;
-  const earlyLeaveCount = rows.filter(({ record }) => record.status === "조퇴").length;
+  const lateCount = attendanceRoster.filter(({ record }) => record?.status === "지각").length;
+  const earlyLeaveCount = attendanceRoster.filter(({ record }) => record?.status === "조퇴").length;
 
   return (
     <div className="space-y-6">
@@ -1119,37 +1136,31 @@ export default function AttendanceBoard() {
 
         {view === "출근현황" && (
           <>
-            <Card className="mb-3 flex flex-wrap items-end gap-2 p-3">
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-medium text-muted">센터</span>
-                <select
-                  className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                  value={filters.siteId}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, siteId: e.target.value }));
-                    setAttendancePage(1);
-                  }}
-                >
-                  <option value="">전체 센터</option>
-                  {workSites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block min-w-[160px] flex-1">
-                <span className="mb-1 block text-[11px] font-medium text-muted">검색</span>
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                  value={filters.name}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, name: e.target.value }));
-                    setAttendancePage(1);
-                  }}
-                  placeholder="이름으로 검색"
-                />
-              </label>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <select
+                className="w-32 rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                value={filters.siteId}
+                onChange={(e) => {
+                  setFilters((f) => ({ ...f, siteId: e.target.value }));
+                  setAttendancePage(1);
+                }}
+              >
+                <option value="">전체 센터</option>
+                {workSites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="w-40 rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                value={filters.name}
+                onChange={(e) => {
+                  setFilters((f) => ({ ...f, name: e.target.value }));
+                  setAttendancePage(1);
+                }}
+                placeholder="이름으로 검색"
+              />
               <Button
                 size="sm"
                 variant="outline"
@@ -1160,48 +1171,72 @@ export default function AttendanceBoard() {
               >
                 <RefreshCw size={13} /> 초기화
               </Button>
-              <div className="ml-auto text-xs text-muted">
-                {rows.length}명 <span className="text-danger">지각 {lateCount}</span> <span className="text-warning">조퇴 {earlyLeaveCount}</span>
-              </div>
-            </Card>
+            </div>
+            <p className="mb-2 text-xs text-muted">
+              총 {attendanceRoster.length}명 · <span className="text-danger">지각 {lateCount}</span> · <span className="text-warning">조퇴 {earlyLeaveCount}</span>
+            </p>
 
-            <div key={attendancePage} className="space-y-2" style={{ animation: "fadeInUp 0.35s ease" }}>
-              {pagedAttendanceRows.map((row) => {
-                const { record: r, emp } = row;
-                return (
-                  <Card
-                    key={r.id}
-                    onDoubleClick={() => openDetail(row)}
-                    title="더블클릭하여 상세보기"
-                    className="flex cursor-pointer items-center justify-between gap-3 p-3.5 hover:bg-slate-50"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
-                        {emp.name?.slice(0, 1) || "?"}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>
-                        <p className="truncate text-[11px] text-muted">
-                          {r.siteName || siteName_(emp.workSiteId)} · {emp.phone || "-"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <div className="text-right text-xs text-ink">
-                        <p>출 {r.checkInTime ? formatTime(r.checkInTime) : "-"}</p>
-                        <p>퇴 {r.checkOutTime ? formatTime(r.checkOutTime) : "-"}</p>
-                      </div>
-                      <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
-                        {r.status || "미출근"}
-                      </Badge>
-                    </div>
-                  </Card>
-                );
-              })}
-              {rows.length === 0 && <p className="py-10 text-center text-xs text-muted">조건에 맞는 출근 기록이 없습니다.</p>}
+            <div key={attendancePage} className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5" style={{ animation: "fadeInUp 0.35s ease" }}>
+              <table className="w-full min-w-[900px] text-center text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs text-muted">
+                    <th className="px-3 py-3 font-semibold">순번</th>
+                    <th className="px-3 py-3 font-semibold">이름</th>
+                    <th className="px-3 py-3 font-semibold">연락처</th>
+                    <th className="px-3 py-3 font-semibold">소속업체</th>
+                    <th className="px-3 py-3 font-semibold">센터</th>
+                    <th className="px-3 py-3 font-semibold">입사일</th>
+                    <th className="px-3 py-3 font-semibold">국적</th>
+                    <th className="px-3 py-3 font-semibold">성별</th>
+                    <th className="px-3 py-3 font-semibold">나이</th>
+                    <th className="px-3 py-3 font-semibold">부서</th>
+                    <th className="px-3 py-3 font-semibold">직급</th>
+                    <th className="px-3 py-3 font-semibold">재직상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedAttendanceRows.map(({ emp, record: r }, i) => (
+                    <tr
+                      key={emp.id}
+                      onDoubleClick={() => r && openDetail({ record: r, emp })}
+                      title={r ? "더블클릭하여 상세보기" : ""}
+                      className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100"
+                    >
+                      <td className="px-3 py-3 text-muted">{(attendancePageClamped - 1) * ATTENDANCE_PAGE_SIZE + i + 1}</td>
+                      <td className="px-3 py-3 text-ink">{emp.name}</td>
+                      <td className="px-3 py-3 text-ink">
+                        <span className="inline-flex items-center gap-1">
+                          {emp.phone || "-"}
+                          {emp.phone && <SmsButton phone={emp.phone} />}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
+                      <td className="px-3 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
+                      <td className="px-3 py-3 text-ink">{emp.hireDate || "-"}</td>
+                      <td className="px-3 py-3 text-ink">{emp.country || (emp.nationality === "내국인" ? "대한민국" : "-")}</td>
+                      <td className="px-3 py-3 text-ink">{emp.gender || "-"}</td>
+                      <td className="px-3 py-3 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
+                      <td className="px-3 py-3 text-ink">{emp.team || "-"}</td>
+                      <td className="px-3 py-3 text-ink">{emp.position || "-"}</td>
+                      <td className="px-3 py-3">
+                        <Badge tone={r ? (r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger") : "muted"}>
+                          {r?.status || "미출근"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                  {attendanceRoster.length === 0 && (
+                    <tr>
+                      <td colSpan={12} className="px-4 py-10 text-center text-xs text-muted">
+                        조건에 맞는 근로자가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            {rows.length > 0 && (
+            {attendanceRoster.length > 0 && (
               <div className="mt-3 flex items-center justify-center gap-1">
                 <button
                   type="button"

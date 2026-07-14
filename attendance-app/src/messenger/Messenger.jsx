@@ -714,7 +714,9 @@ export default function Messenger({ mobileMode = false, mobileVisible = false, o
 
   const PANEL_W = mobileMode ? 360 : 700;
   const PANEL_H = 580;
-  const BTN_BOTTOM = 96;
+  // PC에는 하단 탭바가 없으므로 화면 맨 아래 구석에 붙여도 되지만, 모바일은
+  // 하단 탭바에 가리지 않도록 그 위로 띄워야 한다.
+  const BTN_BOTTOM = mobileMode ? 96 : 24;
   const [panelW, setPanelW] = useState(PANEL_W);
   const [panelH, setPanelH] = useState(PANEL_H);
   const resizingRef = useRef(null);
