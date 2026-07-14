@@ -897,6 +897,18 @@ export default function Schedule() {
 
   const selectedSchedules = useMemo(() => rows.filter(({ schedule: s }) => selected.has(s.id)), [rows, selected]);
 
+  // 대기 인원 현황에서 전체선택(혹은 일부 선택) 후 한 번에 출근확정 처리한다.
+  const confirmSelectedPending = async () => {
+    const targets = pendingRows.filter(({ schedule: s }) => selected.has(s.id));
+    if (targets.length === 0) {
+      toast.error("선택된 인원이 없습니다.");
+      return;
+    }
+    for (const { schedule: s } of targets) await applyScheduleStatusOne(s.id, "출근확정");
+    setSelected(new Set());
+    toast.success(`${targets.length}명을 출근확정 처리했습니다`);
+  };
+
   const addCopyDate = () => {
     if (!copyForm.dateInput) return;
     setCopyForm((f) => (f.dates.includes(f.dateInput) ? f : { ...f, dates: [...f.dates, f.dateInput].sort(), dateInput: "" }));
@@ -1304,7 +1316,15 @@ export default function Schedule() {
           <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
             <Clock size={13} /> 대기 인원 현황 {pendingRows.length}
           </p>
-          <ColumnVisibilityButton columns={scheduleColumnsOrdered} hidden={hiddenScheduleColumns} toggleColumn={toggleScheduleColumn} />
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => toggleSelectAllIn(pendingRows)}>
+              전체선택
+            </Button>
+            <Button size="sm" onClick={confirmSelectedPending}>
+              출근확정
+            </Button>
+            <ColumnVisibilityButton columns={scheduleColumnsOrdered} hidden={hiddenScheduleColumns} toggleColumn={toggleScheduleColumn} />
+          </div>
         </div>
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[720px] text-center text-sm">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import AuthShell, { FormField } from "./AuthShell";
 import Button from "../components/Button";
@@ -54,6 +54,25 @@ export default function EmployeeSignupPage() {
     setLoading(false);
   };
 
+  // 근로자가 가입을 완료해 실제 users 문서(uid)가 생기는 순간, 스케줄등록 >
+  // 대기 인원 현황에도 바로 잡히도록 오늘 날짜로 "대기" 스케줄을 하나 만들어둔다
+  // — 관리자가 근로자등록만 해둔 시점(pendingEmployees)엔 uid가 없어 스케줄을
+  // 만들 수 없으므로, 실제 계정이 생기는 이 시점이 유일하게 가능한 지점이다.
+  const createInitialSchedule = async (uid, name, cid, workSiteId) => {
+    await addDoc(collection(db, "schedules"), {
+      companyId: cid,
+      uid,
+      name,
+      date: toDateKey(),
+      startTime: "09:00",
+      endTime: "18:00",
+      siteId: workSiteId || null,
+      siteName: "",
+      status: "대기",
+      createdAt: serverTimestamp(),
+    }).catch(() => {});
+  };
+
   const submitDetails = async (e) => {
     e.preventDefault();
     setError("");
@@ -76,6 +95,7 @@ export default function EmployeeSignupPage() {
           createdAt: serverTimestamp(),
         });
         await deleteDoc(doc(db, "pendingEmployees", code.trim().toUpperCase()));
+        await createInitialSchedule(cred.user.uid, pendingProfile.name, companyId, pendingProfile.workSiteId);
       } else {
         await setDoc(doc(db, "users", cred.user.uid), {
           role: "employee",
@@ -88,6 +108,7 @@ export default function EmployeeSignupPage() {
           workSiteId: null,
           createdAt: serverTimestamp(),
         });
+        await createInitialSchedule(cred.user.uid, form.name, companyId, null);
         notifyAdmins(companyId, { title: "신규 가입 승인 대기", message: `${form.name}님이 가입코드로 회원가입했습니다.`, link: "/employees" }).catch(() => {});
       }
     } catch (err) {
