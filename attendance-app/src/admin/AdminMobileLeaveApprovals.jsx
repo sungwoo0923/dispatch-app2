@@ -34,7 +34,9 @@ export default function AdminMobileLeaveApprovals() {
     const unsubs = [
       onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (s) => setEmployees(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))),
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (s) => setWorkSites(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
-      onSnapshot(query(collection(db, "leaves"), where("companyId", "==", profile.companyId)), (s) => setLeaves(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "leaves"), where("companyId", "==", profile.companyId)), (s) =>
+        setLeaves(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((l) => l.source !== "schedule"))
+      ),
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);

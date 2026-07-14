@@ -12,7 +12,9 @@ export default function MiniMonthCalendar({ month, cells, onDayClick }) {
     <div>
       <div className="mb-1 grid grid-cols-7 gap-1">
         {WEEKDAY_LABELS.map((w) => (
-          <div key={w} className="text-center text-[10px] font-medium text-muted">{w}</div>
+          <div key={w} className={`text-center text-[10px] font-medium ${w === "일" ? "text-danger" : w === "토" ? "text-primary" : "text-muted"}`}>
+            {w}
+          </div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-1">

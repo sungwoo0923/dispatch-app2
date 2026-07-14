@@ -53,7 +53,11 @@ export default function LeaveApprovals() {
       onSnapshot(query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")), (s) => setEmployees(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (s) => setWorkSites(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(query(collection(db, "vendors"), where("companyId", "==", profile.companyId)), (s) => setVendors(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
-      onSnapshot(query(collection(db, "leaves"), where("companyId", "==", profile.companyId)), (s) => setLeaves(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "leaves"), where("companyId", "==", profile.companyId)), (s) =>
+        // 월별 스케줄표에서 관리자가 바로 지정한 휴무/연차/병가 등(source:"schedule")은
+        // 근로자가 신청한 게 아니라 신청 이력 화면에 섞여 보이면 오해를 준다.
+        setLeaves(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((l) => l.source !== "schedule"))
+      ),
     ];
     return () => unsubs.forEach((u) => u());
   }, [profile?.companyId]);

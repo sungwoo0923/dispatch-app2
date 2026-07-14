@@ -73,6 +73,8 @@ const GRID_CELL_META = {
   병가: { label: "병", className: "bg-purple-100 text-purple-700 font-semibold" },
   결근: { label: "결", className: "bg-red-50 text-danger" },
   "": { label: "", className: "text-slate-300" },
+  // 입사 전/퇴사 후 — 근무 대상 기간이 아니므로 결근과 구분되는 통짜 회색으로 표시하고 집계에서 뺀다.
+  OUT: { label: "", className: "bg-slate-200/70" },
 };
 // 입사일부터 오늘(혹은 기준일)까지 근속일수 — "D+n" 형태로 표시한다.
 function daysSinceHire(hireDate, todayKey) {
@@ -139,6 +141,10 @@ export default function AttendanceBoard() {
   // 참고해, 출근현황 메뉴 하단에 같은 형태의 월별 스케줄표를 추가한다.
   // 출근현황(카드 목록)과 별개로 한 달 전체를 한눈에 보고 셀 단위로
   // 바로 수정할 수 있게 하는 것이 목적이라, 별도의 월/데이터 상태로 관리한다.
+  const [leaveMonth, setLeaveMonth] = useState(toMonthKey());
+  const [leaveSearch, setLeaveSearch] = useState("");
+  // 출근현황 근무자 목록 리스트 페이지네이션(10명씩) — 필터가 바뀌면 1페이지로.
+  const [attendancePage, setAttendancePage] = useState(1);
   const [gridMonth, setGridMonth] = useState(toMonthKey());
   const [gridAttendance, setGridAttendance] = useState([]);
   const [gridLeaves, setGridLeaves] = useState([]);
@@ -247,6 +253,16 @@ export default function AttendanceBoard() {
     () => [...changeRequests].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)),
     [changeRequests]
   );
+
+  // 휴무현황: 선택한 달과 겹치는 휴가만, 이름으로 간단 검색.
+  const monthLeaves = useMemo(() => {
+    const monthStart = `${leaveMonth}-01`;
+    const monthEnd = `${leaveMonth}-31`;
+    return leaves
+      .filter((lv) => lv.startDate <= monthEnd && (lv.endDate || lv.startDate) >= monthStart)
+      .filter((lv) => !leaveSearch.trim() || lv.name?.includes(leaveSearch.trim()))
+      .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+  }, [leaves, leaveMonth, leaveSearch]);
 
   // 출근시각이 수정될 때마다 지각 여부를 스케줄 출근예정시각 기준으로
   // 다시 계산한다 — 안 그러면 관리자가 지각 전 시간으로 고쳐도, 또는
@@ -396,6 +412,15 @@ export default function AttendanceBoard() {
   const todayKeyForCards = toDateKey();
   const todayCardRows = useMemo(() => rows.filter(({ record }) => record.date === todayKeyForCards), [rows, todayKeyForCards]);
 
+  // 출근현황 근무자 목록 리스트 — 10명씩 페이지네이션.
+  const ATTENDANCE_PAGE_SIZE = 10;
+  const attendanceTotalPages = Math.max(1, Math.ceil(rows.length / ATTENDANCE_PAGE_SIZE));
+  const attendancePageClamped = Math.min(attendancePage, attendanceTotalPages);
+  const pagedAttendanceRows = rows.slice(
+    (attendancePageClamped - 1) * ATTENDANCE_PAGE_SIZE,
+    attendancePageClamped * ATTENDANCE_PAGE_SIZE
+  );
+
   // ─────────────────────────────────────────────────────────────
   // 월별 스케줄표(달력형 그리드) — 도급팀이 실제로 쓰던 엑셀 휴무계획표를
   // 참고해 근로자 x 1~31일 표로 한 달 근태를 한눈에 보고, 셀을 눌러 바로
@@ -428,6 +453,11 @@ export default function AttendanceBoard() {
   // 미래 날짜(빈칸) > 과거인데 아무 기록도 없으면 결근으로 간주하는 순서.
   const gridDayStatus = (uid, day) => {
     const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+    const emp = employeeByUid.get(uid);
+    // 입사 전 / 퇴사 후는 애초에 근무 대상 기간이 아니므로 결근으로 잡히면
+    // 안 된다 — 통짜 회색 공백으로 표시하고 아래 요약 집계에서도 뺀다.
+    if (emp?.hireDate && dateKey < emp.hireDate) return "OUT";
+    if (emp?.resignDate && dateKey > emp.resignDate) return "OUT";
     const att = gridAttendance.find((a) => a.uid === uid && a.date === dateKey);
     if (att && (att.status === "출근" || att.status === "지각" || att.status === "특근")) return att.status;
     const leave = leaveStatusOn(gridLeaves, [], uid, dateKey);
@@ -448,6 +478,7 @@ export default function AttendanceBoard() {
     let sick = 0;
     for (const day of gridDayList) {
       const status = gridDayStatus(uid, day);
+      if (status === "OUT") continue; // 입사 전/퇴사 후는 집계 대상이 아니다.
       if (status === "출근" || status === "지각") present += 1;
       else if (status === "특근") overtime += 1;
       else if (status === "연차") annual += 1;
@@ -459,6 +490,26 @@ export default function AttendanceBoard() {
     const worked = present + overtime;
     const fullAttendance = absent === 0 && worked > 0 ? worked : 0;
     return { present, absent, off, annual, overtime, sick, fullAttendance };
+  };
+
+  // 하루치 출근 인원수 — 그 날짜 열 맨 아래 "합계" 행에 쓰인다.
+  const gridDailyHeadcount = (day) =>
+    gridEmployees.filter((emp) => ["출근", "지각", "특근"].includes(gridDayStatus(emp.id, day))).length;
+
+  // 근로자 전원의 이번 달 요약 합계 — 요약열 맨 아래 "합계" 행에 쓰인다.
+  const gridMonthGrandTotal = () => {
+    const total = { present: 0, absent: 0, off: 0, annual: 0, overtime: 0, sick: 0, fullAttendance: 0 };
+    for (const emp of gridEmployees) {
+      const s = gridEmployeeMonthSummary(emp.id);
+      total.present += s.present;
+      total.absent += s.absent;
+      total.off += s.off;
+      total.annual += s.annual;
+      total.overtime += s.overtime;
+      total.sick += s.sick;
+      total.fullAttendance += s.fullAttendance;
+    }
+    return total;
   };
 
   // 입사일 이후 사용한 연차(연차/반차) 누적 — 좌측 고정열의 "연차"는 이번 달
@@ -576,9 +627,15 @@ export default function AttendanceBoard() {
     const day = i + 1;
     const assigned = bulkDayMap[day];
     const meta = assigned ? GRID_STATUS_OPTIONS.find((o) => o.key === assigned) : null;
+    const dateKey = `${bulkMonth}-${String(day).padStart(2, "0")}`;
+    const wd = WEEKDAY_LABELS[new Date(`${dateKey}T00:00:00`).getDay()];
+    const holiday = isKrHoliday(dateKey) || wd === "일";
+    const weekendClass = holiday ? "text-danger" : wd === "토" ? "text-primary" : "text-ink";
     return {
       day,
-      className: meta ? `${meta.tone} ring-2 ring-offset-1 ring-primary/40` : "bg-slate-50 text-ink hover:bg-slate-100",
+      className: meta
+        ? `${meta.tone} ring-2 ring-offset-1 ring-primary/40`
+        : `${holiday ? "bg-red-50" : "bg-slate-50"} ${weekendClass} hover:bg-slate-100`,
     };
   });
   const toggleBulkDay = (day) => {
@@ -886,6 +943,7 @@ export default function AttendanceBoard() {
           </div>
         </Card>
 
+        {view !== "휴무현황" && (
         <Card className="mb-4 space-y-3 p-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <label className="block">
@@ -1057,170 +1115,115 @@ export default function AttendanceBoard() {
             </div>
           </div>
         </Card>
+        )}
 
         {view === "출근현황" && (
           <>
-            <div className="mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
-              <p className="text-xs font-medium text-muted">
-                오늘({formatDate(todayKeyForCards)}) 출근 {todayCardRows.length}명
-              </p>
-            </div>
-            <div className="mb-4 -mx-4 flex gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 md:-mx-5 md:px-5">
-              {todayCardRows.length === 0 && (
-                <p className="py-6 text-xs text-muted">오늘 출근한 근로자가 없습니다.</p>
-              )}
-              {todayCardRows.map(({ record: r, emp }) => (
-                <Card key={r.id} className="w-44 shrink-0 space-y-1.5 p-3.5">
-                  <div className="flex items-center justify-between gap-1.5">
-                    <span className="truncate text-sm font-semibold text-ink">{emp.name}</span>
-                    <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
-                      {r.status || "미출근"}
-                    </Badge>
-                  </div>
-                  <p className="truncate text-[11px] text-muted">{r.siteName || siteName_(emp.workSiteId)}</p>
-                  <div className="flex items-center justify-between text-xs text-ink">
-                    <span>출 {r.checkInTime ? formatTime(r.checkInTime) : "-"}</span>
-                    <span>퇴 {r.checkOutTime ? formatTime(r.checkOutTime) : "-"}</span>
-                  </div>
-                </Card>
-              ))}
-            </div>
-
-            <div className="mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
-              <p className="text-xs font-medium text-muted">
-                출근현황 {rows.length}
-                <span className="ml-2 text-[11px] text-danger">'{lateCount}' 지각</span>
-                <span className="ml-1 text-[11px] text-warning">'{earlyLeaveCount}' 조퇴</span>
-              </p>
-            </div>
             <Card className="mb-3 flex flex-wrap items-end gap-2 p-3">
               <label className="block">
-                <span className="mb-1 block text-[11px] font-medium text-muted">출근시간/퇴근시간</span>
+                <span className="mb-1 block text-[11px] font-medium text-muted">센터</span>
                 <select
                   className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                  value={editField}
-                  onChange={(e) => setEditField(e.target.value)}
+                  value={filters.siteId}
+                  onChange={(e) => {
+                    setFilters((f) => ({ ...f, siteId: e.target.value }));
+                    setAttendancePage(1);
+                  }}
                 >
-                  <option value="checkInTime">출근시각</option>
-                  <option value="checkOutTime">퇴근시각</option>
+                  <option value="">전체 센터</option>
+                  {workSites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
                 </select>
               </label>
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-medium text-muted">변경시각</span>
-                <input
-                  type="time"
-                  className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                  value={editTime}
-                  onChange={(e) => setEditTime(e.target.value)}
-                />
-              </label>
-              <label className="block flex-1 min-w-[140px]">
-                <span className="mb-1 block text-[11px] font-medium text-muted">사유 (필수)</span>
+              <label className="block min-w-[160px] flex-1">
+                <span className="mb-1 block text-[11px] font-medium text-muted">검색</span>
                 <input
                   className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                  value={editReason}
-                  onChange={(e) => setEditReason(e.target.value)}
-                  placeholder="변경사유"
+                  value={filters.name}
+                  onChange={(e) => {
+                    setFilters((f) => ({ ...f, name: e.target.value }));
+                    setAttendancePage(1);
+                  }}
+                  placeholder="이름으로 검색"
                 />
               </label>
-              <Button size="sm" onClick={applyTimeEdit} disabled={selected.size === 0 || !editTime || !editReason.trim()}>
-                적용
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setAttendancePage(1);
+                }}
+              >
+                <RefreshCw size={13} /> 초기화
               </Button>
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-medium text-muted">출근전/조퇴</span>
-                <select
-                  className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                  value={statusAction}
-                  onChange={(e) => setStatusAction(e.target.value)}
-                >
-                  <option value="출근전">출근전</option>
-                  <option value="조퇴">조퇴</option>
-                </select>
-              </label>
-              <Button size="sm" variant="outline" onClick={applyStatus} disabled={selected.size === 0}>
-                적용
-              </Button>
-              <div className="ml-auto flex items-center gap-2">
-                <Button size="sm" variant="danger" onClick={deleteSelectedAttendance} disabled={selected.size === 0}>
-                  <Trash2 size={13} /> 선택삭제
-                </Button>
-                <Button size="sm" variant="outline" onClick={exportCsv}>
-                  <FileSpreadsheet size={13} /> 엑셀
-                </Button>
-                <ColumnVisibilityButton columns={attendanceColumnsOrdered} hidden={hiddenAttendanceColumns} toggleColumn={toggleAttendanceColumn} />
+              <div className="ml-auto text-xs text-muted">
+                {rows.length}명 <span className="text-danger">지각 {lateCount}</span> <span className="text-warning">조퇴 {earlyLeaveCount}</span>
               </div>
             </Card>
 
-            <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
-              <table className="w-full min-w-[980px] text-center text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs text-muted">
-                    <th className="sticky left-0 z-20 w-10 min-w-10 max-w-10 bg-primary-light px-2 py-3 font-semibold">
-                      <input type="checkbox" checked={selected.size > 0 && selected.size === rows.length} onChange={toggleSelectAll} />
-                    </th>
-                    <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
-                    <th className="sticky left-24 z-20 w-28 min-w-28 max-w-28 bg-primary-light px-2 py-3 font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => setSort((s) => ({ key: "name", dir: s.key === "name" && s.dir === "asc" ? "desc" : "asc" }))}
-                        className="inline-flex items-center gap-1 hover:text-ink"
-                      >
-                        이름
-                        {sort.key === "name" ? (
-                          sort.dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                        ) : (
-                          <ChevronsUpDown size={12} className="text-slate-300" />
-                        )}
-                      </button>
-                    </th>
-                    {visibleAttendanceColumns.map((c) => (
-                      <DraggableTh
-                        key={c.key}
-                        columnKey={c.key}
-                        onMove={moveAttendanceColumn}
-                        className="px-4 py-3 font-semibold"
-                        sortKey={c.key}
-                        sort={sort}
-                        onSort={setSort}
-                      >
-                        {c.label}
-                      </DraggableTh>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, i) => {
-                    const { record: r } = row;
-                    return (
-                      <tr
-                        key={r.id}
-                        onDoubleClick={() => openDetail(row)}
-                        title="더블클릭하여 상세보기"
-                        className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${selected.has(r.id) ? "bg-primary-light/60" : ""}`}
-                      >
-                        <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3" onDoubleClick={(e) => e.stopPropagation()}>
-                          <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelected(r.id)} />
-                        </td>
-                        <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{i + 1}</td>
-                        <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{r.name}</td>
-                        {visibleAttendanceColumns.map((c) => (
-                          <td key={c.key} className="px-4 py-3 text-ink">
-                            {c.render(row)}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                  {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={visibleAttendanceColumns.length + 3} className="px-4 py-6 text-center text-xs text-muted">
-                        조건에 맞는 출근 기록이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div key={attendancePage} className="space-y-2" style={{ animation: "fadeInUp 0.35s ease" }}>
+              {pagedAttendanceRows.map((row) => {
+                const { record: r, emp } = row;
+                return (
+                  <Card
+                    key={r.id}
+                    onDoubleClick={() => openDetail(row)}
+                    title="더블클릭하여 상세보기"
+                    className="flex cursor-pointer items-center justify-between gap-3 p-3.5 hover:bg-slate-50"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-light text-sm font-semibold text-primary">
+                        {emp.name?.slice(0, 1) || "?"}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">{emp.name}</p>
+                        <p className="truncate text-[11px] text-muted">
+                          {r.siteName || siteName_(emp.workSiteId)} · {emp.phone || "-"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <div className="text-right text-xs text-ink">
+                        <p>출 {r.checkInTime ? formatTime(r.checkInTime) : "-"}</p>
+                        <p>퇴 {r.checkOutTime ? formatTime(r.checkOutTime) : "-"}</p>
+                      </div>
+                      <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
+                        {r.status || "미출근"}
+                      </Badge>
+                    </div>
+                  </Card>
+                );
+              })}
+              {rows.length === 0 && <p className="py-10 text-center text-xs text-muted">조건에 맞는 출근 기록이 없습니다.</p>}
             </div>
+
+            {rows.length > 0 && (
+              <div className="mt-3 flex items-center justify-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setAttendancePage((p) => Math.max(1, p - 1))}
+                  disabled={attendancePageClamped === 1}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-muted disabled:opacity-40"
+                >
+                  이전
+                </button>
+                <span className="px-2 text-xs text-muted">
+                  {attendancePageClamped} / {attendanceTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAttendancePage((p) => Math.min(attendanceTotalPages, p + 1))}
+                  disabled={attendancePageClamped === attendanceTotalPages}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-muted disabled:opacity-40"
+                >
+                  다음
+                </button>
+              </div>
+            )}
 
             <div className="mt-6">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -1243,17 +1246,8 @@ export default function AttendanceBoard() {
                 </div>
               </div>
 
-              <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                {GRID_STATUS_OPTIONS.map((o) => (
-                  <span key={o.key} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${o.tone}`}>
-                    <o.icon size={11} /> {o.label}
-                  </span>
-                ))}
-                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-danger">토/일/공휴일</span>
-              </div>
-
               <div data-print-area className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
-                <table className="w-full text-center text-xs">
+                <table className="w-full border-collapse text-center text-xs [&_td]:border [&_td]:border-slate-200 [&_th]:border [&_th]:border-slate-200">
                   <thead>
                     <tr className="border-b border-slate-100 text-muted">
                       <th className="sticky left-0 z-20 w-10 min-w-10 bg-primary-light px-2 py-2.5 font-medium">순번</th>
@@ -1280,15 +1274,15 @@ export default function AttendanceBoard() {
                           </th>
                         );
                       })}
-                      <th className="min-w-12 bg-white px-2 py-2.5 font-medium">출근</th>
-                      <th className="min-w-12 bg-white px-2 py-2.5 font-medium">결근</th>
-                      <th className="min-w-12 bg-white px-2 py-2.5 font-medium">휴무</th>
-                      <th className="min-w-12 bg-white px-2 py-2.5 font-medium">연차</th>
-                      <th className="min-w-12 bg-white px-2 py-2.5 font-medium">만근</th>
-                      <th className="min-w-12 bg-white px-2 py-2.5 font-medium">특근</th>
-                      <th className="min-w-12 bg-white px-2 py-2.5 font-medium">병결</th>
-                      <th className="min-w-28 bg-white px-2 py-2.5 font-medium">비고</th>
-                      <th className="min-w-14 bg-white px-2 py-2.5 font-medium print:hidden">편집</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">출근</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">결근</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">휴무</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">연차</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">만근</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">특근</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">병결</th>
+                      <th className="min-w-28 px-2 py-2.5 font-medium">비고</th>
+                      <th className="min-w-14 px-2 py-2.5 font-medium print:hidden">편집</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1296,7 +1290,12 @@ export default function AttendanceBoard() {
                       const summary = gridEmployeeMonthSummary(emp.id);
                       const dday = daysSinceHire(emp.hireDate, gridTodayKey);
                       return (
-                        <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                        <tr
+                          key={emp.id}
+                          onDoubleClick={() => openBulkEdit(emp)}
+                          title="더블클릭하면 다음달 스케줄 일괄편집이 열립니다"
+                          className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
+                        >
                           <td className="sticky left-0 z-10 bg-white px-2 py-2 text-muted">{i + 1}</td>
                           <td className="sticky left-10 z-10 bg-white px-2 py-2 text-left font-medium text-ink">{emp.name}</td>
                           <td className="sticky left-[104px] z-10 bg-white px-2 py-2 text-ink">
@@ -1314,13 +1313,19 @@ export default function AttendanceBoard() {
                             const dateKey = `${gridMonth}-${String(d).padStart(2, "0")}`;
                             const status = gridDayStatus(emp.id, d);
                             const meta = gridCellMeta(status);
-                            const holiday = isKrHoliday(dateKey) || gridWeekdayFor(d) === "일" || gridWeekdayFor(d) === "토";
+                            const isOut = status === "OUT";
+                            const holiday = !isOut && (isKrHoliday(dateKey) || gridWeekdayFor(d) === "일" || gridWeekdayFor(d) === "토");
                             return (
-                              <td key={d} className={`px-1 py-2 ${holiday ? "bg-red-50/40" : ""}`}>
+                              <td
+                                key={d}
+                                onDoubleClick={(e) => e.stopPropagation()}
+                                className={`px-1 py-2 ${holiday ? "bg-red-50/40" : ""} ${isOut ? meta.className : ""}`}
+                              >
                                 <button
                                   type="button"
+                                  disabled={isOut}
                                   onClick={() => openGridCell(emp, d)}
-                                  className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] hover:ring-2 hover:ring-primary/50 ${meta.className}`}
+                                  className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] ${isOut ? "" : `hover:ring-2 hover:ring-primary/50 ${meta.className}`}`}
                                 >
                                   {meta.label}
                                 </button>
@@ -1334,7 +1339,7 @@ export default function AttendanceBoard() {
                           <td className="px-2 py-2 text-ink">{summary.fullAttendance || "-"}</td>
                           <td className="px-2 py-2 text-ink">{summary.overtime}</td>
                           <td className="px-2 py-2 text-ink">{summary.sick}</td>
-                          <td className="px-2 py-2">
+                          <td className="px-2 py-2" onDoubleClick={(e) => e.stopPropagation()}>
                             <input
                               key={`${emp.id}-${gridRemarkFor(emp.id)}`}
                               type="text"
@@ -1344,7 +1349,7 @@ export default function AttendanceBoard() {
                               className="w-24 rounded-md border border-slate-200 px-1.5 py-1 text-center text-[11px]"
                             />
                           </td>
-                          <td className="px-2 py-2 print:hidden">
+                          <td className="px-2 py-2 print:hidden" onDoubleClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               title="다음달 스케줄 일괄편집"
@@ -1364,6 +1369,36 @@ export default function AttendanceBoard() {
                         </td>
                       </tr>
                     )}
+                    {gridEmployees.length > 0 &&
+                      (() => {
+                        const grand = gridMonthGrandTotal();
+                        return (
+                          <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-ink">
+                            <td className="sticky left-0 z-10 bg-slate-50 px-2 py-2">-</td>
+                            <td className="sticky left-10 z-10 bg-slate-50 px-2 py-2 text-left">합계</td>
+                            <td className="sticky left-[104px] z-10 bg-slate-50 px-2 py-2">-</td>
+                            <td className="px-2 py-2">-</td>
+                            <td className="px-2 py-2">-</td>
+                            <td className="px-2 py-2">-</td>
+                            <td className="px-2 py-2">-</td>
+                            <td className="px-2 py-2">-</td>
+                            {gridDayList.map((d) => (
+                              <td key={d} className="px-1 py-2">
+                                {gridDailyHeadcount(d)}
+                              </td>
+                            ))}
+                            <td className="px-2 py-2">{grand.present}</td>
+                            <td className="px-2 py-2 text-danger">{grand.absent}</td>
+                            <td className="px-2 py-2">{grand.off}</td>
+                            <td className="px-2 py-2">{grand.annual}</td>
+                            <td className="px-2 py-2">{grand.fullAttendance || "-"}</td>
+                            <td className="px-2 py-2">{grand.overtime}</td>
+                            <td className="px-2 py-2">{grand.sick}</td>
+                            <td className="px-2 py-2">-</td>
+                            <td className="px-2 py-2 print:hidden">-</td>
+                          </tr>
+                        );
+                      })()}
                   </tbody>
                 </table>
               </div>
@@ -1372,52 +1407,69 @@ export default function AttendanceBoard() {
         )}
 
         {view === "휴무현황" && (
-          <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
-            <table className="w-full min-w-[720px] text-center text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-muted">
-                  <th className="px-4 py-3 font-semibold">순번</th>
-                  <th className="px-4 py-3 font-semibold">종류</th>
-                  <th className="px-4 py-3 font-semibold">사유</th>
-                  <th className="px-4 py-3 font-semibold">이름</th>
-                  <th className="px-4 py-3 font-semibold">전화번호</th>
-                  <th className="px-4 py-3 font-semibold">기간</th>
-                  <th className="px-4 py-3 font-semibold">삭제</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaves.map((lv, i) => (
-                  <tr key={lv.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-4 py-3 text-ink">{i + 1}</td>
-                    <td className="px-4 py-3 text-ink">{lv.type}</td>
-                    <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
-                    <td className="px-4 py-3 text-ink">{lv.name}</td>
-                    <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{employeeByUid.get(lv.uid)?.phone || "-"}<SmsButton phone={employeeByUid.get(lv.uid)?.phone} /></span></td>
-                    <td className="px-4 py-3 text-ink">
-                      {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => deleteLeave(lv)}
-                        title="삭제"
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
+          <>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <input
+                type="month"
+                value={leaveMonth}
+                onChange={(e) => setLeaveMonth(e.target.value)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                value={leaveSearch}
+                onChange={(e) => setLeaveSearch(e.target.value)}
+                placeholder="이름 검색"
+                className="w-40 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
+              <table className="w-full min-w-[720px] text-center text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs text-muted">
+                    <th className="px-4 py-3 font-semibold">순번</th>
+                    <th className="px-4 py-3 font-semibold">종류</th>
+                    <th className="px-4 py-3 font-semibold">사유</th>
+                    <th className="px-4 py-3 font-semibold">이름</th>
+                    <th className="px-4 py-3 font-semibold">전화번호</th>
+                    <th className="px-4 py-3 font-semibold">기간</th>
+                    <th className="px-4 py-3 font-semibold">삭제</th>
                   </tr>
-                ))}
-                {leaves.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
-                      휴무 정보가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {monthLeaves.map((lv, i) => (
+                    <tr key={lv.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-4 py-3 text-ink">{i + 1}</td>
+                      <td className="px-4 py-3 text-ink">{lv.type}</td>
+                      <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
+                      <td className="px-4 py-3 text-ink">{lv.name}</td>
+                      <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{employeeByUid.get(lv.uid)?.phone || "-"}<SmsButton phone={employeeByUid.get(lv.uid)?.phone} /></span></td>
+                      <td className="px-4 py-3 text-ink">
+                        {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => deleteLeave(lv)}
+                          title="삭제"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {monthLeaves.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
+                        해당 월에 휴무 정보가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         {view === "수정현황" && (
@@ -1604,7 +1656,7 @@ export default function AttendanceBoard() {
         open={Boolean(bulkTarget)}
         onClose={() => setBulkTarget(null)}
         size="lg"
-        title={bulkTarget ? `${bulkTarget.name} 근로자 다음달 스케줄 일괄편집` : ""}
+        title={bulkTarget ? `${bulkTarget.name} 스케줄 편집` : ""}
         footer={
           bulkTarget && (
             <>

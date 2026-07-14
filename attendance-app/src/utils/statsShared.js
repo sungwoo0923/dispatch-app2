@@ -72,6 +72,7 @@ export function leaveStatusOn(leaves, leaveTypes, uid, dateKey) {
   const lv = leaves.find((l) => l.uid === uid && l.status === "approved" && dateKey >= l.startDate && dateKey <= (l.endDate || l.startDate));
   if (!lv) return null;
   const typeDef = leaveTypes.find((t) => t.name === lv.type);
-  const paid = typeDef ? typeDef.paid === "유급" : true;
+  // 휴무/결근은 관리자가 leaveTypes에 등록해두지 않아도 성격상 무급으로 본다.
+  const paid = typeDef ? typeDef.paid === "유급" : lv.type !== "휴무" && lv.type !== "결근";
   return { type: lv.type, paid };
 }

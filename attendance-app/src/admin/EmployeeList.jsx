@@ -295,7 +295,6 @@ export default function EmployeeList() {
   const [copyTargets, setCopyTargets] = useState(() => new Set());
   const [quickForm, setQuickForm] = useState({ name: "", phone: "" });
 
-  const [templateForm, setTemplateForm] = useState({ kind: "시간템플릿", templateId: "", effectiveDate: toDateKey(), deleteMode: false, bulkMode: false });
 
   // 대용량(대량) 엑셀 업로드: 양식 다운로드 → 파일선택/파싱(미리보기) →
   // 등록 3단계를 하나의 Modal에서 진행한다. bulkResult가 채워지면(등록 완료)
@@ -1294,26 +1293,6 @@ export default function EmployeeList() {
     setSelected(new Set());
   };
 
-  const templateSourceList = templateForm.kind === "시간템플릿" ? shiftTemplates : allowanceTemplates;
-
-  const applyTemplateBulk = async () => {
-    const targets = templateForm.bulkMode ? filteredEmployees.map((e) => e.id) : [...selected];
-    if (targets.length === 0) return;
-    const field = templateForm.kind === "시간템플릿" ? "shiftTemplateId" : "allowanceTemplateId";
-    const templateName = templateSourceList.find((t) => t.id === templateForm.templateId)?.name || "";
-    for (const uid of targets) {
-      if (templateForm.deleteMode) {
-        await updateDoc(doc(db, "users", uid), { [field]: null });
-        await logChange(uid, "템플릿삭제", `${templateForm.kind} 삭제`);
-      } else {
-        if (!templateForm.templateId) continue;
-        await updateDoc(doc(db, "users", uid), { [field]: templateForm.templateId, [`${field}EffectiveDate`]: templateForm.effectiveDate });
-        await logChange(uid, "템플릿적용", `${templateForm.kind}: ${templateName} (적용시점 ${templateForm.effectiveDate})`);
-      }
-    }
-    toast.success("적용되었습니다");
-  };
-
   // 대용량업로드 팝업을 완전히 초기화하며 닫는다(양식 다운로드/파일선택
   // 단계로 다시 열 수 있도록).
   const closeBulkUpload = () => {
@@ -1643,42 +1622,6 @@ export default function EmployeeList() {
             <ColumnVisibilityButton columns={employeeColumnsOrdered} hidden={hiddenEmployeeColumns} toggleColumn={toggleEmployeeColumn} />
           </div>
         </div>
-
-        <Card className="mb-3 flex flex-nowrap items-end gap-2 overflow-x-auto overscroll-x-contain p-3">
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-medium text-muted">템플릿구분</span>
-            <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={templateForm.kind} onChange={(e) => setTemplateForm((f) => ({ ...f, kind: e.target.value, templateId: "" }))}>
-              <option>시간템플릿</option>
-              <option>수당템플릿</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-medium text-muted">템플릿명</span>
-            <select className="w-40 rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={templateForm.templateId} onChange={(e) => setTemplateForm((f) => ({ ...f, templateId: e.target.value }))}>
-              <option value="">선택</option>
-              {templateSourceList.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-medium text-muted">적용시점</span>
-            <input type="date" className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={templateForm.effectiveDate} onChange={(e) => setTemplateForm((f) => ({ ...f, effectiveDate: e.target.value }))} />
-          </label>
-          <label className="flex items-center gap-1.5 pb-2 text-xs text-muted">
-            <input type="checkbox" checked={templateForm.deleteMode} onChange={(e) => setTemplateForm((f) => ({ ...f, deleteMode: e.target.checked }))} />
-            템플릿삭제
-          </label>
-          <label className="flex items-center gap-1.5 pb-2 text-xs text-muted">
-            <input type="checkbox" checked={templateForm.bulkMode} onChange={(e) => setTemplateForm((f) => ({ ...f, bulkMode: e.target.checked }))} />
-            일괄처리
-          </label>
-          <Button size="sm" onClick={applyTemplateBulk} disabled={!templateForm.bulkMode && selected.size === 0}>
-            적용
-          </Button>
-        </Card>
 
         <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
           <table className="w-full min-w-[2400px] text-center text-sm">
