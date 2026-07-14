@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, serverTimestamp } from "firebase/firestore";
-import { Copy, Plus, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
+import { Copy, Plus, ChevronUp, ChevronDown, Trash2, MapPin } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -159,6 +159,21 @@ export default function AdminMobileOrgSettings() {
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
   const [tab, setTab] = useState(() => sessionStorage.getItem(TAB_KEY) || "dept");
+  const autoCheckInEnabled = company?.autoCheckInEnabled !== false;
+  const [savingAutoCheckIn, setSavingAutoCheckIn] = useState(false);
+
+  const toggleAutoCheckIn = async () => {
+    if (!company?.id) return;
+    setSavingAutoCheckIn(true);
+    try {
+      await updateDoc(doc(db, "companies", company.id), { autoCheckInEnabled: !autoCheckInEnabled });
+      toast.success(!autoCheckInEnabled ? "반경 자동출근을 켰습니다" : "반경 자동출근을 껐습니다");
+    } catch (err) {
+      toast.error(`설정 변경에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSavingAutoCheckIn(false);
+    }
+  };
 
   useEffect(() => {
     sessionStorage.setItem(TAB_KEY, tab);
@@ -187,6 +202,32 @@ export default function AdminMobileOrgSettings() {
         <button onClick={copyCode} className="mt-2 inline-flex items-center gap-2 rounded-xl bg-primary-light px-3.5 py-2 font-mono text-sm font-bold text-primary">
           {company?.id} <Copy size={13} />
         </button>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <MapPin size={15} className="mt-0.5 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-semibold text-ink">반경 자동출근</p>
+              <p className="mt-0.5 text-xs text-muted">
+                켜두면 반경 진입 시 서명 팝업이 자동으로 뜨고 서명을 마치면 출근됩니다. 꺼두면 직접 출근 버튼을 눌러야 합니다.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoCheckInEnabled}
+            disabled={savingAutoCheckIn}
+            onClick={toggleAutoCheckIn}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${autoCheckInEnabled ? "bg-primary" : "bg-slate-200"}`}
+          >
+            <span
+              className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoCheckInEnabled ? "translate-x-5" : "translate-x-0"}`}
+            />
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain">

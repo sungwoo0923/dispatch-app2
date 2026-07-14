@@ -133,27 +133,14 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
       const radiusIn = workSite.radiusM || CHECK_IN_RADIUS_M;
       const radiusOut = Math.max(radiusIn * 3, CHECK_OUT_RADIUS_M);
 
-      if (canCheckIn && !autoCheckedInRef.current && d <= radiusIn) {
-        autoCheckedInRef.current = true;
-        farStreakRef.current = 0;
-        const now = new Date();
-        const late = minutesLate(scheduleStartTime, now);
-        await writeAttendance({
-          uid,
-          name,
-          companyId,
-          status: late > LATE_GRACE_MINUTES ? "지각" : "출근",
-          extra: {
-            checkInTime: now.toISOString(),
-            checkInLocation: { lat, lng, distanceM: Math.round(d) },
-            source: "auto",
-            siteId: workSite.id,
-            siteName: workSite.name,
-          },
-        });
-        if (late > LATE_GRACE_MINUTES) notifyAdminsOfLateCheckIn({ companyId, name, late });
-        refreshToday();
-      } else if (autoCheckedInRef.current && !todayAttendance?.checkOutTime) {
+      // 반경 안에 들어왔다고 여기서 바로 attendance를 써버리면, 안전교육일지(및
+      // 일용직 근로계약동의서) 서명 없이 출근 처리가 되어버린다 — 서명은
+      // 화면이 켜져 있는 화면단(Home.jsx)에서 서명패드로 받아야 하므로, 이
+      // 훅은 "반경 안에 들어왔다"는 사실(distance)만 알려주고 실제 출근 기록은
+      // Home.jsx가 서명 절차를 마친 뒤 manualCheckIn을 통해서만 쓰도록 한다.
+      // (회사별 "반경 자동출근" 설정이 꺼져 있으면 Home.jsx는 이 신호를 쓰지
+      // 않고 직원이 출근 버튼을 직접 눌러야만 서명 절차가 시작된다.)
+      if (autoCheckedInRef.current && !todayAttendance?.checkOutTime) {
         if (d > radiusOut) {
           // 단발성 GPS 튐으로 반경 밖 좌표가 한 번 찍혔다고 바로 자동퇴근
           // 처리하지 않고, 연속으로 AUTO_CHECKOUT_CONFIRM_STREAK번 이상
@@ -175,7 +162,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
         }
       }
     },
-    [uid, name, companyId, workSite, todayAttendance, refreshToday, canCheckIn, scheduleStartTime]
+    [uid, name, companyId, workSite, todayAttendance, refreshToday]
   );
 
   // 상시 watchPosition과 별개로, 사용자가 "위치 갱신" 버튼을 눌렀을 때 즉시

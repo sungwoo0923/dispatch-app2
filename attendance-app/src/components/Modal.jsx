@@ -47,16 +47,31 @@ export default function Modal({ open, onClose, title, children, footer, size = "
   useEffect(() => {
     if (!open || typeof window === "undefined" || !window.visualViewport) return;
     const vv = window.visualViewport;
+    // 실제 온스크린 키보드는 항상 입력칸에 포커스가 가 있을 때만 뜬다.
+    // visualViewport 크기 차이만 보고 판단하면, 중첩 모달(예: 센터 상세
+    // 팝업 안의 주소검색 팝업) 안쪽 입력칸에서 키보드를 띄운 뒤 안쪽
+    // 모달만 닫힐 때 리사이즈 이벤트가 타이밍상 안 오는 경우가 있어,
+    // 이미 포커스가 사라졌는데도 바깥 모달이 "키보드 열림" 상태로 굳어
+    // 실제 화면보다 짧게 표시되고(그 아래 빈 공간에 하단 탭바가 겹쳐
+    // 보임) 하단 footer 버튼이 안 보이는 문제가 있었다. 가로모드로
+    // 돌리면 강제로 리사이즈 이벤트가 발생해 그제서야 정상화됐다.
+    const isEditableFocused = () => {
+      const el = document.activeElement;
+      return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    };
     const update = () => {
-      const keyboardOpen = window.innerHeight - vv.height > KEYBOARD_HEIGHT_THRESHOLD;
+      const keyboardOpen = isEditableFocused() && window.innerHeight - vv.height > KEYBOARD_HEIGHT_THRESHOLD;
       setViewport(keyboardOpen ? { height: vv.height, top: vv.offsetTop } : { height: null, top: 0 });
     };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
+    const onFocusOut = () => queueMicrotask(update);
+    document.addEventListener("focusout", onFocusOut, true);
     return () => {
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
+      document.removeEventListener("focusout", onFocusOut, true);
     };
   }, [open]);
 

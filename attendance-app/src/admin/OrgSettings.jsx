@@ -11,7 +11,7 @@ import {
   writeBatch,
   serverTimestamp,
 } from "firebase/firestore";
-import { Plus, Copy, KeyRound, Building, Search, Download, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Copy, KeyRound, Building, Search, Download, ChevronUp, ChevronDown, MapPin } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -267,10 +267,26 @@ function RankManager({ label, collectionName, presetOptions, items, companyId })
 
 export default function OrgSettings() {
   const { profile, company } = useAuth();
+  const toast = useToast();
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState(() => sessionStorage.getItem(TAB_KEY) || "dept");
+  const autoCheckInEnabled = company?.autoCheckInEnabled !== false;
+  const [savingAutoCheckIn, setSavingAutoCheckIn] = useState(false);
+
+  const toggleAutoCheckIn = async () => {
+    if (!company?.id) return;
+    setSavingAutoCheckIn(true);
+    try {
+      await updateDoc(doc(db, "companies", company.id), { autoCheckInEnabled: !autoCheckInEnabled });
+      toast.success(!autoCheckInEnabled ? "반경 자동출근을 켰습니다" : "반경 자동출근을 껐습니다");
+    } catch (err) {
+      toast.error(`설정 변경에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setSavingAutoCheckIn(false);
+    }
+  };
 
   useEffect(() => {
     sessionStorage.setItem(TAB_KEY, tab);
@@ -309,6 +325,32 @@ export default function OrgSettings() {
           {company?.id} <Copy size={14} />
         </button>
         {copied && <span className="ml-2 text-xs text-primary">복사됨</span>}
+
+        <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-5">
+          <div className="flex items-start gap-2.5">
+            <MapPin size={16} className="mt-0.5 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-semibold text-ink">반경 자동출근</p>
+              <p className="mt-0.5 max-w-md text-xs text-muted">
+                켜두면 근로자가 근무지 반경 안에 들어오면 안전교육(일용직은 근로계약동의서 포함) 서명 팝업이 자동으로
+                뜨고, 서명을 마치면 출근 처리됩니다. 꺼두면 반경 안에서도 근로자가 직접 출근 버튼을 눌러야만
+                서명 절차가 시작됩니다.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoCheckInEnabled}
+            disabled={savingAutoCheckIn}
+            onClick={toggleAutoCheckIn}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${autoCheckInEnabled ? "bg-primary" : "bg-slate-200"}`}
+          >
+            <span
+              className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoCheckInEnabled ? "translate-x-5" : "translate-x-0"}`}
+            />
+          </button>
+        </div>
       </Panel>
 
       <Panel icon={Building} title="부서 · 직급 관리">

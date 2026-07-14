@@ -79,7 +79,7 @@ const DOC_META = {
 };
 
 export default function Home() {
-  const { profile, user } = useAuth();
+  const { profile, user, company } = useAuth();
   const { t } = useLanguage();
   const toast = useToast();
   const [workSite, setWorkSite] = useState(null);
@@ -419,6 +419,30 @@ export default function Home() {
     setDocStep(0);
     setShowChecklist(true);
   };
+
+  // 회사 설정 > "반경 자동출근"(companies.autoCheckInEnabled) — 값이 없으면
+  // 기존 동작 그대로 켜진 것으로 취급한다. 꺼두면 반경 안에 들어와도 아무
+  // 일도 일어나지 않고, 근로자가 출근 버튼을 직접 눌러야만 서명 절차가
+  // 시작된다.
+  const autoCheckInEnabled = company?.autoCheckInEnabled !== false;
+  const inCheckInRadius = distance != null && distance <= manualCheckInRadiusM;
+  // 반경 안에 들어왔다고 서명 없이 바로 출근 처리해버리던 예전 버그를 고쳐,
+  // "반경 자동출근"이 켜져 있으면 반경 진입 시 서명 체크리스트를 자동으로
+  // 띄우기만 하고(openCheckIn과 동일한 관문 통과), 실제 출근 기록은 근로자가
+  // 서명을 마쳐야만 manualCheckIn을 통해 쓰인다. autoPromptedRef로 같은 반경
+  // 체류 동안 반복해서 팝업이 뜨는 것을 막고, 반경을 벗어났다가 다시
+  // 들어오거나 출근이 완료되면 다시 열릴 수 있게 초기화한다.
+  const autoPromptedRef = useRef(false);
+  useEffect(() => {
+    if (checkedIn || !inCheckInRadius) {
+      autoPromptedRef.current = false;
+      return;
+    }
+    if (!autoCheckInEnabled || !canCheckIn || pendingSafetyCount > 0 || showChecklist || autoPromptedRef.current) return;
+    autoPromptedRef.current = true;
+    openCheckIn();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCheckInEnabled, checkedIn, inCheckInRadius, canCheckIn, pendingSafetyCount, showChecklist]);
 
   // 출근이 이미 처리돼있는데(강제출근 등) 서류 서명만 빠진 경우, 체크탭에
   // 들어올 때마다 자동으로 서명 팝업을 띄운다.
