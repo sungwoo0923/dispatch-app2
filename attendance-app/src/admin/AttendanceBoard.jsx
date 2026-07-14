@@ -21,6 +21,7 @@ import {
   Wand2,
   Printer,
   Eraser,
+  Upload,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -126,6 +127,21 @@ export default function AttendanceBoard() {
   const [rejectNote, setRejectNote] = useState("");
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  // 출근현황 탭 검색창: 이름 입력 + 세부검색(드롭다운) 값을 바로 filters에
+  // 반영하지 않고 이 초안(draft)에 모아뒀다가 검색 버튼을 눌러야만 실제
+  // 목록/월별 스케줄표에 적용되도록 한다 — 초기화는 즉시 전체를 보여준다.
+  const [searchDraft, setSearchDraft] = useState(EMPTY_FILTERS);
+  const [detailSearchOpen, setDetailSearchOpen] = useState(false);
+  const applyAttendanceSearch = () => {
+    setFilters(searchDraft);
+    setAttendancePage(1);
+  };
+  const resetAttendanceSearch = () => {
+    setSearchDraft(EMPTY_FILTERS);
+    setFilters(EMPTY_FILTERS);
+    setAttendancePage(1);
+    setDetailSearchOpen(false);
+  };
   const [range, setRange] = useState({ start: toDateKey(), end: toDateKey() });
   const [view, setView] = useState("출근현황");
   const [selected, setSelected] = useState(() => new Set());
@@ -149,6 +165,11 @@ export default function AttendanceBoard() {
   const [gridAttendance, setGridAttendance] = useState([]);
   const [gridLeaves, setGridLeaves] = useState([]);
   const [gridRemarks, setGridRemarks] = useState([]);
+  // 스케줄등록(Schedule.jsx) 각 현황과 연동하기 위해 이 달의 schedules 문서도
+  // 함께 구독한다 — writeDayStatus가 그리드에 상태를 찍을 때마다 같은
+  // uid+date의 schedules 문서도 같이 갱신해, 스케줄등록 메뉴가 매일 그
+  // 날짜에 맞는 상태(출근확정/휴무/대기)로 자동 반영되게 한다.
+  const [gridSchedules, setGridSchedules] = useState([]);
   const [gridEditCell, setGridEditCell] = useState(null);
   const [gridSaving, setGridSaving] = useState(false);
   // 일괄편집(다음달 스케줄 미리 채우기): 대상 근로자/월을 고르고, 상태별로
@@ -160,6 +181,12 @@ export default function AttendanceBoard() {
   const [bulkActiveStatus, setBulkActiveStatus] = useState("휴무");
   const [bulkDayMap, setBulkDayMap] = useState({});
   const [bulkSaving, setBulkSaving] = useState(false);
+
+  // 업체에서 보내주는 출근기록부(엑셀) 업로드 — 이름+전화번호로 등록된
+  // 근로자와 매칭되는 행만 그 달의 그리드에 반영하고, 매칭되지 않는 행은
+  // 건너뛴다.
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -215,10 +242,22 @@ export default function AttendanceBoard() {
       query(collection(db, "scheduleRemarks"), where("companyId", "==", profile.companyId), where("month", "==", gridMonth)),
       (snap) => setGridRemarks(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const monthStart = `${gridMonth}-01`;
+    const monthEnd = `${gridMonth}-31`;
+    const unsubSchedules = onSnapshot(
+      query(
+        collection(db, "schedules"),
+        where("companyId", "==", profile.companyId),
+        where("date", ">=", monthStart),
+        where("date", "<=", monthEnd)
+      ),
+      (snap) => setGridSchedules(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     return () => {
       unsubAtt();
       unsubLeaves();
       unsubRemarks();
+      unsubSchedules();
     };
   }, [profile?.companyId, view, gridMonth]);
 
@@ -263,6 +302,20 @@ export default function AttendanceBoard() {
       .filter((lv) => !leaveSearch.trim() || lv.name?.includes(leaveSearch.trim()))
       .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
   }, [leaves, leaveMonth, leaveSearch]);
+
+  // 종류별 뱃지 톤 + 기간의 실제 일수(달력일 기준) — 휴무현황 표에 함께 쓴다.
+  const LEAVE_TYPE_TONE = { 연차: "primary", 오전반차: "primary", 오후반차: "primary", 병가: "warning", 휴무: "muted", 결근: "danger" };
+  const leaveDayCount = (lv) => {
+    const start = new Date(`${lv.startDate}T00:00:00`);
+    const end = new Date(`${lv.endDate || lv.startDate}T00:00:00`);
+    const days = Math.round((end - start) / 86400000) + 1;
+    return lv.type === "오전반차" || lv.type === "오후반차" ? 0.5 : Math.max(days, 1);
+  };
+  const monthLeaveTypeTotals = useMemo(() => {
+    const totals = {};
+    for (const lv of monthLeaves) totals[lv.type] = (totals[lv.type] || 0) + leaveDayCount(lv);
+    return totals;
+  }, [monthLeaves]);
 
   // 출근시각이 수정될 때마다 지각 여부를 스케줄 출근예정시각 기준으로
   // 다시 계산한다 — 안 그러면 관리자가 지각 전 시간으로 고쳐도, 또는
@@ -420,7 +473,15 @@ export default function AttendanceBoard() {
       .filter((emp) => (emp.employmentStatus || "재직") !== "퇴사")
       .filter((emp) => {
         if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
+        if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
+        if (filters.shiftType && emp.shiftType !== filters.shiftType) return false;
+        if (filters.employmentType && emp.employmentType !== filters.employmentType) return false;
+        if (filters.team && emp.team !== filters.team) return false;
+        if (filters.position && emp.position !== filters.position) return false;
+        if (filters.nationality && emp.nationality !== filters.nationality) return false;
+        if (filters.country && emp.country !== filters.country) return false;
         if (filters.name && !emp.name?.includes(filters.name)) return false;
+        if (filters.phone && !emp.phone?.includes(filters.phone)) return false;
         return true;
       })
       .map((emp) => ({ emp, record: attendance.find((a) => a.uid === emp.id && a.date === todayKeyForCards) || null }))
@@ -451,7 +512,10 @@ export default function AttendanceBoard() {
           if (filters.employmentType && emp.employmentType !== filters.employmentType) return false;
           if (filters.team && emp.team !== filters.team) return false;
           if (filters.position && emp.position !== filters.position) return false;
+          if (filters.nationality && emp.nationality !== filters.nationality) return false;
+          if (filters.country && emp.country !== filters.country) return false;
           if (filters.name && !emp.name?.includes(filters.name)) return false;
+          if (filters.phone && !emp.phone?.includes(filters.phone)) return false;
           return true;
         })
         .sort((a, b) => (a.name || "").localeCompare(b.name || "")),
@@ -562,6 +626,36 @@ export default function AttendanceBoard() {
   // 하루치 상태를 실제 문서에 반영 — 출근/특근은 attendance 문서 하나,
   // 그 외(휴무/연차/반차/병가/결근)는 leaves 문서 하나로 남기고, statusKey가
   // 빈 문자열이면 두 컬렉션 모두에서 그 날짜 기록을 지워 "미정" 상태로 되돌린다.
+  // 월별 스케줄표에 찍은 상태를 스케줄등록(Schedule.jsx) 각 현황과 그대로
+  // 맞춰준다 — 출근/특근은 출근확정, 휴무 계열(휴무/연차/반차/병가)은 휴무,
+  // 결근/미정은 손대지 않고 대기 상태를 유지한다(별도 "결근" 인원현황이
+  // 없으므로). 같은 uid+date의 schedules 문서가 이미 있으면 그 상태만
+  // 갱신하고, 없으면 새로 만든다.
+  const syncScheduleStatus = async (emp, uid, name, dateKey, statusKey) => {
+    if (!emp) return;
+    let targetStatus = null;
+    if (statusKey === "출근" || statusKey === "특근") targetStatus = "출근확정";
+    else if (["휴무", "연차", "오전반차", "오후반차", "병가"].includes(statusKey)) targetStatus = "휴무";
+    if (!targetStatus) return; // 결근/미정(빈 값)은 스케줄등록 상태를 건드리지 않는다.
+    const existing = gridSchedules.find((s) => s.uid === uid && s.date === dateKey);
+    if (existing) {
+      if (existing.status !== targetStatus) await updateDoc(doc(db, "schedules", existing.id), { status: targetStatus }).catch(() => {});
+    } else {
+      await addDoc(collection(db, "schedules"), {
+        companyId: profile.companyId,
+        uid,
+        name,
+        date: dateKey,
+        startTime: "09:00",
+        endTime: "18:00",
+        siteId: emp.workSiteId || null,
+        siteName: siteName_(emp.workSiteId),
+        status: targetStatus,
+        createdAt: serverTimestamp(),
+      }).catch(() => {});
+    }
+  };
+
   const writeDayStatus = async (uid, name, dateKey, statusKey) => {
     const oldLeaves = gridLeaves.filter(
       (l) => l.uid === uid && l.status === "approved" && dateKey >= l.startDate && dateKey <= (l.endDate || l.startDate)
@@ -598,6 +692,7 @@ export default function AttendanceBoard() {
         });
       }
     }
+    await syncScheduleStatus(employeeByUid.get(uid), uid, name, dateKey, statusKey);
   };
 
   const gridApplyStatus = async (statusKey) => {
@@ -735,6 +830,58 @@ export default function AttendanceBoard() {
       ];
     });
     downloadCsv(`월별스케줄표_${gridMonth}.csv`, header, rows);
+  };
+
+  // 업체가 보내주는 출근기록부 엑셀 업로드 — 이름+전화번호가 등록된
+  // 근로자와 일치하는 행만 이번 gridMonth 그리드에 반영한다. 매칭 안 되는
+  // 행은 그 행만 건너뛰고 나머지는 정상 반영한다.
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const { parseAttendanceRecordFile } = await import("../utils/attendanceRecordImport");
+      const { error, matched, unmatched } = await parseAttendanceRecordFile(file, employees);
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      for (const row of matched) {
+        const dayEntries = Object.entries(row.dayMarks);
+        for (const [day, statusKey] of dayEntries) {
+          const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+          await writeDayStatus(row.uid, row.name, dateKey, statusKey);
+        }
+        // 일자별 연차 표기가 하나도 없는데 연차 합계만 있는 경우, 정확한
+        // 날짜를 알 수 없으므로 이번 달 1일부터 합계만큼 연차로 기록해둔다.
+        const hasDayLeave = dayEntries.some(([, s]) => ["연차", "오전반차", "오후반차"].includes(s));
+        if (!hasDayLeave && row.leaveTotal > 0) {
+          const start = new Date(`${gridMonth}-01T00:00:00`);
+          const end = new Date(start.getTime() + (row.leaveTotal - 1) * 86400000);
+          await addDoc(collection(db, "leaves"), {
+            companyId: profile.companyId,
+            uid: row.uid,
+            name: row.name,
+            type: "연차",
+            startDate: toDateKey(start),
+            endDate: toDateKey(end),
+            status: "approved",
+            source: "schedule",
+            reason: "출근기록부 업로드",
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+      setImportResult({ matchedCount: matched.length, unmatched });
+      if (matched.length > 0) toast.success(`${matched.length}명의 기록을 반영했습니다`);
+      if (unmatched.length > 0) toast.error(`${unmatched.length}명은 등록된 근로자와 일치하지 않아 제외했습니다`);
+    } catch (err) {
+      toast.error(`업로드 처리에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setImporting(false);
+    }
   };
 
   const attendanceColumns = [
@@ -960,7 +1107,7 @@ export default function AttendanceBoard() {
           </div>
         </Card>
 
-        {view !== "휴무현황" && (
+        {(view === "수정현황" || view === "변경요청") && (
         <Card className="mb-4 space-y-3 p-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <label className="block">
@@ -1136,42 +1283,168 @@ export default function AttendanceBoard() {
 
         {view === "출근현황" && (
           <>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <select
-                className="w-32 rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                value={filters.siteId}
-                onChange={(e) => {
-                  setFilters((f) => ({ ...f, siteId: e.target.value }));
-                  setAttendancePage(1);
-                }}
-              >
-                <option value="">전체 센터</option>
-                {workSites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                className="w-40 rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-                value={filters.name}
-                onChange={(e) => {
-                  setFilters((f) => ({ ...f, name: e.target.value }));
-                  setAttendancePage(1);
-                }}
-                placeholder="이름으로 검색"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setFilters(EMPTY_FILTERS);
-                  setAttendancePage(1);
-                }}
-              >
-                <RefreshCw size={13} /> 초기화
-              </Button>
-            </div>
+            <Card className="mb-3 space-y-3 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-1 min-w-[220px] items-center overflow-hidden rounded-lg border border-slate-200 focus-within:border-primary">
+                  <input
+                    className="w-full px-3 py-2 text-sm outline-none"
+                    value={searchDraft.name}
+                    onChange={(e) => setSearchDraft((f) => ({ ...f, name: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && applyAttendanceSearch()}
+                    placeholder="이름으로 검색"
+                  />
+                  <button
+                    type="button"
+                    onClick={applyAttendanceSearch}
+                    className="flex shrink-0 items-center gap-1 bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-dark"
+                  >
+                    검색
+                  </button>
+                </div>
+                <Button size="sm" variant="outline" onClick={resetAttendanceSearch}>
+                  <RefreshCw size={13} /> 초기화
+                </Button>
+                <Button
+                  size="sm"
+                  variant={detailSearchOpen ? "primary" : "outline"}
+                  onClick={() => setDetailSearchOpen((v) => !v)}
+                >
+                  세부검색 {detailSearchOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </Button>
+              </div>
+
+              {detailSearchOpen && (
+                <div className="space-y-3 border-t border-slate-100 pt-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.siteId}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, siteId: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {workSites.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.vendorId}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, vendorId: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {vendors.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">근무구분</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.shiftType}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, shiftType: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {SHIFT_TYPE_OPTIONS.map((s) => (
+                          <option key={s}>{s}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">근무형태</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.employmentType}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, employmentType: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                          <option key={t}>{t}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">부서</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.team}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, team: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">직급</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.position}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, position: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {positions.map((p) => (
+                          <option key={p.id} value={p.name}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">외/내국인구분</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.nationality}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, nationality: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {NATIONALITY_OPTIONS.map((n) => (
+                          <option key={n}>{n}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">국가구분</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.country}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, country: e.target.value }))}
+                      >
+                        <option value="">전체</option>
+                        {COUNTRY_OPTIONS.map((c) => (
+                          <option key={c}>{c}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-muted">전화번호</span>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={searchDraft.phone}
+                        onChange={(e) => setSearchDraft((f) => ({ ...f, phone: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={applyAttendanceSearch}>
+                      검색
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
             <p className="mb-2 text-xs text-muted">
               총 {attendanceRoster.length}명 · <span className="text-danger">지각 {lateCount}</span> · <span className="text-warning">조퇴 {earlyLeaveCount}</span>
             </p>
@@ -1260,7 +1533,13 @@ export default function AttendanceBoard() {
               </div>
             )}
 
-            <div className="mt-6">
+            <div className="my-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-200" />
+              <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-muted">아래는 월별 스케줄표입니다</span>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 md:p-4">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                   <CalendarRange size={15} className="text-primary" /> 월별 스케줄표
@@ -1272,6 +1551,16 @@ export default function AttendanceBoard() {
                     onChange={(e) => setGridMonth(e.target.value)}
                     className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-ink hover:bg-slate-50">
+                    <Upload size={14} /> {importing ? "업로드 중..." : "출근기록부 업로드"}
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      disabled={importing}
+                      onChange={handleImportFile}
+                    />
+                  </label>
                   <Button size="sm" variant="outline" onClick={exportGridCsv}>
                     <FileSpreadsheet size={14} /> 파일저장
                   </Button>
@@ -1458,45 +1747,69 @@ export default function AttendanceBoard() {
                 className="w-40 rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
             </div>
+            <p className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+              <span>총 {monthLeaves.length}건</span>
+              {Object.entries(monthLeaveTypeTotals).map(([type, total]) => (
+                <span key={type}>
+                  {type} {total}일
+                </span>
+              ))}
+            </p>
             <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
-              <table className="w-full min-w-[720px] text-center text-sm">
+              <table className="w-full min-w-[860px] text-center text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-muted">
                     <th className="px-4 py-3 font-semibold">순번</th>
                     <th className="px-4 py-3 font-semibold">종류</th>
-                    <th className="px-4 py-3 font-semibold">사유</th>
                     <th className="px-4 py-3 font-semibold">이름</th>
-                    <th className="px-4 py-3 font-semibold">전화번호</th>
+                    <th className="px-4 py-3 font-semibold">연락처</th>
+                    <th className="px-4 py-3 font-semibold">소속업체</th>
+                    <th className="px-4 py-3 font-semibold">센터</th>
                     <th className="px-4 py-3 font-semibold">기간</th>
+                    <th className="px-4 py-3 font-semibold">일수</th>
+                    <th className="px-4 py-3 font-semibold">사유</th>
                     <th className="px-4 py-3 font-semibold">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {monthLeaves.map((lv, i) => (
-                    <tr key={lv.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3 text-ink">{i + 1}</td>
-                      <td className="px-4 py-3 text-ink">{lv.type}</td>
-                      <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
-                      <td className="px-4 py-3 text-ink">{lv.name}</td>
-                      <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{employeeByUid.get(lv.uid)?.phone || "-"}<SmsButton phone={employeeByUid.get(lv.uid)?.phone} /></span></td>
-                      <td className="px-4 py-3 text-ink">
-                        {formatDate(lv.startDate)} ~ {formatDate(lv.endDate)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => deleteLeave(lv)}
-                          title="삭제"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {monthLeaves.map((lv, i) => {
+                    const emp = employeeByUid.get(lv.uid);
+                    return (
+                      <tr key={lv.id} className="border-b border-slate-50 last:border-0">
+                        <td className="px-4 py-3 text-ink">{i + 1}</td>
+                        <td className="px-4 py-3">
+                          <Badge tone={LEAVE_TYPE_TONE[lv.type] || "muted"}>{lv.type}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-ink">{lv.name}</td>
+                        <td className="px-4 py-3 text-ink">
+                          <span className="inline-flex items-center gap-1">
+                            {emp?.phone || "-"}
+                            {emp?.phone && <SmsButton phone={emp.phone} />}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-ink">{vendorName_(emp?.vendorId)}</td>
+                        <td className="px-4 py-3 text-ink">{siteName_(emp?.workSiteId)}</td>
+                        <td className="px-4 py-3 text-ink">
+                          {lv.startDate === lv.endDate || !lv.endDate ? formatDate(lv.startDate) : `${formatDate(lv.startDate)} ~ ${formatDate(lv.endDate)}`}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-ink">{leaveDayCount(lv)}일</td>
+                        <td className="px-4 py-3 text-ink">{lv.reason || "-"}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => deleteLeave(lv)}
+                            title="삭제"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {monthLeaves.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted">
+                      <td colSpan={10} className="px-4 py-6 text-center text-xs text-muted">
                         해당 월에 휴무 정보가 없습니다.
                       </td>
                     </tr>
@@ -1755,6 +2068,47 @@ export default function AttendanceBoard() {
                   .join(" · ")}
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(importResult)}
+        onClose={() => setImportResult(null)}
+        title="출근기록부 업로드 결과"
+        footer={
+          <Button variant="outline" onClick={() => setImportResult(null)}>
+            닫기
+          </Button>
+        }
+      >
+        {importResult && (
+          <div className="space-y-3">
+            <p className="text-sm text-ink">
+              총 <span className="font-semibold text-primary">{importResult.matchedCount}명</span> 반영 완료 ·{" "}
+              <span className="font-semibold text-danger">{importResult.unmatched.length}명</span> 제외
+            </p>
+            {importResult.unmatched.length > 0 && (
+              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200">
+                <table className="w-full text-center text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs text-muted">
+                      <th className="px-3 py-2 font-semibold">이름</th>
+                      <th className="px-3 py-2 font-semibold">전화번호</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importResult.unmatched.map((u, i) => (
+                      <tr key={i} className="border-b border-slate-50 last:border-0">
+                        <td className="px-3 py-2 text-ink">{u.name}</td>
+                        <td className="px-3 py-2 text-ink">{u.phone || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-xs text-muted">제외된 근로자는 이름과 전화번호가 등록된 근로자 정보와 정확히 일치하지 않아 자동으로 반영되지 않았습니다.</p>
           </div>
         )}
       </Modal>

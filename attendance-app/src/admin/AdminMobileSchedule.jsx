@@ -253,6 +253,7 @@ export default function AdminMobileSchedule() {
           : "관리자에 의해 출근 처리되었습니다."
       );
     } catch (err) {
+      console.error("forceCheckIn 실패:", err);
       toast.error(`강제출근 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }
   };

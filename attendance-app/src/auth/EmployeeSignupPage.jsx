@@ -100,6 +100,9 @@ export default function EmployeeSignupPage() {
           createdAt: serverTimestamp(),
         });
         await deleteDoc(doc(db, "pendingEmployees", code.trim().toUpperCase()));
+        // 관리자가 가입 전에 미리 승인 처리해둔 임시 계정(users 문서 id =
+        // 가입코드)이 있다면, 방금 만든 실제 uid 문서와 중복되지 않도록 지운다.
+        await deleteDoc(doc(db, "users", code.trim().toUpperCase())).catch(() => {});
         await createInitialSchedule(cred.user.uid, pendingProfile.name, companyId, pendingProfile.workSiteId);
       } else {
         await setDoc(doc(db, "users", cred.user.uid), {

@@ -219,6 +219,39 @@ export default function Schedule() {
     return () => unsubSchedules();
   }, [profile?.companyId, range.start, range.end, view, calendarMonth]);
 
+  // 출근현황(월별 스케줄표)에서 그날 상태를 따로 지정하지 않은 재직 중인
+  // 근로자도 매일 스케줄등록의 어딘가(기본은 대기)에는 항상 잡혀 있어야
+  // 한다 — 오늘 날짜로 조회 중인데 아직 schedules 문서가 없는 근로자가
+  // 있으면 "대기" 상태로 하나씩 채워 넣는다. 서버 크론이 없는 구조라
+  // 관리자가 스케줄등록 화면을 열 때마다(=오늘 날짜를 조회할 때) 이
+  // 보정이 일어난다.
+  useEffect(() => {
+    if (!profile?.companyId) return;
+    const today = toDateKey();
+    if (range.start !== today || range.end !== today) return;
+    const existingKeys = new Set(schedules.map((s) => `${s.uid}_${s.date}`));
+    const missing = employees.filter(
+      (emp) => !emp.deleted && emp.employmentStatus !== "퇴사" && !existingKeys.has(`${emp.id}_${today}`)
+    );
+    if (missing.length === 0) return;
+    (async () => {
+      for (const emp of missing) {
+        await addDoc(collection(db, "schedules"), {
+          companyId: profile.companyId,
+          uid: emp.id,
+          name: emp.name,
+          date: today,
+          startTime: "09:00",
+          endTime: "18:00",
+          siteId: emp.workSiteId || null,
+          siteName: siteName_(emp.workSiteId),
+          status: "대기",
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+      }
+    })();
+  }, [profile?.companyId, employees, schedules, range.start, range.end]);
+
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
@@ -828,6 +861,7 @@ export default function Schedule() {
           : "관리자에 의해 출근 처리되었습니다."
       );
     } catch (err) {
+      console.error("forceCheckIn 실패:", err);
       toast.error(`강제출근 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }
   };

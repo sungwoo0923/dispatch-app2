@@ -1222,6 +1222,40 @@ export default function EmployeeList() {
 
   const removePending = (code) => deleteDoc(doc(db, "pendingEmployees", code));
 
+  // 대용량업로드 등으로 미리 등록만 해둔(가입코드 미입력) 근로자를, 본인이
+  // 앱에서 직접 가입하지 않아도 관리자가 바로 승인 처리할 수 있게 한다.
+  // 실제 Firebase Auth 계정이 없으므로 가입코드를 그대로 users 문서
+  // id로 써서 임시 계정을 만든다 — 근로자목록/스케줄 등 다른 화면은 uid
+  // 형태를 신경 쓰지 않으므로 정상 동작하고, 이후 본인이 같은 코드로
+  // 실제 가입하면(EmployeeSignupPage) 이 임시 문서를 실제 uid 문서로
+  // 교체하도록 되어 있다.
+  const approvedPendingIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
+  const approvePending = async (p) => {
+    if (approvedPendingIds.has(p.id)) return;
+    const { id, companyId, ...rest } = p;
+    await setDoc(
+      doc(db, "users", id),
+      {
+        ...rest,
+        companyId,
+        role: "employee",
+        approved: true,
+        employmentStatus: rest.employmentStatus || "재직",
+        hireDate: rest.hireDate || toDateKey(),
+        pendingSignupCode: id,
+        createdAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    toast.success(`${p.name}님을 가입 전 임시 승인 처리했습니다`);
+  };
+  const approveAllPending = async () => {
+    const targets = pending.filter((p) => !approvedPendingIds.has(p.id));
+    if (targets.length === 0) return;
+    if (!(await confirm(`가입 대기 중인 ${targets.length}명을 전부 가입 전 임시 승인 처리하시겠습니까?`, "save"))) return;
+    for (const p of targets) await approvePending(p);
+  };
+
   const toggleSelected = (id) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -1969,41 +2003,72 @@ export default function EmployeeList() {
           defaultCollapsed
           highlight={panelHasNew("panel_pendingEmployees", pending)}
           actions={
-            panelHasNew("panel_pendingEmployees", pending) ? (
-              <Button size="sm" variant="outline" onClick={() => ackPanel("panel_pendingEmployees")}>
-                <Check size={13} /> 확인
-              </Button>
-            ) : null
+            <div className="flex items-center gap-2">
+              {pending.some((p) => !approvedPendingIds.has(p.id)) && (
+                <Button size="sm" variant="outline" onClick={approveAllPending}>
+                  <Check size={13} /> 전체 일괄승인
+                </Button>
+              )}
+              {panelHasNew("panel_pendingEmployees", pending) && (
+                <Button size="sm" variant="outline" onClick={() => ackPanel("panel_pendingEmployees")}>
+                  <Check size={13} /> 확인
+                </Button>
+              )}
+            </div>
           }
         >
-          <p className="mb-2 text-xs text-muted">아직 앱에서 가입코드 입력 전인 근로자입니다.</p>
+          <p className="mb-2 text-xs text-muted">
+            아직 앱에서 가입코드 입력 전인 근로자입니다. 본인이 직접 가입할 때까지 기다리지 않고 바로 승인만 먼저 처리하려면 &quot;승인&quot;을 누르세요 — 근로자목록에 즉시 등록되고, 나중에 본인이 같은 코드로 가입하면 자동으로 정식 계정으로 전환됩니다.
+          </p>
           <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
-            <table className="w-full min-w-[560px] text-center text-sm">
+            <table className="w-full min-w-[640px] text-center text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-muted">
                   <th className="px-4 py-3 font-semibold">이름</th>
                   <th className="px-4 py-3 font-semibold">연락처</th>
                   <th className="px-4 py-3 font-semibold">가입코드</th>
+                  <th className="px-4 py-3 font-semibold">상태</th>
                   <th className="px-4 py-3 font-semibold"></th>
                 </tr>
               </thead>
               <tbody>
-                {pending.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
-                    <td className="px-4 py-3 text-ink">{p.name}</td>
-                    <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{p.phone}<SmsButton phone={p.phone} /></span></td>
-                    <td className="px-4 py-3 font-mono text-primary">{p.id}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        className="text-muted hover:text-danger"
-                        onClick={() => removePending(p.id)}
-                        title="삭제"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {pending.map((p) => {
+                  const isApproved = approvedPendingIds.has(p.id);
+                  return (
+                    <tr key={p.id} className="border-b border-slate-50 last:border-0 odd:bg-white even:bg-slate-50/50">
+                      <td className="px-4 py-3 text-ink">{p.name}</td>
+                      <td className="px-4 py-3 text-ink"><span className="inline-flex items-center gap-1">{p.phone}<SmsButton phone={p.phone} /></span></td>
+                      <td className="px-4 py-3 font-mono text-primary">{p.id}</td>
+                      <td className="px-4 py-3">
+                        {isApproved ? (
+                          <Badge tone="primary">가입 전 임시승인됨</Badge>
+                        ) : (
+                          <Badge tone="muted">가입코드 미입력</Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          {!isApproved && (
+                            <button
+                              className="text-primary hover:text-primary-dark"
+                              onClick={() => approvePending(p)}
+                              title="가입 전 승인"
+                            >
+                              <Check size={16} />
+                            </button>
+                          )}
+                          <button
+                            className="text-muted hover:text-danger"
+                            onClick={() => removePending(p.id)}
+                            title="삭제"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

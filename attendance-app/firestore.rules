@@ -74,7 +74,15 @@ service cloud.firestore {
       allow list: if isAdminOf(resource.data.companyId);
       allow create: if isSignedIn() && request.auth.uid == uid;
       allow update: if isSelf(uid) || isAdminOf(resource.data.companyId);
-      allow delete: if isAdminOf(resource.data.companyId);
+      // 대용량업로드로 만든 가입코드를 관리자가 가입 전에 미리 승인해두면
+      // (pendingSignupCode 필드가 있는 임시 users 문서) 본인이 나중에 같은
+      // 코드로 실제 가입할 때 이 임시 문서를 지우고 실제 uid 문서로
+      // 교체해야 한다 — 그 시점의 본인은 아직 admin이 아니므로, "같은
+      // 회사 소속의 가입 전 임시문서"에 한해 셀프 삭제를 별도로 허용한다.
+      allow delete: if isAdminOf(resource.data.companyId) ||
+        (isSignedIn() && resource.data.pendingSignupCode == uid &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId);
     }
 
     // Work site info (name/coords/radius) has no PII, so any signed-in
@@ -136,6 +144,9 @@ service cloud.firestore {
         (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
       allow create, update: if isSignedIn() &&
         (request.resource.data.uid == request.auth.uid || isAdminOf(request.resource.data.companyId));
+      // 기록지우기(관리자가 근태 셀을 "미정"으로 초기화) 시 실제 문서를
+      // 지워야 하는데, delete 규칙이 없어 매번 조용히 실패하던 버그.
+      allow delete: if isSignedIn() && isAdminOf(resource.data.companyId);
     }
 
     // Audit trail of admin corrections to a worker's recorded check-in/out
