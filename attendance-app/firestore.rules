@@ -178,6 +178,15 @@ service cloud.firestore {
         (isAdminOf(resource.data.companyId) || (resource.data.uid == request.auth.uid && resource.data.status == 'pending'));
     }
 
+    // 월별 스케줄표(출근현황) 각 근로자 행의 비고 메모 — docId가
+    // `${month}_${uid}`라 관리자가 그대로 setDoc(merge)으로 덮어쓴다.
+    match /scheduleRemarks/{id} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isAdminOf(resource.data.companyId));
+      allow create, update: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+    }
+
     // 근로자 개인 알림(조퇴 승인/거절 등) — 관리자가 발행하고 본인만 읽고
     // 읽음 처리할 수 있다.
     match /notifications/{id} {

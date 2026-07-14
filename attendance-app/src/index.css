@@ -87,6 +87,24 @@ body[data-modal-open="true"] #admin-bottom-nav {
   border-radius: 999px;
 }
 
+/* 화면 전체(사이드바/필터 등)는 그대로 두고 특정 영역만 인쇄해야 할 때
+   쓰는 범용 스코프 — 인쇄 버튼을 누르면 document.body에 data-print-target을
+   달고, [data-print-area]로 감싼 부분만 남기고 나머지는 인쇄에서 숨긴다. */
+@media print {
+  body[data-print-target] * {
+    visibility: hidden;
+  }
+  body[data-print-target] [data-print-area],
+  body[data-print-target] [data-print-area] * {
+    visibility: visible;
+  }
+  body[data-print-target] [data-print-area] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+}
+
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }

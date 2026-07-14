@@ -38,6 +38,7 @@ import {
   EMPLOYMENT_TYPE_OPTIONS,
   SHIFT_TYPE_OPTIONS,
   PAY_TYPE_OPTIONS,
+  TRANSPORT_MODE_OPTIONS,
   COUNTRY_OPTIONS,
   VISA_STATUS_GROUPS,
   BANK_OPTIONS,
@@ -118,6 +119,7 @@ const EMPTY_REGISTER_FORM = {
   employmentType: "상용직",
   shiftType: "주간",
   payType: "월급",
+  transportMode: "",
   team: "",
   position: "",
   insuranceApplied: "Y",
@@ -181,6 +183,7 @@ const CHANGE_LOG_FIELD_LABELS = {
   employmentType: "근무형태",
   shiftType: "근무구분",
   payType: "지급구분",
+  transportMode: "이동수단",
   team: "부서",
   position: "직급",
   employmentStatus: "재직상태",
@@ -1102,6 +1105,7 @@ export default function EmployeeList() {
       position: src.position || "",
       shiftType: src.shiftType || f.shiftType,
       payType: src.payType || f.payType,
+      transportMode: src.transportMode || f.transportMode,
       insuranceApplied: src.insuranceApplied || f.insuranceApplied,
     }));
   };
@@ -2621,6 +2625,19 @@ export default function EmployeeList() {
                       <option key={p.id} value={p.name}>
                         {p.name}
                       </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">이동수단</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={registerForm.transportMode}
+                    onChange={(e) => setRegisterForm((f) => ({ ...f, transportMode: e.target.value }))}
+                  >
+                    <option value="">선택</option>
+                    {TRANSPORT_MODE_OPTIONS.map((t) => (
+                      <option key={t}>{t}</option>
                     ))}
                   </select>
                 </label>

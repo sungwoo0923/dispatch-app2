@@ -61,6 +61,8 @@ export function calcLeaveBalance({ hireDate, leaves = [], today = toDateKey(), c
       fieldDays += days;
     } else if (lv.type === "오전반차" || lv.type === "오후반차") {
       used += 0.5;
+    } else if (lv.type === "휴무" || lv.type === "결근" || lv.type === "관리자 처리") {
+      // 월별 스케줄표에서 지정하는 휴무/결근은 연차를 소진하지 않는다.
     } else {
       used += days;
     }

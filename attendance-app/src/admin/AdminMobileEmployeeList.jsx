@@ -16,6 +16,7 @@ import {
   EMPLOYMENT_TYPE_OPTIONS,
   SHIFT_TYPE_OPTIONS,
   PAY_TYPE_OPTIONS,
+  TRANSPORT_MODE_OPTIONS,
   TEAM_OPTIONS,
   POSITION_OPTIONS,
   NATIONALITY_OPTIONS,
@@ -36,6 +37,7 @@ const EMPTY_REG_FORM = {
   employmentType: "상용직",
   shiftType: "주간",
   payType: "월급",
+  transportMode: "",
   team: "",
   position: "",
   careerYears: "",
@@ -555,6 +557,15 @@ export default function AdminMobileEmployeeList() {
                 <span className="mb-1 block text-xs font-medium text-muted">지급구분</span>
                 <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.payType} onChange={(e) => setRegForm((f) => ({ ...f, payType: e.target.value }))}>
                   {PAY_TYPE_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted">이동수단</span>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={regForm.transportMode} onChange={(e) => setRegForm((f) => ({ ...f, transportMode: e.target.value }))}>
+                  <option value="">선택</option>
+                  {TRANSPORT_MODE_OPTIONS.map((o) => (
                     <option key={o} value={o}>{o}</option>
                   ))}
                 </select>

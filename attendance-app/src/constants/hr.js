@@ -12,6 +12,8 @@ export const SHIFT_TYPE_OPTIONS = ["주간", "야간"];
 export const SHIFT_WORK_TYPE_OPTIONS = ["정규직", "탄력근무", "교대근무", "단시간근로"];
 // 지급구분: settlement cadence, drives which 급여형태 tab a payroll defaults into.
 export const PAY_TYPE_OPTIONS = ["일급", "주급", "월급"];
+// 이동수단: 출퇴근 방법 — 통근버스/식대 등 사업장 공통비용 배정과 연결될 수 있다.
+export const TRANSPORT_MODE_OPTIONS = ["자차", "버스", "도보", "기타"];
 // 국가구분: 내국인 선택 시 자동으로 "대한민국"이 지정되므로 항상 옵션에 포함해야
 // select 값이 빈 문자열로 표시되지 않는다. 이어서 고용허가제(EPS) 송출 16개국을
 // 상단에 두고, 그 외 국가는 가나다순으로 배치.
