@@ -271,6 +271,48 @@ export default function AdminMobileSchedule() {
     }
   };
 
+  // 이번 달에 등록해둔 스케줄을 통째로 지워야 할 때 — writeDayStatus로
+  // 하루씩 지우면 schedules(스케줄등록) 상태가 낡은 채로 남으므로, 세
+  // 컬렉션 모두 이 근로자의 이번 달 문서를 직접 지운다(PC AttendanceBoard의
+  // 일괄편집 "이 달 전체 초기화"와 동일한 로직).
+  const [gridResetting, setGridResetting] = useState(false);
+  const resetGridMonth = async () => {
+    if (!monthEmp) return;
+    if (!(await confirm(`${monthEmp.name} 근로자의 ${gridMonth} 스케줄을 전부 초기화하시겠습니까? 출근/휴가/스케줄등록 기록이 모두 삭제됩니다.`, "delete")))
+      return;
+    setGridResetting(true);
+    try {
+      const monthStart = `${gridMonth}-01`;
+      const monthEnd = `${gridMonth}-31`;
+      const [attSnap, leavesSnap, schedSnap] = await Promise.all([
+        getDocs(
+          query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("uid", "==", monthEmp.id), where("month", "==", gridMonth))
+        ),
+        getDocs(query(collection(db, "leaves"), where("companyId", "==", profile.companyId), where("uid", "==", monthEmp.id))),
+        getDocs(
+          query(
+            collection(db, "schedules"),
+            where("companyId", "==", profile.companyId),
+            where("uid", "==", monthEmp.id),
+            where("date", ">=", monthStart),
+            where("date", "<=", monthEnd)
+          )
+        ),
+      ]);
+      const deletes = [
+        ...attSnap.docs.map((d) => deleteDoc(doc(db, "attendance", d.id))),
+        ...leavesSnap.docs.filter((d) => d.data().startDate >= monthStart && d.data().startDate <= monthEnd).map((d) => deleteDoc(doc(db, "leaves", d.id))),
+        ...schedSnap.docs.map((d) => deleteDoc(doc(db, "schedules", d.id))),
+      ];
+      await Promise.all(deletes);
+      toast.success(`${monthEmp.name} 근로자의 ${gridMonth} 스케줄을 초기화했습니다`);
+    } catch (err) {
+      toast.error(`초기화에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setGridResetting(false);
+    }
+  };
+
   const pendingRows = useMemo(
     () => schedules.filter((s) => (s.status || "대기") === "대기").map((s) => ({ schedule: s, emp: empByUid.get(s.uid) })).filter((r) => r.emp),
     [schedules, empByUid]
@@ -719,6 +761,15 @@ export default function AdminMobileSchedule() {
               )}
 
               <MiniMonthCalendar month={gridMonth} cells={gridCells} onDayClick={openGridDay} />
+
+              <button
+                type="button"
+                disabled={gridResetting}
+                onClick={resetGridMonth}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-sm text-muted disabled:opacity-50"
+              >
+                <Eraser size={14} /> {gridResetting ? "초기화 중..." : `${gridMonth.split("-")[1]}월 스케줄 전체 초기화`}
+              </button>
 
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
                 {GRID_STATUS_KEYS.map((k) => (

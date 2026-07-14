@@ -821,6 +821,50 @@ export default function AttendanceBoard() {
     }
   };
 
+  // 이번 달에 등록해둔 스케줄을 통째로 지워야 할 때(엑셀 대량업로드로
+  // 잘못 채워졌거나, 처음부터 다시 짤 때)를 위한 초기화 — writeDayStatus로
+  // 하루하루 지우면 출근/휴가 기록만 지워지고 schedules(스케줄등록) 문서는
+  // 상태가 낡은 채로 남으므로, 세 컬렉션 모두 이 근로자의 이번 달 문서를
+  // 직접 지운다.
+  const [bulkResetting, setBulkResetting] = useState(false);
+  const resetBulkMonth = async () => {
+    if (!bulkTarget) return;
+    if (!(await confirm(`${bulkTarget.name} 근로자의 ${bulkMonth} 스케줄을 전부 초기화하시겠습니까? 출근/휴가/스케줄등록 기록이 모두 삭제됩니다.`, "delete")))
+      return;
+    setBulkResetting(true);
+    try {
+      const monthStart = `${bulkMonth}-01`;
+      const monthEnd = `${bulkMonth}-31`;
+      const [attSnap, leavesSnap, schedSnap] = await Promise.all([
+        getDocs(
+          query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("uid", "==", bulkTarget.id), where("month", "==", bulkMonth))
+        ),
+        getDocs(query(collection(db, "leaves"), where("companyId", "==", profile.companyId), where("uid", "==", bulkTarget.id))),
+        getDocs(
+          query(
+            collection(db, "schedules"),
+            where("companyId", "==", profile.companyId),
+            where("uid", "==", bulkTarget.id),
+            where("date", ">=", monthStart),
+            where("date", "<=", monthEnd)
+          )
+        ),
+      ]);
+      const deletes = [
+        ...attSnap.docs.map((d) => deleteDoc(doc(db, "attendance", d.id))),
+        ...leavesSnap.docs.filter((d) => d.data().startDate >= monthStart && d.data().startDate <= monthEnd).map((d) => deleteDoc(doc(db, "leaves", d.id))),
+        ...schedSnap.docs.map((d) => deleteDoc(doc(db, "schedules", d.id))),
+      ];
+      await Promise.all(deletes);
+      setBulkDayMap({});
+      toast.success(`${bulkTarget.name} 근로자의 ${bulkMonth} 스케줄을 초기화했습니다`);
+    } catch (err) {
+      toast.error(`초기화에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setBulkResetting(false);
+    }
+  };
+
   // ── 인쇄/파일저장 ──────────────────────────────────────────────
   const printGrid = () => {
     document.body.setAttribute("data-print-target", "1");
@@ -2053,6 +2097,9 @@ export default function AttendanceBoard() {
         footer={
           bulkTarget && (
             <>
+              <Button variant="outline" className="mr-auto" onClick={resetBulkMonth} disabled={bulkResetting || bulkSaving}>
+                <Trash2 size={13} /> {bulkResetting ? "초기화 중..." : "이 달 전체 초기화"}
+              </Button>
               <Button variant="outline" onClick={() => setBulkTarget(null)}>
                 취소
               </Button>
