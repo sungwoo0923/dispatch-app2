@@ -22,13 +22,22 @@ function monthsBetween(hireDateKey, todayKey) {
   );
 }
 
-// Standard Korean labor-law style annual leave: 15 days after 1yr tenure,
-// prorated ~1 day/month (up to 11) before 1yr. Cycle resets from Jan 1 of
-// the current year for simplicity.
-export function calcLeaveBalance({ hireDate, leaves = [], today = toDateKey() }) {
-  const monthsOfService = Math.max(0, monthsBetween(hireDate, today));
+// 근로기준법 제60조 기준: 계속근로 1년 미만은 매월 개근 시 1일(최대 11일),
+// 1년 이상은 15일 + 3년차부터 매 2년마다 1일 가산(최대 25일). 별도
+// 관리자 설정(휴가템플릿 등) 없이 입사일만으로 자동 계산한다 — 경력직으로
+// 입사해 이 회사 근속연수와 별개로 인정해줄 연차가 있으면(근로자등록의
+// "경력인정연수") monthsOfService에 그만큼 더해 반영한다.
+function yearlyEntitlement(years) {
+  return Math.min(15 + Math.floor(Math.max(0, years - 1) / 2), 25);
+}
+
+// Standard Korean labor-law style annual leave: 15 days after 1yr tenure
+// (+가산휴가 for long service), prorated ~1 day/month (up to 11) before 1yr.
+// Cycle resets from Jan 1 of the current year for simplicity.
+export function calcLeaveBalance({ hireDate, leaves = [], today = toDateKey(), careerYears = 0 }) {
+  const monthsOfService = Math.max(0, monthsBetween(hireDate, today)) + Math.round((careerYears || 0) * 12);
   const isAnnual = monthsOfService >= 12;
-  const entitlement = isAnnual ? 15 : Math.min(11, monthsOfService);
+  const entitlement = isAnnual ? yearlyEntitlement(Math.floor(monthsOfService / 12)) : Math.min(11, monthsOfService);
   const leaveLabel = isAnnual ? "연차" : "월차";
 
   const yearStart = `${today.slice(0, 4)}-01-01`;

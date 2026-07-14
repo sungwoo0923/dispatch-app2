@@ -40,11 +40,10 @@ export const NAV = [
     ],
   },
   {
-    to: "/leaves/settings",
+    to: "/leaves/management",
     label: "휴가",
     icon: CalendarClock,
     children: [
-      { to: "/leaves/settings", label: "휴가설정" },
       { to: "/leaves/management", label: "근로자휴가관리" },
       { to: "/leaves", label: "근로자휴가신청현황" },
       { to: "/leaves/usage", label: "휴가사용현황" },

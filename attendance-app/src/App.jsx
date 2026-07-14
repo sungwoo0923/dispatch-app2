@@ -27,7 +27,6 @@ import AdminMobileStatsAttendanceCount from "./admin/AdminMobileStatsAttendanceC
 import AdminMobileStatsMonthlyGrid from "./admin/AdminMobileStatsMonthlyGrid";
 import AdminMobileStatsMonthlyTime from "./admin/AdminMobileStatsMonthlyTime";
 import AdminMobileStatsSiteAggregate from "./admin/AdminMobileStatsSiteAggregate";
-import AdminMobileLeaveSettings from "./admin/AdminMobileLeaveSettings";
 import AdminMobileBusinessEntities from "./admin/AdminMobileBusinessEntities";
 import AdminMobileVendors from "./admin/AdminMobileVendors";
 import AdminMobileCenters from "./admin/AdminMobileCenters";
@@ -72,7 +71,6 @@ import CenterReports from "./admin/CenterReports";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
 import LeaveApprovals from "./admin/LeaveApprovals";
-import LeaveSettings from "./admin/LeaveSettings";
 import LeaveManagement from "./admin/LeaveManagement";
 import LeaveUsage from "./admin/LeaveUsage";
 import Payroll from "./admin/Payroll";
@@ -205,7 +203,6 @@ export default function App() {
             <Route path="stats/monthly-grid" element={<AdminMobileStatsMonthlyGrid />} />
             <Route path="stats/monthly-time" element={<AdminMobileStatsMonthlyTime />} />
             <Route path="stats/site-aggregate" element={<AdminMobileStatsSiteAggregate />} />
-            <Route path="leaves/settings" element={<AdminMobileLeaveSettings />} />
             <Route path="org/entities" element={<AdminMobileBusinessEntities />} />
             <Route path="org/vendors" element={<AdminMobileVendors />} />
             <Route path="org/centers" element={<AdminMobileCenters />} />
@@ -247,7 +244,6 @@ export default function App() {
           <Route path="stats/monthly-grid" element={<StatsMonthlyGrid />} />
           <Route path="stats/monthly-time" element={<StatsMonthlyTimeGrid />} />
           <Route path="stats/site-aggregate" element={<StatsSiteAggregate />} />
-          <Route path="leaves/settings" element={<LeaveSettings />} />
           <Route path="org/entities" element={<BusinessEntities />} />
           <Route path="org/vendors" element={<Vendors />} />
           <Route path="org/centers" element={<Centers />} />

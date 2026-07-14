@@ -9,6 +9,7 @@ import Panel from "../components/Panel";
 import Modal from "../components/Modal";
 import { downloadCsv } from "../utils/exportCsv";
 import { formatDate, toDateKey, addDays } from "../utils/dateUtils";
+import { calcLeaveBalance } from "../utils/leave";
 import { EMPLOYMENT_TYPE_OPTIONS, SHIFT_TYPE_OPTIONS } from "../constants/hr";
 import SmsButton from "../components/SmsButton";
 
@@ -248,25 +249,23 @@ function UsageListTab({ employees, workSites, vendors, leaves }) {
         {detailUid &&
           (() => {
             const emp = employeeByUid.get(detailUid);
-            const used = leaves.filter((l) => l.uid === detailUid).reduce((sum, l) => sum + (l.days || 1), 0);
-            const generated = 2; // 휴가 발생 산정 엔진 연동 전까지의 임시값 (근로자휴가관리와 동일한 기준)
-            const remaining = Math.max(generated - used, 0);
+            const b = calcLeaveBalance({ hireDate: emp?.hireDate || toDateKey(), leaves: leaves.filter((l) => l.uid === detailUid), careerYears: emp?.careerYears });
             return (
               <div className="space-y-3 text-center">
                 <p className="text-sm font-semibold text-ink">{emp?.name}</p>
                 <p className="text-xs text-muted">{siteName_(emp?.workSiteId)} · {vendorName_(emp?.vendorId)}</p>
                 <div className="grid grid-cols-3 gap-2 pt-2">
                   <div className="rounded-xl border border-slate-100 p-3">
-                    <p className="text-[11px] text-muted">총 휴가발생일수</p>
-                    <p className="mt-1 text-lg font-bold text-ink">{generated}</p>
+                    <p className="text-[11px] text-muted">총 휴가발생일수 ({b.leaveLabel})</p>
+                    <p className="mt-1 text-lg font-bold text-ink">{b.entitlement}</p>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <p className="text-[11px] text-muted">사용일수</p>
-                    <p className="mt-1 text-lg font-bold text-ink">{used}</p>
+                    <p className="mt-1 text-lg font-bold text-ink">{b.used}</p>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <p className="text-[11px] text-muted">잔여일수</p>
-                    <p className="mt-1 text-lg font-bold text-primary">{remaining}</p>
+                    <p className="mt-1 text-lg font-bold text-primary">{b.remaining}</p>
                   </div>
                 </div>
               </div>

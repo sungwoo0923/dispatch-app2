@@ -111,6 +111,7 @@ const EMPTY_REGISTER_FORM = {
   workLocation: "",
   vendorId: "",
   hireDate: toDateKey(),
+  careerYears: "",
   resignDate: "",
   workStartDate: toDateKey(),
   employmentType: "상용직",
@@ -2473,6 +2474,18 @@ export default function EmployeeList() {
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
                     value={registerForm.hireDate}
                     onChange={(e) => setRegisterForm((f) => ({ ...f, hireDate: e.target.value }))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">경력인정연수 (연차 계산용)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={registerForm.careerYears}
+                    onChange={(e) => setRegisterForm((f) => ({ ...f, careerYears: e.target.value }))}
+                    placeholder="경력직이면 인정할 연차를 입력 (예: 3)"
                   />
                 </label>
                 <label className="block">
