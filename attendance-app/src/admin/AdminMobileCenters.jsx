@@ -282,7 +282,25 @@ export default function AdminMobileCenters() {
         ))}
       </div>
 
-      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={selectedSite ? selectedSite.name : "신규 센터"}>
+      <Modal
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        title={selectedSite ? selectedSite.name : "신규 센터"}
+        footer={
+          tab === "info" ? (
+            <div className="flex w-full gap-2">
+              {selectedId && (
+                <Button variant="outline" onClick={removeSite}>
+                  <Trash2 size={13} />
+                </Button>
+              )}
+              <Button className="flex-1" onClick={saveInfo}>
+                저장
+              </Button>
+            </div>
+          ) : null
+        }
+      >
         <div className="space-y-4">
           <div className="flex flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain">
             {TABS.map((t) => (
@@ -360,16 +378,6 @@ export default function AdminMobileCenters() {
                   <span className="mb-1.5 block text-xs font-medium text-muted">반경(m)</span>
                   <input type="number" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm" value={info.radiusM} onChange={(e) => setInfo((f) => ({ ...f, radiusM: e.target.value }))} />
                 </label>
-              </div>
-              <div className="flex gap-2">
-                {selectedId && (
-                  <Button variant="outline" onClick={removeSite}>
-                    <Trash2 size={13} />
-                  </Button>
-                )}
-                <Button className="flex-1" onClick={saveInfo}>
-                  저장
-                </Button>
               </div>
             </div>
           )}
