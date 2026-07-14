@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Check, X as XIcon, Trash2 } from "lucide-react";
+import { collection, query, where, onSnapshot, doc, setDoc, getDoc, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { ClipboardCheck, FileSpreadsheet, RefreshCw, Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Check, X as XIcon, Trash2, CalendarRange } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -14,7 +14,7 @@ import DraggableTh from "../components/DraggableTh";
 import ColumnVisibilityButton from "../components/ColumnVisibilityButton";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { downloadCsv } from "../utils/exportCsv";
-import { toDateKey, formatTime, formatDate } from "../utils/dateUtils";
+import { toDateKey, toMonthKey, formatTime, formatDate, attendanceDocId } from "../utils/dateUtils";
 import { computeCheckInStatus } from "../utils/attendanceStatus";
 import {
   EMPLOYMENT_TYPE_OPTIONS,
@@ -23,6 +23,7 @@ import {
   COUNTRY_OPTIONS,
 } from "../constants/hr";
 import SmsButton from "../components/SmsButton";
+import { daysInMonth, WEEKDAY_LABELS, leaveStatusOn } from "../utils/statsShared";
 
 const VIEW_OPTIONS = ["출근현황", "휴무현황", "수정현황", "변경요청"];
 const CHANGE_REQUEST_STATUS_TONE = { pending: "warning", approved: "success", rejected: "danger" };
@@ -71,6 +72,16 @@ export default function AttendanceBoard() {
   const [detailEditMode, setDetailEditMode] = useState(false);
   const [detailForm, setDetailForm] = useState({ checkInTime: "", checkOutTime: "", status: "", reason: "" });
 
+  // 도급팀이 실제로 쓰던 엑셀 휴무계획표(근로자 x 1~31일 달력형 표)를
+  // 참고해, 출근현황 메뉴 하단에 같은 형태의 월별 스케줄표를 추가한다.
+  // 출근현황(카드 목록)과 별개로 한 달 전체를 한눈에 보고 셀 단위로
+  // 바로 수정할 수 있게 하는 것이 목적이라, 별도의 월/데이터 상태로 관리한다.
+  const [gridMonth, setGridMonth] = useState(toMonthKey());
+  const [gridAttendance, setGridAttendance] = useState([]);
+  const [gridLeaves, setGridLeaves] = useState([]);
+  const [gridEditCell, setGridEditCell] = useState(null);
+  const [gridSaving, setGridSaving] = useState(false);
+
   useEffect(() => {
     if (!profile?.companyId) return;
     getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
@@ -110,6 +121,22 @@ export default function AttendanceBoard() {
     );
     return () => unsub();
   }, [profile?.companyId, range.start, range.end]);
+
+  useEffect(() => {
+    if (!profile?.companyId || view !== "출근현황") return;
+    const unsubAtt = onSnapshot(
+      query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("month", "==", gridMonth)),
+      (snap) => setGridAttendance(snap.docs.map((d) => d.data()))
+    );
+    const unsubLeaves = onSnapshot(
+      query(collection(db, "leaves"), where("companyId", "==", profile.companyId), where("status", "==", "approved")),
+      (snap) => setGridLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => {
+      unsubAtt();
+      unsubLeaves();
+    };
+  }, [profile?.companyId, view, gridMonth]);
 
   useEffect(() => {
     if (!profile?.companyId || view !== "휴무현황") return;
@@ -284,6 +311,129 @@ export default function AttendanceBoard() {
         return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
       });
   }, [attendance, employeeByUid, filters, sort]);
+
+  // 오늘 출근한 근로자를 슬라이드 카드로 보여주는 부분 — 별도 조회 없이
+  // 이미 화면에 있는 rows(현재 range 조건에 맞는 출퇴근 기록) 중 오늘
+  // 날짜 것만 뽑아 재사용한다.
+  const todayKeyForCards = toDateKey();
+  const todayCardRows = useMemo(() => rows.filter(({ record }) => record.date === todayKeyForCards), [rows, todayKeyForCards]);
+
+  // ─────────────────────────────────────────────────────────────
+  // 월별 스케줄표(달력형 그리드) — 도급팀이 실제로 쓰던 엑셀 휴무계획표를
+  // 참고해 근로자 x 1~31일 표로 한 달 근태를 한눈에 보고, 셀을 눌러 바로
+  // 정정할 수 있게 한다. 위 출근현황(카드/표)과는 별도 데이터(gridMonth
+  // 전체)로 동작한다.
+  const gridEmployees = useMemo(
+    () =>
+      employees
+        .filter((emp) => (emp.employmentStatus || "재직") !== "퇴사")
+        .filter((emp) => {
+          if (filters.siteId && emp.workSiteId !== filters.siteId) return false;
+          if (filters.vendorId && emp.vendorId !== filters.vendorId) return false;
+          if (filters.shiftType && emp.shiftType !== filters.shiftType) return false;
+          if (filters.employmentType && emp.employmentType !== filters.employmentType) return false;
+          if (filters.team && emp.team !== filters.team) return false;
+          if (filters.position && emp.position !== filters.position) return false;
+          if (filters.name && !emp.name?.includes(filters.name)) return false;
+          return true;
+        })
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+    [employees, filters]
+  );
+  const gridNumDays = daysInMonth(gridMonth);
+  const gridDayList = Array.from({ length: gridNumDays }, (_, i) => i + 1);
+  const gridTodayKey = toDateKey();
+  const gridWeekdayFor = (day) => WEEKDAY_LABELS[new Date(`${gridMonth}-${String(day).padStart(2, "0")}T00:00:00`).getDay()];
+
+  const gridDayStatus = (uid, day) => {
+    const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+    if (gridAttendance.some((a) => a.uid === uid && a.date === dateKey && (a.status === "출근" || a.status === "지각"))) return "present";
+    const leave = leaveStatusOn(gridLeaves, [], uid, dateKey);
+    if (leave) return "leave";
+    if (dateKey > gridTodayKey) return "future";
+    return "absent";
+  };
+  const GRID_CELL_STYLE = {
+    present: "bg-primary text-white font-semibold",
+    leave: "bg-amber-100 text-amber-700",
+    absent: "bg-red-50 text-danger",
+    future: "text-slate-300",
+  };
+  const GRID_CELL_LABEL = { present: "1", leave: "휴", absent: "-", future: "" };
+
+  const openGridCell = (emp, day) => {
+    const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+    setGridEditCell({ uid: emp.id, name: emp.name, day, dateKey });
+  };
+
+  const gridMarkPresent = async () => {
+    if (!gridEditCell) return;
+    setGridSaving(true);
+    try {
+      await setDoc(
+        doc(db, "attendance", attendanceDocId(gridEditCell.uid, gridEditCell.dateKey)),
+        {
+          uid: gridEditCell.uid,
+          name: gridEditCell.name,
+          companyId: profile.companyId,
+          date: gridEditCell.dateKey,
+          month: gridEditCell.dateKey.slice(0, 7),
+          status: "출근",
+          checkInTime: `${gridEditCell.dateKey}T09:00:00`,
+          source: "manual",
+        },
+        { merge: true }
+      );
+      toast.success("출근으로 표시했습니다");
+      setGridEditCell(null);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setGridSaving(false);
+    }
+  };
+
+  const gridMarkLeave = async () => {
+    if (!gridEditCell) return;
+    setGridSaving(true);
+    try {
+      await deleteDoc(doc(db, "attendance", attendanceDocId(gridEditCell.uid, gridEditCell.dateKey))).catch(() => {});
+      await addDoc(collection(db, "leaves"), {
+        companyId: profile.companyId,
+        uid: gridEditCell.uid,
+        name: gridEditCell.name,
+        type: "관리자 처리",
+        startDate: gridEditCell.dateKey,
+        endDate: gridEditCell.dateKey,
+        status: "approved",
+        createdAt: serverTimestamp(),
+      });
+      toast.success("휴무로 표시했습니다");
+      setGridEditCell(null);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setGridSaving(false);
+    }
+  };
+
+  const gridClearDay = async () => {
+    if (!gridEditCell) return;
+    setGridSaving(true);
+    try {
+      await deleteDoc(doc(db, "attendance", attendanceDocId(gridEditCell.uid, gridEditCell.dateKey))).catch(() => {});
+      const toRemove = gridLeaves.filter(
+        (l) => l.uid === gridEditCell.uid && l.status === "approved" && gridEditCell.dateKey >= l.startDate && gridEditCell.dateKey <= (l.endDate || l.startDate)
+      );
+      for (const l of toRemove) await deleteDoc(doc(db, "leaves", l.id)).catch(() => {});
+      toast.success("기록을 지웠습니다");
+      setGridEditCell(null);
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setGridSaving(false);
+    }
+  };
 
   const attendanceColumns = [
     {
@@ -684,6 +834,32 @@ export default function AttendanceBoard() {
           <>
             <div className="mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
               <p className="text-xs font-medium text-muted">
+                오늘({formatDate(todayKeyForCards)}) 출근 {todayCardRows.length}명
+              </p>
+            </div>
+            <div className="mb-4 -mx-4 flex gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 md:-mx-5 md:px-5">
+              {todayCardRows.length === 0 && (
+                <p className="py-6 text-xs text-muted">오늘 출근한 근로자가 없습니다.</p>
+              )}
+              {todayCardRows.map(({ record: r, emp }) => (
+                <Card key={r.id} className="w-44 shrink-0 space-y-1.5 p-3.5">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="truncate text-sm font-semibold text-ink">{emp.name}</span>
+                    <Badge tone={r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger"}>
+                      {r.status || "미출근"}
+                    </Badge>
+                  </div>
+                  <p className="truncate text-[11px] text-muted">{r.siteName || siteName_(emp.workSiteId)}</p>
+                  <div className="flex items-center justify-between text-xs text-ink">
+                    <span>출 {r.checkInTime ? formatTime(r.checkInTime) : "-"}</span>
+                    <span>퇴 {r.checkOutTime ? formatTime(r.checkOutTime) : "-"}</span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            <div className="mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain">
+              <p className="text-xs font-medium text-muted">
                 출근현황 {rows.length}
                 <span className="ml-2 text-[11px] text-danger">'{lateCount}' 지각</span>
                 <span className="ml-1 text-[11px] text-warning">'{earlyLeaveCount}' 조퇴</span>
@@ -816,6 +992,87 @@ export default function AttendanceBoard() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div className="mt-6">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                  <CalendarRange size={15} className="text-primary" /> 월별 스케줄표
+                </p>
+                <input
+                  type="month"
+                  value={gridMonth}
+                  onChange={(e) => setGridMonth(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="-mx-4 overflow-x-auto overscroll-x-contain md:-mx-5">
+                <table className="w-full text-center text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-muted">
+                      <th className="sticky left-0 z-10 bg-white px-3 py-2.5 font-medium">순번</th>
+                      <th className="sticky left-8 z-10 min-w-24 bg-white px-3 py-2.5 font-medium">이름</th>
+                      <th className="bg-white px-3 py-2.5 font-medium">근무구분</th>
+                      <th className="bg-white px-3 py-2.5 font-medium">입사일</th>
+                      {gridDayList.map((d) => {
+                        const wd = gridWeekdayFor(d);
+                        const dateKey = `${gridMonth}-${String(d).padStart(2, "0")}`;
+                        return (
+                          <th
+                            key={d}
+                            className={`px-1 py-2.5 font-medium ${dateKey === gridTodayKey ? "bg-primary-light" : ""} ${
+                              wd === "토" ? "text-primary" : wd === "일" ? "text-danger" : ""
+                            }`}
+                          >
+                            {d}
+                            <br />({wd})
+                          </th>
+                        );
+                      })}
+                      <th className="bg-white px-3 py-2.5 font-medium">출근</th>
+                      <th className="bg-white px-3 py-2.5 font-medium">휴무</th>
+                      <th className="bg-white px-3 py-2.5 font-medium">결근</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gridEmployees.map((emp, i) => {
+                      const marks = gridDayList.map((d) => gridDayStatus(emp.id, d));
+                      const present = marks.filter((s) => s === "present").length;
+                      const leave = marks.filter((s) => s === "leave").length;
+                      const absent = marks.filter((s) => s === "absent").length;
+                      return (
+                        <tr key={emp.id} className="border-b border-slate-50 last:border-0">
+                          <td className="sticky left-0 bg-white px-3 py-2 text-muted">{i + 1}</td>
+                          <td className="sticky left-8 bg-white px-3 py-2 text-left font-medium text-ink">{emp.name}</td>
+                          <td className="px-3 py-2 text-ink">{emp.shiftType || "-"}</td>
+                          <td className="px-3 py-2 text-ink">{emp.hireDate || "-"}</td>
+                          {marks.map((s, di) => (
+                            <td key={di} className="px-1 py-2">
+                              <button
+                                type="button"
+                                onClick={() => openGridCell(emp, gridDayList[di])}
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] hover:ring-2 hover:ring-primary/50 ${GRID_CELL_STYLE[s]}`}
+                              >
+                                {GRID_CELL_LABEL[s]}
+                              </button>
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 font-semibold text-ink">{present}</td>
+                          <td className="px-3 py-2 text-ink">{leave}</td>
+                          <td className="px-3 py-2 text-danger">{absent}</td>
+                        </tr>
+                      );
+                    })}
+                    {gridEmployees.length === 0 && (
+                      <tr>
+                        <td colSpan={gridNumDays + 7} className="px-4 py-6 text-center text-muted">
+                          조건에 맞는 근로자가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}
@@ -1002,6 +1259,26 @@ export default function AttendanceBoard() {
           </div>
         )}
       </Panel>
+
+      <Modal
+        open={Boolean(gridEditCell)}
+        onClose={() => setGridEditCell(null)}
+        title={gridEditCell ? `${gridEditCell.name} · ${gridMonth.split("-")[1]}월 ${gridEditCell.day}일` : ""}
+      >
+        {gridEditCell && (
+          <div className="space-y-2">
+            <Button className="w-full" onClick={gridMarkPresent} disabled={gridSaving}>
+              출근으로 표시
+            </Button>
+            <Button className="w-full" variant="outline" onClick={gridMarkLeave} disabled={gridSaving}>
+              휴무로 표시
+            </Button>
+            <Button className="w-full" variant="danger" onClick={gridClearDay} disabled={gridSaving}>
+              기록 삭제 (결근)
+            </Button>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={Boolean(rejectTarget)}
