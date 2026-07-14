@@ -21,8 +21,7 @@ import Button from "../components/Button";
 import Panel from "../components/Panel";
 import SidePanel from "../components/SidePanel";
 import { downloadCsv } from "../utils/exportCsv";
-import { openAddressSearch } from "../utils/daumPostcode";
-import { searchAddressCoords } from "../utils/geocode";
+import AddressGeocodeModal from "../components/AddressGeocodeModal";
 import { TEAM_OPTIONS, POSITION_OPTIONS, SHIFT_TYPE_OPTIONS, SHIFT_WORK_TYPE_OPTIONS } from "../constants/hr";
 
 const MAX_SITES = 10;
@@ -60,7 +59,7 @@ export default function Centers() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [tab, setTab] = useState("info");
   const [info, setInfo] = useState(EMPTY_INFO);
-  const [searchingAddress, setSearchingAddress] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [locatingMe, setLocatingMe] = useState(false);
 
   // 주소 지오코딩은 도로명주소 DB의 정확도에 좌우돼, 신도시/분구 지역 등은
@@ -104,32 +103,19 @@ export default function Centers() {
     );
   };
 
-  // "내 회사 등록하기 > 센터 관리"와 동일한 다음(카카오) 우편번호 팝업으로
-  // 정확한 실제 주소를 목록에서 골라 받고, 그 도로명주소를 그대로
-  // 지오코딩해 위도/경도까지 한 번에 채운다 — 별도의 좌표 검색 팝업/직접
-  // 타이핑 없이 주소검색 버튼 한 번으로 끝난다.
-  const searchCenterAddress = async () => {
-    const result = await openAddressSearch();
-    if (!result) return;
-    setInfo((f) => ({ ...f, address: result.address }));
-    setSearchingAddress(true);
-    try {
-      const geo = await searchAddressCoords(result.address);
-      if (geo) {
-        // geo.precise === false면 동/구 단위 근사 좌표라, 이 값 그대로 반경
-        // 판정에 쓰면 실제로는 근무지 안에 있는 직원도 수백m~수km "반경
-        // 밖"으로 잘못 표시될 수 있다 — 목록/상세 화면에 계속 경고가
-        // 남도록 coordsPrecise를 센터 문서에 함께 저장해둔다.
-        setInfo((f) => ({ ...f, lat: geo.lat, lng: geo.lng, coordsPrecise: geo.precise }));
-        if (!geo.precise) {
-          toast.error("건물번지까지 정확히 일치하는 좌표를 찾지 못해 인근 지역 좌표로 채워졌습니다. 출근 반경이 좁다면(50~100m) 위도/경도를 직접 미세조정하거나 '현재 위치로 가져오기'를 이용해주세요.");
-        }
-      } else {
-        toast.error("좌표를 자동으로 찾지 못했습니다. 위도/경도를 직접 입력해주세요.");
-      }
-    } finally {
-      setSearchingAddress(false);
+  // 배차 프로그램(FleetManagement.jsx)의 "출근지 설정"과 동일한 방식 —
+  // 다음 우편번호 팝업을 거치지 않고 주소를 바로 입력해 검색하면 좌표까지
+  // 한 번에 확인되고, 저장을 눌러야 실제로 반영된다.
+  const applyCenterAddress = (geo) => {
+    // geo.precise === false면 동/구 단위 근사 좌표라, 이 값 그대로 반경
+    // 판정에 쓰면 실제로는 근무지 안에 있는 직원도 수백m~수km "반경 밖"으로
+    // 잘못 표시될 수 있다 — 목록/상세 화면에 계속 경고가 남도록
+    // coordsPrecise를 센터 문서에 함께 저장해둔다.
+    setInfo((f) => ({ ...f, address: geo.address, lat: geo.lat, lng: geo.lng, coordsPrecise: geo.precise }));
+    if (!geo.precise) {
+      toast.error("건물번지까지 정확히 일치하는 좌표를 찾지 못해 인근 지역 좌표로 채워졌습니다. 출근 반경이 좁다면(50~100m) '현재 위치로 가져오기'를 이용해주세요.");
     }
+    setAddressModalOpen(false);
   };
 
   useEffect(() => {
@@ -449,8 +435,8 @@ export default function Centers() {
                           value={info.address}
                           placeholder="주소검색 버튼으로 입력하세요"
                         />
-                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={searchCenterAddress} disabled={searchingAddress}>
-                          <Search size={13} /> {searchingAddress ? "좌표 찾는 중..." : "주소검색"}
+                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setAddressModalOpen(true)}>
+                          <Search size={13} /> 주소검색
                         </Button>
                       </div>
                     </label>
@@ -561,6 +547,14 @@ export default function Centers() {
           </div>
         </Card>
       </SidePanel>
+
+      <AddressGeocodeModal
+        open={addressModalOpen}
+        title="센터 출근지 주소 설정"
+        initialAddress={info.address}
+        onSave={applyCenterAddress}
+        onClose={() => setAddressModalOpen(false)}
+      />
     </div>
   );
 }
