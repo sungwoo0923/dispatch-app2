@@ -104,6 +104,7 @@ export default function Home() {
   const [earlyLeaveSaving, setEarlyLeaveSaving] = useState(false);
   const [myEarlyLeaveToday, setMyEarlyLeaveToday] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [notificationsModalOpen, setNotificationsModalOpen] = useState(false);
   const [pendingResignation, setPendingResignation] = useState(false);
   const [pendingSafetyCount, setPendingSafetyCount] = useState(0);
   const padRef = useRef(null);
@@ -683,6 +684,35 @@ export default function Home() {
 
       {notifications.length > 0 && (
         <div className="space-y-2">
+          {notifications.slice(0, 4).map((n) => (
+            <Card key={n.id} className="flex items-start gap-3 border border-primary/20 bg-primary-light/40 p-4">
+              <Bell size={16} className="mt-0.5 shrink-0 text-primary" />
+              <div className="flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-ink">{n.title}</p>
+                  <span className="shrink-0 text-[10px] text-muted">{formatNotificationTime(n.createdAt)}</span>
+                </div>
+                {n.message && <p className="mt-0.5 text-xs text-muted">{n.message}</p>}
+              </div>
+              <button type="button" className="shrink-0 text-muted hover:text-ink" onClick={() => dismissNotification(n.id)}>
+                <X size={14} />
+              </button>
+            </Card>
+          ))}
+          {notifications.length > 4 && (
+            <button
+              type="button"
+              onClick={() => setNotificationsModalOpen(true)}
+              className="w-full rounded-xl border border-primary/20 bg-white py-2.5 text-xs font-semibold text-primary hover:bg-primary-light/30"
+            >
+              전체보기 ({notifications.length})
+            </button>
+          )}
+        </div>
+      )}
+
+      <Modal open={notificationsModalOpen} onClose={() => setNotificationsModalOpen(false)} title={`알림 전체보기 (${notifications.length})`}>
+        <div className="max-h-[60vh] space-y-2 overflow-y-auto">
           {notifications.map((n) => (
             <Card key={n.id} className="flex items-start gap-3 border border-primary/20 bg-primary-light/40 p-4">
               <Bell size={16} className="mt-0.5 shrink-0 text-primary" />
@@ -699,7 +729,7 @@ export default function Home() {
             </Card>
           ))}
         </div>
-      )}
+      </Modal>
 
       <Card className="relative overflow-hidden border-none bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-lg shadow-rose-500/25">
         {homeSafetyVideoUrl ? (
