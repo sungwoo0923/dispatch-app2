@@ -68,6 +68,14 @@ export default function Centers() {
   // 오차) — 관리자가 실제 근무지 현장에서 이 버튼을 누르면 기기의 실측
   // GPS 좌표를 그대로 위도/경도에 채워, 지오코딩 오차와 무관하게 정확한
   // 반경 기준점을 확보할 수 있다.
+  //
+  // 단, 이 버튼을 PC/노트북에서 누르면(사무실 등 근무지가 아닌 곳) 브라우저는
+  // GPS가 없어 Wi-Fi/IP 기반 위치를 내려주는데, 이 방식은 스스로 보고하는
+  // accuracy 숫자가 작아도 실제로는 수백m~수km까지 틀릴 수 있다(특히 검단
+  // 같은 신도시는 Wi-Fi 위치 DB가 아직 부실함) — accuracy가 좋아도 그대로
+  // 믿지 않고, 기준치보다 나쁘면 "부정확한 좌표"로 표시해 관리자가 반드시
+  // 현장에서 폰으로 다시 찍도록 강하게 안내한다.
+  const CENTER_GPS_ACCURACY_TRUST_THRESHOLD_M = 150;
   const useCurrentLocationForCenter = () => {
     if (!navigator.geolocation) {
       toast.error("이 기기/브라우저에서는 위치 확인을 지원하지 않습니다.");
@@ -76,8 +84,16 @@ export default function Centers() {
     setLocatingMe(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setInfo((f) => ({ ...f, lat: pos.coords.latitude, lng: pos.coords.longitude, coordsPrecise: true }));
-        toast.success(`현재 위치로 좌표를 채웠습니다 (정확도 약 ${Math.round(pos.coords.accuracy)}m)`);
+        const acc = pos.coords.accuracy;
+        const trustworthy = acc == null || acc <= CENTER_GPS_ACCURACY_TRUST_THRESHOLD_M;
+        setInfo((f) => ({ ...f, lat: pos.coords.latitude, lng: pos.coords.longitude, coordsPrecise: trustworthy }));
+        if (trustworthy) {
+          toast.success(`현재 위치로 좌표를 채웠습니다 (정확도 약 ${Math.round(acc)}m)`);
+        } else {
+          toast.error(
+            `위치 정확도가 낮습니다 (약 ${Math.round(acc)}m 오차). PC/사무실에서 누르면 Wi-Fi 기반 위치라 부정확할 수 있습니다. 반드시 실제 근무지 현장에서 휴대폰으로 다시 눌러 정확한 좌표를 확보해주세요.`
+          );
+        }
         setLocatingMe(false);
       },
       (err) => {

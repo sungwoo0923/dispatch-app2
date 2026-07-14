@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { computeCheckInStatus } from "../utils/attendanceStatus";
 import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
@@ -777,6 +778,12 @@ export default function Schedule() {
         return;
       }
       const dateKey = s.date || toDateKey();
+      // 강제출근도 실제 출근 버튼을 누른 것과 동일하게 예정 출근시각 대비
+      // 지각 여부를 판정해야 한다 — 이전에는 무조건 "출근"으로만 기록돼
+      // 실제로 예정시각보다 한참 늦게 강제출근 처리해도 지각이 전혀
+      // 남지 않았다.
+      const now = new Date();
+      const status = computeCheckInStatus(s.startTime, now);
       await setDoc(
         doc(db, "attendance", attendanceDocId(s.uid, dateKey)),
         {
@@ -785,15 +792,15 @@ export default function Schedule() {
           companyId: profile.companyId,
           date: dateKey,
           month: dateKey.slice(0, 7),
-          status: "출근",
-          checkInTime: new Date().toISOString(),
+          status,
+          checkInTime: now.toISOString(),
           source: "manual",
           siteId: s.siteId || emp.workSiteId || null,
           siteName: s.siteName || siteName_(emp.workSiteId),
         },
         { merge: true }
       );
-      toast.success(`${emp.name}님을 출근 처리했습니다`);
+      toast.success(status === "지각" ? `${emp.name}님을 지각 출근 처리했습니다` : `${emp.name}님을 출근 처리했습니다`);
     } catch (err) {
       toast.error(`강제출근 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }

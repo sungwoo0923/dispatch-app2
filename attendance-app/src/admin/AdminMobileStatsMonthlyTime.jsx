@@ -60,7 +60,7 @@ export default function AdminMobileStatsMonthlyTime() {
   return (
     <div className="space-y-3 px-4 pt-4">
       <div>
-        <p className="text-sm font-semibold text-ink">근로자별월별출퇴근시간집계</p>
+        <p className="text-sm font-semibold text-ink">근로자월별출퇴근시간</p>
         <p className="mt-0.5 text-xs text-muted">근로자를 눌러 날짜별 출퇴근 시각을 확인하세요</p>
       </div>
 

@@ -36,10 +36,16 @@ async function notifyAdminsOfLateCheckIn({ companyId, name, late }) {
 
 const CHECK_IN_RADIUS_M = 100;
 const CHECK_OUT_RADIUS_M = 300;
-// 수동 출근 버튼은 자동출근(반경 100m)보다 더 엄격하게, 등록된 센터 반경 50m
-// 이내에서만 허용한다 — 관리자가 지정한 근무지에 실제로 도착했는지 확인하는
-// 마지막 관문이므로 workSite.radiusM 설정과 무관하게 고정값을 쓴다.
+// 예전에는 수동출근 버튼만 센터의 출근인정반경(workSite.radiusM) 설정과 무관하게
+// 50m로 고정되어 있었다 — 관리자가 센터정보에서 반경을 100m/150m 등으로 넓혀도
+// 수동출근은 여전히 50m 안에 들어와야만 허용돼서, 자동출근은 되는데 수동출근
+// 버튼만 "반경 밖"으로 막히는 모순이 있었다. 이제 자동/수동 모두 같은
+// workSite.radiusM을 기준으로 판정하되, 값이 없거나 비정상적으로 작게(예: 0)
+// 설정된 경우를 대비해 최소 50m는 보장한다.
 const MANUAL_CHECK_IN_RADIUS_M = 50;
+function resolveCheckInRadius(workSite) {
+  return Math.max(workSite?.radiusM || CHECK_IN_RADIUS_M, MANUAL_CHECK_IN_RADIUS_M);
+}
 // 위치 권한이 "정확한 위치(Precise Location)"가 아닌 대략적 위치로 내려가
 // 있거나, 기기가 실내/지하 등이라 GPS 신호를 못 잡으면 브라우저가 Wi-Fi/IP
 // 기반 위치를 대신 주는데, 이때 accuracy가 수만 m로 찍히면서 실제로는
@@ -173,6 +179,23 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
     });
   }, [handlePosition]);
 
+  // handlePosition은 workSite/todayAttendance/canCheckIn 등이 바뀔 때마다 새로
+  // 만들어지는데(useCallback), 바로 아래 watcher 설정 effect는 네이티브
+  // watcher를 매번 재시작하지 않으려고 [enabled, workSite?.id]에만 반응한다.
+  // 문제는 addWatcher/watchPosition에 넘긴 콜백이 "그 순간의" handlePosition을
+  // 클로저로 붙잡아버려서, 이후 관리자가 센터 좌표를 고치거나, 출근확정이
+  // 되거나, 오늘 출근 기록이 바뀌어도 이 watcher는 계속 그 시점의 낡은
+  // 값(옛 좌표/옛 출근기록)으로만 판정한다는 것 — 이게 "좌표를 고쳐도 반경
+  // 밖이 계속 뜨는" 문제와 "퇴근시간이 계속 지금 시각으로 덮어써지는" 문제의
+  // 진짜 원인이었다(낡은 클로저 속 todayAttendance엔 방금 쓴 checkOutTime이
+  // 반영되지 않아 매 위치 업데이트마다 자동퇴근 조건을 다시 만족해버림).
+  // ref에 항상 최신 handlePosition을 담아두고, watcher는 그 ref를 통해서만
+  // 호출하게 하면 watcher 재시작 없이도 항상 최신 로직/데이터로 판정한다.
+  const handlePositionRef = useRef(handlePosition);
+  useEffect(() => {
+    handlePositionRef.current = handlePosition;
+  }, [handlePosition]);
+
   useEffect(() => {
     if (!enabled || !workSite) return;
 
@@ -201,7 +224,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
                 setPermissionError(error.message || String(error));
                 return;
               }
-              if (position && !cancelled) handlePosition(position.latitude, position.longitude, position.accuracy);
+              if (position && !cancelled) handlePositionRef.current(position.latitude, position.longitude, position.accuracy);
             }
           );
           watcherIdRef.current = { native: true, id, BackgroundGeolocation };
@@ -214,7 +237,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
       if (navigator.geolocation) {
         const webId = navigator.geolocation.watchPosition(
           (pos) => {
-            if (!cancelled) handlePosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+            if (!cancelled) handlePositionRef.current(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
           },
           (err) => setPermissionError(err.message),
           { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
@@ -239,7 +262,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
   }, [enabled, workSite?.id]);
 
   // 관리자가 오늘 스케줄을 출근확정 처리했는지, 그리고 등록된 센터 반경
-  // 50m 이내에 있는지를 서버 요청 직전에 다시 확인한다 — 버튼 disabled만으로는
+  // 이내에 있는지를 서버 요청 직전에 다시 확인한다 — 버튼 disabled만으로는
   // devtools 등으로 우회될 수 있으므로 이 함수 자체가 최종 관문 역할을 한다.
   // { ok: false, reason } 형태로 실패 사유를 돌려주어 호출부가 안내 메시지를
   // 보여줄 수 있게 한다.
@@ -250,7 +273,7 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
         if (accuracy != null && accuracy > POOR_ACCURACY_THRESHOLD_M) return { ok: false, reason: "poor-accuracy" };
         return { ok: false, reason: "no-location" };
       }
-      if (distance > MANUAL_CHECK_IN_RADIUS_M) return { ok: false, reason: "too-far" };
+      if (distance > resolveCheckInRadius(workSite)) return { ok: false, reason: "too-far" };
 
       const now = new Date();
       const late = minutesLate(scheduleStartTime, now);
@@ -296,6 +319,6 @@ export function useGeofenceCheckIn({ uid, name, companyId, workSite, enabled, ca
     manualCheckOut,
     refreshToday,
     refreshLocation,
-    manualCheckInRadiusM: MANUAL_CHECK_IN_RADIUS_M,
+    manualCheckInRadiusM: resolveCheckInRadius(workSite),
   };
 }

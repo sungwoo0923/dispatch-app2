@@ -82,7 +82,7 @@ export default function AdminMobileSafetyCompliance() {
   return (
     <div className="space-y-3 px-4 pt-4">
       <div>
-        <p className="text-sm font-semibold text-ink">감사자료</p>
+        <p className="text-sm font-semibold text-ink">안전교육 리포트</p>
         <p className="mt-0.5 text-xs text-muted">근로감독관 방문/정부 감사 대비 이수율·증빙 자료입니다</p>
       </div>
 

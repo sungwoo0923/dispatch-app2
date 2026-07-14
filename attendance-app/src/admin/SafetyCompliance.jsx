@@ -100,7 +100,7 @@ export default function SafetyCompliance() {
 
   return (
     <div className="space-y-6">
-      <Panel icon={FileCheck2} title="감사자료">
+      <Panel icon={FileCheck2} title="안전교육 리포트">
         <p className="mb-4 text-xs text-muted">
           근로감독관 방문이나 정부 감사 시 안전교육 이수 관리가 제대로 이루어지고 있음을 보여줄 수 있는 자료입니다. 센터/자료별
           이수율을 확인하고, 서명 증빙이 포함된 감사보고서를 출력하며, 점검 이력을 남길 수 있습니다.

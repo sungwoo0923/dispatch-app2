@@ -65,7 +65,7 @@ function NavItems({ items, onClick, badgeCounts }) {
               }`}
             >
               <Icon size={18} />
-              <span className="flex-1 text-left">{label}</span>
+              <span className="flex-1 truncate whitespace-nowrap text-left">{label}</span>
               <NavBadge count={groupCount} />
               <ChevronDown size={16} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
             </button>
@@ -84,7 +84,7 @@ function NavItems({ items, onClick, badgeCounts }) {
                       }`
                     }
                   >
-                    <span className="flex-1">{child.label}</span>
+                    <span className="flex-1 truncate whitespace-nowrap">{child.label}</span>
                     <NavBadge count={badgeCounts?.[child.to]} />
                   </NavLink>
                 ))}

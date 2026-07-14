@@ -79,11 +79,11 @@ export default function StatsMonthlyTimeGrid() {
       });
       return [lookups.companyName, siteName_(emp.workSiteId), vendorName_(emp.vendorId), emp.team || "-", emp.position || "-", emp.name, emp.phone, ...marks];
     });
-    downloadCsv(`근로자별월별출퇴근시간집계_${month}`, headers, rowsOut);
+    downloadCsv(`근로자월별출퇴근시간_${month}`, headers, rowsOut);
   };
 
   return (
-    <Panel icon={Clock} title="근로자별월별출퇴근시간집계">
+    <Panel icon={Clock} title="근로자월별출퇴근시간">
       <Card className="mb-4 flex flex-wrap items-end gap-3 p-4">
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-muted">사업자</span>

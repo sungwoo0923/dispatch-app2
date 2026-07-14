@@ -12,6 +12,7 @@ import Badge from "../components/Badge";
 import SmsButton from "../components/SmsButton";
 import { toDateKey, formatDate, attendanceDocId } from "../utils/dateUtils";
 import { buildDefaultContract } from "../utils/contractTemplate";
+import { computeCheckInStatus } from "../utils/attendanceStatus";
 
 const TABS = [
   { key: "pending", label: "대기", tone: "muted" },
@@ -211,6 +212,11 @@ export default function AdminMobileSchedule() {
         return;
       }
       const dk = s.date || dateKey;
+      // 강제출근도 예정 출근시각 대비 지각 여부를 그대로 판정해야 한다 —
+      // 이전에는 무조건 "출근"으로만 기록돼 실제 지각이었어도 지각 표시가
+      // 전혀 남지 않았다.
+      const now = new Date();
+      const status = computeCheckInStatus(s.startTime, now);
       await setDoc(
         doc(db, "attendance", attendanceDocId(s.uid, dk)),
         {
@@ -219,15 +225,15 @@ export default function AdminMobileSchedule() {
           companyId: profile.companyId,
           date: dk,
           month: dk.slice(0, 7),
-          status: "출근",
-          checkInTime: new Date().toISOString(),
+          status,
+          checkInTime: now.toISOString(),
           source: "manual",
           siteId: s.siteId || emp.workSiteId || null,
           siteName: s.siteName || siteName(emp.workSiteId),
         },
         { merge: true }
       );
-      toast.success(`${emp.name}님을 출근 처리했습니다`);
+      toast.success(status === "지각" ? `${emp.name}님을 지각 출근 처리했습니다` : `${emp.name}님을 출근 처리했습니다`);
     } catch (err) {
       toast.error(`강제출근 처리에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }

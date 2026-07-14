@@ -58,7 +58,7 @@ export const NAV = [
       { to: "/safety", label: "안전교육현황" },
       { to: "/safety/settings", label: "센터별 안전관리" },
       { to: "/safety/materials", label: "안전교육자료" },
-      { to: "/safety/compliance", label: "감사자료" },
+      { to: "/safety/compliance", label: "안전교육 리포트" },
     ],
   },
   {
@@ -78,7 +78,7 @@ export const NAV = [
       { to: "/stats", label: "오늘 현황" },
       { to: "/stats/attendance-count", label: "근로자별출근집계" },
       { to: "/stats/monthly-grid", label: "근로자별월별출근집계" },
-      { to: "/stats/monthly-time", label: "근로자별월별출퇴근시간집계" },
+      { to: "/stats/monthly-time", label: "근로자월별출퇴근시간" },
       { to: "/stats/site-aggregate", label: "센터별집계" },
     ],
   },
