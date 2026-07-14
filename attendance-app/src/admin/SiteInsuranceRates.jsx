@@ -112,7 +112,11 @@ export default function SiteInsuranceRates() {
   return (
     <div className="space-y-6">
       <Panel icon={Settings} title="센터별 정산설정">
-        <p className="mb-4 text-xs text-muted">센터에서 근로자에게 적용하는 보험 요율을 설정일자별로 관리합니다.</p>
+        <p className="mb-4 text-xs text-muted">
+          센터에서 근로자에게 적용하는 보험 요율을 설정일자별로 관리합니다. 같은 센터 소속이라도 계약조건이 달라
+          별도 요율을 적용해야 하는 근로자가 있다면, <b>근로자 &gt; 근로자 목록</b>의 등록/수정 화면에서
+          "개별 정산조건(보험요율) 재정의" 항목으로 해당 근로자에게만 다른 템플릿을 지정할 수 있습니다.
+        </p>
 
         <Card className="mb-4 flex flex-wrap items-end gap-3 p-4">
           <label className="block">

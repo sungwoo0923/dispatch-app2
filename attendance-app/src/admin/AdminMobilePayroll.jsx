@@ -310,7 +310,7 @@ export default function AdminMobilePayroll() {
     setSaving(true);
     try {
       const existing = payrollFor(target.id);
-      const rates = await getSiteInsuranceRates(profile.companyId, target.workSiteId, `${month}-28`);
+      const rates = await getSiteInsuranceRates(profile.companyId, target.workSiteId, `${month}-28`, target.insuranceRateOverrideId);
       const result = calcMonthlyPayroll({
         baseWage: Number(form.baseWage),
         wageType: form.wageType,
@@ -379,7 +379,7 @@ export default function AdminMobilePayroll() {
         const lateDeduction = existing?.lateDeduction || 0;
         const earlyLeaveDeduction = existing?.earlyLeaveDeduction || 0;
         const weeklyEligibleWeeks = existing?.weeklyEligibleWeeks || 0;
-        const rates = await getSiteInsuranceRates(profile.companyId, emp.workSiteId, end);
+        const rates = await getSiteInsuranceRates(profile.companyId, emp.workSiteId, end, emp.insuranceRateOverrideId);
         const result = calcMonthlyPayroll({
           baseWage,
           wageType,

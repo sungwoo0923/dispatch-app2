@@ -545,7 +545,7 @@ export default function Payroll() {
   const save = async (e) => {
     e.preventDefault();
     const existing = payrollFor(target.id);
-    const rates = await getSiteInsuranceRates(profile.companyId, target.workSiteId, `${month}-28`);
+    const rates = await getSiteInsuranceRates(profile.companyId, target.workSiteId, `${month}-28`, target.insuranceRateOverrideId);
     const result = calcMonthlyPayroll({
       baseWage: Number(form.baseWage),
       wageType: form.wageType,
@@ -620,7 +620,7 @@ export default function Payroll() {
       const lateDeduction = existing?.lateDeduction || 0;
       const earlyLeaveDeduction = existing?.earlyLeaveDeduction || 0;
       const weeklyEligibleWeeks = existing?.weeklyEligibleWeeks || 0;
-      const rates = await getSiteInsuranceRates(profile.companyId, emp.workSiteId, end);
+      const rates = await getSiteInsuranceRates(profile.companyId, emp.workSiteId, end, emp.insuranceRateOverrideId);
       const result = calcMonthlyPayroll({
         baseWage,
         wageType,
@@ -691,7 +691,7 @@ export default function Payroll() {
         const t = allowanceTemplates.find((x) => x.name === adjustForm.allowanceItem);
         if (t) allowances += Number(t.dailyEtcAllowance || 0);
       }
-      const rates = await getSiteInsuranceRates(profile.companyId, emp?.workSiteId, `${month}-28`);
+      const rates = await getSiteInsuranceRates(profile.companyId, emp?.workSiteId, `${month}-28`, emp?.insuranceRateOverrideId);
       const result = calcMonthlyPayroll({
         baseWage: p.baseWage,
         wageType: p.wageType,

@@ -112,6 +112,7 @@ const EMPTY_REGISTER_FORM = {
   vendorId: "",
   hireDate: toDateKey(),
   careerYears: "",
+  insuranceRateOverrideId: "",
   resignDate: "",
   workStartDate: toDateKey(),
   employmentType: "상용직",
@@ -263,6 +264,7 @@ export default function EmployeeList() {
 
   const [shiftTemplates, setShiftTemplates] = useState([]);
   const [allowanceTemplates, setAllowanceTemplates] = useState([]);
+  const [insuranceRateTemplates, setInsuranceRateTemplates] = useState([]);
   const [changeLogs, setChangeLogs] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
   // 배정변경요청/기본정보수정요청/가입대기 패널은 항상 접힌 채로 시작하고,
@@ -361,6 +363,10 @@ export default function EmployeeList() {
       query(collection(db, "allowanceTemplates"), where("companyId", "==", profile.companyId)),
       (snap) => setAllowanceTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubInsuranceT = onSnapshot(
+      query(collection(db, "insuranceRateTemplates"), where("companyId", "==", profile.companyId)),
+      (snap) => setInsuranceRateTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     const unsubLogs = onSnapshot(
       query(collection(db, "employeeChangeLogs"), where("companyId", "==", profile.companyId)),
       (snap) => setChangeLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -395,6 +401,7 @@ export default function EmployeeList() {
       unsubPos();
       unsubShiftT();
       unsubAllowT();
+      unsubInsuranceT();
       unsubLogs();
       unsubChangeReq();
       unsubInfoChangeReq();
@@ -2487,6 +2494,21 @@ export default function EmployeeList() {
                     onChange={(e) => setRegisterForm((f) => ({ ...f, careerYears: e.target.value }))}
                     placeholder="경력직이면 인정할 연차를 입력 (예: 3)"
                   />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">개별 정산조건 (보험요율) 재정의</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={registerForm.insuranceRateOverrideId}
+                    onChange={(e) => setRegisterForm((f) => ({ ...f, insuranceRateOverrideId: e.target.value }))}
+                  >
+                    <option value="">센터 기본값 사용</option>
+                    {insuranceRateTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">퇴사일자</span>
