@@ -37,6 +37,9 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import SmsButton from "../components/SmsButton";
+import BankAccountFields from "../components/BankAccountFields";
+import PayslipInfoGroup from "../components/PayslipInfoGroup";
+import { isPlausibleAccountLength } from "../utils/bankAccount";
 import { calcMonthlyPayroll, getSiteInsuranceRates } from "../utils/payroll";
 import { toMonthKey, toDateKey, formatTime, formatDate, birthDateFromResident } from "../utils/dateUtils";
 import { downloadCsv } from "../utils/exportCsv";
@@ -196,6 +199,8 @@ export default function Payroll() {
   const [attendance, setAttendance] = useState([]);
   const [allowanceTemplates, setAllowanceTemplates] = useState([]);
   const [target, setTarget] = useState(null);
+  const [editingBank, setEditingBank] = useState(false);
+  const [bankForm, setBankForm] = useState({ bankName: "", bankAccount: "", accountHolder: "" });
   const [form, setForm] = useState({
     wageType: "hourly",
     baseWage: 12000,
@@ -480,6 +485,8 @@ export default function Payroll() {
 
   const openFor = (emp) => {
     setTarget(emp);
+    setEditingBank(false);
+    setBankForm({ bankName: emp.bankName || "", bankAccount: emp.bankAccount || "", accountHolder: emp.accountHolder || "" });
     const existing = payrollFor(emp.id);
     if (existing) {
       setForm({
@@ -508,6 +515,30 @@ export default function Payroll() {
         earlyLeaveDeduction: 0,
         ...emptyExtraForm(),
       });
+    }
+  };
+
+  // 급여계좌는 원래 근로자등록(EmployeeList)에서만 고칠 수 있었는데, 정산
+  // 작업 중 계좌를 잘못 입력했거나 변경됐다는 걸 알게 되는 경우가 많아
+  // 여기서 바로 고칠 수 있게 한다. users 문서(근로자등록 원본)를 직접
+  // 갱신하므로 EmployeeList/명세서 등 계좌를 참조하는 다른 화면에도
+  // 그대로 반영된다.
+  const saveBankInfo = async () => {
+    if (bankForm.bankAccount && !isPlausibleAccountLength(bankForm.bankName, bankForm.bankAccount)) {
+      toast.error(`${bankForm.bankName || "선택한 은행"} 계좌번호 자릿수가 맞지 않습니다. 다시 확인해주세요.`);
+      return;
+    }
+    try {
+      await updateDoc(doc(db, "users", target.id), {
+        bankName: bankForm.bankName,
+        bankAccount: bankForm.bankAccount,
+        accountHolder: bankForm.accountHolder,
+      });
+      setTarget((t) => (t ? { ...t, ...bankForm } : t));
+      setEditingBank(false);
+      toast.success("급여계좌 정보가 수정되었습니다");
+    } catch (err) {
+      toast.error(`저장에 실패했습니다. (${err?.code || err?.message || "다시 시도해주세요"})`);
     }
   };
 
@@ -1360,22 +1391,72 @@ export default function Payroll() {
         }
       >
         <form onSubmit={save} className="space-y-3">
-          {/* 급여계좌는 근로자 등록정보(users.bankName 등)가 원본이므로 여기서는
-              읽기전용으로 참고만 보여준다 — 정산 처리 중 계좌를 확인/전달할 때 편의용. */}
-          <div className="space-y-1 rounded-xl bg-slate-50 p-3 text-xs">
-            <p className="mb-1 font-semibold text-ink">급여계좌 (근로자 등록정보 · 참고용)</p>
+          {/* 급여계좌 원본은 근로자등록(users.bankName 등)이지만, 정산 작업
+              중 계좌 오류를 발견하는 경우가 많아 여기서 바로 고칠 수 있게
+              한다. "수정"을 누르기 전까지는 실수로 값이 바뀌지 않도록
+              읽기전용으로 보여준다. */}
+          <div className="space-y-2 rounded-xl bg-slate-50 p-3 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-muted">은행</span>
-              <span className="font-medium text-ink">{target?.bankName || "-"}</span>
+              <p className="font-semibold text-ink">급여계좌</p>
+              {!editingBank && (
+                <button type="button" className="font-semibold text-primary" onClick={() => setEditingBank(true)}>
+                  수정
+                </button>
+              )}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">예금주</span>
-              <span className="font-medium text-ink">{target?.accountHolder || "-"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">계좌번호</span>
-              <span className="font-medium text-ink">{target?.bankAccount || "-"}</span>
-            </div>
+            {editingBank ? (
+              <div className="space-y-2">
+                <BankAccountFields
+                  bankName={bankForm.bankName}
+                  bankAccount={bankForm.bankAccount}
+                  onBankNameChange={(v) => setBankForm((f) => ({ ...f, bankName: v }))}
+                  onBankAccountChange={(v) => setBankForm((f) => ({ ...f, bankAccount: v }))}
+                  bankLabel="은행"
+                  accountLabel="계좌번호"
+                  wrapperClassName="grid grid-cols-2 gap-2"
+                  fieldClassName="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs"
+                  labelClassName="mb-1 block text-[11px] font-medium text-muted"
+                />
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-muted">예금주</span>
+                  <input
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs"
+                    value={bankForm.accountHolder}
+                    onChange={(e) => setBankForm((f) => ({ ...f, accountHolder: e.target.value }))}
+                  />
+                </label>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-muted"
+                    onClick={() => {
+                      setEditingBank(false);
+                      setBankForm({ bankName: target?.bankName || "", bankAccount: target?.bankAccount || "", accountHolder: target?.accountHolder || "" });
+                    }}
+                  >
+                    취소
+                  </button>
+                  <button type="button" className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white" onClick={saveBankInfo}>
+                    계좌 저장
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">은행</span>
+                  <span className="font-medium text-ink">{target?.bankName || "-"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">예금주</span>
+                  <span className="font-medium text-ink">{target?.accountHolder || "-"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">계좌번호</span>
+                  <span className="font-medium text-ink">{target?.bankAccount || "-"}</span>
+                </div>
+              </div>
+            )}
           </div>
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">급여 형태</span>
@@ -1624,24 +1705,27 @@ export default function Payroll() {
                 </p>
                 <p className="text-lg font-bold">{companyName || ""}</p>
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
-                {[
-                  ["회사명", companyName || "-"],
-                  ["성명", previewFor.emp.name],
-                  ["생년월일", birthDateDisplay(previewFor.emp.residentNumberFront)],
-                  ["입사일", previewFor.emp.hireDate ? formatDate(previewFor.emp.hireDate) : "-"],
-                  ["직급", previewFor.emp.position || "-"],
-                  ["부서", previewFor.emp.team || "-"],
-                  ["지급일", payDateFor(previewFor.p)],
-                  ["지급대상기간", previewFor.p.month],
-                  ["발급일", toDateKey()],
-                  ["비고", previewFor.p.note || "-"],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex items-center justify-between gap-2">
-                    <span className="text-muted">{label}</span>
-                    <span className="truncate font-semibold text-ink">{value}</span>
-                  </div>
-                ))}
+              <div className="space-y-3 border-b border-dashed border-slate-200 px-5 py-4">
+                <PayslipInfoGroup
+                  title="근로자 정보"
+                  rows={[
+                    ["성명", previewFor.emp.name],
+                    ["생년월일", birthDateDisplay(previewFor.emp.residentNumberFront)],
+                    ["입사일", previewFor.emp.hireDate ? formatDate(previewFor.emp.hireDate) : "-"],
+                    ["직급", previewFor.emp.position || "-"],
+                    ["부서", previewFor.emp.team || "-"],
+                  ]}
+                />
+                <PayslipInfoGroup
+                  title="지급 정보"
+                  rows={[
+                    ["회사명", companyName || "-"],
+                    ["지급일", payDateFor(previewFor.p)],
+                    ["지급대상기간", previewFor.p.month],
+                    ["발급일", toDateKey()],
+                    ["비고", previewFor.p.note || "-"],
+                  ]}
+                />
               </div>
               <div className="p-5 text-center">
                 <span className="inline-block rounded-full bg-primary-light px-3 py-1 text-xs font-semibold text-primary">실수령액</span>

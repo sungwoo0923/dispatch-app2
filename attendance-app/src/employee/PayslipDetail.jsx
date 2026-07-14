@@ -8,6 +8,7 @@ import { useToast } from "../hooks/useToast";
 import { formatDate, toDateKey, birthDateFromResident } from "../utils/dateUtils";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import PayslipInfoGroup from "../components/PayslipInfoGroup";
 
 // PC 관리자용 급여명세서 미리보기(Payroll.jsx)와 동일한 항목 구성 — 값이
 // 없으면(0) 해당 줄을 아예 표시하지 않아, 기본 항목만 쓰는 회사는 예전과
@@ -103,13 +104,20 @@ export default function PayslipDetail() {
   }
 
   const d = payroll.deductions || {};
-  const infoRows = [
-    ["회사명", company?.name || "-"],
+  // 예전엔 이 항목들을 grid-cols-2로 두 칸씩 욱여넣어서, 칸마다 라벨 길이가
+  // 달라 값의 시작 위치가 줄마다 들쭉날쭉해 보였다("정렬이 안 된 느낌") —
+  // "근로자 정보"/"지급 정보"로 의미상 구분해 소제목을 달고, 각 줄은
+  // 라벨 폭을 고정한 한 줄짜리 표처럼 배치해 값이 항상 같은 위치에서
+  // 시작하도록 정리한다.
+  const workerInfoRows = [
     ["성명", profile?.name],
     ["생년월일", birthDateDisplay(profile?.residentNumberFront)],
     ["입사일", profile?.hireDate ? formatDate(profile.hireDate) : "-"],
     ["직급", profile?.position || "-"],
     ["부서", profile?.team || "-"],
+  ];
+  const paymentInfoRows = [
+    ["회사명", company?.name || "-"],
     ["지급일", payDate],
     ["지급대상기간", payroll.month],
     ["발급일", formatDate(toDateKey())],
@@ -139,13 +147,9 @@ export default function PayslipDetail() {
           </p>
           <p className="text-lg font-bold">{company?.name || ""}</p>
         </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-b border-dashed border-slate-200 px-5 py-4 text-sm">
-          {infoRows.map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-2">
-              <span className="text-muted">{label}</span>
-              <span className="truncate font-semibold text-ink">{value}</span>
-            </div>
-          ))}
+        <div className="space-y-3 border-b border-dashed border-slate-200 px-5 py-4">
+          <PayslipInfoGroup title="근로자 정보" rows={workerInfoRows} />
+          <PayslipInfoGroup title="지급 정보" rows={paymentInfoRows} />
         </div>
         <div className="p-5 text-center">
           <span className="inline-block rounded-full bg-primary-light px-3 py-1 text-xs font-semibold text-primary">실수령액</span>
