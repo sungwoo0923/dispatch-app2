@@ -77,7 +77,9 @@ export default function AttendanceBoard() {
     const unsubs = [
       onSnapshot(
         query(collection(db, "users"), where("companyId", "==", profile.companyId), where("role", "==", "employee")),
-        (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        // 삭제(탈퇴)된 근로자는 걸러내야 한다 — 안 그러면 근로자목록에서 이미
+        // 삭제한 계정의 옛 출근기록이 출근현황에 계속 남아있게 된다.
+        (snap) => setEmployees(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((e) => !e.deleted))
       ),
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (snap) =>
         setWorkSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -454,6 +456,18 @@ export default function AttendanceBoard() {
     setSelected(new Set());
   };
 
+  // 출근현황(메인) 표에는 다른 3개 서브탭(휴무현황/수정현황/변경요청)과 달리
+  // 행 삭제 기능이 없었다 — 탈퇴 처리 등으로 더 이상 의미 없는 출퇴근
+  // 기록을 관리자가 직접 정리할 방법이 없어서, 체크박스로 선택한 기록을
+  // 한 번에 지울 수 있게 한다.
+  const deleteSelectedAttendance = async () => {
+    if (selected.size === 0) return;
+    if (!(await confirm(`선택한 출근기록 ${selected.size}건을 삭제하시겠습니까?`, "delete"))) return;
+    for (const id of selected) await deleteDoc(doc(db, "attendance", id));
+    setSelected(new Set());
+    toast.success("삭제되었습니다");
+  };
+
   const exportCsv = () => {
     const headers = ["이름", "출근시간", "퇴근시간", "근무일", "사업자", "센터", "근무구분", "근무형태", "전화번호", "성별"];
     const rowsOut = rows.map(({ record: r, emp }) => [
@@ -723,6 +737,9 @@ export default function AttendanceBoard() {
                 적용
               </Button>
               <div className="ml-auto flex items-center gap-2">
+                <Button size="sm" variant="danger" onClick={deleteSelectedAttendance} disabled={selected.size === 0}>
+                  <Trash2 size={13} /> 선택삭제
+                </Button>
                 <Button size="sm" variant="outline" onClick={exportCsv}>
                   <FileSpreadsheet size={13} /> 엑셀
                 </Button>

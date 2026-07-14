@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
 // Home.jsx(체크 탭)의 미완료 근로계약서/안전교육 카운트를 그대로 읽기만
@@ -21,7 +21,13 @@ export function useOnboardingPending(user, companyId) {
   useEffect(() => {
     if (!user) return;
     setContractsLoaded(false);
-    getDocs(query(collection(db, "contracts"), where("uid", "==", user.uid))).then((snap) => {
+    // 예전에는 getDocs로 한 번만 조회해서, EmployeeLayout이 계속 마운트된
+    // 상태로 근로자가 계약서에 서명해도 이 훅의 pendingContracts 값이 갱신되지
+    // 않았다 — 그래서 서명을 마쳤는데도 "근로계약서 서명하기" 안내 팝업이
+    // 계속 떴고, 앱을 완전히 나갔다 재실행해 컴포넌트가 다시 마운트돼야만
+    // (useEffect가 재실행돼야만) 반영됐다. onSnapshot으로 바꿔 서명 즉시
+    // 실시간으로 갱신되게 한다.
+    const unsub = onSnapshot(query(collection(db, "contracts"), where("uid", "==", user.uid)), (snap) => {
       // status는 회사 쪽 서명(도장)까지 합쳐진 상태라, 회사가 아직 도장을
       // 안 찍었으면(companySignatureDataUrl 없음) 직원이 이미 서명해도
       // "sent"에 머무른다 — 그 경우까지 미완료로 세면 직원은 자기 몫을
@@ -31,6 +37,7 @@ export function useOnboardingPending(user, companyId) {
       setPendingContracts(snap.docs.filter((d) => !d.data().employeeSignatureDataUrl).length);
       setContractsLoaded(true);
     });
+    return () => unsub();
   }, [user]);
 
   useEffect(() => {
