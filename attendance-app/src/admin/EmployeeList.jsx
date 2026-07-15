@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   collection,
   query,
@@ -117,7 +117,7 @@ const EMPTY_REGISTER_FORM = {
   resignDate: "",
   workStartDate: toDateKey(),
   employmentType: "상용직",
-  shiftType: "주간",
+  shiftType: "주간스케줄",
   payType: "월급",
   transportMode: "",
   team: "",
@@ -207,6 +207,7 @@ function SectionHeader({ children }) {
 export default function EmployeeList() {
   const { profile, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
   const confirm = useConfirm();
   const [employees, setEmployees] = useState([]);
@@ -903,6 +904,21 @@ export default function EmployeeList() {
     setRegisterOpen(true);
   };
 
+  // 출근현황 목록 등 다른 화면에서 특정 근로자를 바로 수정하도록 넘어올 때
+  // 쓰는 진입점 — URL의 ?edit=uid 파라미터를 보고 해당 근로자의 수정창을 연다.
+  useEffect(() => {
+    const editUid = searchParams.get("edit");
+    if (!editUid || employees.length === 0) return;
+    const emp = employees.find((e) => e.id === editUid);
+    if (emp) openEditEmployee(emp);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("edit");
+      return next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, employees]);
+
   const photoInputRef = useRef(null);
   const handlePhotoFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -1329,7 +1345,7 @@ export default function EmployeeList() {
       employmentType: sourceEmployee.employmentType || "상용직",
       team: sourceEmployee.team || "",
       position: sourceEmployee.position || "",
-      shiftType: sourceEmployee.shiftType || "주간",
+      shiftType: sourceEmployee.shiftType || "주간스케줄",
       payType: sourceEmployee.payType || "월급",
       employmentStatus: "재직",
       createdAt: serverTimestamp(),
@@ -2568,22 +2584,20 @@ export default function EmployeeList() {
             <Card className="p-5">
               <SectionHeader>근무정보</SectionHeader>
               <div className="grid grid-cols-3 gap-3">
-                <div>
+                <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">근무구분 *</span>
-                  <div className="flex h-[42px] items-center gap-4 text-sm">
+                  <select
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                    value={registerForm.shiftType}
+                    onChange={(e) => setRegisterForm((f) => ({ ...f, shiftType: e.target.value }))}
+                  >
                     {SHIFT_TYPE_OPTIONS.map((s) => (
-                      <label key={s} className="flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name="shiftType"
-                          checked={registerForm.shiftType === s}
-                          onChange={() => setRegisterForm((f) => ({ ...f, shiftType: s }))}
-                        />
+                      <option key={s} value={s}>
                         {s}
-                      </label>
+                      </option>
                     ))}
-                  </div>
-                </div>
+                  </select>
+                </label>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted">근무형태 *</span>
                   <select

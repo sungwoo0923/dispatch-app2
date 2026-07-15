@@ -1047,6 +1047,7 @@ export default function Schedule() {
       toast.error("선택된 인원이 없습니다.");
       return;
     }
+    if (!(await confirm(`선택된 ${targets.length}명을 출근확정 처리하시겠습니까?`, "save"))) return;
     for (const { schedule: s } of targets) await applyScheduleStatusOne(s.id, "출근확정");
     setSelected(new Set());
     toast.success(`${targets.length}명을 출근확정 처리했습니다`);

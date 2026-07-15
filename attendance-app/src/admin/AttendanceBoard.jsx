@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, doc, setDoc, getDoc, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import {
   ClipboardCheck,
@@ -111,6 +112,7 @@ const EMPTY_FILTERS = {
 
 export default function AttendanceBoard() {
   const { profile, user } = useAuth();
+  const navigate = useNavigate();
   const confirm = useConfirm();
   const toast = useToast();
   const [companyName, setCompanyName] = useState("");
@@ -413,6 +415,16 @@ export default function AttendanceBoard() {
 
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
+  // 센터를 "전체"로 두고 볼 때는 이름순보다 센터별로 묶어서 보는 게 더
+  // 쓸모 있어 센터명 우선 정렬로 바꾸고, 특정 센터를 골랐을 때는(전부 같은
+  // 센터이므로) 그냥 이름순으로 둔다.
+  const rosterSortCompare = (a, b) => {
+    if (!filters.siteId) {
+      const siteCmp = siteName_(a.workSiteId).localeCompare(siteName_(b.workSiteId));
+      if (siteCmp !== 0) return siteCmp;
+    }
+    return (a.name || "").localeCompare(b.name || "");
+  };
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
 
   const [sort, setSort] = useState({ key: "date", dir: "asc" });
@@ -485,7 +497,7 @@ export default function AttendanceBoard() {
         return true;
       })
       .map((emp) => ({ emp, record: attendance.find((a) => a.uid === emp.id && a.date === todayKeyForCards) || null }))
-      .sort((a, b) => (a.emp.name || "").localeCompare(b.emp.name || ""));
+      .sort((a, b) => rosterSortCompare(a.emp, b.emp));
   }, [employees, filters, attendance, todayKeyForCards]);
 
   const ATTENDANCE_PAGE_SIZE = 10;
@@ -518,7 +530,7 @@ export default function AttendanceBoard() {
           if (filters.phone && !emp.phone?.includes(filters.phone)) return false;
           return true;
         })
-        .sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+        .sort(rosterSortCompare),
     [employees, filters]
   );
   const gridNumDays = daysInMonth(gridMonth);
@@ -607,6 +619,18 @@ export default function AttendanceBoard() {
       today: gridTodayKey,
       careerYears: Number(emp.careerYears) || 0,
     }).used;
+  };
+
+  // 좌측 고정열의 "잔여연차" — 입사일 기준 근로기준법 산정 부여일수에서
+  // 올해 누적 사용량을 뺀 실제 남은 연차 일수.
+  const gridRemainingLeave = (emp) => {
+    const empLeaves = gridLeaves.filter((l) => l.uid === emp.id);
+    return calcLeaveBalance({
+      hireDate: emp.hireDate,
+      leaves: empLeaves,
+      today: gridTodayKey,
+      careerYears: Number(emp.careerYears) || 0,
+    }).remaining;
   };
 
   const gridRemarkFor = (uid) => gridRemarks.find((r) => r.uid === uid)?.text || "";
@@ -884,7 +908,8 @@ export default function AttendanceBoard() {
       "D-DAY",
       "입사일",
       "퇴사일",
-      "연차(누적)",
+      "잔여연차",
+      "근무구분",
       ...gridDayList.map((d) => `${d}일(${gridWeekdayFor(d)})`),
       "출근",
       "결근",
@@ -906,7 +931,8 @@ export default function AttendanceBoard() {
         dday != null ? `D+${dday}` : "-",
         emp.hireDate || "-",
         emp.resignDate || "-",
-        gridCumulativeUsedLeave(emp),
+        gridRemainingLeave(emp),
+        emp.shiftType || "-",
         ...gridDayList.map((d) => gridCellMeta(gridDayStatus(emp.id, d)).label || ""),
         summary.present,
         summary.absent,
@@ -1179,22 +1205,20 @@ export default function AttendanceBoard() {
   return (
     <div className="space-y-6">
       <Panel icon={ClipboardCheck} title="출근현황">
-        <Card className="mb-4 p-0">
-          <div className="flex flex-nowrap overflow-x-auto overscroll-x-contain border-b border-slate-100">
-            {VIEW_OPTIONS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                className={`shrink-0 px-4 py-3 text-sm font-medium ${
-                  view === v ? "bg-primary-dark text-white" : "text-muted hover:bg-slate-50"
-                }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        </Card>
+        <div className="mb-4 flex w-fit flex-nowrap gap-1 overflow-x-auto overscroll-x-contain rounded-lg bg-slate-100 p-1">
+          {VIEW_OPTIONS.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium ${
+                view === v ? "bg-white text-primary shadow-sm" : "text-muted"
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
 
         {(view === "수정현황" || view === "변경요청") && (
         <Card className="mb-4 space-y-3 p-4">
@@ -1374,6 +1398,23 @@ export default function AttendanceBoard() {
           <>
             <Card className="mb-3 space-y-3 p-4">
               <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium"
+                  value={filters.siteId}
+                  onChange={(e) => {
+                    const siteId = e.target.value;
+                    setFilters((f) => ({ ...f, siteId }));
+                    setSearchDraft((f) => ({ ...f, siteId }));
+                    setAttendancePage(1);
+                  }}
+                >
+                  <option value="">전체 센터</option>
+                  {workSites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
                 <div className="flex flex-1 min-w-[220px] items-center overflow-hidden rounded-lg border border-slate-200 focus-within:border-primary">
                   <input
                     className="w-full px-3 py-2 text-sm outline-none"
@@ -1552,6 +1593,7 @@ export default function AttendanceBoard() {
                     <th className="px-3 py-3 font-semibold">성별</th>
                     <th className="px-3 py-3 font-semibold">나이</th>
                     <th className="px-3 py-3 font-semibold">부서</th>
+                    <th className="px-3 py-3 font-semibold">근무구분</th>
                     <th className="px-3 py-3 font-semibold">직급</th>
                     <th className="px-3 py-3 font-semibold">재직상태</th>
                   </tr>
@@ -1560,8 +1602,8 @@ export default function AttendanceBoard() {
                   {pagedAttendanceRows.map(({ emp, record: r }, i) => (
                     <tr
                       key={emp.id}
-                      onDoubleClick={() => r && openDetail({ record: r, emp })}
-                      title={r ? "더블클릭하여 상세보기" : ""}
+                      onDoubleClick={() => navigate(`/employees?edit=${emp.id}`)}
+                      title="더블클릭하여 근로자 수정창 열기"
                       className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100"
                     >
                       <td className="px-3 py-3 text-muted">{(attendancePageClamped - 1) * ATTENDANCE_PAGE_SIZE + i + 1}</td>
@@ -1579,17 +1621,25 @@ export default function AttendanceBoard() {
                       <td className="px-3 py-3 text-ink">{emp.gender || "-"}</td>
                       <td className="px-3 py-3 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
                       <td className="px-3 py-3 text-ink">{emp.team || "-"}</td>
+                      <td className="px-3 py-3 text-ink">{emp.shiftType || "-"}</td>
                       <td className="px-3 py-3 text-ink">{emp.position || "-"}</td>
-                      <td className="px-3 py-3">
-                        <Badge tone={r ? (r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger") : "muted"}>
-                          {r?.status || "미출근"}
-                        </Badge>
+                      <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => r && openDetail({ record: r, emp })}
+                          disabled={!r}
+                          title={r ? "클릭하여 출퇴근 상세보기" : ""}
+                        >
+                          <Badge tone={r ? (r.status === "출근" ? "success" : r.status === "지각" || r.status === "조퇴" ? "warning" : "danger") : "muted"}>
+                            {r?.status || "미출근"}
+                          </Badge>
+                        </button>
                       </td>
                     </tr>
                   ))}
                   {attendanceRoster.length === 0 && (
                     <tr>
-                      <td colSpan={12} className="px-4 py-10 text-center text-xs text-muted">
+                      <td colSpan={13} className="px-4 py-10 text-center text-xs text-muted">
                         조건에 맞는 근로자가 없습니다.
                       </td>
                     </tr>
@@ -1670,7 +1720,8 @@ export default function AttendanceBoard() {
                       <th className="min-w-14 px-2 py-2.5 font-medium">D-DAY</th>
                       <th className="min-w-20 px-2 py-2.5 font-medium">입사일</th>
                       <th className="min-w-20 px-2 py-2.5 font-medium">퇴사일</th>
-                      <th className="min-w-12 px-2 py-2.5 font-medium">연차</th>
+                      <th className="min-w-14 px-2 py-2.5 font-medium">잔여연차</th>
+                      <th className="min-w-20 px-2 py-2.5 font-medium">근무구분</th>
                       {gridDayList.map((d) => {
                         const wd = gridWeekdayFor(d);
                         const dateKey = `${gridMonth}-${String(d).padStart(2, "0")}`;
@@ -1710,7 +1761,7 @@ export default function AttendanceBoard() {
                           className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"
                         >
                           <td className="sticky left-0 z-10 bg-white px-2 py-2 text-muted">{i + 1}</td>
-                          <td className="sticky left-10 z-10 bg-white px-2 py-2 text-left font-medium text-ink">{emp.name}</td>
+                          <td className="sticky left-10 z-10 bg-white px-2 py-2 text-center font-medium text-ink">{emp.name}</td>
                           <td className="sticky left-[104px] z-10 bg-white px-2 py-2 text-ink">
                             <span className="inline-flex items-center gap-1">
                               {emp.phone || "-"}
@@ -1721,7 +1772,8 @@ export default function AttendanceBoard() {
                           <td className="px-2 py-2 font-medium text-primary">{dday != null ? `D+${dday}` : "-"}</td>
                           <td className="px-2 py-2 text-ink">{emp.hireDate || "-"}</td>
                           <td className="px-2 py-2 text-ink">{emp.resignDate || "-"}</td>
-                          <td className="px-2 py-2 text-ink">{gridCumulativeUsedLeave(emp)}</td>
+                          <td className="px-2 py-2 font-medium text-primary">{gridRemainingLeave(emp)}</td>
+                          <td className="px-2 py-2 text-ink">{emp.shiftType || "-"}</td>
                           {gridDayList.map((d) => {
                             const dateKey = `${gridMonth}-${String(d).padStart(2, "0")}`;
                             const status = gridDayStatus(emp.id, d);
@@ -1777,7 +1829,7 @@ export default function AttendanceBoard() {
                     })}
                     {gridEmployees.length === 0 && (
                       <tr>
-                        <td colSpan={gridNumDays + 17} className="px-4 py-6 text-center text-muted">
+                        <td colSpan={gridNumDays + 18} className="px-4 py-6 text-center text-muted">
                           조건에 맞는 근로자가 없습니다.
                         </td>
                       </tr>

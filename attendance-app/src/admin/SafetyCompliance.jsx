@@ -105,13 +105,13 @@ export default function SafetyCompliance() {
           근로감독관 방문이나 정부 감사 시 안전교육 이수 관리가 제대로 이루어지고 있음을 보여줄 수 있는 자료입니다. 센터/자료별
           이수율을 확인하고, 서명 증빙이 포함된 감사보고서를 출력하며, 점검 이력을 남길 수 있습니다.
         </p>
-        <div className="mb-4 flex flex-nowrap overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100 bg-white">
+        <div className="mb-4 flex w-fit flex-nowrap gap-1 overflow-x-auto overscroll-x-contain rounded-lg bg-slate-100 p-1">
           {TOP_TABS.map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
-              className={`shrink-0 px-4 py-3 text-sm font-medium ${tab === t.key ? "bg-primary-dark text-white" : "text-muted hover:bg-slate-50"}`}
+              className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium ${tab === t.key ? "bg-white text-primary shadow-sm" : "text-muted"}`}
             >
               {t.label}
             </button>

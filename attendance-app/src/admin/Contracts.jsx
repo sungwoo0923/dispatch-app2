@@ -414,13 +414,13 @@ export default function Contracts() {
   return (
     <div className="space-y-6">
       <Panel icon={FileSignature} title="계약관리">
-        <div className="mb-4 flex flex-nowrap overflow-x-auto overscroll-x-contain rounded-xl border border-slate-100 bg-white">
+        <div className="mb-4 flex w-fit flex-nowrap gap-1 overflow-x-auto overscroll-x-contain rounded-lg bg-slate-100 p-1">
           {TOP_TABS.map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`shrink-0 px-4 py-3 text-sm font-medium ${tab === t ? "bg-primary-dark text-white" : "text-muted hover:bg-slate-50"}`}
+              className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium ${tab === t ? "bg-white text-primary shadow-sm" : "text-muted"}`}
             >
               {t}
             </button>
