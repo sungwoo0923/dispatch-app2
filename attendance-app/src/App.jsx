@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
-import LoginPage from "./auth/LoginPage";
-import AdminLoginPage from "./auth/AdminLoginPage";
+import UnifiedLoginPage from "./auth/UnifiedLoginPage";
 import AdminSignupPage from "./auth/AdminSignupPage";
 import AgencySignupPage from "./auth/AgencySignupPage";
 import EmployeeSignupPage from "./auth/EmployeeSignupPage";
@@ -129,11 +128,12 @@ export default function App() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/admin-login" element={<AdminLoginPage />} />
+        <Route path="/admin-login" element={<UnifiedLoginPage initialTab="admin" />} />
+        <Route path="/agency-login" element={<UnifiedLoginPage initialTab="agency" />} />
         <Route path="/admin-signup" element={<AdminSignupPage />} />
         <Route path="/agency-signup" element={<AgencySignupPage />} />
         <Route path="/employee-signup" element={<EmployeeSignupPage />} />
-        <Route path="*" element={<LoginPage />} />
+        <Route path="*" element={<UnifiedLoginPage initialTab="employee" />} />
       </Routes>
     );
   }
