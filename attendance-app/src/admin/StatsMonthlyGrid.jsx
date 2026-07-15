@@ -22,15 +22,18 @@ function ExcelButton({ onClick }) {
   );
 }
 
-// 하루치 상태를 하나로 판정한다 — 출근기록이 있으면 무조건 출근으로 보고,
-// 없을 때만 그날을 포함하는 승인된 휴가가 있는지로 유급/무급휴무를 가른다.
-// 그 외(출근도 휴가도 없는 과거/오늘 날짜)는 결근으로 표시해 "언제 쉬었는지"
-// 뿐 아니라 "언제 안 나왔는지"도 한눈에 구분되게 한다.
-function dayStatus({ uid, dateKey, attendance, leaves, leaveTypes, isFuture }) {
-  if (attendance.some((a) => a.uid === uid && a.date === dateKey && a.status === "출근")) return "present";
+// 하루치 상태를 하나로 판정한다 — 출근(지각 포함)기록이 있으면 무조건
+// 출근으로 보고, 없을 때만 그날을 포함하는 승인된 휴가가 있는지로
+// 유급/무급휴무를 가른다. 그 외(출근도 휴가도 없는 과거 날짜, 또는
+// 정해진 퇴근시각이 지난 오늘 날짜)는 결근으로 표시해 "언제 쉬었는지"
+// 뿐 아니라 "언제 안 나왔는지"도 한눈에 구분되게 한다. 오늘 날짜는 하루가
+// 끝나기 전까지는 아직 결근으로 단정하지 않는다(AttendanceBoard의
+// resolveDayStatus와 같은 기준).
+function dayStatus({ uid, dateKey, attendance, leaves, leaveTypes, isFuture, isTodayNotYetOver }) {
+  if (attendance.some((a) => a.uid === uid && a.date === dateKey && (a.status === "출근" || a.status === "지각"))) return "present";
   const leave = leaveStatusOn(leaves, leaveTypes, uid, dateKey);
   if (leave) return leave.paid ? "paidLeave" : "unpaidLeave";
-  if (isFuture) return "future";
+  if (isFuture || isTodayNotYetOver) return "future";
   return "absent";
 }
 
@@ -88,7 +91,9 @@ export default function StatsMonthlyGrid() {
 
   const statusFor = (uid, day) => {
     const dateKey = `${month}-${String(day).padStart(2, "0")}`;
-    return dayStatus({ uid, dateKey, attendance, leaves, leaveTypes: lookups.leaveTypes, isFuture: dateKey > todayKey });
+    // 정해진 퇴근시각(기본 18:00) 전까지는 오늘 날짜를 결근으로 단정하지 않는다.
+    const isTodayNotYetOver = dateKey === todayKey && new Date().getHours() < 18;
+    return dayStatus({ uid, dateKey, attendance, leaves, leaveTypes: lookups.leaveTypes, isFuture: dateKey > todayKey, isTodayNotYetOver });
   };
 
   const openCellEditor = (emp, day) => {

@@ -7,11 +7,11 @@ import MiniMonthCalendar from "../components/MiniMonthCalendar";
 import { useCompanyLookups, filterEmployees, daysInMonth, leaveStatusOn } from "../utils/statsShared";
 import { toMonthKey } from "../utils/dateUtils";
 
-function dayStatus({ uid, dateKey, attendance, leaves, leaveTypes, isFuture }) {
-  if (attendance.some((a) => a.uid === uid && a.date === dateKey && a.status === "출근")) return "present";
+function dayStatus({ uid, dateKey, attendance, leaves, leaveTypes, isFuture, isTodayNotYetOver }) {
+  if (attendance.some((a) => a.uid === uid && a.date === dateKey && (a.status === "출근" || a.status === "지각"))) return "present";
   const leave = leaveStatusOn(leaves, leaveTypes, uid, dateKey);
   if (leave) return leave.paid ? "paidLeave" : "unpaidLeave";
-  if (isFuture) return "future";
+  if (isFuture || isTodayNotYetOver) return "future";
   return "absent";
 }
 
@@ -58,7 +58,8 @@ export default function AdminMobileStatsMonthlyGrid() {
 
   const statusFor = (uid, day) => {
     const dateKey = `${month}-${String(day).padStart(2, "0")}`;
-    return dayStatus({ uid, dateKey, attendance, leaves, leaveTypes: lookups.leaveTypes, isFuture: dateKey > todayKey });
+    const isTodayNotYetOver = dateKey === todayKey && new Date().getHours() < 18;
+    return dayStatus({ uid, dateKey, attendance, leaves, leaveTypes: lookups.leaveTypes, isFuture: dateKey > todayKey, isTodayNotYetOver });
   };
 
   const rows = useMemo(() => {

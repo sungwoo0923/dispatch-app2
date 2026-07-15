@@ -22,6 +22,7 @@ import {
   Printer,
   Eraser,
   Upload,
+  Clock,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -38,7 +39,7 @@ import MiniMonthCalendar from "../components/MiniMonthCalendar";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { downloadCsv } from "../utils/exportCsv";
 import { toDateKey, toMonthKey, formatTime, formatDate, attendanceDocId, calculateAge } from "../utils/dateUtils";
-import { computeCheckInStatus } from "../utils/attendanceStatus";
+import { computeCheckInStatus, LATE_GRACE_MINUTES } from "../utils/attendanceStatus";
 import { calcLeaveBalance } from "../utils/leave";
 import { isKrHoliday } from "../utils/holidaysKR";
 import {
@@ -55,6 +56,7 @@ import { daysInMonth, WEEKDAY_LABELS, leaveStatusOn } from "../utils/statsShared
 // attendance 컬렉션에, 나머지는 leaves 컬렉션(type=키)에 기록한다.
 const GRID_STATUS_OPTIONS = [
   { key: "출근", label: "출근", desc: "정상 출근으로 표시", icon: CheckCircle2, tone: "bg-primary text-white" },
+  { key: "지각", label: "지각", desc: "지각 출근으로 표시 (자동판정이 잘못됐을 때 직접 고칠 때도 사용)", icon: Clock, tone: "bg-primary/70 text-white" },
   { key: "특근", label: "특근", desc: "휴일/추가 근무", icon: Zap, tone: "bg-indigo-500 text-white" },
   { key: "휴무", label: "휴무", desc: "무급 휴무일", icon: Moon, tone: "bg-slate-500 text-white" },
   { key: "연차", label: "연차", desc: "연차 1일 사용", icon: CalendarCheck, tone: "bg-amber-500 text-white" },
@@ -569,6 +571,15 @@ export default function AttendanceBoard() {
   // 모두 이 로직을 공유해야 "이미 출근/휴무로 찍힌 날짜"가 두 화면에서
   // 항상 똑같이 보인다 — 그래서 emp/attendance/leaves를 인자로 받는 순수
   // 함수로 뽑아두고, 각 화면은 자신의 데이터 소스만 다르게 넘긴다.
+  // 오늘 날짜는 아직 하루가 끝나지 않았으므로 무조건 결근으로 단정하면 안
+  // 된다 — 정해진 출근시간(기본 09:00, 10분 유예) 전에는 빈 칸, 그 이후
+  // 퇴근시간(기본 18:00) 전까지는 "아직 안 찍었다"는 뜻으로 지각을
+  // 잠정 표시하고, 퇴근시간이 지나도록 기록이 없을 때만 비로소 결근으로
+  // 확정한다. 이 잠정 상태는 실제로 attendance/leaves 문서에 저장하지
+  // 않는 화면 표시용 판단이라, 근로자가 나중에 실제로 체크인하면 그
+  // 시점의 실제 시각 기준으로 정상 판정된다.
+  const DEFAULT_SHIFT_START_MINUTES = 9 * 60;
+  const DEFAULT_SHIFT_END_MINUTES = 18 * 60;
   const resolveDayStatus = (uid, emp, dateKey, attendanceList, leavesList) => {
     if (emp?.hireDate && dateKey < emp.hireDate) return "OUT";
     if (emp?.resignDate && dateKey > emp.resignDate) return "OUT";
@@ -577,6 +588,11 @@ export default function AttendanceBoard() {
     const leave = leaveStatusOn(leavesList, [], uid, dateKey);
     if (leave) return leave.type;
     if (dateKey > gridTodayKey) return "";
+    if (dateKey === gridTodayKey) {
+      const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+      if (nowMinutes < DEFAULT_SHIFT_START_MINUTES + LATE_GRACE_MINUTES) return "";
+      if (nowMinutes < DEFAULT_SHIFT_END_MINUTES) return "지각";
+    }
     return "결근";
   };
   const gridDayStatus = (uid, day) => {
@@ -589,6 +605,7 @@ export default function AttendanceBoard() {
   // 만근/특근/병결)에 그대로 쓰인다.
   const gridEmployeeMonthSummary = (uid) => {
     let present = 0;
+    let late = 0;
     let absent = 0;
     let off = 0;
     let annual = 0;
@@ -599,7 +616,8 @@ export default function AttendanceBoard() {
       const status = gridDayStatus(uid, day);
       if (status === "OUT") continue; // 입사 전/퇴사 후는 집계 대상이 아니다.
       scheduledDays += 1;
-      if (status === "출근" || status === "지각") present += 1;
+      if (status === "출근") present += 1;
+      else if (status === "지각") late += 1;
       else if (status === "특근") overtime += 1;
       else if (status === "연차") annual += 1;
       else if (status === "오전반차" || status === "오후반차") annual += 0.5;
@@ -610,7 +628,7 @@ export default function AttendanceBoard() {
     // 만근 = 결근 없이 재직 구간 전체를 채웠을 때의 총 근무 대상 일수
     // (예: 이번 달 14일 입사자라면 14~31일 = 18일이 만근 일수).
     const fullAttendance = absent === 0 && scheduledDays > 0 ? scheduledDays : 0;
-    return { present, absent, off, annual, overtime, sick, fullAttendance };
+    return { present, late, absent, off, annual, overtime, sick, fullAttendance };
   };
 
   // 하루치 출근 인원수 — 그 날짜 열 맨 아래 "합계" 행에 쓰인다.
@@ -619,10 +637,11 @@ export default function AttendanceBoard() {
 
   // 근로자 전원의 이번 달 요약 합계 — 요약열 맨 아래 "합계" 행에 쓰인다.
   const gridMonthGrandTotal = () => {
-    const total = { present: 0, absent: 0, off: 0, annual: 0, overtime: 0, sick: 0, fullAttendance: 0 };
+    const total = { present: 0, late: 0, absent: 0, off: 0, annual: 0, overtime: 0, sick: 0, fullAttendance: 0 };
     for (const emp of gridEmployees) {
       const s = gridEmployeeMonthSummary(emp.id);
       total.present += s.present;
+      total.late += s.late;
       total.absent += s.absent;
       total.off += s.off;
       total.annual += s.annual;
@@ -686,7 +705,7 @@ export default function AttendanceBoard() {
   const syncScheduleStatus = async (emp, uid, name, dateKey, statusKey) => {
     if (!emp) return;
     let targetStatus = null;
-    if (statusKey === "출근" || statusKey === "특근") targetStatus = "출근확정";
+    if (statusKey === "출근" || statusKey === "지각" || statusKey === "특근") targetStatus = "출근확정";
     else if (["휴무", "연차", "오전반차", "오후반차", "병가"].includes(statusKey)) targetStatus = "휴무";
     if (!targetStatus) return; // 결근/미정(빈 값)은 스케줄등록 상태를 건드리지 않는다.
     const existing = gridSchedules.find((s) => s.uid === uid && s.date === dateKey);
@@ -713,7 +732,12 @@ export default function AttendanceBoard() {
       (l) => l.uid === uid && l.status === "approved" && dateKey >= l.startDate && dateKey <= (l.endDate || l.startDate)
     );
     for (const l of oldLeaves) await deleteDoc(doc(db, "leaves", l.id)).catch(() => {});
-    if (statusKey === "출근" || statusKey === "특근") {
+    if (statusKey === "출근" || statusKey === "지각" || statusKey === "특근") {
+      // 지각으로 수동 지정할 때는 지각 판정 기준(LATE_GRACE_MINUTES)보다
+      // 늦은 시각을 출근시각으로 남겨, 이후 출근현황 상세에서 시각을 다시
+      // 봐도 "지각"이라는 상태와 앞뒤가 맞도록 한다.
+      const checkInTime =
+        statusKey === "지각" ? `${dateKey}T09:${String(LATE_GRACE_MINUTES + 1).padStart(2, "0")}:00` : `${dateKey}T09:00:00`;
       await setDoc(
         doc(db, "attendance", attendanceDocId(uid, dateKey)),
         {
@@ -723,7 +747,7 @@ export default function AttendanceBoard() {
           date: dateKey,
           month: dateKey.slice(0, 7),
           status: statusKey,
-          checkInTime: `${dateKey}T09:00:00`,
+          checkInTime,
           source: "manual",
         },
         { merge: true }
@@ -943,6 +967,7 @@ export default function AttendanceBoard() {
       "근무구분",
       ...gridDayList.map((d) => `${d}일(${gridWeekdayFor(d)})`),
       "출근",
+      "지각",
       "결근",
       "휴무",
       "연차",
@@ -966,6 +991,7 @@ export default function AttendanceBoard() {
         emp.shiftType || "-",
         ...gridDayList.map((d) => gridCellMeta(gridDayStatus(emp.id, d)).label || ""),
         summary.present,
+        summary.late,
         summary.absent,
         summary.off,
         summary.annual,
@@ -1821,6 +1847,7 @@ export default function AttendanceBoard() {
                         );
                       })}
                       <th className="min-w-12 px-2 py-2.5 font-medium">출근</th>
+                      <th className="min-w-12 px-2 py-2.5 font-medium">지각</th>
                       <th className="min-w-12 px-2 py-2.5 font-medium">결근</th>
                       <th className="min-w-12 px-2 py-2.5 font-medium">휴무</th>
                       <th className="min-w-12 px-2 py-2.5 font-medium">연차</th>
@@ -1880,6 +1907,7 @@ export default function AttendanceBoard() {
                             );
                           })}
                           <td className="px-2 py-2 font-semibold text-ink">{summary.present}</td>
+                          <td className="px-2 py-2 text-primary">{summary.late}</td>
                           <td className="px-2 py-2 text-danger">{summary.absent}</td>
                           <td className="px-2 py-2 text-ink">{summary.off}</td>
                           <td className="px-2 py-2 text-ink">{summary.annual}</td>
@@ -1911,7 +1939,7 @@ export default function AttendanceBoard() {
                     })}
                     {gridEmployees.length === 0 && (
                       <tr>
-                        <td colSpan={gridNumDays + 18} className="px-4 py-6 text-center text-muted">
+                        <td colSpan={gridNumDays + 19} className="px-4 py-6 text-center text-muted">
                           조건에 맞는 근로자가 없습니다.
                         </td>
                       </tr>
@@ -1935,6 +1963,7 @@ export default function AttendanceBoard() {
                               </td>
                             ))}
                             <td className="px-2 py-2">{grand.present}</td>
+                            <td className="px-2 py-2 text-primary">{grand.late}</td>
                             <td className="px-2 py-2 text-danger">{grand.absent}</td>
                             <td className="px-2 py-2">{grand.off}</td>
                             <td className="px-2 py-2">{grand.annual}</td>
