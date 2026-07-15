@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LogOut, ClipboardList, Wallet } from "lucide-react";
+import { LogOut, ClipboardList, Wallet, Users } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import BuildInfo from "../components/BuildInfo";
 
@@ -9,7 +9,7 @@ const itemClass = ({ isActive }) =>
   }`;
 
 // 외부 인력사무소(에이전시) 전용 화면 껍데기 — 도급사 관리자 화면과 완전히
-// 분리되어 있고, 요청장/정산 두 메뉴만 볼 수 있다(요청장/정산 외 데이터는
+// 분리되어 있고, 요청장/인원관리/정산 메뉴만 볼 수 있다(그 외 데이터는
 // firestore.rules에서도 애초에 읽을 수 없다).
 export default function AgencyLayout() {
   const { agency, logout } = useAuth();
@@ -29,6 +29,9 @@ export default function AgencyLayout() {
         <nav className="flex-1 space-y-1">
           <NavLink to="/" end className={itemClass}>
             <ClipboardList size={18} /> 요청장
+          </NavLink>
+          <NavLink to="/workers" className={itemClass}>
+            <Users size={18} /> 인원관리
           </NavLink>
           <NavLink to="/settlement" className={itemClass}>
             <Wallet size={18} /> 정산
@@ -51,9 +54,12 @@ export default function AgencyLayout() {
             <LogOut size={18} />
           </button>
         </header>
-        <nav className="flex gap-1 border-b border-slate-100 bg-white px-3 py-2 md:hidden">
+        <nav className="flex flex-wrap gap-1 border-b border-slate-100 bg-white px-3 py-2 md:hidden">
           <NavLink to="/" end className={itemClass}>
             <ClipboardList size={16} /> 요청장
+          </NavLink>
+          <NavLink to="/workers" className={itemClass}>
+            <Users size={16} /> 인원관리
           </NavLink>
           <NavLink to="/settlement" className={itemClass}>
             <Wallet size={16} /> 정산

@@ -101,6 +101,7 @@ import NotificationsPage from "./employee/NotificationsPage";
 import AgencyApprovalPendingPage from "./auth/AgencyApprovalPendingPage";
 import AgencyLayout from "./agency/AgencyLayout";
 import AgencyRequests from "./agency/AgencyRequests";
+import AgencyWorkers from "./agency/AgencyWorkers";
 import AgencySettlement from "./agency/AgencySettlement";
 import BiometricGate from "./components/BiometricGate";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -278,6 +279,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AgencyLayout />}>
           <Route index element={<AgencyRequests />} />
+          <Route path="workers" element={<AgencyWorkers />} />
           <Route path="settlement" element={<AgencySettlement />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

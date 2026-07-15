@@ -121,6 +121,15 @@ service cloud.firestore {
       allow delete: if isAdminOf(resource.data.companyId);
     }
 
+    // 인력사무소 자체 인원관리(로스터) — 요청 배정 시 이름검색으로 불러다
+    // 쓸 수 있도록 인력사무소가 미리 등록해두는 인력 풀. 도급사는 접근하지
+    // 않고, 해당 인력사무소 관리자만 CRUD한다.
+    match /agencyWorkers/{workerId} {
+      allow read: if isAgencyAdminOf(resource.data.agencyId);
+      allow create: if isAgencyAdminOf(request.resource.data.agencyId);
+      allow update, delete: if isAgencyAdminOf(resource.data.agencyId);
+    }
+
     // 사이드바 메뉴별 "안읽음 배지" 확인 시각 — 관리자 계정별로 자기 것만
     // 읽고 쓸 수 있다 (다른 관리자가 봤다고 내 배지가 사라지면 안 되므로).
     match /adminReadState/{uid} {

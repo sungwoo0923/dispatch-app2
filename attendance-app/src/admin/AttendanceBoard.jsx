@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, doc, setDoc, getDoc, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import {
   ClipboardCheck,
@@ -47,6 +46,7 @@ import {
   SHIFT_TYPE_OPTIONS,
   NATIONALITY_OPTIONS,
   COUNTRY_OPTIONS,
+  EMPLOYMENT_STATUS_OPTIONS,
 } from "../constants/hr";
 import SmsButton from "../components/SmsButton";
 import { daysInMonth, WEEKDAY_LABELS, leaveStatusOn } from "../utils/statsShared";
@@ -112,7 +112,6 @@ const EMPTY_FILTERS = {
 
 export default function AttendanceBoard() {
   const { profile, user } = useAuth();
-  const navigate = useNavigate();
   const confirm = useConfirm();
   const toast = useToast();
   const [companyName, setCompanyName] = useState("");
@@ -166,6 +165,14 @@ export default function AttendanceBoard() {
   const [detail, setDetail] = useState(null);
   const [detailEditMode, setDetailEditMode] = useState(false);
   const [detailForm, setDetailForm] = useState({ checkInTime: "", checkOutTime: "", status: "", reason: "" });
+
+  // 출근현황 근로자 목록 더블클릭 — 예전엔 근로자목록 메뉴로 이동시켰지만,
+  // 관리자가 화면 이동 없이 출근현황에서 바로 확인/수정할 수 있도록
+  // 외부인력은 간단 정보 팝업, 자사 근로자는 제자리 수정 팝업을 띄운다.
+  const [externalInfoTarget, setExternalInfoTarget] = useState(null);
+  const [quickEditTarget, setQuickEditTarget] = useState(null);
+  const [quickEditForm, setQuickEditForm] = useState(null);
+  const [quickEditSaving, setQuickEditSaving] = useState(false);
 
   // 도급팀이 실제로 쓰던 엑셀 휴무계획표(근로자 x 1~31일 달력형 표)를
   // 참고해, 출근현황 메뉴 하단에 같은 형태의 월별 스케줄표를 추가한다.
@@ -438,6 +445,11 @@ export default function AttendanceBoard() {
     return (a.name || "").localeCompare(b.name || "");
   };
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
+  // 외부인력(인력사무소가 배정한 근로자)은 소속업체 개념이 vendors
+  // 컬렉션이 아니라 그 인력사무소 자체이므로, 소속업체 컬럼에는 vendorId
+  // 대신 agencyName을 보여준다.
+  const vendorOrAgencyName_ = (emp) =>
+    emp?.employmentType === "외부인력" ? emp.agencyName || "-" : vendorName_(emp?.vendorId);
 
   const [sort, setSort] = useState({ key: "date", dir: "asc" });
   const ATTENDANCE_SORT_ACCESSORS = {
@@ -939,7 +951,7 @@ export default function AttendanceBoard() {
         i + 1,
         emp.name || "",
         emp.phone || "",
-        vendorName_(emp.vendorId),
+        vendorOrAgencyName_(emp),
         dday != null ? `D+${dday}` : "-",
         emp.hireDate || "-",
         emp.resignDate || "-",
@@ -1136,6 +1148,48 @@ export default function AttendanceBoard() {
       });
     }
     closeDetail();
+  };
+
+  const openRosterRow = (emp) => {
+    if (emp.employmentType === "외부인력") {
+      setExternalInfoTarget(emp);
+      return;
+    }
+    setQuickEditTarget(emp);
+    setQuickEditForm({
+      name: emp.name || "",
+      phone: emp.phone || "",
+      gender: emp.gender || "",
+      workSiteId: emp.workSiteId || "",
+      vendorId: emp.vendorId || "",
+      team: emp.team || "",
+      position: emp.position || "",
+      shiftType: emp.shiftType || "",
+      employmentType: emp.employmentType || "",
+      employmentStatus: emp.employmentStatus || "재직",
+      hireDate: emp.hireDate || "",
+    });
+  };
+  const closeQuickEdit = () => {
+    setQuickEditTarget(null);
+    setQuickEditForm(null);
+  };
+  const saveQuickEdit = async () => {
+    if (!quickEditTarget || !quickEditForm) return;
+    if (!quickEditForm.name.trim()) {
+      toast.error("이름을 입력해주세요");
+      return;
+    }
+    setQuickEditSaving(true);
+    try {
+      await updateDoc(doc(db, "users", quickEditTarget.id), { ...quickEditForm });
+      toast.success("저장되었습니다");
+      closeQuickEdit();
+    } catch {
+      toast.error("저장에 실패했습니다");
+    } finally {
+      setQuickEditSaving(false);
+    }
   };
 
   const toggleSelected = (id) =>
@@ -1623,8 +1677,8 @@ export default function AttendanceBoard() {
                   {pagedAttendanceRows.map(({ emp, record: r }, i) => (
                     <tr
                       key={emp.id}
-                      onDoubleClick={() => navigate(`/employees?edit=${emp.id}`)}
-                      title="더블클릭하여 근로자 수정창 열기"
+                      onDoubleClick={() => openRosterRow(emp)}
+                      title="더블클릭하여 상세/수정 팝업 열기"
                       className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100"
                     >
                       <td className="px-3 py-3 text-muted">{(attendancePageClamped - 1) * ATTENDANCE_PAGE_SIZE + i + 1}</td>
@@ -1635,7 +1689,7 @@ export default function AttendanceBoard() {
                           {emp.phone && <SmsButton phone={emp.phone} />}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-ink">{vendorName_(emp.vendorId)}</td>
+                      <td className="px-3 py-3 text-ink">{vendorOrAgencyName_(emp)}</td>
                       <td className="px-3 py-3 text-ink">{siteName_(emp.workSiteId)}</td>
                       <td className="px-3 py-3 text-ink">{emp.hireDate || "-"}</td>
                       <td className="px-3 py-3 text-ink">{emp.country || (emp.nationality === "내국인" ? "대한민국" : "-")}</td>
@@ -1789,7 +1843,7 @@ export default function AttendanceBoard() {
                               {emp.phone && <SmsButton phone={emp.phone} />}
                             </span>
                           </td>
-                          <td className="px-2 py-2 text-ink">{vendorName_(emp.vendorId)}</td>
+                          <td className="px-2 py-2 text-ink">{vendorOrAgencyName_(emp)}</td>
                           <td className="px-2 py-2 font-medium text-primary">{dday != null ? `D+${dday}` : "-"}</td>
                           <td className="px-2 py-2 text-ink">{emp.hireDate || "-"}</td>
                           <td className="px-2 py-2 text-ink">{emp.resignDate || "-"}</td>
@@ -2423,6 +2477,204 @@ export default function AttendanceBoard() {
                 />
               </label>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={Boolean(externalInfoTarget)} onClose={() => setExternalInfoTarget(null)} title="외부인력 정보">
+        {externalInfoTarget && (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div>
+              <span className="block text-[11px] font-medium text-muted">이름</span>
+              <span className="text-ink">{externalInfoTarget.name || "-"}</span>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-muted">연락처</span>
+              <span className="text-ink">{externalInfoTarget.phone || "-"}</span>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-muted">소속업체(인력사무소)</span>
+              <span className="text-ink">{externalInfoTarget.agencyName || "-"}</span>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-muted">센터</span>
+              <span className="text-ink">{siteName_(externalInfoTarget.workSiteId)}</span>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-muted">근무구분</span>
+              <span className="text-ink">{externalInfoTarget.shiftType || "-"}</span>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-muted">일당</span>
+              <span className="text-ink">{externalInfoTarget.dailyRate ? `${Number(externalInfoTarget.dailyRate).toLocaleString()}원` : "-"}</span>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-muted">성별</span>
+              <span className="text-ink">{externalInfoTarget.gender || "-"}</span>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-muted">입사일</span>
+              <span className="text-ink">{externalInfoTarget.hireDate || "-"}</span>
+            </div>
+            <div className="col-span-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">
+              외부인력은 연동된 인력사무소의 인원관리에서 정보를 수정할 수 있습니다.
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(quickEditTarget)}
+        onClose={closeQuickEdit}
+        title="근로자 정보 수정"
+        footer={
+          <>
+            <Button variant="outline" onClick={closeQuickEdit}>
+              취소
+            </Button>
+            <Button onClick={saveQuickEdit} disabled={quickEditSaving}>
+              {quickEditSaving ? "저장 중..." : "저장"}
+            </Button>
+          </>
+        }
+      >
+        {quickEditForm && (
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">이름</span>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.name}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">연락처</span>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.phone}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, phone: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">성별</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.gender}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, gender: e.target.value }))}
+              >
+                <option value="">선택</option>
+                <option value="남">남</option>
+                <option value="여">여</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">입사일</span>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.hireDate}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, hireDate: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.workSiteId}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, workSiteId: e.target.value }))}
+              >
+                <option value="">선택</option>
+                {workSites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">소속업체</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.vendorId}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, vendorId: e.target.value }))}
+              >
+                <option value="">선택</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">부서</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.team}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, team: e.target.value }))}
+              >
+                <option value="">선택</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">직급</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.position}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, position: e.target.value }))}
+              >
+                <option value="">선택</option>
+                {positions.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">근무구분</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.shiftType}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, shiftType: e.target.value }))}
+              >
+                <option value="">선택</option>
+                {SHIFT_TYPE_OPTIONS.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">고용구분</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.employmentType}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, employmentType: e.target.value }))}
+              >
+                <option value="">선택</option>
+                {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted">재직상태</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+                value={quickEditForm.employmentStatus}
+                onChange={(e) => setQuickEditForm((f) => ({ ...f, employmentStatus: e.target.value }))}
+              >
+                {EMPLOYMENT_STATUS_OPTIONS.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </label>
           </div>
         )}
       </Modal>

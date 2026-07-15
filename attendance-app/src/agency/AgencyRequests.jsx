@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, query, where, onSnapshot, doc, setDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { ClipboardList, Users } from "lucide-react";
+import { ClipboardList, Users, Search } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
@@ -53,17 +53,46 @@ async function provisionWorker({ request, worker, agencyId, agencyName }) {
   return uid;
 }
 
-function AssignModal({ request, agencyId, agencyName, onClose, onDone }) {
+function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone }) {
   const toast = useToast();
   const [workers, setWorkers] = useState(
     Array.from({ length: Math.max(1, request.headcount || 1) }, () => ({ ...EMPTY_WORKER }))
   );
   const [saving, setSaving] = useState(false);
+  // 이름칸에 타이핑 중인 근로자 행 인덱스 — 그 행에만 인원관리 로스터
+  // 검색결과 드롭다운을 띄운다. 바깥 클릭하면 닫히도록 각 행 wrapper에
+  // ref를 붙여 바깥 클릭을 감지한다.
+  const [searchOpenIndex, setSearchOpenIndex] = useState(null);
+  const rowRefs = useRef([]);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (searchOpenIndex == null) return;
+      const el = rowRefs.current[searchOpenIndex];
+      if (el && !el.contains(e.target)) setSearchOpenIndex(null);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [searchOpenIndex]);
 
   const updateWorker = (i, key, value) =>
     setWorkers((w) => w.map((row, idx) => (idx === i ? { ...row, [key]: value } : row)));
   const addRow = () => setWorkers((w) => [...w, { ...EMPTY_WORKER }]);
   const removeRow = (i) => setWorkers((w) => w.filter((_, idx) => idx !== i));
+
+  const pickFromRoster = (i, person) => {
+    setWorkers((w) =>
+      w.map((row, idx) =>
+        idx === i ? { ...row, name: person.name, phone: person.phone || "", gender: person.gender || "" } : row
+      )
+    );
+    setSearchOpenIndex(null);
+  };
+  const rosterMatches = (i) => {
+    const kw = (workers[i]?.name || "").trim();
+    if (!kw) return [];
+    return roster.filter((p) => p.name?.includes(kw)).slice(0, 6);
+  };
 
   const totalPrice = workers.reduce((sum, w) => sum + (Number(w.dailyRate) || 0), 0);
 
@@ -104,16 +133,62 @@ function AssignModal({ request, agencyId, agencyName, onClose, onDone }) {
       </div>
       <div className="space-y-3">
         {workers.map((w, i) => (
-          <div key={i} className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-5">
-            <input className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm sm:col-span-1" placeholder="이름" value={w.name} onChange={(e) => updateWorker(i, "name", e.target.value)} />
-            <input className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm sm:col-span-1" placeholder="연락처" value={w.phone} onChange={(e) => updateWorker(i, "phone", e.target.value)} />
-            <select className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm sm:col-span-1" value={w.gender} onChange={(e) => updateWorker(i, "gender", e.target.value)}>
-              <option value="">성별</option>
-              <option value="남">남</option>
-              <option value="여">여</option>
-            </select>
-            <input type="number" className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm sm:col-span-1" placeholder="일당(원)" value={w.dailyRate} onChange={(e) => updateWorker(i, "dailyRate", e.target.value)} />
-            <button type="button" onClick={() => removeRow(i)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs text-danger sm:col-span-1">삭제</button>
+          <div key={i} className="rounded-xl border border-slate-200 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted">인원 {i + 1}</p>
+              <button type="button" onClick={() => removeRow(i)} className="text-xs text-danger">삭제</button>
+            </div>
+            <div className="space-y-2">
+              <div ref={(el) => (rowRefs.current[i] = el)} className="relative">
+                <label className="mb-1 block text-[11px] font-medium text-muted">이름</label>
+                <div className="relative">
+                  <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                  <input
+                    className="w-full rounded-lg border border-slate-200 py-2 pl-8 pr-2.5 text-sm"
+                    placeholder="이름 입력 또는 인원관리에서 검색"
+                    value={w.name}
+                    onFocus={() => setSearchOpenIndex(i)}
+                    onChange={(e) => {
+                      updateWorker(i, "name", e.target.value);
+                      setSearchOpenIndex(i);
+                    }}
+                  />
+                </div>
+                {searchOpenIndex === i && rosterMatches(i).length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+                    {rosterMatches(i).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => pickFromRoster(i, p)}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      >
+                        <span className="text-ink">{p.name}</span>
+                        <span className="text-xs text-muted">{p.phone || "-"} {p.jobType ? `· ${p.jobType}` : ""}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-muted">연락처</span>
+                  <input className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" placeholder="연락처" value={w.phone} onChange={(e) => updateWorker(i, "phone", e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-muted">성별</span>
+                  <select className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" value={w.gender} onChange={(e) => updateWorker(i, "gender", e.target.value)}>
+                    <option value="">선택</option>
+                    <option value="남">남</option>
+                    <option value="여">여</option>
+                  </select>
+                </label>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-muted">일당(원)</span>
+                <input type="number" className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" placeholder="일당(원)" value={w.dailyRate} onChange={(e) => updateWorker(i, "dailyRate", e.target.value)} />
+              </label>
+            </div>
           </div>
         ))}
       </div>
@@ -128,12 +203,23 @@ function AssignModal({ request, agencyId, agencyName, onClose, onDone }) {
 export default function AgencyRequests() {
   const { agency } = useAuth();
   const [requests, setRequests] = useState([]);
+  const [roster, setRoster] = useState([]);
   const [assignTarget, setAssignTarget] = useState(null);
 
   useEffect(() => {
     if (!agency?.id) return;
     const unsub = onSnapshot(query(collection(db, "staffingRequests"), where("agencyId", "==", agency.id)), (snap) =>
       setRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [agency?.id]);
+
+  // 배정 팝업에서 이름검색으로 불러올 인원관리 로스터 — 여기서 한 번만
+  // 구독해두고 AssignModal에 그대로 넘긴다.
+  useEffect(() => {
+    if (!agency?.id) return;
+    const unsub = onSnapshot(query(collection(db, "agencyWorkers"), where("agencyId", "==", agency.id)), (snap) =>
+      setRoster(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
     return () => unsub();
   }, [agency?.id]);
@@ -197,6 +283,7 @@ export default function AgencyRequests() {
           request={assignTarget}
           agencyId={agency.id}
           agencyName={agency.name}
+          roster={roster}
           onClose={() => setAssignTarget(null)}
           onDone={() => setAssignTarget(null)}
         />

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { Building2, Plus, Trash2, Check, X } from "lucide-react";
+import { Building2, Plus, Trash2, Check, X, Pencil } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -37,6 +37,9 @@ export default function StaffingAgency() {
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestForm, setRequestForm] = useState(EMPTY_REQUEST_FORM);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [detailEditMode, setDetailEditMode] = useState(false);
+  const [detailForm, setDetailForm] = useState(null);
+  const [detailSaving, setDetailSaving] = useState(false);
 
   useEffect(() => {
     if (!profile?.companyId) return;
@@ -173,6 +176,58 @@ export default function StaffingAgency() {
     toast.success("삭제되었습니다");
   };
 
+  const openDetail = (r) => {
+    setDetailTarget(r);
+    setDetailEditMode(false);
+    setDetailForm({
+      siteId: r.siteId || "",
+      date: r.date || "",
+      shiftLabel: r.shiftLabel || SHIFT_LABEL_OPTIONS[0],
+      headcount: r.headcount || 1,
+      note: r.note || "",
+      workers: (r.workers || []).map((w) => ({ ...w })),
+    });
+  };
+  const closeDetail = () => {
+    setDetailTarget(null);
+    setDetailEditMode(false);
+    setDetailForm(null);
+  };
+
+  const updateDetailWorker = (idx, field, value) => {
+    setDetailForm((f) => ({
+      ...f,
+      workers: f.workers.map((w, i) => (i === idx ? { ...w, [field]: value } : w)),
+    }));
+  };
+  const removeDetailWorker = (idx) => {
+    setDetailForm((f) => ({ ...f, workers: f.workers.filter((_, i) => i !== idx) }));
+  };
+
+  const saveDetailEdit = async () => {
+    if (!detailTarget || !detailForm) return;
+    setDetailSaving(true);
+    try {
+      const totalPrice = detailForm.workers.reduce((sum, w) => sum + (Number(w.dailyRate) || 0), 0);
+      await updateDoc(doc(db, "staffingRequests", detailTarget.id), {
+        siteId: detailForm.siteId || null,
+        siteName: siteName_(detailForm.siteId),
+        date: detailForm.date,
+        shiftLabel: detailForm.shiftLabel,
+        headcount: Number(detailForm.headcount) || 1,
+        note: detailForm.note,
+        workers: detailForm.workers,
+        totalPrice,
+      });
+      toast.success("저장되었습니다");
+      closeDetail();
+    } catch (err) {
+      toast.error(`저장에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Panel icon={Building2} title="외부인력">
@@ -307,7 +362,7 @@ export default function StaffingAgency() {
                 </thead>
                 <tbody>
                   {sortedRequests.map((r) => (
-                    <tr key={r.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => setDetailTarget(r)}>
+                    <tr key={r.id} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50" onDoubleClick={() => openDetail(r)}>
                       <td className="px-3 py-3 text-ink">{r.agencyName}</td>
                       <td className="px-3 py-3 text-ink">{r.siteName || "-"}</td>
                       <td className="px-3 py-3 text-ink">{r.date}</td>
@@ -388,31 +443,108 @@ export default function StaffingAgency() {
         </div>
       </Modal>
 
-      <Modal open={!!detailTarget} onClose={() => setDetailTarget(null)} title="요청장 상세">
-        {detailTarget && (
+      <Modal
+        open={!!detailTarget}
+        onClose={closeDetail}
+        title="요청장 상세"
+        footer={
+          detailEditMode ? (
+            <>
+              <Button variant="outline" onClick={() => setDetailEditMode(false)}>취소</Button>
+              <Button onClick={saveDetailEdit} disabled={detailSaving}>{detailSaving ? "저장 중..." : "저장"}</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={closeDetail}>닫기</Button>
+              <Button onClick={() => setDetailEditMode(true)}>
+                <Pencil size={13} /> 수정
+              </Button>
+            </>
+          )
+        }
+      >
+        {detailTarget && detailForm && (
           <div className="space-y-3 text-sm">
             <div className="grid grid-cols-2 gap-2 text-ink">
               <p><span className="text-muted">인력사무소</span> {detailTarget.agencyName}</p>
               <p><span className="text-muted">상태</span> {detailTarget.status === "assigned" ? "배정완료" : "요청중"}</p>
-              <p><span className="text-muted">센터</span> {detailTarget.siteName || "-"}</p>
-              <p><span className="text-muted">날짜</span> {detailTarget.date}</p>
-              <p><span className="text-muted">조</span> {detailTarget.shiftLabel}</p>
-              <p><span className="text-muted">요청인원</span> {detailTarget.headcount}명</p>
             </div>
-            {detailTarget.note && <p className="text-muted">비고: {detailTarget.note}</p>}
-            {detailTarget.workers?.length > 0 && (
+
+            {detailEditMode ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">센터</span>
+                  <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={detailForm.siteId} onChange={(e) => setDetailForm((f) => ({ ...f, siteId: e.target.value }))}>
+                    <option value="">선택 안함</option>
+                    {workSites.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">날짜</span>
+                  <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={detailForm.date} onChange={(e) => setDetailForm((f) => ({ ...f, date: e.target.value }))} />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">조</span>
+                  <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={detailForm.shiftLabel} onChange={(e) => setDetailForm((f) => ({ ...f, shiftLabel: e.target.value }))}>
+                    {SHIFT_LABEL_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">요청인원</span>
+                  <input type="number" min={1} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={detailForm.headcount} onChange={(e) => setDetailForm((f) => ({ ...f, headcount: e.target.value }))} />
+                </label>
+                <label className="col-span-2 block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">비고</span>
+                  <textarea className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" rows={2} value={detailForm.note} onChange={(e) => setDetailForm((f) => ({ ...f, note: e.target.value }))} />
+                </label>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 text-ink">
+                <p><span className="text-muted">센터</span> {detailTarget.siteName || "-"}</p>
+                <p><span className="text-muted">날짜</span> {detailTarget.date}</p>
+                <p><span className="text-muted">조</span> {detailTarget.shiftLabel}</p>
+                <p><span className="text-muted">요청인원</span> {detailTarget.headcount}명</p>
+                {detailTarget.note && <p className="col-span-2"><span className="text-muted">비고</span> {detailTarget.note}</p>}
+              </div>
+            )}
+
+            {detailForm.workers.length > 0 && (
               <div className="rounded-xl border border-slate-200 p-3">
                 <p className="mb-2 text-xs font-medium text-muted">배정 인력</p>
-                <ul className="space-y-1">
-                  {detailTarget.workers.map((w, i) => (
-                    <li key={i} className="flex items-center justify-between text-ink">
-                      <span>{w.name} {w.phone && `· ${w.phone}`} {w.gender && `· ${w.gender}`}</span>
-                      <span className="font-medium">{(w.dailyRate || 0).toLocaleString()}원</span>
-                    </li>
-                  ))}
-                </ul>
+                {detailEditMode ? (
+                  <div className="space-y-2">
+                    {detailForm.workers.map((w, i) => (
+                      <div key={i} className="grid grid-cols-5 items-center gap-1.5 rounded-lg border border-slate-100 p-2">
+                        <input className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" placeholder="이름" value={w.name} onChange={(e) => updateDetailWorker(i, "name", e.target.value)} />
+                        <input className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" placeholder="연락처" value={w.phone || ""} onChange={(e) => updateDetailWorker(i, "phone", e.target.value)} />
+                        <select className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" value={w.gender || ""} onChange={(e) => updateDetailWorker(i, "gender", e.target.value)}>
+                          <option value="">성별</option>
+                          <option value="남">남</option>
+                          <option value="여">여</option>
+                        </select>
+                        <input type="number" className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" placeholder="일당" value={w.dailyRate || ""} onChange={(e) => updateDetailWorker(i, "dailyRate", e.target.value)} />
+                        <button type="button" onClick={() => removeDetailWorker(i)} className="col-span-1 flex items-center justify-center text-danger">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="space-y-1">
+                    {detailForm.workers.map((w, i) => (
+                      <li key={i} className="flex items-center justify-between text-ink">
+                        <span>{w.name} {w.phone && `· ${w.phone}`} {w.gender && `· ${w.gender}`}</span>
+                        <span className="font-medium">{(w.dailyRate || 0).toLocaleString()}원</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <p className="mt-2 border-t border-slate-100 pt-2 text-right font-semibold text-primary">
-                  합계 {(detailTarget.totalPrice || 0).toLocaleString()}원
+                  합계 {detailForm.workers.reduce((sum, w) => sum + (Number(w.dailyRate) || 0), 0).toLocaleString()}원
                 </p>
               </div>
             )}
