@@ -66,6 +66,14 @@ service cloud.firestore {
         );
     }
 
+    // 도급사 관리자가 인력사무소 가입승인 요청(agencies.status)을 처리할 수
+    // 있으려면, 그 도급사와 해당 인력사무소 사이에 이미(가입 시 자동 생성된
+    // pending 상태) companyAgencyLinks 문서가 있어야 한다.
+    function canApproveAgency(agencyId) {
+      return isSignedIn() && myCompanyId() != null &&
+        exists(/databases/$(database)/documents/companyAgencyLinks/$(myCompanyId() + '_' + agencyId));
+    }
+
     match /admins/{uid} {
       allow get: if isSelf(uid);
       allow list: if false;
@@ -84,17 +92,22 @@ service cloud.firestore {
       allow get: if true; // 가입 시 코드 중복확인, 도급사가 연동업체 코드로 조회할 때 필요
       allow list: if isSuperAdmin();
       allow create: if isSignedIn();
-      allow update: if isAgencyAdminOf(agencyId) || isSuperAdmin();
+      // 가입승인(status: pending -> approved)은 그 인력사무소가 가입 시
+      // 요청한 도급사의 관리자만 할 수 있다(canApproveAgency).
+      allow update: if isAgencyAdminOf(agencyId) || isSuperAdmin() || canApproveAgency(agencyId);
       allow delete: if isAgencyAdminOf(agencyId);
     }
 
-    // 도급사가 인력사무소를 "연동업체"로 등록한 관계 — 문서 id는
-    // `${companyId}_${agencyId}`로 고정한다.
+    // 도급사-인력사무소 연동 관계 — 문서 id는 `${companyId}_${agencyId}`로
+    // 고정한다. status: "pending"(인력사무소 가입 시 자동 생성, 도급사 승인
+    // 대기) -> "approved"(도급사 승인 완료, 또는 관리자가 이미 승인된
+    // 인력사무소를 코드로 직접 연동했을 때).
     match /companyAgencyLinks/{linkId} {
       allow read: if isAdminOf(resource.data.companyId) || isAgencyAdminOf(resource.data.agencyId);
-      allow create: if isAdminOf(request.resource.data.companyId);
+      allow create: if isAdminOf(request.resource.data.companyId) ||
+        (request.resource.data.status == "pending" && isAgencyAdminOf(request.resource.data.agencyId));
+      allow update: if isAdminOf(resource.data.companyId);
       allow delete: if isAdminOf(resource.data.companyId);
-      allow update: if false;
     }
 
     // 외부인력 요청장 — 도급사가 요청을 만들고(요청중), 연동된 인력사무소가

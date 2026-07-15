@@ -99,6 +99,7 @@ import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
 import SafetyArchivePage from "./employee/SafetyArchivePage";
 import BoardPage from "./employee/BoardPage";
 import NotificationsPage from "./employee/NotificationsPage";
+import AgencyApprovalPendingPage from "./auth/AgencyApprovalPendingPage";
 import AgencyLayout from "./agency/AgencyLayout";
 import AgencyRequests from "./agency/AgencyRequests";
 import AgencySettlement from "./agency/AgencySettlement";
@@ -120,7 +121,7 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { user, profile, loading, company, companyLoading, isSuperAdmin } = useAuth();
+  const { user, profile, loading, company, companyLoading, agency, agencyLoading, isSuperAdmin } = useAuth();
   const isMobile = useIsMobile();
 
   if (loading) return <LoadingScreen />;
@@ -271,6 +272,8 @@ export default function App() {
   }
 
   if (profile.role === "agency") {
+    if (agencyLoading) return <LoadingScreen />;
+    if (!agency || agency.status !== "approved") return <AgencyApprovalPendingPage />;
     return (
       <Routes>
         <Route path="/" element={<AgencyLayout />}>

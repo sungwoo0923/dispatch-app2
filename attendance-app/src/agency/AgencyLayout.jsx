@@ -20,6 +20,11 @@ export default function AgencyLayout() {
         <div className="mb-6 px-2">
           <img src="/logo.png" alt="KP-Work" className="h-7" />
           <p className="mt-1 truncate text-xs font-medium text-muted">{agency?.name || "인력사무소"}</p>
+          {agency?.id && (
+            <p className="mt-1 text-[11px] text-muted">
+              연동코드 <span className="font-mono font-semibold text-primary">{agency.id}</span>
+            </p>
+          )}
         </div>
         <nav className="flex-1 space-y-1">
           <NavLink to="/" end className={itemClass}>
