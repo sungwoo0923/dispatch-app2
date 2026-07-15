@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { Building2, Plus, Trash2, Check, X, Pencil, Ban } from "lucide-react";
+import { Building2, Plus, Trash2, Check, X, Pencil, UserCog, Ban } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -10,7 +10,7 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
-import { deprovisionWorkers } from "../agency/AgencyRequests";
+import { notifyAgency } from "../utils/agencyNotify";
 
 const SHIFT_LABEL_OPTIONS = ["7시조", "8시조", "9시조", "야간조", "기타"];
 const EMPTY_REQUEST_FORM = { agencyId: "", siteId: "", date: "", shiftLabel: SHIFT_LABEL_OPTIONS[0], headcount: 1, note: "" };
@@ -149,7 +149,7 @@ export default function StaffingAgency() {
     }
     const link = links.find((l) => l.agencyId === requestForm.agencyId);
     try {
-      await addDoc(collection(db, "staffingRequests"), {
+      const ref = await addDoc(collection(db, "staffingRequests"), {
         companyId: profile.companyId,
         companyName,
         agencyId: requestForm.agencyId,
@@ -161,8 +161,17 @@ export default function StaffingAgency() {
         headcount: Number(requestForm.headcount) || 1,
         note: requestForm.note,
         status: "requested",
+        pendingAction: null,
         requestedBy: profile.id,
         createdAt: serverTimestamp(),
+      });
+      await notifyAgency({
+        agencyId: requestForm.agencyId,
+        companyId: profile.companyId,
+        type: "register",
+        title: "새 요청장이 등록되었습니다",
+        message: `${companyName} · ${requestForm.date} · ${requestForm.shiftLabel} · ${requestForm.headcount}명`,
+        requestId: ref.id,
       });
       toast.success("요청장이 등록되었습니다");
       setRequestOpen(false);
@@ -171,26 +180,72 @@ export default function StaffingAgency() {
     }
   };
 
+  // "요청중"(아직 배정 전) 건만 도급사가 직접 삭제할 수 있다 — 이미 배정된
+  // 건은 인력사무소가 실제로 인력을 보낸 상태이므로, 오더삭제요청을 보내
+  // 인력사무소의 승인을 받아야 한다.
   const deleteRequest = async (r) => {
     if (!(await confirm("이 요청장을 삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "staffingRequests", r.id));
+    await notifyAgency({
+      agencyId: r.agencyId,
+      companyId: r.companyId,
+      type: "delete",
+      title: "요청장이 삭제되었습니다",
+      message: `${r.companyName} · ${r.date} · ${r.shiftLabel || "-"}`,
+      requestId: r.id,
+    });
     toast.success("삭제되었습니다");
   };
 
-  // 도급사가 요청을 취소한다 — 이미 배정된 인력이 있으면 그 인력의
-  // users(임시 placeholder)/schedules 문서도 함께 정리해, 스케줄등록·
-  // 출근현황에 취소된 인원이 남아있지 않도록 한다. 인력사무소 화면에는
-  // status가 "cancelled"로 바뀌면서 배너와 배지로 즉시 반영된다.
-  const cancelRequest = async (r) => {
-    if (!(await confirm(`${r.agencyName}에 요청한 ${r.date} 건을 취소하시겠습니까? 이미 배정된 인력이 있다면 스케줄도 함께 취소됩니다.`, "delete")))
-      return;
+  // 배정된 인력을 바꾸고 싶을 때 — 도급사가 직접 배정 인력을 지우거나
+  // 바꿀 수는 없고, 인력사무소에 변경을 요청해 승인을 받아야 한다.
+  // 승인되면 배정이 해제되고 다시 "요청중" 상태로 돌아가 인력사무소가
+  // 새로 배정을 진행한다.
+  const requestReassign = async (r) => {
+    if (!(await confirm(`${r.agencyName}에 배정 인력 변경을 요청하시겠습니까? 인력사무소가 승인해야 진행됩니다.`, "save"))) return;
     try {
-      if (r.workers?.length) await deprovisionWorkers(r.workers);
-      await updateDoc(doc(db, "staffingRequests", r.id), { status: "cancelled", cancelledAt: serverTimestamp() });
-      toast.success("요청을 취소했습니다");
+      await updateDoc(doc(db, "staffingRequests", r.id), { pendingAction: "reassign", pendingActionAt: serverTimestamp() });
+      await notifyAgency({
+        agencyId: r.agencyId,
+        companyId: r.companyId,
+        type: "reassign_request",
+        title: "배정 변경요청이 있습니다",
+        message: `${r.companyName} · ${r.date} · ${r.shiftLabel || "-"}`,
+        requestId: r.id,
+      });
+      toast.success("배정 변경을 요청했습니다. 인력사무소의 승인을 기다려주세요.");
+      closeDetail();
     } catch (err) {
-      toast.error(`취소에 실패했습니다: ${err.code || err.message}`);
+      toast.error(`요청에 실패했습니다: ${err.code || err.message}`);
     }
+  };
+
+  // 이미 배정된 요청장을 통째로 취소(삭제)하고 싶을 때도 인력사무소 승인이
+  // 필요하다 — 승인되면 배정 인력이 정리되고 상태가 "취소됨"으로 바뀐다.
+  const requestCancelOrder = async (r) => {
+    if (!(await confirm(`${r.agencyName}에 고용(요청장) 취소를 요청하시겠습니까? 인력사무소가 승인해야 진행됩니다.`, "delete"))) return;
+    try {
+      await updateDoc(doc(db, "staffingRequests", r.id), { pendingAction: "cancelOrder", pendingActionAt: serverTimestamp() });
+      await notifyAgency({
+        agencyId: r.agencyId,
+        companyId: r.companyId,
+        type: "cancel_request",
+        title: "고용 취소 요청이 있습니다",
+        message: `${r.companyName} · ${r.date} · ${r.shiftLabel || "-"}`,
+        requestId: r.id,
+      });
+      toast.success("고용 취소를 요청했습니다. 인력사무소의 승인을 기다려주세요.");
+      closeDetail();
+    } catch (err) {
+      toast.error(`요청에 실패했습니다: ${err.code || err.message}`);
+    }
+  };
+
+  // 아직 인력사무소가 결정하지 않은 요청은 도급사가 스스로 취소(철회)할 수
+  // 있다.
+  const withdrawPendingAction = async (r) => {
+    await updateDoc(doc(db, "staffingRequests", r.id), { pendingAction: null });
+    toast.success("요청을 취소했습니다");
   };
 
   const openDetail = (r) => {
@@ -202,7 +257,6 @@ export default function StaffingAgency() {
       shiftLabel: r.shiftLabel || SHIFT_LABEL_OPTIONS[0],
       headcount: r.headcount || 1,
       note: r.note || "",
-      workers: (r.workers || []).map((w) => ({ ...w })),
     });
   };
   const closeDetail = () => {
@@ -211,21 +265,13 @@ export default function StaffingAgency() {
     setDetailForm(null);
   };
 
-  const updateDetailWorker = (idx, field, value) => {
-    setDetailForm((f) => ({
-      ...f,
-      workers: f.workers.map((w, i) => (i === idx ? { ...w, [field]: value } : w)),
-    }));
-  };
-  const removeDetailWorker = (idx) => {
-    setDetailForm((f) => ({ ...f, workers: f.workers.filter((_, i) => i !== idx) }));
-  };
-
+  // 요청 정보(센터/날짜/조/인원/비고)는 도급사가 직접 수정할 수 있지만,
+  // 이미 배정된 인력 명단은 여기서 건드릴 수 없다 — 인력을 바꾸려면
+  // 아래 "인력변경요청"으로 인력사무소의 승인을 받아야 한다.
   const saveDetailEdit = async () => {
     if (!detailTarget || !detailForm) return;
     setDetailSaving(true);
     try {
-      const totalPrice = detailForm.workers.reduce((sum, w) => sum + (Number(w.dailyRate) || 0), 0);
       await updateDoc(doc(db, "staffingRequests", detailTarget.id), {
         siteId: detailForm.siteId || null,
         siteName: siteName_(detailForm.siteId),
@@ -233,8 +279,14 @@ export default function StaffingAgency() {
         shiftLabel: detailForm.shiftLabel,
         headcount: Number(detailForm.headcount) || 1,
         note: detailForm.note,
-        workers: detailForm.workers,
-        totalPrice,
+      });
+      await notifyAgency({
+        agencyId: detailTarget.agencyId,
+        companyId: detailTarget.companyId,
+        type: "edit",
+        title: "요청장 정보가 수정되었습니다",
+        message: `${detailTarget.companyName} · ${detailForm.date} · ${detailForm.shiftLabel}`,
+        requestId: detailTarget.id,
       });
       toast.success("저장되었습니다");
       closeDetail();
@@ -386,21 +438,38 @@ export default function StaffingAgency() {
                       <td className="px-3 py-3 text-ink">{r.shiftLabel}</td>
                       <td className="px-3 py-3 text-ink">{r.headcount}명</td>
                       <td className="px-3 py-3">
-                        <Badge tone={r.status === "assigned" ? "success" : r.status === "cancelled" ? "danger" : "warning"}>
-                          {r.status === "assigned" ? "배정완료" : r.status === "cancelled" ? "취소됨" : "요청중"}
-                        </Badge>
+                        <div className="flex flex-col items-center gap-1">
+                          <Badge tone={r.status === "assigned" ? "success" : r.status === "cancelled" ? "danger" : "warning"}>
+                            {r.status === "assigned" ? "배정완료" : r.status === "cancelled" ? "취소됨" : "요청중"}
+                          </Badge>
+                          {r.pendingAction && (
+                            <span className="text-[10px] font-medium text-warning">
+                              {r.pendingAction === "reassign" ? "변경요청 대기중" : "취소요청 대기중"}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-ink">{r.totalPrice ? `${r.totalPrice.toLocaleString()}원` : "-"}</td>
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-2">
-                          {r.status !== "cancelled" && (
-                            <button type="button" onClick={() => cancelRequest(r)} title="요청 취소" className="text-muted hover:text-danger">
-                              <Ban size={15} />
+                          {r.pendingAction ? (
+                            <button type="button" onClick={() => withdrawPendingAction(r)} className="text-xs font-medium text-muted hover:text-danger">
+                              요청 철회
+                            </button>
+                          ) : r.status === "assigned" ? (
+                            <>
+                              <button type="button" onClick={() => requestReassign(r)} title="인력변경요청" className="text-muted hover:text-primary">
+                                <UserCog size={15} />
+                              </button>
+                              <button type="button" onClick={() => requestCancelOrder(r)} title="오더삭제요청" className="text-muted hover:text-danger">
+                                <Ban size={15} />
+                              </button>
+                            </>
+                          ) : (
+                            <button type="button" onClick={() => deleteRequest(r)} className="text-danger">
+                              <Trash2 size={15} />
                             </button>
                           )}
-                          <button type="button" onClick={() => deleteRequest(r)} className="text-danger">
-                            <Trash2 size={15} />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -482,7 +551,7 @@ export default function StaffingAgency() {
           ) : (
             <>
               <Button variant="outline" onClick={closeDetail}>닫기</Button>
-              {detailTarget?.status !== "cancelled" && (
+              {detailTarget?.status !== "cancelled" && !detailTarget?.pendingAction && (
                 <Button onClick={() => setDetailEditMode(true)}>
                   <Pencil size={13} /> 수정
                 </Button>
@@ -543,40 +612,42 @@ export default function StaffingAgency() {
               </div>
             )}
 
-            {detailForm.workers.length > 0 && (
+            {detailTarget.workers?.length > 0 && (
               <div className="rounded-xl border border-slate-200 p-3">
                 <p className="mb-2 text-xs font-medium text-muted">배정 인력</p>
-                {detailEditMode ? (
-                  <div className="space-y-2">
-                    {detailForm.workers.map((w, i) => (
-                      <div key={i} className="grid grid-cols-5 items-center gap-1.5 rounded-lg border border-slate-100 p-2">
-                        <input className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" placeholder="이름" value={w.name} onChange={(e) => updateDetailWorker(i, "name", e.target.value)} />
-                        <input className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" placeholder="연락처" value={w.phone || ""} onChange={(e) => updateDetailWorker(i, "phone", e.target.value)} />
-                        <select className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" value={w.gender || ""} onChange={(e) => updateDetailWorker(i, "gender", e.target.value)}>
-                          <option value="">성별</option>
-                          <option value="남">남</option>
-                          <option value="여">여</option>
-                        </select>
-                        <input type="number" className="col-span-1 rounded border border-slate-200 px-2 py-1.5 text-xs" placeholder="일당" value={w.dailyRate || ""} onChange={(e) => updateDetailWorker(i, "dailyRate", e.target.value)} />
-                        <button type="button" onClick={() => removeDetailWorker(i)} className="col-span-1 flex items-center justify-center text-danger">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <ul className="space-y-1">
-                    {detailForm.workers.map((w, i) => (
-                      <li key={i} className="flex items-center justify-between text-ink">
-                        <span>{w.name} {w.phone && `· ${w.phone}`} {w.gender && `· ${w.gender}`}</span>
-                        <span className="font-medium">{(w.dailyRate || 0).toLocaleString()}원</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="mt-2 border-t border-slate-100 pt-2 text-right font-semibold text-primary">
-                  합계 {detailForm.workers.reduce((sum, w) => sum + (Number(w.dailyRate) || 0), 0).toLocaleString()}원
+                <p className="mb-2 text-[11px] text-muted">
+                  배정 인력은 여기서 직접 바꿀 수 없습니다. 인력을 바꾸려면 아래 인력변경요청을 보내 인력사무소의 승인을 받아주세요.
                 </p>
+                <ul className="space-y-1">
+                  {detailTarget.workers.map((w, i) => (
+                    <li key={i} className="flex items-center justify-between text-ink">
+                      <span>{w.name} {w.phone && `· ${w.phone}`} {w.gender && `· ${w.gender}`}</span>
+                      <span className="font-medium">{(w.dailyRate || 0).toLocaleString()}원</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 border-t border-slate-100 pt-2 text-right font-semibold text-primary">
+                  합계 {(detailTarget.totalPrice || 0).toLocaleString()}원
+                </p>
+              </div>
+            )}
+
+            {!detailEditMode && detailTarget.status === "assigned" && (
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                {detailTarget.pendingAction ? (
+                  <Button variant="outline" onClick={() => withdrawPendingAction(detailTarget)}>
+                    요청 철회
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={() => requestReassign(detailTarget)}>
+                      <UserCog size={13} /> 인력변경요청
+                    </Button>
+                    <Button variant="danger" onClick={() => requestCancelOrder(detailTarget)}>
+                      <Ban size={13} /> 오더삭제요청
+                    </Button>
+                  </>
+                )}
               </div>
             )}
           </div>

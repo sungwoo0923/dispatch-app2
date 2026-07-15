@@ -102,6 +102,7 @@ import AgencyApprovalPendingPage from "./auth/AgencyApprovalPendingPage";
 import AgencyLayout from "./agency/AgencyLayout";
 import AgencyRequests from "./agency/AgencyRequests";
 import AgencyWorkers from "./agency/AgencyWorkers";
+import AgencyBusiness from "./agency/AgencyBusiness";
 import AgencySettlement from "./agency/AgencySettlement";
 import BiometricGate from "./components/BiometricGate";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -280,6 +281,7 @@ export default function App() {
         <Route path="/" element={<AgencyLayout />}>
           <Route index element={<AgencyRequests />} />
           <Route path="workers" element={<AgencyWorkers />} />
+          <Route path="business" element={<AgencyBusiness />} />
           <Route path="settlement" element={<AgencySettlement />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

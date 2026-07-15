@@ -29,7 +29,7 @@ const EMPTY_WORKER = {
 // 계정 없이 임의 코드를 uid로 쓰는 방식이라 기존 스케줄/출근현황 화면이
 // 코드 수정 없이 그대로 인식한다. schedules 문서 id를 미리 만들어두면
 // (setDoc) 나중에 재배정/취소 시 쿼리 없이 바로 지울 수 있다.
-export async function provisionWorker({ request, worker, agencyId, agencyName }) {
+export async function provisionWorker({ request, worker, agencyId, agencyName, businessName }) {
   const uid = generateInviteCode(10);
   await setDoc(doc(db, "users", uid), {
     companyId: request.companyId,
@@ -44,6 +44,9 @@ export async function provisionWorker({ request, worker, agencyId, agencyName })
     employmentType: "외부인력",
     agencyId,
     agencyName,
+    // 인력사무소가 회사관리에서 등록한 사업자등록증 상호명 — 도급사 화면의
+    // "사업자" 컬럼에 그대로 표시된다. 미등록 상태면 빈 문자열로 남는다.
+    businessName: businessName || "",
     dailyRate: Number(worker.dailyRate) || 0,
     workSiteId: request.siteId || null,
     shiftType: request.shiftLabel || "",
@@ -80,7 +83,7 @@ export async function deprovisionWorkers(workers) {
   }
 }
 
-function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone }) {
+function AssignModal({ request, agencyId, agencyName, businessName, roster, onClose, onDone }) {
   const toast = useToast();
   // 이미 배정된 요청장을 다시 열면(인원 교체 등) 기존 배정 인원을 그대로
   // 채워 보여주고, 저장 시 예전 배정을 정리한 뒤 새로 배정한다.
@@ -149,7 +152,7 @@ function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone })
       if (isEdit) await deprovisionWorkers(request.workers);
       const provisioned = [];
       for (const w of valid) {
-        const { uid, scheduleId } = await provisionWorker({ request, worker: w, agencyId, agencyName });
+        const { uid, scheduleId } = await provisionWorker({ request, worker: w, agencyId, agencyName, businessName });
         provisioned.push({ ...w, dailyRate: Number(w.dailyRate) || 0, uid, scheduleId });
       }
       await updateDoc(doc(db, "staffingRequests", request.id), {
@@ -319,13 +322,22 @@ export default function AgencyRequests() {
                   <td className="px-3 py-3 text-ink">{r.shiftLabel || "-"}</td>
                   <td className="px-3 py-3 text-ink">{r.headcount}명</td>
                   <td className="px-3 py-3">
-                    <Badge tone={r.status === "assigned" ? "success" : r.status === "cancelled" ? "danger" : "warning"}>
-                      {r.status === "assigned" ? "배정완료" : r.status === "cancelled" ? "취소됨" : "요청중"}
-                    </Badge>
+                    <div className="flex flex-col items-center gap-1">
+                      <Badge tone={r.status === "assigned" ? "success" : r.status === "cancelled" ? "danger" : "warning"}>
+                        {r.status === "assigned" ? "배정완료" : r.status === "cancelled" ? "취소됨" : "요청중"}
+                      </Badge>
+                      {r.pendingAction && (
+                        <span className="text-[10px] font-medium text-danger">
+                          {r.pendingAction === "reassign" ? "변경요청 검토중" : "취소요청 검토중"}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-muted">{r.note || "-"}</td>
                   <td className="px-3 py-3">
-                    {r.status === "cancelled" ? (
+                    {r.pendingAction ? (
+                      <span className="text-xs text-muted">상단 알림에서 확인해주세요</span>
+                    ) : r.status === "cancelled" ? (
                       <button type="button" onClick={() => deleteOwnRequest(r)} className="inline-flex items-center gap-1 text-xs font-medium text-danger">
                         <Trash2 size={13} /> 삭제
                       </button>
@@ -355,6 +367,7 @@ export default function AgencyRequests() {
           request={assignTarget}
           agencyId={agency.id}
           agencyName={agency.name}
+          businessName={agency.business?.name || ""}
           roster={roster}
           onClose={() => setAssignTarget(null)}
           onDone={() => setAssignTarget(null)}

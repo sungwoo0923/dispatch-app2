@@ -136,6 +136,15 @@ service cloud.firestore {
       allow update, delete: if isAgencyAdminOf(resource.data.agencyId);
     }
 
+    // 인력사무소 알림 이력(요청장 등록/수정/삭제, 배정변경·오더삭제 요청) —
+    // 도급사 관리자가 자기와 연동된 인력사무소 앞으로 발행하고, 해당
+    // 인력사무소만 읽고 읽음 처리할 수 있다.
+    match /agencyNotifications/{id} {
+      allow read, update, delete: if isAgencyAdminOf(resource.data.agencyId);
+      allow create: if isAdminOf(request.resource.data.companyId) &&
+        isLinkedAgency(request.resource.data.companyId, request.resource.data.agencyId);
+    }
+
     // 사이드바 메뉴별 "안읽음 배지" 확인 시각 — 관리자 계정별로 자기 것만
     // 읽고 쓸 수 있다 (다른 관리자가 봤다고 내 배지가 사라지면 안 되므로).
     match /adminReadState/{uid} {

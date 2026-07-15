@@ -308,6 +308,10 @@ export default function Schedule() {
   const employeeByUid = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const vendorName_ = (id) => vendors.find((v) => v.id === id)?.name || "-";
+  // 외부인력(인력사무소가 배정한 근로자)의 "사업자"는 우리 회사 이름이 아니라
+  // 그 인력사무소가 회사관리에서 등록한 사업자명이어야 한다 — 미등록이면
+  // 공백으로 둔다.
+  const companyName_ = (emp) => (emp?.employmentType === "외부인력" ? emp.businessName || "" : companyName);
   const shiftTemplateName_ = (id) => shiftTemplates.find((t) => t.id === id)?.name || "-";
   const allowanceTemplateName_ = (id) => allowanceTemplates.find((t) => t.id === id)?.name || "-";
   const latestContractFor = (uid) =>
@@ -339,7 +343,7 @@ export default function Schedule() {
       case "vendor":
         return vendorName_(row.emp?.vendorId);
       case "company":
-        return companyName;
+        return companyName_(row.emp);
       case "date":
         return row.schedule?.date || "";
       case "time":
@@ -387,6 +391,10 @@ export default function Schedule() {
   // 스케줄 인원 현황은 "확정된" 근무만 모아두는 카드다 — 대기/취소 상태 건은
   // 각자의 카드(대기/휴무/퇴사)에만 나타나야 하며 여기 중복으로 잡히면 안 된다.
   const confirmedRows = useMemo(() => rows.filter(({ schedule: s }) => s.status === "출근확정"), [rows]);
+  // 외부인력(인력사무소가 배정한 근로자)은 도급사 관리자가 대기/휴무/퇴사 등
+  // 상태를 임의로 바꿀 수 없다 — 배정을 바꾸려면 인력사무소에 재배정을
+  // 요청해야 한다. 그래서 체크박스 선택/전체선택 대상에서 제외한다.
+  const confirmedSelectableRows = useMemo(() => confirmedRows.filter(({ emp }) => emp?.employmentType !== "외부인력"), [confirmedRows]);
   const pendingRows = useMemo(() => rows.filter(({ schedule: s }) => (s.status || "대기") === "대기"), [rows]);
 
   const leaveRowSortValue = (row, key) => {
@@ -398,7 +406,7 @@ export default function Schedule() {
       case "vendor":
         return vendorName_(row.emp?.vendorId);
       case "company":
-        return companyName;
+        return companyName_(row.emp);
       case "type":
         return row.leave?.type || "";
       case "period":
@@ -430,7 +438,7 @@ export default function Schedule() {
       case "vendor":
         return vendorName_(emp.vendorId);
       case "company":
-        return companyName;
+        return companyName_(emp);
       case "furlough":
         return emp.employmentStatus === "휴직" ? "Y" : "N";
       case "shiftTemplate":
@@ -496,7 +504,7 @@ export default function Schedule() {
     ) : null;
 
   const scheduleColumns = [
-    { key: "company", label: "사업자", render: () => companyName },
+    { key: "company", label: "사업자", render: ({ emp }) => companyName_(emp) },
     { key: "site", label: "센터", render: ({ schedule: s, emp }) => siteName_(emp.workSiteId) || s.siteName || "-" },
     {
       key: "status",
@@ -550,7 +558,7 @@ export default function Schedule() {
 
   const leaveColumns = [
     { key: "name", label: "이름", render: ({ emp }) => emp.name },
-    { key: "company", label: "사업자", render: () => companyName },
+    { key: "company", label: "사업자", render: ({ emp }) => companyName_(emp) },
     { key: "site", label: "센터", render: ({ emp }) => siteName_(emp.workSiteId) },
     { key: "type", label: "휴가유형", render: ({ leave }) => leave.type || "-" },
     {
@@ -580,7 +588,7 @@ export default function Schedule() {
 
   const resignedColumns = [
     { key: "name", label: "이름", render: (emp) => emp.name },
-    { key: "company", label: "사업자", render: () => companyName },
+    { key: "company", label: "사업자", render: (emp) => companyName_(emp) },
     { key: "site", label: "센터", render: (emp) => siteName_(emp.workSiteId) },
     { key: "phone", label: "전화번호", render: (emp) => emp.phone },
     { key: "gender", label: "성별", render: (emp) => emp.gender || "-" },
@@ -1131,7 +1139,7 @@ export default function Schedule() {
     const headers = ["이름", "사업자", "센터", "확정", "근무일자", "근무시각", "전화번호", "성별", "소속업체"];
     const rowsOut = confirmedRows.map(({ schedule: s, emp }) => [
       s.name,
-      companyName,
+      companyName_(emp),
       siteName_(emp.workSiteId) || s.siteName || "-",
       s.status || "대기",
       formatDate(s.date),
@@ -1395,8 +1403,11 @@ export default function Schedule() {
                     <th className="sticky left-0 z-20 w-10 min-w-10 max-w-10 bg-primary-light px-2 py-3 font-semibold">
                       <input
                         type="checkbox"
-                        checked={confirmedRows.length > 0 && confirmedRows.every(({ schedule: s }) => selected.has(s.id))}
-                        onChange={() => toggleSelectAllIn(confirmedRows)}
+                        checked={
+                          confirmedSelectableRows.length > 0 &&
+                          confirmedSelectableRows.every(({ schedule: s }) => selected.has(s.id))
+                        }
+                        onChange={() => toggleSelectAllIn(confirmedSelectableRows)}
                       />
                     </th>
                     <th className="sticky left-10 z-20 w-14 min-w-14 max-w-14 bg-primary-light px-2 py-3 font-semibold">순번</th>
@@ -1418,17 +1429,29 @@ export default function Schedule() {
                 </thead>
                 <tbody>
                   {confirmedPaged.paged.map((row, i) => {
-                    const { schedule: s } = row;
+                    const { schedule: s, emp } = row;
+                    const isExternal = emp?.employmentType === "외부인력";
                     return (
                       <tr
                         key={s.id}
-                        className={`cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-100 ${selected.has(s.id) ? "bg-primary-light/60" : ""}`}
-                        title="더블클릭하여 수정 · 우클릭하여 상태변경"
-                        onDoubleClick={() => openScheduleEdit(s)}
-                        onContextMenu={(e) => openRowMenu(e, "confirmed", row)}
+                        className={`border-b border-slate-50 last:border-0 hover:bg-slate-100 ${isExternal ? "" : "cursor-pointer"} ${selected.has(s.id) ? "bg-primary-light/60" : ""}`}
+                        title={isExternal ? "외부인력은 인력사무소를 통해서만 변경할 수 있습니다" : "더블클릭하여 수정 · 우클릭하여 상태변경"}
+                        onDoubleClick={() => !isExternal && openScheduleEdit(s)}
+                        onContextMenu={(e) => {
+                          if (isExternal) {
+                            e.preventDefault();
+                            return;
+                          }
+                          openRowMenu(e, "confirmed", row);
+                        }}
                       >
                         <td className="sticky left-0 z-10 w-10 min-w-10 max-w-10 bg-white px-2 py-3">
-                          <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
+                          <input
+                            type="checkbox"
+                            checked={selected.has(s.id)}
+                            disabled={isExternal}
+                            onChange={() => !isExternal && toggleSelected(s.id)}
+                          />
                         </td>
                         <td className="sticky left-10 z-10 w-14 min-w-14 max-w-14 bg-white px-2 py-3 text-muted">{confirmedPaged.offset + i + 1}</td>
                         <td className="sticky left-24 z-10 w-28 min-w-28 max-w-28 overflow-hidden text-ellipsis bg-white px-2 py-3 text-ink">{s.name}</td>
@@ -1993,7 +2016,7 @@ export default function Schedule() {
                       <td className="px-3 py-2 text-ink">{calculateAge(emp.residentNumberFront) ?? "-"}</td>
                       <td className="px-3 py-2 text-ink">{emp.employmentStatus === "휴직" ? "Y" : "N"}</td>
                       <td className="px-3 py-2 text-ink">{siteName_(emp.workSiteId)}</td>
-                      <td className="px-3 py-2 text-ink">{companyName}</td>
+                      <td className="px-3 py-2 text-ink">{companyName_(emp)}</td>
                       <td className="px-3 py-2 text-ink">{vendorName_(emp.vendorId)}</td>
                       <td className="px-3 py-2 text-ink">{emp.workLocation || "-"}</td>
                       <td className="px-3 py-2 text-ink">{emp.shiftType || "-"}</td>
