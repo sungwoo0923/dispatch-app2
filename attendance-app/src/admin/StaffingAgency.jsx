@@ -26,6 +26,7 @@ export default function StaffingAgency() {
   const toast = useToast();
   const [tab, setTab] = useState("requests");
   const [links, setLinks] = useState([]);
+  const [pendingAgencies, setPendingAgencies] = useState([]);
   const [workSites, setWorkSites] = useState([]);
   const [requests, setRequests] = useState([]);
   const [companyName, setCompanyName] = useState("");
@@ -44,6 +45,11 @@ export default function StaffingAgency() {
       onSnapshot(query(collection(db, "companyAgencyLinks"), where("companyId", "==", profile.companyId)), (s) =>
         setLinks(s.docs.map((d) => ({ id: d.id, ...d.data() })))
       ),
+      // 도급사를 지정하지 않고 가입 신청한 인력사무소 전체 — 어느 도급사든
+      // 먼저 승인하는 쪽이 그 인력사무소와 자동 연동된다.
+      onSnapshot(query(collection(db, "agencies"), where("status", "==", "pending")), (s) =>
+        setPendingAgencies(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+      ),
       onSnapshot(query(collection(db, "workSites"), where("companyId", "==", profile.companyId)), (s) =>
         setWorkSites(s.docs.map((d) => ({ id: d.id, ...d.data() })))
       ),
@@ -56,12 +62,10 @@ export default function StaffingAgency() {
 
   const siteName_ = (id) => workSites.find((s) => s.id === id)?.name || "-";
   const sortedRequests = useMemo(() => [...requests].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [requests]);
-  const pendingLinks = useMemo(() => links.filter((l) => l.status === "pending"), [links]);
-  const approvedLinks = useMemo(() => links.filter((l) => l.status !== "pending"), [links]);
 
   // 이미(다른 도급사에서) 승인된 인력사무소를 코드로 직접 연동한다 — 아직
-  // 한 번도 승인된 적 없는 인력사무소는 이 방법으로 연동할 수 없고, 가입
-  // 시 입력한 도급사 코드를 통한 승인 절차를 거쳐야 한다.
+  // 한 번도 승인된 적 없는 인력사무소는 코드입력이 아니라 아래 "가입승인
+  // 대기" 목록에서 승인해야 한다.
   const linkAgency = async () => {
     const code = linkCode.trim().toUpperCase();
     if (!code) return;
@@ -102,26 +106,36 @@ export default function StaffingAgency() {
 
   // 인력사무소 가입 신청 승인 — 인력사무소 로그인이 즉시 열리고
   // (agencies.status: approved), 동시에 이 도급사와 자동 연동된다.
-  const approveAgencyJoin = async (link) => {
-    if (!(await confirm(`${link.agencyName}의 가입을 승인하시겠습니까? 승인하면 이 도급사와 자동으로 연동됩니다.`, "save"))) return;
+  const approveAgencyJoin = async (agency) => {
+    if (!(await confirm(`${agency.name}의 가입을 승인하시겠습니까? 승인하면 우리 회사와 자동으로 연동됩니다.`, "save"))) return;
     try {
-      await updateDoc(doc(db, "agencies", link.agencyId), { status: "approved" });
-      await updateDoc(doc(db, "companyAgencyLinks", link.id), { status: "approved", linkedAt: serverTimestamp() });
-      toast.success(`${link.agencyName} 가입을 승인했습니다`);
+      await updateDoc(doc(db, "agencies", agency.id), { status: "approved" });
+      await setDoc(doc(db, "companyAgencyLinks", `${profile.companyId}_${agency.id}`), {
+        companyId: profile.companyId,
+        agencyId: agency.id,
+        agencyName: agency.name,
+        agencyPhone: agency.phone || "",
+        linkedAt: serverTimestamp(),
+      });
+      toast.success(`${agency.name} 가입을 승인했습니다`);
     } catch (err) {
       toast.error(`승인에 실패했습니다: ${err.code || err.message}`);
     }
   };
 
-  const rejectAgencyJoin = async (link) => {
-    if (!(await confirm(`${link.agencyName}의 가입 신청을 거절하시겠습니까?`, "delete"))) return;
-    await deleteDoc(doc(db, "companyAgencyLinks", link.id));
-    toast.success("거절했습니다");
+  const rejectAgencyJoin = async (agency) => {
+    if (!(await confirm(`${agency.name}의 가입 신청을 거절하시겠습니까?`, "delete"))) return;
+    try {
+      await updateDoc(doc(db, "agencies", agency.id), { status: "rejected" });
+      toast.success("거절했습니다");
+    } catch (err) {
+      toast.error(`거절 처리에 실패했습니다: ${err.code || err.message}`);
+    }
   };
 
   const openNewRequest = () => {
-    if (approvedLinks.length === 0) return toast.error("먼저 연동업체를 등록해주세요.");
-    setRequestForm({ ...EMPTY_REQUEST_FORM, agencyId: approvedLinks[0].agencyId, date: new Date().toISOString().slice(0, 10) });
+    if (links.length === 0) return toast.error("먼저 연동업체를 등록해주세요.");
+    setRequestForm({ ...EMPTY_REQUEST_FORM, agencyId: links[0].agencyId, date: new Date().toISOString().slice(0, 10) });
     setRequestOpen(true);
   };
 
@@ -129,7 +143,7 @@ export default function StaffingAgency() {
     if (!requestForm.agencyId || !requestForm.date || !requestForm.headcount) {
       return toast.error("연동업체/날짜/인원수를 입력해주세요.");
     }
-    const link = approvedLinks.find((l) => l.agencyId === requestForm.agencyId);
+    const link = links.find((l) => l.agencyId === requestForm.agencyId);
     try {
       await addDoc(collection(db, "staffingRequests"), {
         companyId: profile.companyId,
@@ -174,9 +188,9 @@ export default function StaffingAgency() {
               className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium ${tab === t.key ? "bg-white text-primary shadow-sm" : "text-muted"}`}
             >
               {t.label}
-              {t.key === "links" && pendingLinks.length > 0 && (
+              {t.key === "links" && pendingAgencies.length > 0 && (
                 <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
-                  {pendingLinks.length}
+                  {pendingAgencies.length}
                 </span>
               )}
             </button>
@@ -185,30 +199,32 @@ export default function StaffingAgency() {
 
         {tab === "links" && (
           <div className="space-y-4">
-            {pendingLinks.length > 0 && (
+            {pendingAgencies.length > 0 && (
               <Card className="overflow-x-auto p-0">
-                <p className="px-3 pt-3 text-xs font-medium text-muted">가입승인 대기 ({pendingLinks.length}건)</p>
+                <p className="px-3 pt-3 text-xs font-medium text-muted">가입승인 대기 ({pendingAgencies.length}건)</p>
                 <table className="w-full min-w-[560px] text-center text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs text-muted">
                       <th className="px-3 py-3 font-semibold">인력사무소명</th>
+                      <th className="px-3 py-3 font-semibold">담당자</th>
                       <th className="px-3 py-3 font-semibold">연락처</th>
                       <th className="px-3 py-3 font-semibold">연동코드</th>
                       <th className="px-3 py-3 font-semibold">관리</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pendingLinks.map((l) => (
-                      <tr key={l.id} className="border-b border-slate-50 last:border-0">
-                        <td className="px-3 py-3 text-ink">{l.agencyName}</td>
-                        <td className="px-3 py-3 text-ink">{l.agencyPhone || "-"}</td>
-                        <td className="px-3 py-3 font-mono text-ink">{l.agencyId}</td>
+                    {pendingAgencies.map((a) => (
+                      <tr key={a.id} className="border-b border-slate-50 last:border-0">
+                        <td className="px-3 py-3 text-ink">{a.name}</td>
+                        <td className="px-3 py-3 text-ink">{a.contactName || "-"}</td>
+                        <td className="px-3 py-3 text-ink">{a.phone || "-"}</td>
+                        <td className="px-3 py-3 font-mono text-ink">{a.id}</td>
                         <td className="px-3 py-3">
                           <div className="flex items-center justify-center gap-2">
-                            <button type="button" onClick={() => approveAgencyJoin(l)} className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-white">
+                            <button type="button" onClick={() => approveAgencyJoin(a)} className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-white">
                               <Check size={13} className="inline" /> 승인
                             </button>
-                            <button type="button" onClick={() => rejectAgencyJoin(l)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-danger">
+                            <button type="button" onClick={() => rejectAgencyJoin(a)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-danger">
                               <X size={13} className="inline" /> 거절
                             </button>
                           </div>
@@ -245,7 +261,7 @@ export default function StaffingAgency() {
                   </tr>
                 </thead>
                 <tbody>
-                  {approvedLinks.map((l) => (
+                  {links.map((l) => (
                     <tr key={l.id} className="border-b border-slate-50 last:border-0">
                       <td className="px-3 py-3 text-ink">{l.agencyName}</td>
                       <td className="px-3 py-3 text-ink">{l.agencyPhone || "-"}</td>
@@ -257,7 +273,7 @@ export default function StaffingAgency() {
                       </td>
                     </tr>
                   ))}
-                  {approvedLinks.length === 0 && (
+                  {links.length === 0 && (
                     <tr>
                       <td colSpan={4} className="px-4 py-10 text-center text-xs text-muted">등록된 연동업체가 없습니다.</td>
                     </tr>
@@ -335,7 +351,7 @@ export default function StaffingAgency() {
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted">연동업체 *</span>
             <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={requestForm.agencyId} onChange={(e) => setRequestForm((f) => ({ ...f, agencyId: e.target.value }))}>
-              {approvedLinks.map((l) => (
+              {links.map((l) => (
                 <option key={l.agencyId} value={l.agencyId}>{l.agencyName}</option>
               ))}
             </select>

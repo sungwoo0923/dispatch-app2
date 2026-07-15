@@ -66,12 +66,10 @@ service cloud.firestore {
         );
     }
 
-    // 도급사 관리자가 인력사무소 가입승인 요청(agencies.status)을 처리할 수
-    // 있으려면, 그 도급사와 해당 인력사무소 사이에 이미(가입 시 자동 생성된
-    // pending 상태) companyAgencyLinks 문서가 있어야 한다.
-    function canApproveAgency(agencyId) {
-      return isSignedIn() && myCompanyId() != null &&
-        exists(/databases/$(database)/documents/companyAgencyLinks/$(myCompanyId() + '_' + agencyId));
+    // 어떤 회사든 실제 관리자(직원 계정 제외) 본인인지 — 인력사무소 가입승인처럼
+    // "소속 회사와 무관하게 관리자이기만 하면 되는" 판단에 쓴다.
+    function isAnyCompanyAdmin() {
+      return isSignedIn() && myCompanyId() != null && isAdminOf(myCompanyId());
     }
 
     match /admins/{uid} {
@@ -90,22 +88,24 @@ service cloud.firestore {
 
     match /agencies/{agencyId} {
       allow get: if true; // 가입 시 코드 중복확인, 도급사가 연동업체 코드로 조회할 때 필요
-      allow list: if isSuperAdmin();
+      // 가입승인 대기(status: pending) 목록을 아무 도급사 관리자나 볼 수
+      // 있어야 "연동업체" 화면에서 승인 대상으로 뜬다.
+      allow list: if isSuperAdmin() || isAnyCompanyAdmin();
       allow create: if isSignedIn();
-      // 가입승인(status: pending -> approved)은 그 인력사무소가 가입 시
-      // 요청한 도급사의 관리자만 할 수 있다(canApproveAgency).
-      allow update: if isAgencyAdminOf(agencyId) || isSuperAdmin() || canApproveAgency(agencyId);
+      // 가입승인(pending -> approved/rejected)은 아무 도급사 관리자나 먼저
+      // 처리하는 쪽이 그 인력사무소를 맡는다(선착순 클레임) — 이미
+      // 승인/거절된 건은 더 이상 다른 관리자가 건드릴 수 없다.
+      allow update: if isAgencyAdminOf(agencyId) || isSuperAdmin() ||
+        (isAnyCompanyAdmin() && resource.data.status == "pending");
       allow delete: if isAgencyAdminOf(agencyId);
     }
 
     // 도급사-인력사무소 연동 관계 — 문서 id는 `${companyId}_${agencyId}`로
-    // 고정한다. status: "pending"(인력사무소 가입 시 자동 생성, 도급사 승인
-    // 대기) -> "approved"(도급사 승인 완료, 또는 관리자가 이미 승인된
-    // 인력사무소를 코드로 직접 연동했을 때).
+    // 고정한다. 도급사 관리자가 가입승인 대기 인력사무소를 승인하거나(자동
+    // 생성), 이미 승인된 인력사무소를 코드로 직접 연동할 때 만들어진다.
     match /companyAgencyLinks/{linkId} {
       allow read: if isAdminOf(resource.data.companyId) || isAgencyAdminOf(resource.data.agencyId);
-      allow create: if isAdminOf(request.resource.data.companyId) ||
-        (request.resource.data.status == "pending" && isAgencyAdminOf(request.resource.data.agencyId));
+      allow create: if isAdminOf(request.resource.data.companyId);
       allow update: if isAdminOf(resource.data.companyId);
       allow delete: if isAdminOf(resource.data.companyId);
     }
