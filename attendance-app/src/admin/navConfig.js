@@ -13,6 +13,7 @@ import {
   Lock,
   KeyRound,
   Smartphone,
+  Handshake,
 } from "lucide-react";
 
 export const NAV = [
@@ -82,6 +83,7 @@ export const NAV = [
     ],
   },
   { to: "/board", label: "게시판", icon: MessageSquare },
+  { to: "/staffing", label: "외부인력", icon: Handshake },
   {
     to: "/org/entities",
     label: "조직",

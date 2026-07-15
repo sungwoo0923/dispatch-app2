@@ -103,6 +103,12 @@ export default function LoginPage() {
             {t("login.adminLogin")}
           </Link>
         </div>
+        <div className="mt-3 text-center text-xs text-muted">
+          외부 인력사무소이신가요?{" "}
+          <Link to="/agency-signup" className="text-primary hover:underline">
+            인력사무소 가입
+          </Link>
+        </div>
         <BuildInfo className="mt-6" />
       </div>
       </div>

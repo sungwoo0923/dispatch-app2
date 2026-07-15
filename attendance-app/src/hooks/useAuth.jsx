@@ -13,6 +13,8 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [company, setCompany] = useState(null);
   const [companyLoading, setCompanyLoading] = useState(true);
+  const [agency, setAgency] = useState(null);
+  const [agencyLoading, setAgencyLoading] = useState(true);
   // Which company's data the super-admin is currently viewing. Regular
   // admins never set this, so it has no effect on them.
   const [activeCompanyId, setActiveCompanyIdState] = useState(
@@ -122,6 +124,22 @@ export function AuthProvider({ children }) {
     return () => unsubCompany();
   }, [effectiveProfile?.companyId]);
 
+  // 외부 인력사무소(에이전시) 계정용 — company와 같은 패턴이지만
+  // profile.role === "agency"일 때만 agencyId 기준으로 구독한다.
+  useEffect(() => {
+    if (!effectiveProfile?.agencyId || effectiveProfile.role !== "agency") {
+      setAgency(null);
+      setAgencyLoading(false);
+      return;
+    }
+    setAgencyLoading(true);
+    const unsubAgency = onSnapshot(doc(db, "agencies", effectiveProfile.agencyId), (snap) => {
+      setAgency(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      setAgencyLoading(false);
+    });
+    return () => unsubAgency();
+  }, [effectiveProfile?.agencyId, effectiveProfile?.role]);
+
   // 그룹(권한)이 지정된 관리자는 그 그룹에 허용된 메뉴 경로만 볼 수 있다 —
   // null이면 "제한 없음"(그룹 미지정 관리자, 최고관리자는 항상 이 경우).
   // navConfig.js의 isMenuAllowed/filterNavByPermission이 이 값을 그대로 소비한다.
@@ -148,6 +166,8 @@ export function AuthProvider({ children }) {
     loading,
     company,
     companyLoading,
+    agency,
+    agencyLoading,
     isSuperAdmin,
     allowedMenuPaths,
     activeCompanyId,

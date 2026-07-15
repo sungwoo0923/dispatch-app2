@@ -3,6 +3,7 @@ import { useAuth } from "./hooks/useAuth";
 import LoginPage from "./auth/LoginPage";
 import AdminLoginPage from "./auth/AdminLoginPage";
 import AdminSignupPage from "./auth/AdminSignupPage";
+import AgencySignupPage from "./auth/AgencySignupPage";
 import EmployeeSignupPage from "./auth/EmployeeSignupPage";
 import PendingApprovalPage from "./auth/PendingApprovalPage";
 import CompanyApprovalPendingPage from "./auth/CompanyApprovalPendingPage";
@@ -70,6 +71,7 @@ import InsuranceRateTemplates from "./admin/InsuranceRateTemplates";
 import CenterReports from "./admin/CenterReports";
 import Schedule from "./admin/Schedule";
 import AttendanceBoard from "./admin/AttendanceBoard";
+import StaffingAgency from "./admin/StaffingAgency";
 import LeaveApprovals from "./admin/LeaveApprovals";
 import LeaveManagement from "./admin/LeaveManagement";
 import LeaveUsage from "./admin/LeaveUsage";
@@ -97,6 +99,9 @@ import SafetyTrainingsPage from "./employee/SafetyTrainingsPage";
 import SafetyArchivePage from "./employee/SafetyArchivePage";
 import BoardPage from "./employee/BoardPage";
 import NotificationsPage from "./employee/NotificationsPage";
+import AgencyLayout from "./agency/AgencyLayout";
+import AgencyRequests from "./agency/AgencyRequests";
+import AgencySettlement from "./agency/AgencySettlement";
 import BiometricGate from "./components/BiometricGate";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { PENDING_INVITE_KEY, SUPER_ADMIN_PICK_COMPANY_KEY } from "./constants/session";
@@ -125,6 +130,7 @@ export default function App() {
       <Routes>
         <Route path="/admin-login" element={<AdminLoginPage />} />
         <Route path="/admin-signup" element={<AdminSignupPage />} />
+        <Route path="/agency-signup" element={<AgencySignupPage />} />
         <Route path="/employee-signup" element={<EmployeeSignupPage />} />
         <Route path="*" element={<LoginPage />} />
       </Routes>
@@ -175,6 +181,7 @@ export default function App() {
         <Route path="employees/documents" element={<Documents />} />
         <Route path="employees/inquiries" element={<Inquiries />} />
         <Route path="board" element={<Board />} />
+        <Route path="staffing" element={<StaffingAgency />} />
         <Route path="settings/me" element={<MyInfo />} />
         <Route path="templates" element={<Navigate to="/templates/shift" replace />} />
       </>
@@ -257,6 +264,18 @@ export default function App() {
           <Route path="templates/insurance" element={<InsuranceRateTemplates />} />
           <Route path="templates/reports" element={<CenterReports />} />
           {sharedAdminChildRoutes}
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
+
+  if (profile.role === "agency") {
+    return (
+      <Routes>
+        <Route path="/" element={<AgencyLayout />}>
+          <Route index element={<AgencyRequests />} />
+          <Route path="settlement" element={<AgencySettlement />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -36,6 +36,24 @@ service cloud.firestore {
       );
     }
 
+    // 외부 인력사무소(에이전시) 관리자 계정 판별 — admins/{uid}와 같은
+    // 패턴이지만 companyId가 아니라 agencyId를 갖는다.
+    function isAgencyAdminOf(agencyId) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (
+          exists(/databases/$(database)/documents/agencyAdmins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/agencyAdmins/$(request.auth.uid)).data.agencyId == agencyId
+        )
+      );
+    }
+
+    // 도급사(companyId)-인력사무소(agencyId) 연동 여부 — 문서 id를
+    // `${companyId}_${agencyId}`로 고정해 rules에서 exists()로 바로 확인한다.
+    function isLinkedAgency(companyId, agencyId) {
+      return exists(/databases/$(database)/documents/companyAgencyLinks/$(companyId + '_' + agencyId));
+    }
+
     // 사내 메신저 규칙에서 "내 회사"를 판별할 때 쓴다 — 관리자는 admins/{uid},
     // 근로자는 users/{uid}에 companyId가 있다.
     function myCompanyId() {
@@ -53,6 +71,41 @@ service cloud.firestore {
       allow list: if false;
       allow create: if isSelf(uid);
       allow update, delete: if false;
+    }
+
+    match /agencyAdmins/{uid} {
+      allow get: if isSelf(uid);
+      allow list: if false;
+      allow create: if isSelf(uid);
+      allow update, delete: if false;
+    }
+
+    match /agencies/{agencyId} {
+      allow get: if true; // 가입 시 코드 중복확인, 도급사가 연동업체 코드로 조회할 때 필요
+      allow list: if isSuperAdmin();
+      allow create: if isSignedIn();
+      allow update: if isAgencyAdminOf(agencyId) || isSuperAdmin();
+      allow delete: if isAgencyAdminOf(agencyId);
+    }
+
+    // 도급사가 인력사무소를 "연동업체"로 등록한 관계 — 문서 id는
+    // `${companyId}_${agencyId}`로 고정한다.
+    match /companyAgencyLinks/{linkId} {
+      allow read: if isAdminOf(resource.data.companyId) || isAgencyAdminOf(resource.data.agencyId);
+      allow create: if isAdminOf(request.resource.data.companyId);
+      allow delete: if isAdminOf(resource.data.companyId);
+      allow update: if false;
+    }
+
+    // 외부인력 요청장 — 도급사가 요청을 만들고(요청중), 연동된 인력사무소가
+    // 인원/금액을 채워 배정완료로 넘긴다.
+    match /staffingRequests/{requestId} {
+      allow read: if isAdminOf(resource.data.companyId) || isAgencyAdminOf(resource.data.agencyId);
+      allow create: if isAdminOf(request.resource.data.companyId) &&
+        isLinkedAgency(request.resource.data.companyId, request.resource.data.agencyId);
+      allow update: if isAdminOf(resource.data.companyId) ||
+        (isAgencyAdminOf(resource.data.agencyId) && isLinkedAgency(resource.data.companyId, resource.data.agencyId));
+      allow delete: if isAdminOf(resource.data.companyId);
     }
 
     // 사이드바 메뉴별 "안읽음 배지" 확인 시각 — 관리자 계정별로 자기 것만
@@ -74,8 +127,13 @@ service cloud.firestore {
       allow list: if isAdminOf(resource.data.companyId);
       // 본인 가입(uid=자기 uid) 외에, 관리자가 가입 전 임시승인 시
       // 가입코드를 문서 id로 쓰는 placeholder 문서도 만들 수 있어야 한다.
+      // 외부인력(요청장으로 배정된 인력사무소 소속 근로자)은 연동된
+      // 인력사무소 관리자가 도급사 companyId 아래에 대신 등록한다.
       allow create: if isSignedIn() &&
-        (request.auth.uid == uid || isAdminOf(request.resource.data.companyId));
+        (request.auth.uid == uid || isAdminOf(request.resource.data.companyId) ||
+          (request.resource.data.employmentType == "외부인력" &&
+            isAgencyAdminOf(request.resource.data.agencyId) &&
+            isLinkedAgency(request.resource.data.companyId, request.resource.data.agencyId)));
       allow update: if isSelf(uid) || isAdminOf(resource.data.companyId);
       // 대용량업로드로 만든 가입코드를 관리자가 가입 전에 미리 승인해두면
       // (pendingSignupCode 필드가 있는 임시 users 문서) 본인이 나중에 같은
@@ -130,8 +188,12 @@ service cloud.firestore {
       // "대기" 스케줄을 하나 만들어 스케줄등록 > 대기 인원 현황에 바로
       // 잡히게 한다 — 그 시점엔 아직 admins 문서 매칭이 안 되므로 본인
       // uid로 생성하는 경우도 허용해야 한다.
+      // 외부인력 배정 시 인력사무소 관리자가 도급사 companyId 아래에
+      // 대신 스케줄을 생성한다(연동된 관계일 때만).
       allow create: if isAdminOf(request.resource.data.companyId) ||
-        (isSignedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.status == "대기");
+        (isSignedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.status == "대기") ||
+        (isAgencyAdminOf(request.resource.data.agencyId) &&
+          isLinkedAgency(request.resource.data.companyId, request.resource.data.agencyId));
       allow update: if isAdminOf(request.resource.data.companyId);
       allow delete: if isAdminOf(resource.data.companyId);
     }
