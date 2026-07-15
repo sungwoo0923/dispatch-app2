@@ -73,6 +73,15 @@ export default function AdminMobileSchedule() {
   const [gridEditDay, setGridEditDay] = useState(null); // { day, dateKey, current }
   const [gridSaving, setGridSaving] = useState(false);
 
+  // 여러 날짜를 한 번에 같은 상태로 등록하고 싶을 때(예: "남은 일자를 전부
+  // 출근으로") — 하루씩 눌러서 넣던 기존 방식과 별개로, 일괄등록 모드를
+  // 켜면 날짜를 눌러 선택만 하고(저장은 안 함), 상태를 고른 뒤 한 번에
+  // 적용한다.
+  const [bulkPickMode, setBulkPickMode] = useState(false);
+  const [bulkPickedDays, setBulkPickedDays] = useState(() => new Set());
+  const [bulkPickStatus, setBulkPickStatus] = useState("출근");
+  const [bulkPickApplying, setBulkPickApplying] = useState(false);
+
   useEffect(() => {
     if (!profile?.companyId) return;
     getDoc(doc(db, "companies", profile.companyId)).then((s) => setCompanyName(s.data()?.name || ""));
@@ -216,10 +225,13 @@ export default function AdminMobileSchedule() {
     const isOut = status === "OUT";
     const wd = WEEKDAY_LABELS[new Date(`${dateKey}T00:00:00`).getDay()];
     const holiday = !isOut && (isKrHoliday(dateKey) || wd === "일" || wd === "토");
+    const selected = bulkPickMode && bulkPickedDays.has(day);
     return {
       day,
       disabled: isOut,
-      className: isOut ? meta.className : `${meta.className || ""} ${holiday && !meta.className?.includes("bg-") ? "bg-red-50" : ""} border border-slate-100`,
+      className: `${isOut ? meta.className : `${meta.className || ""} ${holiday && !meta.className?.includes("bg-") ? "bg-red-50" : ""} border border-slate-100`} ${
+        selected ? "ring-2 ring-offset-1 ring-primary" : ""
+      }`,
     };
   });
   const gridMonthSummary = useMemo(() => {
@@ -242,11 +254,66 @@ export default function AdminMobileSchedule() {
 
   const openGridDay = (day) => {
     if (!monthEmp) return;
+    if (bulkPickMode) {
+      setBulkPickedDays((prev) => {
+        const next = new Set(prev);
+        if (next.has(day)) next.delete(day);
+        else next.add(day);
+        return next;
+      });
+      return;
+    }
     const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
     setGridEditDay({ day, dateKey, current: gridDayStatus(day) });
   };
   const gridEmpLeaves = useMemo(() => (monthEmp ? gridLeaves.filter((l) => l.uid === monthEmp.id) : []), [gridLeaves, monthEmp]);
   const gridEmpSchedules = useMemo(() => (monthEmp ? gridSchedules.filter((s) => s.uid === monthEmp.id) : []), [gridSchedules, monthEmp]);
+
+  // 근로자나 월을 바꾸면 이전 선택은 의미가 없으므로 비운다.
+  useEffect(() => {
+    setBulkPickedDays(new Set());
+  }, [monthEmpUid, gridMonth]);
+
+  const selectRemainingDays = () => {
+    const days = [];
+    for (let day = 1; day <= gridNumDays; day += 1) {
+      const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+      if (dateKey <= gridTodayKey) continue;
+      if ((monthEmp?.hireDate && dateKey < monthEmp.hireDate) || (monthEmp?.resignDate && dateKey > monthEmp.resignDate)) continue;
+      days.push(day);
+    }
+    setBulkPickedDays(new Set(days));
+  };
+
+  const applyBulkPick = async () => {
+    if (!monthEmp || bulkPickedDays.size === 0) return;
+    const label = GRID_STATUS_LABELS[bulkPickStatus]?.label || bulkPickStatus;
+    if (!(await confirm(`선택한 ${bulkPickedDays.size}일을 '${label}'(으)로 일괄 등록하시겠습니까?`, "save"))) return;
+    setBulkPickApplying(true);
+    try {
+      for (const day of bulkPickedDays) {
+        const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
+        await writeDayStatus(db, {
+          companyId: profile.companyId,
+          uid: monthEmp.id,
+          name: monthEmp.name,
+          dateKey,
+          statusKey: bulkPickStatus,
+          emp: monthEmp,
+          existingLeaves: gridEmpLeaves,
+          existingSchedules: gridEmpSchedules,
+          siteName: siteName(monthEmp.workSiteId),
+        });
+      }
+      toast.success(`${bulkPickedDays.size}일을 '${label}'(으)로 일괄 등록했습니다`);
+      setBulkPickedDays(new Set());
+      setBulkPickMode(false);
+    } catch (err) {
+      toast.error(`일괄 등록에 실패했습니다: ${err.code || err.message}`);
+    } finally {
+      setBulkPickApplying(false);
+    }
+  };
   const applyGridStatus = async (statusKey) => {
     if (!gridEditDay || !monthEmp) return;
     setGridSaving(true);
@@ -750,6 +817,60 @@ export default function AdminMobileSchedule() {
                   className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
                 />
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkPickMode((v) => !v);
+                  setBulkPickedDays(new Set());
+                }}
+                className={`flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                  bulkPickMode ? "bg-primary text-white" : "border border-slate-200 bg-white text-ink"
+                }`}
+              >
+                {bulkPickMode ? <CheckSquare size={14} /> : <Square size={14} />}
+                {bulkPickMode ? "일괄등록 모드 (날짜를 눌러 선택하세요)" : "여러 날짜 한 번에 등록"}
+              </button>
+
+              {bulkPickMode && (
+                <div className="space-y-2 rounded-xl border border-primary/30 bg-primary-light/30 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-ink">{bulkPickedDays.size}일 선택됨</p>
+                    <button type="button" onClick={selectRemainingDays} className="text-xs font-semibold text-primary underline">
+                      남은 일자 전체 선택
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {GRID_STATUS_KEYS.map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setBulkPickStatus(k)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                          bulkPickStatus === k ? GRID_STATUS_LABELS[k].tone : "bg-white text-muted border border-slate-200"
+                        }`}
+                      >
+                        {GRID_STATUS_LABELS[k].label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setBulkPickMode(false);
+                        setBulkPickedDays(new Set());
+                      }}
+                    >
+                      취소
+                    </Button>
+                    <Button className="flex-1" disabled={bulkPickedDays.size === 0 || bulkPickApplying} onClick={applyBulkPick}>
+                      {bulkPickApplying ? "등록 중..." : `선택 ${bulkPickedDays.size}일 등록`}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {gridMonthSummary && (
                 <div className="grid grid-cols-4 gap-1.5 text-center text-[11px]">
