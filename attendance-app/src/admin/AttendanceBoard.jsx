@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, doc, setDoc, getDoc, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import {
@@ -127,6 +127,18 @@ export default function AttendanceBoard() {
   const [changeRequests, setChangeRequests] = useState([]);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [rejectNote, setRejectNote] = useState("");
+
+  // 출근현황 센터 드롭다운을 바꿀 때 화면 중앙에 잠깐 깜빡였다 사라지는
+  // 안내 배너 — 어느 센터로 조회 중인지 즉시 눈에 띄게 알려준다.
+  const [centerBanner, setCenterBanner] = useState(null);
+  const centerBannerTimerRef = useRef(null);
+  const flashCenterBanner = (siteId) => {
+    const label = siteId ? siteName_(siteId) : "전체 센터";
+    setCenterBanner(`${label}로 조회했습니다`);
+    clearTimeout(centerBannerTimerRef.current);
+    centerBannerTimerRef.current = setTimeout(() => setCenterBanner(null), 2000);
+  };
+  useEffect(() => () => clearTimeout(centerBannerTimerRef.current), []);
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   // 출근현황 탭 검색창: 이름 입력 + 세부검색(드롭다운) 값을 바로 filters에
@@ -1204,6 +1216,14 @@ export default function AttendanceBoard() {
 
   return (
     <div className="space-y-6">
+      {centerBanner && (
+        <div
+          key={centerBanner}
+          className="animate-center-banner pointer-events-none fixed left-1/2 top-1/2 z-[999] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-ink/85 px-6 py-4 text-center text-base font-semibold text-white shadow-2xl"
+        >
+          {centerBanner}
+        </div>
+      )}
       <Panel icon={ClipboardCheck} title="출근현황">
         <div className="mb-4 flex w-fit flex-nowrap gap-1 overflow-x-auto overscroll-x-contain rounded-lg bg-slate-100 p-1">
           {VIEW_OPTIONS.map((v) => (
@@ -1406,6 +1426,7 @@ export default function AttendanceBoard() {
                     setFilters((f) => ({ ...f, siteId }));
                     setSearchDraft((f) => ({ ...f, siteId }));
                     setAttendancePage(1);
+                    flashCenterBanner(siteId);
                   }}
                 >
                   <option value="">전체 센터</option>

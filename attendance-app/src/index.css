@@ -117,3 +117,17 @@ body[data-modal-open="true"] #admin-bottom-nav {
 .animate-checkin-blink {
   animation: checkinBlink 1.6s ease-in-out infinite;
 }
+
+@keyframes centerBannerBlink {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  8% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  22% { opacity: 0.15; }
+  36% { opacity: 1; }
+  50% { opacity: 0.15; }
+  64% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-center-banner {
+  animation: centerBannerBlink 2s ease-in-out;
+}
