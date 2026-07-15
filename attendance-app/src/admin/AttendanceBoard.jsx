@@ -854,10 +854,17 @@ export default function AttendanceBoard() {
     if (!bulkTarget) return;
     setBulkSaving(true);
     try {
+      // 지정하지 않은 날짜는 "미래 날짜"만 출근으로 채워야 한다("이 달 전체
+      // 초기화"로 bulkDayMap을 통째로 비운 뒤 그대로 저장하면, 과거 날짜까지
+      // 전부 출근으로 채워지던 버그 — 오늘 이전 날짜는 지정된 값이 없으면
+      // 건드리지 않고 건너뛴다.
+      const todayKey = toDateKey();
       for (let day = 1; day <= bulkNumDays; day += 1) {
         const dateKey = `${bulkMonth}-${String(day).padStart(2, "0")}`;
         if ((bulkTarget.hireDate && dateKey < bulkTarget.hireDate) || (bulkTarget.resignDate && dateKey > bulkTarget.resignDate)) continue;
-        const statusKey = bulkDayMap[day] || "출근";
+        const assigned = bulkDayMap[day];
+        if (!assigned && dateKey < todayKey) continue;
+        const statusKey = assigned || "출근";
         await writeDayStatus(bulkTarget.id, bulkTarget.name, dateKey, statusKey);
       }
       toast.success(`${bulkTarget.name} 근로자의 ${bulkMonth} 스케줄을 저장했습니다`);

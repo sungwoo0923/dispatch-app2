@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, query, where, onSnapshot, doc, setDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { ClipboardList, Users, Search } from "lucide-react";
+import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { ClipboardList, Users, Search, AlertTriangle, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useConfirm } from "../hooks/useConfirm";
 import { useToast } from "../hooks/useToast";
 import Panel from "../components/Panel";
 import Card from "../components/Card";
@@ -11,14 +12,24 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { generateInviteCode } from "../utils/ids";
 
-const EMPTY_WORKER = { name: "", phone: "", gender: "", dailyRate: "" };
+const EMPTY_WORKER = {
+  name: "",
+  phone: "",
+  gender: "",
+  dailyRate: "",
+  nationality: "",
+  country: "",
+  residentNumberFront: "",
+  address: "",
+};
 
 // 도급사가 스케줄등록/출근현황에 바로 반영되도록, 배정 시 각 근로자마다
 // users(외부인력 placeholder) + schedules(출근확정) 문서를 함께 만든다 —
 // EmployeeList의 "가입 전 임시승인" 패턴과 동일하게 실제 Firebase Auth
 // 계정 없이 임의 코드를 uid로 쓰는 방식이라 기존 스케줄/출근현황 화면이
-// 코드 수정 없이 그대로 인식한다.
-async function provisionWorker({ request, worker, agencyId, agencyName }) {
+// 코드 수정 없이 그대로 인식한다. schedules 문서 id를 미리 만들어두면
+// (setDoc) 나중에 재배정/취소 시 쿼리 없이 바로 지울 수 있다.
+export async function provisionWorker({ request, worker, agencyId, agencyName }) {
   const uid = generateInviteCode(10);
   await setDoc(doc(db, "users", uid), {
     companyId: request.companyId,
@@ -26,6 +37,10 @@ async function provisionWorker({ request, worker, agencyId, agencyName }) {
     name: worker.name,
     phone: worker.phone,
     gender: worker.gender || "",
+    nationality: worker.nationality || "",
+    country: worker.country || "",
+    residentNumberFront: worker.residentNumberFront || "",
+    address: worker.address || "",
     employmentType: "외부인력",
     agencyId,
     agencyName,
@@ -37,7 +52,8 @@ async function provisionWorker({ request, worker, agencyId, agencyName }) {
     approved: true,
     createdAt: serverTimestamp(),
   });
-  await addDoc(collection(db, "schedules"), {
+  const scheduleRef = doc(collection(db, "schedules"));
+  await setDoc(scheduleRef, {
     companyId: request.companyId,
     agencyId,
     uid,
@@ -50,13 +66,29 @@ async function provisionWorker({ request, worker, agencyId, agencyName }) {
     status: "출근확정",
     createdAt: serverTimestamp(),
   });
-  return uid;
+  return { uid, scheduleId: scheduleRef.id };
+}
+
+// 이미 배정됐던 근로자들의 users(placeholder)/schedules 문서를 정리한다 —
+// 인력사무소가 배정을 수정(인원 교체)하거나, 도급사가 요청 자체를
+// 취소했을 때 공통으로 쓴다. scheduleId가 없는(이전 버전에서 배정된)
+// 데이터는 조용히 건너뛴다.
+export async function deprovisionWorkers(workers) {
+  for (const w of workers || []) {
+    if (w.uid) await deleteDoc(doc(db, "users", w.uid)).catch(() => {});
+    if (w.scheduleId) await deleteDoc(doc(db, "schedules", w.scheduleId)).catch(() => {});
+  }
 }
 
 function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone }) {
   const toast = useToast();
-  const [workers, setWorkers] = useState(
-    Array.from({ length: Math.max(1, request.headcount || 1) }, () => ({ ...EMPTY_WORKER }))
+  // 이미 배정된 요청장을 다시 열면(인원 교체 등) 기존 배정 인원을 그대로
+  // 채워 보여주고, 저장 시 예전 배정을 정리한 뒤 새로 배정한다.
+  const isEdit = Boolean(request.workers?.length);
+  const [workers, setWorkers] = useState(() =>
+    isEdit
+      ? request.workers.map((w) => ({ ...EMPTY_WORKER, ...w }))
+      : Array.from({ length: Math.max(1, request.headcount || 1) }, () => ({ ...EMPTY_WORKER }))
   );
   const [saving, setSaving] = useState(false);
   // 이름칸에 타이핑 중인 근로자 행 인덱스 — 그 행에만 인원관리 로스터
@@ -83,7 +115,18 @@ function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone })
   const pickFromRoster = (i, person) => {
     setWorkers((w) =>
       w.map((row, idx) =>
-        idx === i ? { ...row, name: person.name, phone: person.phone || "", gender: person.gender || "" } : row
+        idx === i
+          ? {
+              ...row,
+              name: person.name,
+              phone: person.phone || "",
+              gender: person.gender || "",
+              nationality: person.nationality || "",
+              country: person.country || "",
+              residentNumberFront: person.residentNumber ? person.residentNumber.split("-")[0] : "",
+              address: person.address || "",
+            }
+          : row
       )
     );
     setSearchOpenIndex(null);
@@ -101,10 +144,13 @@ function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone })
     if (valid.length === 0) return toast.error("최소 1명 이상의 근로자 정보를 입력해주세요.");
     setSaving(true);
     try {
+      // 수정(재배정)인 경우 사람이 바뀌었을 수 있으므로 기존에 배정됐던
+      // 인력의 users/schedules 문서를 먼저 지우고 항상 새로 만든다.
+      if (isEdit) await deprovisionWorkers(request.workers);
       const provisioned = [];
       for (const w of valid) {
-        const uid = await provisionWorker({ request, worker: w, agencyId, agencyName });
-        provisioned.push({ ...w, dailyRate: Number(w.dailyRate) || 0, uid });
+        const { uid, scheduleId } = await provisionWorker({ request, worker: w, agencyId, agencyName });
+        provisioned.push({ ...w, dailyRate: Number(w.dailyRate) || 0, uid, scheduleId });
       }
       await updateDoc(doc(db, "staffingRequests", request.id), {
         status: "assigned",
@@ -112,20 +158,22 @@ function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone })
         totalPrice: provisioned.reduce((sum, w) => sum + w.dailyRate, 0),
         assignedAt: serverTimestamp(),
       });
-      toast.success("배정이 완료되었습니다");
+      toast.success(isEdit ? "배정이 수정되었습니다" : "배정이 완료되었습니다");
       onDone();
     } catch (err) {
-      toast.error(`배정에 실패했습니다: ${err.code || err.message}`);
+      toast.error(`${isEdit ? "수정" : "배정"}에 실패했습니다: ${err.code || err.message}`);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal open onClose={onClose} title="인력 배정" footer={
+    <Modal open onClose={onClose} title={isEdit ? "인력 배정 수정" : "인력 배정"} footer={
       <>
         <Button variant="outline" onClick={onClose}>취소</Button>
-        <Button onClick={submit} disabled={saving}>{saving ? "배정 중..." : "배정 완료"}</Button>
+        <Button onClick={submit} disabled={saving}>
+          {saving ? (isEdit ? "수정 중..." : "배정 중...") : isEdit ? "수정 완료" : "배정 완료"}
+        </Button>
       </>
     }>
       <div className="mb-3 rounded-xl bg-slate-50 p-3 text-xs text-muted">
@@ -202,6 +250,8 @@ function AssignModal({ request, agencyId, agencyName, roster, onClose, onDone })
 
 export default function AgencyRequests() {
   const { agency } = useAuth();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [requests, setRequests] = useState([]);
   const [roster, setRoster] = useState([]);
   const [assignTarget, setAssignTarget] = useState(null);
@@ -228,11 +278,24 @@ export default function AgencyRequests() {
     () => [...requests].sort((a, b) => (b.date || "").localeCompare(a.date || "")),
     [requests]
   );
+  const cancelledCount = useMemo(() => requests.filter((r) => r.status === "cancelled").length, [requests]);
+
+  const deleteOwnRequest = async (r) => {
+    if (!(await confirm("취소된 요청을 목록에서 삭제하시겠습니까?", "delete"))) return;
+    await deleteDoc(doc(db, "staffingRequests", r.id));
+    toast.success("삭제되었습니다");
+  };
 
   return (
     <div className="space-y-6">
       <Panel icon={ClipboardList} title="요청장">
         <p className="mb-3 text-xs text-muted">도급사로부터 받은 외부인력 요청입니다. 요청중 건을 눌러 인원/단가를 입력하면 배정완료로 전환됩니다.</p>
+        {cancelledCount > 0 && (
+          <div className="mb-3 flex items-center gap-2 rounded-xl border border-danger/30 bg-red-50 px-4 py-3 text-sm text-danger">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>도급사가 취소한 요청이 {cancelledCount}건 있습니다. 목록에서 확인 후 삭제할 수 있습니다.</span>
+          </div>
+        )}
         <Card className="overflow-x-auto p-0">
           <table className="w-full min-w-[720px] text-center text-sm">
             <thead>
@@ -256,12 +319,21 @@ export default function AgencyRequests() {
                   <td className="px-3 py-3 text-ink">{r.shiftLabel || "-"}</td>
                   <td className="px-3 py-3 text-ink">{r.headcount}명</td>
                   <td className="px-3 py-3">
-                    <Badge tone={r.status === "assigned" ? "success" : "warning"}>{r.status === "assigned" ? "배정완료" : "요청중"}</Badge>
+                    <Badge tone={r.status === "assigned" ? "success" : r.status === "cancelled" ? "danger" : "warning"}>
+                      {r.status === "assigned" ? "배정완료" : r.status === "cancelled" ? "취소됨" : "요청중"}
+                    </Badge>
                   </td>
                   <td className="px-3 py-3 text-muted">{r.note || "-"}</td>
                   <td className="px-3 py-3">
-                    {r.status === "assigned" ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted"><Users size={13} /> {r.workers?.length || 0}명 · {(r.totalPrice || 0).toLocaleString()}원</span>
+                    {r.status === "cancelled" ? (
+                      <button type="button" onClick={() => deleteOwnRequest(r)} className="inline-flex items-center gap-1 text-xs font-medium text-danger">
+                        <Trash2 size={13} /> 삭제
+                      </button>
+                    ) : r.status === "assigned" ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="inline-flex items-center gap-1 text-xs text-muted"><Users size={13} /> {r.workers?.length || 0}명 · {(r.totalPrice || 0).toLocaleString()}원</span>
+                        <Button size="sm" variant="outline" onClick={() => setAssignTarget(r)}>수정</Button>
+                      </div>
                     ) : (
                       <Button size="sm" onClick={() => setAssignTarget(r)}>배정하기</Button>
                     )}

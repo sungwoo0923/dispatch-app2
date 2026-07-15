@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { Building2, Plus, Trash2, Check, X, Pencil } from "lucide-react";
+import { Building2, Plus, Trash2, Check, X, Pencil, Ban } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useConfirm } from "../hooks/useConfirm";
@@ -10,6 +10,7 @@ import Card from "../components/Card";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
+import { deprovisionWorkers } from "../agency/AgencyRequests";
 
 const SHIFT_LABEL_OPTIONS = ["7시조", "8시조", "9시조", "야간조", "기타"];
 const EMPTY_REQUEST_FORM = { agencyId: "", siteId: "", date: "", shiftLabel: SHIFT_LABEL_OPTIONS[0], headcount: 1, note: "" };
@@ -174,6 +175,22 @@ export default function StaffingAgency() {
     if (!(await confirm("이 요청장을 삭제하시겠습니까?", "delete"))) return;
     await deleteDoc(doc(db, "staffingRequests", r.id));
     toast.success("삭제되었습니다");
+  };
+
+  // 도급사가 요청을 취소한다 — 이미 배정된 인력이 있으면 그 인력의
+  // users(임시 placeholder)/schedules 문서도 함께 정리해, 스케줄등록·
+  // 출근현황에 취소된 인원이 남아있지 않도록 한다. 인력사무소 화면에는
+  // status가 "cancelled"로 바뀌면서 배너와 배지로 즉시 반영된다.
+  const cancelRequest = async (r) => {
+    if (!(await confirm(`${r.agencyName}에 요청한 ${r.date} 건을 취소하시겠습니까? 이미 배정된 인력이 있다면 스케줄도 함께 취소됩니다.`, "delete")))
+      return;
+    try {
+      if (r.workers?.length) await deprovisionWorkers(r.workers);
+      await updateDoc(doc(db, "staffingRequests", r.id), { status: "cancelled", cancelledAt: serverTimestamp() });
+      toast.success("요청을 취소했습니다");
+    } catch (err) {
+      toast.error(`취소에 실패했습니다: ${err.code || err.message}`);
+    }
   };
 
   const openDetail = (r) => {
@@ -369,13 +386,22 @@ export default function StaffingAgency() {
                       <td className="px-3 py-3 text-ink">{r.shiftLabel}</td>
                       <td className="px-3 py-3 text-ink">{r.headcount}명</td>
                       <td className="px-3 py-3">
-                        <Badge tone={r.status === "assigned" ? "success" : "warning"}>{r.status === "assigned" ? "배정완료" : "요청중"}</Badge>
+                        <Badge tone={r.status === "assigned" ? "success" : r.status === "cancelled" ? "danger" : "warning"}>
+                          {r.status === "assigned" ? "배정완료" : r.status === "cancelled" ? "취소됨" : "요청중"}
+                        </Badge>
                       </td>
                       <td className="px-3 py-3 text-ink">{r.totalPrice ? `${r.totalPrice.toLocaleString()}원` : "-"}</td>
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" onClick={() => deleteRequest(r)} className="text-danger">
-                          <Trash2 size={15} />
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          {r.status !== "cancelled" && (
+                            <button type="button" onClick={() => cancelRequest(r)} title="요청 취소" className="text-muted hover:text-danger">
+                              <Ban size={15} />
+                            </button>
+                          )}
+                          <button type="button" onClick={() => deleteRequest(r)} className="text-danger">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -456,9 +482,11 @@ export default function StaffingAgency() {
           ) : (
             <>
               <Button variant="outline" onClick={closeDetail}>닫기</Button>
-              <Button onClick={() => setDetailEditMode(true)}>
-                <Pencil size={13} /> 수정
-              </Button>
+              {detailTarget?.status !== "cancelled" && (
+                <Button onClick={() => setDetailEditMode(true)}>
+                  <Pencil size={13} /> 수정
+                </Button>
+              )}
             </>
           )
         }
@@ -467,7 +495,10 @@ export default function StaffingAgency() {
           <div className="space-y-3 text-sm">
             <div className="grid grid-cols-2 gap-2 text-ink">
               <p><span className="text-muted">인력사무소</span> {detailTarget.agencyName}</p>
-              <p><span className="text-muted">상태</span> {detailTarget.status === "assigned" ? "배정완료" : "요청중"}</p>
+              <p>
+                <span className="text-muted">상태</span>{" "}
+                {detailTarget.status === "assigned" ? "배정완료" : detailTarget.status === "cancelled" ? "취소됨" : "요청중"}
+              </p>
             </div>
 
             {detailEditMode ? (
