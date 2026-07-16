@@ -227,29 +227,6 @@ export default function ShipperStatus() {
     setFocusOrderId(order.id);
   };
 
-  useEffect(() => {
-    if (!focusOrderId) return;
-    const idx = rows.findIndex(r => r.id === focusOrderId);
-    if (idx === -1) return;
-    const targetPage = Math.floor(idx / pageSize) + 1;
-    if (targetPage !== page) { setPage(targetPage); return; }
-
-    let rafId, tries = 0, timeoutId;
-    const run = () => {
-      const el = rowRefs.current[focusOrderId];
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        setFlashId(focusOrderId);
-        timeoutId = setTimeout(() => { setFlashId(null); setFocusOrderId(null); }, 1600);
-        return;
-      }
-      if (tries++ < 30) rafId = requestAnimationFrame(run);
-      else setFocusOrderId(null);
-    };
-    rafId = requestAnimationFrame(run);
-    return () => { cancelAnimationFrame(rafId); clearTimeout(timeoutId); };
-  }, [focusOrderId, rows, page]);
-
   const getStatus = useCallback((o) => {
     if (["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태)) return "배차취소";
     if (o.차량번호 && o.차량번호.trim()) return "배차완료";
@@ -349,6 +326,30 @@ export default function ShipperStatus() {
       }
     });
   }, [orders, filter, keyword, startDate, endDate, searchType, hideCanceled, getStatus]);
+
+  // 알림 클릭으로 포커스 이동 -> 해당 오더가 있는 페이지로 이동 후 스크롤 + 하이라이트
+  useEffect(() => {
+    if (!focusOrderId) return;
+    const idx = rows.findIndex(r => r.id === focusOrderId);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / pageSize) + 1;
+    if (targetPage !== page) { setPage(targetPage); return; }
+
+    let rafId, tries = 0, timeoutId;
+    const run = () => {
+      const el = rowRefs.current[focusOrderId];
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setFlashId(focusOrderId);
+        timeoutId = setTimeout(() => { setFlashId(null); setFocusOrderId(null); }, 1600);
+        return;
+      }
+      if (tries++ < 30) rafId = requestAnimationFrame(run);
+      else setFocusOrderId(null);
+    };
+    rafId = requestAnimationFrame(run);
+    return () => { cancelAnimationFrame(rafId); clearTimeout(timeoutId); };
+  }, [focusOrderId, rows, page]);
 
   useEffect(() => { setPage(1); }, [startDate, endDate, filter, keyword]);
 
