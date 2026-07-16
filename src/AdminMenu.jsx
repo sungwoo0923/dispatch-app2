@@ -522,19 +522,16 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const approveShipper1st = async (app) => {
     if (isViewer) return _viewerAlert();
     const myName = users.find(u => u.id === me?.uid)?.name || me?.email || "관리자";
+    // ⚠️ 1차 승인은 운송사 관리자 확인일 뿐 — 최종 로그인 허용(users.approved)과
+    // companyApplications.status="approved"는 최고관리자의 2차 승인(approveShipper2nd)에서만
+    // 설정해야 한다. 여기서 같이 켜버리면 1차만 하고도 로그인이 되고, 최고관리자의
+    // "2차 승인 대기" 목록(status !== "approved" 조건)에서도 즉시 빠져버린다.
     await updateDoc(doc(db, "companyApplications", app.id), {
       transportApprovalStatus: "approved",
       transportApprovedAt: serverTimestamp(),
       transportApprovedBy: myName,
-      status: "approved",
-      processedAt: serverTimestamp(),
     });
-    if (app.userId) {
-      try {
-        await updateDoc(doc(db, "users", app.userId), { approved: true, companyName: app.companyName });
-      } catch (_) {}
-    }
-    setManagingLinkedApp(prev => prev ? { ...prev, transportApprovalStatus: "approved", transportApprovedBy: myName, status: "approved" } : null);
+    setManagingLinkedApp(prev => prev ? { ...prev, transportApprovalStatus: "approved", transportApprovedBy: myName } : null);
   };
 
   // 운송사 관리자 1차 거절
