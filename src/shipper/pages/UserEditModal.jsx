@@ -136,44 +136,47 @@ const removeUser = async () => {
 if (!open) return null;
   if (mode === "approve") {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
 
-      <div className="bg-white w-[420px] rounded-xl shadow-xl p-7">
+      <div className="bg-white w-[420px] rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
 
         {/* 헤더 */}
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-[20px] font-bold text-gray-800">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
+          <h2 className="text-white font-bold text-[15px]">
             가입 승인
           </h2>
-          <button onClick={onClose} className="text-xl text-gray-500">×</button>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">×</button>
         </div>
 
+        <div className="px-6 py-5">
         {/* 사용자 정보 */}
-        <div className="space-y-3 text-[16px] mb-6">
+        <div className="space-y-2 text-[14px] mb-6 text-gray-700">
           <div>이름: {user?.name || "-"}</div>
           <div>이메일: {user?.email}</div>
           <div>연락처: {user?.phone || "-"}</div>
         </div>
 
         {/* 권한 선택 */}
-        <div className="mb-6">
-          <div className="font-semibold mb-2">권한 선택</div>
+        <div className="mb-2">
+          <div className="font-semibold mb-2 text-gray-800 text-[14px]">권한 선택</div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 text-[14px] text-gray-700">
 
   {/* 마스터 (선택불가) */}
-  <label>
+  <label className="flex items-center gap-1.5">
     <input
       type="checkbox"
+      className="accent-[#1B2B4B]"
       checked={permissions.master}
       disabled
     /> 마스터
   </label>
 
   {/* 부마스터 */}
-  <label>
+  <label className="flex items-center gap-1.5">
     <input
       type="checkbox"
+      className="accent-[#1B2B4B]"
       checked={permissions.subMaster}
       onChange={(e) =>
         setPermissions({
@@ -186,9 +189,10 @@ if (!open) return null;
   </label>
 
   {/* 정산 */}
-  <label>
+  <label className="flex items-center gap-1.5">
     <input
       type="checkbox"
+      className="accent-[#1B2B4B]"
       checked={permissions.settlement}
       onChange={(e) =>
         setPermissions({
@@ -200,9 +204,10 @@ if (!open) return null;
   </label>
 
   {/* 운송 */}
-  <label>
+  <label className="flex items-center gap-1.5">
     <input
       type="checkbox"
+      className="accent-[#1B2B4B]"
       checked={permissions.transport}
       onChange={(e) =>
         setPermissions({
@@ -215,13 +220,14 @@ if (!open) return null;
 
 </div>
         </div>
+        </div>
 
         {/* 버튼 */}
-        <div className="flex justify-end gap-3">
+        <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2">
 
           <button
             onClick={onClose}
-            className="px-5 py-2 border rounded"
+            className="px-5 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100"
           >
             취소
           </button>
@@ -231,7 +237,7 @@ if (!open) return null;
     if (!window.confirm("승인하시겠습니까?")) return;
     await approve();
   }}
-  className="px-5 py-2 bg-blue-600 text-white rounded"
+  className="px-5 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-bold hover:opacity-90"
 >
   승인완료
 </button>
@@ -243,20 +249,20 @@ if (!open) return null;
 }
 if (mode === "reApprove") {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
 
-      <div className="bg-white w-[420px] rounded-xl shadow-xl p-7">
+      <div className="bg-white w-[420px] rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
 
         {/* 헤더 */}
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-[20px] font-bold text-gray-800">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
+          <h2 className="text-white font-bold text-[15px]">
             계정 재승인
           </h2>
-          <button onClick={onClose} className="text-xl text-gray-500">×</button>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">×</button>
         </div>
 
         {/* 사용자 정보 */}
-        <div className="space-y-3 text-[16px] mb-6">
+        <div className="px-6 py-5 space-y-2 text-[14px] text-gray-700">
           <div>이름: {user?.name || "-"}</div>
           <div>이메일: {user?.email}</div>
           <div>연락처: {user?.phone || "-"}</div>
@@ -264,11 +270,11 @@ if (mode === "reApprove") {
         </div>
 
         {/* 버튼 */}
-        <div className="flex justify-end gap-3 mt-6">
+        <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2">
 
           <button
             onClick={onClose}
-            className="px-5 py-2 text-[18px] border rounded bg-gray-100"
+            className="px-5 py-2 text-sm font-semibold border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100"
           >
             취소
           </button>
@@ -286,7 +292,7 @@ if (mode === "reApprove") {
               alert("재승인 완료");
               onClose();
             }}
-            className="px-5 py-2 text-[18px] bg-green-500 text-white rounded"
+            className="px-5 py-2 text-sm font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
           >
             재승인
           </button>
@@ -297,18 +303,19 @@ if (mode === "reApprove") {
   );
 }
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
 
-      <div className="bg-white w-[650px] rounded-xl shadow-xl p-7 relative">
+      <div className="bg-white w-[650px] rounded-2xl shadow-2xl overflow-hidden relative" onClick={(e) => e.stopPropagation()}>
 
         {/* 헤더 */}
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-[20px] font-bold text-gray-800">
+        <div className="bg-[#1B2B4B] px-7 py-4 flex justify-between items-center">
+          <h2 className="text-white font-bold text-[15px]">
             {user?.name || user?.email}님 정보수정
           </h2>
-          <button onClick={onClose} className="text-xl text-gray-500">×</button>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">×</button>
         </div>
 
+        <div className="p-7">
         {/* 탭 */}
         <div className="flex gap-2 mb-6">
           {[
@@ -319,10 +326,10 @@ if (mode === "reApprove") {
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-[18px] rounded-md ${
+              className={`px-4 py-2 text-[15px] rounded-md font-semibold transition ${
                 tab === t
-                  ? "bg-gray-200 font-semibold text-gray-800"
-                  : "text-gray-500"
+                  ? "bg-[#eef1f7] text-[#1B2B4B]"
+                  : "text-gray-500 hover:bg-gray-50"
               }`}
             >
               {t}
@@ -599,18 +606,19 @@ disabled={!canEdit}
         <div className="flex justify-end gap-3 mt-6">
   <button
     onClick={onClose}
-    className="px-5 py-2 border rounded text-gray-600"
+    className="px-5 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100"
   >
     취소
   </button>
 
   <button
     onClick={save}
-    className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+    className="px-5 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-bold hover:opacity-90"
   >
     저장
   </button>
 </div>
+        </div>
       </div>
     </div>
   );
@@ -647,7 +655,7 @@ function AlarmGroup({ title, items, isSelf }) {
           <label key={i} className="flex items-center gap-3 text-[16px]">
             <input
   type="checkbox"
-  className="scale-125 accent-blue-600"
+  className="scale-125 accent-[#1B2B4B]"
   defaultChecked
   disabled={!isSelf}
 />
@@ -660,7 +668,7 @@ function AlarmGroup({ title, items, isSelf }) {
 }
 function Toggle({ disabled }) {
   return (
-    <div className={`w-12 h-6 rounded-full relative ${disabled ? "bg-gray-300" : "bg-blue-500"} cursor-pointer`}>
+    <div className={`w-12 h-6 rounded-full relative ${disabled ? "bg-gray-300" : "bg-[#1B2B4B]"} cursor-pointer`}>
       <div className="w-5 h-5 bg-white rounded-full absolute right-1 top-[2px]" />
     </div>
   );
