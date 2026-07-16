@@ -213,7 +213,7 @@ export default function SettingsAddress() {
           </label>
           <button
             onClick={openAdd}
-            className="bg-blue-600 text-white px-4 py-2 text-sm rounded-md hover:bg-blue-700 font-medium"
+            className="bg-[#1B2B4B] text-white px-4 py-2 text-sm rounded-md hover:opacity-90 font-medium"
           >
             + 주소록 등록
           </button>
@@ -253,7 +253,7 @@ export default function SettingsAddress() {
                     <div className="flex justify-center gap-2">
                       <button
                         onClick={() => openEdit(item)}
-                        className="px-3 py-1 text-xs border rounded bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium"
+                        className="px-3 py-1 text-xs border rounded bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2] font-medium"
                       >
                         수정
                       </button>
@@ -274,15 +274,17 @@ export default function SettingsAddress() {
 
       {/* 등록/수정 모달 */}
       {addOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-[480px] p-6 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">{editItem ? "주소록 수정" : "주소록 등록"}</h3>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setAddOpen(false)}>
+          <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">{editItem ? "주소록 수정" : "주소록 등록"}</h3>
+            </div>
 
-            <div className="space-y-3">
+            <div className="px-6 py-5 space-y-3">
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">회사명 *</label>
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B]"
                   placeholder="회사명"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -291,7 +293,7 @@ export default function SettingsAddress() {
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">주소</label>
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B]"
                   placeholder="주소"
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
@@ -300,7 +302,7 @@ export default function SettingsAddress() {
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">담당자</label>
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B]"
                   placeholder="담당자명"
                   value={form.담당자명}
                   onChange={(e) => setForm({ ...form, 담당자명: e.target.value })}
@@ -309,7 +311,7 @@ export default function SettingsAddress() {
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">담당자번호</label>
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B]"
                   placeholder="010-0000-0000"
                   value={form.담당자번호}
                   onChange={(e) => setForm({ ...form, 담당자번호: e.target.value })}
@@ -318,7 +320,7 @@ export default function SettingsAddress() {
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">메모</label>
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B]"
                   placeholder="메모"
                   value={form.메모}
                   onChange={(e) => setForm({ ...form, 메모: e.target.value })}
@@ -326,17 +328,17 @@ export default function SettingsAddress() {
               </div>
             </div>
 
-            <div className="flex gap-2 mt-5">
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex gap-2">
               <button
                 onClick={() => setAddOpen(false)}
-                className="flex-1 border py-2 rounded-lg text-sm"
+                className="flex-1 border border-gray-200 bg-white py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100"
               >
                 취소
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                className="flex-1 bg-[#1B2B4B] text-white py-2 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? "저장중..." : "저장"}
               </button>
@@ -347,24 +349,28 @@ export default function SettingsAddress() {
 
       {/* 대량등록 안내 */}
       {bulkOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-[460px] p-6 shadow-xl">
-            <h3 className="text-lg font-bold mb-3">주소록 대량등록</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              엑셀 파일(.xlsx)에 아래 열을 포함해 업로드하세요.
-            </p>
-            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 font-mono mb-4">
-              회사명 | 주소 | 담당자 | 담당자번호 | 메모
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setBulkOpen(false)}>
+          <div className="bg-white rounded-2xl w-[460px] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">주소록 대량등록</h3>
             </div>
-            <label className={`block w-full text-center py-3 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 font-semibold ${bulkLoading ? "opacity-50" : ""}`}>
-              {bulkLoading ? "등록중..." : "파일 선택"}
-              <input
-                type="file" accept=".xlsx,.xls,.csv" className="hidden"
-                disabled={bulkLoading}
-                onChange={handleBulkFile}
-              />
-            </label>
-            <button onClick={() => setBulkOpen(false)} className="w-full mt-2 border py-2 rounded-lg text-sm">닫기</button>
+            <div className="px-6 py-5">
+              <p className="text-sm text-gray-500 mb-4">
+                엑셀 파일(.xlsx)에 아래 열을 포함해 업로드하세요.
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 font-mono mb-4">
+                회사명 | 주소 | 담당자 | 담당자번호 | 메모
+              </div>
+              <label className={`block w-full text-center py-3 bg-[#1B2B4B] text-white rounded-lg cursor-pointer hover:opacity-90 font-semibold ${bulkLoading ? "opacity-50" : ""}`}>
+                {bulkLoading ? "등록중..." : "파일 선택"}
+                <input
+                  type="file" accept=".xlsx,.xls,.csv" className="hidden"
+                  disabled={bulkLoading}
+                  onChange={handleBulkFile}
+                />
+              </label>
+              <button onClick={() => setBulkOpen(false)} className="w-full mt-2 border border-gray-200 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">닫기</button>
+            </div>
           </div>
         </div>
       )}

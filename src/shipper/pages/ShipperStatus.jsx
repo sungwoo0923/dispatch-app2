@@ -90,6 +90,7 @@ const fmtDateTime = (ts) => {
   let d;
   if (ts?.toDate) d = ts.toDate();
   else if (ts instanceof Date) d = ts;
+  else if (typeof ts === "number") d = new Date(ts);
   else return String(ts).slice(0, 16);
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString().slice(0, 16).replace("T", " ");
@@ -1272,9 +1273,9 @@ function Timeline({ order }) {
   const isCanceled = order?.상태 === "취소" || order?.상태 === "오더취소" || order?.취소여부 === true;
 
   const steps = [
-    { title: "배차접수", company: order?.운송사명 || "돌캐", date: order?.상차일, time: order?.상차시간 },
-    { title: "배차중", company: order?.운송사명 || "돌캐", date: order?.상차일, time: order?.상차시간 },
-    { title: "배차완료", company: order?.운송사명 || "돌캐" },
+    { title: "배차접수", company: order?.운송사명 || "돌캐", ts: order?.createdAt },
+    { title: "배차중", company: order?.운송사명 || "돌캐", ts: order?.배차중전환일시 },
+    { title: "배차완료", company: order?.운송사명 || "돌캐", ts: order?.dispatchedAt || order?.배차완료일시 },
     { title: "상차완료", company: order?.운송사명 || "돌캐", location: order?.상차지명 },
     { title: "운송완료", company: order?.운송사명 || "돌캐", location: order?.하차지명 },
   ];
@@ -1284,7 +1285,20 @@ function Timeline({ order }) {
 
   return (
     <div className="relative pl-16">
-      <div className="absolute left-[20px] top-0 bottom-0 w-[3px] bg-gray-200" />
+      {/* 연결선: 지난 구간은 네이비, 남은 구간은 회색 */}
+      {steps.slice(0, -1).map((_, i) => {
+        const segDone = i < currentIndex && !isCanceled;
+        return (
+          <div key={`seg-${i}`}
+            className="absolute w-[3px]"
+            style={{
+              left: 20, top: `${i * 108 + 20}px`, height: "88px",
+              background: segDone ? "#1B2B4B" : "#e5e7eb",
+              transition: "background 0.3s",
+            }}
+          />
+        );
+      })}
       {steps.map((step, i) => {
         const isPrev = i < currentIndex;
         const isCurrent = i === currentIndex;
@@ -1292,16 +1306,19 @@ function Timeline({ order }) {
         return (
           <div key={i} className="relative mb-12">
             {(isCurrent || isCancelPoint) && (
-              <div className={`absolute left-[20px] top-[6px] -translate-x-1/2 w-7 h-7 rounded-full border-[4px] bg-white z-10 animate-pulseSlow ${isCancelPoint ? "border-red-500" : "border-blue-500"}`} />
+              <div className={`absolute left-[20px] top-[6px] -translate-x-1/2 w-7 h-7 rounded-full border-[4px] bg-white z-10 animate-pulseSlow`}
+                style={{ borderColor: isCancelPoint ? "#e11d48" : "#1B2B4B" }} />
             )}
-            <div className={`absolute left-[20px] top-[14px] -translate-x-1/2 w-3 h-3 rounded-full ${isCancelPoint ? "bg-red-500" : isCurrent ? "bg-blue-500" : isPrev ? "bg-gray-300" : "bg-gray-200"}`} />
+            <div className="absolute left-[20px] top-[14px] -translate-x-1/2 w-3 h-3 rounded-full z-10"
+              style={{ background: isCancelPoint ? "#e11d48" : isCurrent ? "#1B2B4B" : isPrev ? "#1B2B4B" : "#d1d5db" }} />
             <div className="ml-14">
-              <div className={`text-[20px] font-bold ${isCancelPoint ? "text-red-500" : isCurrent ? "text-blue-600" : isPrev ? "text-gray-400" : "text-gray-300"}`}>
+              <div className="text-[20px] font-bold"
+                style={{ color: isCancelPoint ? "#e11d48" : isCurrent ? "#1B2B4B" : isPrev ? "#374151" : "#9ca3af" }}>
                 {isCancelPoint ? "취소 [오더취소] 배차중" : step.title}
               </div>
               {step.company && <div className="text-[16px] text-gray-700 mt-1">{step.company}</div>}
               {step.location && <div className="text-[14px] text-gray-500">{step.location}</div>}
-              {step.date && <div className="text-[14px] text-gray-400 mt-1">요청일자 {step.date} {step.time}</div>}
+              {step.ts && <div className="text-[14px] text-gray-400 mt-1">{step.title} 시각: {fmtDateTime(step.ts)}</div>}
             </div>
           </div>
         );
