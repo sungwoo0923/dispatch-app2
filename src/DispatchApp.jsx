@@ -1160,7 +1160,7 @@ function OrderInfoModal({ row, onClose }) {
           <Section title="상차지">
             <Row label="업체명" value={row.상차지명} />
             <Row label="주소" value={row.상차지주소} />
-            <Row label="상차시간" value={row.상차시간 ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}` : ""} />
+            <Row label="상차시간" value={row.상차시간 ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}` : "즉시"} />
           </Section>
           {pickupStops.length > 0 && (
             <Section title={`상차 경유지 (${pickupStops.length})`}>
@@ -1179,7 +1179,7 @@ function OrderInfoModal({ row, onClose }) {
           <Section title="하차지">
             <Row label="업체명" value={row.하차지명} />
             <Row label="주소" value={row.하차지주소} />
-            <Row label="하차시간" value={row.하차시간 ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}` : ""} />
+            <Row label="하차시간" value={row.하차시간 ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}` : "즉시"} />
           </Section>
           {dropStops.length > 0 && (
             <Section title={`하차 경유지 (${dropStops.length})`}>
@@ -17926,14 +17926,14 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   {r.상차시간
     ? `${r.상차시간}${r.상차시간기준 ? ` ${r.상차시간기준}` : ""}`
-    : ""}
+    : "즉시"}
 </td>
 
                   <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
                  <td className={cell}>
   {r.하차시간
     ? `${r.하차시간}${r.하차시간기준 ? ` ${r.하차시간기준}` : ""}`
-    : ""}
+    : "즉시"}
 </td>
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
@@ -26258,14 +26258,14 @@ return (
   <span>
     {row.상차시간
       ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}`
-      : ""}
+      : "즉시"}
   </span>
 
 ) : key === "하차시간" ? (
   <span>
     {row.하차시간
       ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}`
-      : ""}
+      : "즉시"}
   </span>
 
 ) : key === "화물내용" ? (() => {
