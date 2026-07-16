@@ -242,7 +242,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     [approvedLinkedShippers]
   );
   const myLinkedInquiries = useMemo(() => {
-    if (isTotalMaster) return [];
     return allInquiries.filter(q => {
       const author = users.find(u => u.id === q.userId);
       return author && linkedShipperCompanyNames.has(author.companyName);
@@ -652,27 +651,23 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             </span>
           )}
         </button>
-        {!isTotalMaster && (
-          <button
-            onClick={() => setAdminTab("transmit")}
-            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "transmit" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-          >
-            화주사 전송
-          </button>
-        )}
-        {!isTotalMaster && (
-          <button
-            onClick={() => setAdminTab("inquiries")}
-            className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "inquiries" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-          >
-            화주사 문의
-            {unansweredInquiryCount > 0 && (
-              <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${adminTab === "inquiries" ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
-                {unansweredInquiryCount}
-              </span>
-            )}
-          </button>
-        )}
+        <button
+          onClick={() => setAdminTab("transmit")}
+          className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "transmit" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+        >
+          화주사 전송
+        </button>
+        <button
+          onClick={() => setAdminTab("inquiries")}
+          className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "inquiries" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+        >
+          화주사 문의
+          {unansweredInquiryCount > 0 && (
+            <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${adminTab === "inquiries" ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
+              {unansweredInquiryCount}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="flex gap-6">
