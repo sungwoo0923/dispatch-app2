@@ -17,10 +17,10 @@ import {
 import { useNavigate } from "react-router-dom";
 
 const STATUS = {
-  요청: { label: "요청", cls: "bg-blue-100 text-blue-700" },
-  배차중: { label: "배차중", cls: "bg-amber-100 text-amber-700" },
-  배차완료: { label: "배차완료", cls: "bg-emerald-100 text-emerald-700" },
-  배차취소: { label: "취소", cls: "bg-red-100 text-red-600" },
+  요청: { label: "요청", cls: "bg-slate-100 text-slate-700" },
+  배차중: { label: "배차중", cls: "bg-amber-100 text-amber-800" },
+  배차완료: { label: "배차완료", cls: "bg-emerald-100 text-emerald-800" },
+  배차취소: { label: "취소", cls: "bg-rose-100 text-rose-800" },
 };
 
 const getTodayKST = () => {
@@ -44,6 +44,26 @@ const fmt12 = (t) => {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
 };
+
+const fmtTimeCell = (time, gubun) => {
+  if (!time) return "즉시";
+  return gubun && gubun !== "정각" ? `${fmt12(time)} ${gubun}` : fmt12(time);
+};
+
+const getViaList = (v) => (Array.isArray(v) ? v.filter(s => s && (s.업체명 || s.주소)) : []);
+
+// 경유+N 뱃지 — 운송프로그램(StopInlineBadge)과 동일한 디자인/동작
+function ShipperViaBadge({ count, label, onOpen }) {
+  if (!count) return null;
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onOpen(); }}
+      className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
+    >
+      경유+{count}
+    </button>
+  );
+}
 
 const fmtDate = (ts) => {
   if (!ts) return "-";
@@ -91,7 +111,6 @@ export default function ShipperStatus() {
   const [searchType, setSearchType] = useState("통합");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [expandedRows, setExpandedRows] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
   const [editData, setEditData] = useState(null);
@@ -100,6 +119,8 @@ export default function ShipperStatus() {
   const pageSize = 100;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({ message: "", onConfirm: null });
+  const [addrPopup, setAddrPopup] = useState(null);
+  const [viaPopup, setViaPopup] = useState(null); // { label, list }
 
   const openConfirm = (message, onConfirm) => {
     setConfirmConfig({ message, onConfirm });
@@ -185,10 +206,6 @@ export default function ShipperStatus() {
     if (d?.toDate) return d.toDate().toISOString().slice(0, 10);
     if (d instanceof Date) return d.toISOString().slice(0, 10);
     return String(d).slice(0, 10);
-  };
-
-  const toggleExpand = (id, type) => {
-    setExpandedRows(prev => ({ ...prev, [`${id}_${type}`]: !prev[`${id}_${type}`] }));
   };
 
   const toggleSelect = (id, checked) => {
@@ -361,8 +378,8 @@ export default function ShipperStatus() {
                 onClick={() => setFilter(s)}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold ${
                   filter === s
-                    ? "bg-blue-600 text-white"
-                    : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    ? "bg-[#1B2B4B] text-white"
+                    : "bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2]"
                 }`}
               >
                 {s}
@@ -424,9 +441,9 @@ export default function ShipperStatus() {
 
             {/* 버튼 */}
             <div className="flex gap-2">
-              <button onClick={handleEditSelected} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">선택수정</button>
-              <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-semibold">선택삭제</button>
-              <button onClick={handleExcelDownload} className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold">엑셀다운</button>
+              <button onClick={handleEditSelected} className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-semibold">선택수정</button>
+              <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold">선택삭제</button>
+              <button onClick={handleExcelDownload} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold">엑셀다운</button>
             </div>
           </div>
         </div>
@@ -435,6 +452,7 @@ export default function ShipperStatus() {
           <table className="border-collapse text-[14px]" style={{ minWidth: "2640px", width: "100%" }}>
             <colgroup>
               <col style={{ width: 40 }} /><col style={{ width: 60 }} />
+              <col style={{ width: 110 }} />
               <col style={{ width: 100 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
@@ -445,7 +463,7 @@ export default function ShipperStatus() {
               <col style={{ width: 120 }} /><col style={{ width: 120 }} />
               <col style={{ width: 120 }} /><col style={{ width: 110 }} />
               <col style={{ width: 110 }} /><col style={{ width: 120 }} />
-              <col style={{ width: 90 }} /><col style={{ width: 75 }} />
+              <col style={{ width: 75 }} />
             </colgroup>
             <thead>
               <tr className="bg-[#eef3fb] text-gray-800 font-extrabold text-[13px]">
@@ -453,9 +471,9 @@ export default function ShipperStatus() {
                   <input key="chk" type="checkbox"
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
-                  "순번","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
+                  "순번","운송사","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
                   "하차지","하차지주소","화물","차량","톤수","차량번호","이름","전화번호",
-                  "청구운임","지급방식","상태","운송사","첨부"
+                  "청구운임","지급방식","상태","첨부"
                 ].map((h, idx) => (
                   <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 last:border-r-0 whitespace-nowrap">
                     {h}
@@ -470,6 +488,8 @@ export default function ShipperStatus() {
                 const isCanceled = getStatus(o) === "배차취소";
                 const rowCls = isCanceled ? "bg-red-50 text-red-600" : "text-gray-800 hover:bg-blue-50 cursor-pointer";
                 const tdCls = "px-3 py-3 text-center border-r border-gray-100 last:border-r-0 align-middle";
+                const pickupVia = getViaList(o.경유상차목록);
+                const dropVia = getViaList(o.경유하차목록);
                 return (
                   <tr key={o.id} className={`border-t border-gray-100 ${rowCls}`}
                     onDoubleClick={() => { setSelectedOrder(o); setDetailOpen(true); }}>
@@ -479,25 +499,54 @@ export default function ShipperStatus() {
                         onChange={(e) => toggleSelect(o.id, e.target.checked)} />
                     </td>
                     <td className={tdCls}>{(page - 1) * pageSize + i + 1}</td>
+                    <td className={`${tdCls} font-semibold text-gray-900`}>{o.운송사명 || "-"}</td>
                     <td className={`${tdCls} text-gray-500`}>{fmtDate(o.createdAt)}</td>
                     <td className={`${tdCls} font-semibold`}>{o.상차일 || "-"}</td>
-                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>
-                      {o.상차시간 ? (o.상차시간구분 && o.상차시간구분 !== "정각" ? `${fmt12(o.상차시간)} ${o.상차시간구분}` : fmt12(o.상차시간)) : "-"}
-                    </td>
+                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>{fmtTimeCell(o.상차시간, o.상차시간구분)}</td>
                     <td className={`${tdCls} font-semibold`}>{o.하차일 || "-"}</td>
-                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>
-                      {o.하차시간 ? (o.하차시간구분 && o.하차시간구분 !== "정각" ? `${fmt12(o.하차시간)} ${o.하차시간구분}` : fmt12(o.하차시간)) : "-"}
-                    </td>
+                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>{fmtTimeCell(o.하차시간, o.하차시간구분)}</td>
                     <td className={`${tdCls} font-bold text-gray-900`}>{o.거래처명 || "-"}</td>
-                    <td className={tdCls}>{o.상차지명 || "-"}</td>
-                    <td className={`${tdCls} text-gray-600 cursor-pointer`}
-                      onClick={() => toggleExpand(o.id, "up")}>
-                      <span className={expandedRows[`${o.id}_up`] ? "" : "line-clamp-1 block text-left"}>{o.상차지주소 || "-"}</span>
+                    <td className={tdCls}>
+                      {o.상차지명 || "-"}
+                      <ShipperViaBadge count={pickupVia.length} label="상차경유지" onOpen={() => setViaPopup({ label: "상차경유지", list: pickupVia })} />
                     </td>
-                    <td className={tdCls}>{o.하차지명 || "-"}</td>
-                    <td className={`${tdCls} text-gray-600 cursor-pointer`}
-                      onClick={() => toggleExpand(o.id, "down")}>
-                      <span className={expandedRows[`${o.id}_down`] ? "" : "line-clamp-1 block text-left"}>{o.하차지주소 || "-"}</span>
+                    <td className={`${tdCls} text-gray-600`}>
+                      {(() => {
+                        const text = o.상차지주소 || "";
+                        const isLong = text.length > 14;
+                        return (
+                          <div className="flex items-center justify-center gap-1 min-w-0">
+                            <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 120 }} title={text}>
+                              {isLong ? text.slice(0, 14) + "…" : (text || "-")}
+                            </span>
+                            {isLong && (
+                              <button type="button" className="text-[11px] text-[#1B2B4B] underline shrink-0 hover:opacity-70"
+                                onClick={(e) => { e.stopPropagation(); setAddrPopup(text); }}>더보기</button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className={tdCls}>
+                      {o.하차지명 || "-"}
+                      <ShipperViaBadge count={dropVia.length} label="하차경유지" onOpen={() => setViaPopup({ label: "하차경유지", list: dropVia })} />
+                    </td>
+                    <td className={`${tdCls} text-gray-600`}>
+                      {(() => {
+                        const text = o.하차지주소 || "";
+                        const isLong = text.length > 14;
+                        return (
+                          <div className="flex items-center justify-center gap-1 min-w-0">
+                            <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 120 }} title={text}>
+                              {isLong ? text.slice(0, 14) + "…" : (text || "-")}
+                            </span>
+                            {isLong && (
+                              <button type="button" className="text-[11px] text-[#1B2B4B] underline shrink-0 hover:opacity-70"
+                                onClick={(e) => { e.stopPropagation(); setAddrPopup(text); }}>더보기</button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className={`${tdCls} truncate max-w-[140px]`}>{o.화물내용 || "-"}</td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
@@ -512,7 +561,6 @@ export default function ShipperStatus() {
                     <td className={tdCls}>
                       <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
                     </td>
-                    <td className={`${tdCls} font-semibold text-gray-900`}>{o.운송사명 || "-"}</td>
                     <td className={tdCls}>
                       <button
                         onClick={(e) => { e.stopPropagation(); setAttachViewer(o); }}
@@ -664,6 +712,48 @@ export default function ShipperStatus() {
           order={attachViewer}
           onClose={() => setAttachViewer(null)}
         />
+      )}
+
+      {/* 주소 전체보기 팝업 */}
+      {addrPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{addrPopup}</p>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 경유지 팝업 */}
+      {viaPopup && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]" onClick={() => setViaPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[75vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 flex items-center justify-between bg-[#1B2B4B]">
+              <h3 className="text-white font-bold text-[16px]">{viaPopup.label} ({viaPopup.list.length}곳)</h3>
+              <button onClick={() => setViaPopup(null)} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
+              {viaPopup.list.map((s, i) => (
+                <div key={i} className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+                  <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">{i + 1}. {s.업체명 || "-"}</div>
+                  {s.주소 && <div className="text-[12px] text-gray-600 mb-1">주소: {s.주소}</div>}
+                  {(s.담당자 || s.담당자번호) && (
+                    <div className="text-[12px] text-gray-600 mb-1">담당자: {s.담당자 || "-"} {s.담당자번호 ? `(${s.담당자번호})` : ""}</div>
+                  )}
+                  {s.화물내용 && <div className="text-[12px] text-gray-600 mb-1">화물: {s.화물내용}</div>}
+                  {s.메모 && <div className="text-[12px] text-gray-500">메모: {s.메모}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

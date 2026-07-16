@@ -331,6 +331,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     이름: r.이름 || "",
     전화번호: r.전화번호 || "",
     배차상태: r.차량번호 ? "배차완료" : "배차중",
+    경유상차목록: Array.isArray(r.경유상차목록) ? r.경유상차목록 : (Array.isArray(r.경유지_상차) ? r.경유지_상차 : []),
+    경유하차목록: Array.isArray(r.경유하차목록) ? r.경유하차목록 : (Array.isArray(r.경유지_하차) ? r.경유지_하차 : []),
     source: "transport_transmit",
     originCol: r.__col || "dispatch",
     originId: r._id,
