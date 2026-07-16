@@ -76,9 +76,13 @@ export default function ShipperOrder({ editData, onClose }) {
   const [companyEdit, setCompanyEdit] = useState("");
   const [contactPicker, setContactPicker] = useState(null); // { field, item, contacts }
   const [cargoRows, setCargoRows] = useState([{ qty: "", unit: "파레트", palletCo: "" }]);
+  const [errors, setErrors] = useState({}); // { fieldKey: true }
+  const [cargoRowErrors, setCargoRowErrors] = useState({}); // { rowIdx: true } — 파렛트사 미선택
 
   const updateCargoRow = (idx, key, value) => {
     setCargoRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: value } : r));
+    if (key === "palletCo" && value) setCargoRowErrors(prev => (prev[idx] ? { ...prev, [idx]: false } : prev));
+    if (key === "qty" && value) setErrors(prev => (prev.화물내용 ? { ...prev, 화물내용: false } : prev));
   };
   const addCargoRow = () => {
     setCargoRows(prev => prev.length >= 3 ? prev : [...prev, { qty: "", unit: "파레트", palletCo: "" }]);
@@ -212,7 +216,10 @@ export default function ShipperOrder({ editData, onClose }) {
     경유상차목록: [], 경유하차목록: [],
   });
 
-  const onChange = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const onChange = (k, v) => {
+    setForm(p => ({ ...p, [k]: v }));
+    setErrors(prev => (prev[k] ? { ...prev, [k]: false } : prev));
+  };
 
   useEffect(() => {
     if (!editId) return;
@@ -248,7 +255,34 @@ export default function ShipperOrder({ editData, onClose }) {
     });
     setCargoRows([{ qty: "", unit: "파레트", palletCo: "" }]);
     setSuggestions([]); setShowDropdown(null); setActiveIndex(-1);
+    setErrors({}); setCargoRowErrors({});
+    try { localStorage.removeItem("shipperOrderDraft"); } catch {}
   };
+
+  /* 임시저장 (탭 이동/새로고침에도 작성 중이던 내용 유지) — 수정 모드에서는 사용 안 함 */
+  useEffect(() => {
+    if (editId || editData) return;
+    try {
+      const saved = localStorage.getItem("shipperOrderDraft");
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.form) setForm(p => ({ ...p, ...draft.form }));
+        if (Array.isArray(draft.cargoRows) && draft.cargoRows.length) setCargoRows(draft.cargoRows);
+        if (draft.companyEdit) { setCompanyEdit(draft.companyEdit); setCompanyEditable(true); }
+      }
+    } catch {}
+  }, []);
+
+  const skipFirstDraftSaveRef = useRef(true);
+  useEffect(() => {
+    if (editId || editData) return;
+    if (skipFirstDraftSaveRef.current) { skipFirstDraftSaveRef.current = false; return; }
+    const hasContent = form.상차지명 || form.하차지명 || form.상차지주소 || form.하차지주소 || cargoRows.some(r => r.qty);
+    try {
+      if (hasContent) localStorage.setItem("shipperOrderDraft", JSON.stringify({ form, cargoRows, companyEdit: companyEditable ? companyEdit : "" }));
+      else localStorage.removeItem("shipperOrderDraft");
+    } catch {}
+  }, [form, cargoRows, companyEdit, companyEditable, editId, editData]);
 
   const upsertPlace = async (data, type) => {
     const currentCompany = companyEditable ? companyEdit : company;
@@ -297,8 +331,38 @@ export default function ShipperOrder({ editData, onClose }) {
     } catch { return null; }
   };
 
+  const validate = () => {
+    const errs = {};
+    const effectiveCompany = companyEditable ? companyEdit : company;
+    if (!effectiveCompany?.trim()) errs.거래처명 = true;
+    if (!form.상차지명?.trim()) errs.상차지명 = true;
+    if (!form.상차지주소?.trim()) errs.상차지주소 = true;
+    if (!form.하차지명?.trim()) errs.하차지명 = true;
+    if (!form.하차지주소?.trim()) errs.하차지주소 = true;
+    if (!form.차량종류) errs.차량종류 = true;
+    if (!form.차량톤수?.toString().trim()) errs.차량톤수 = true;
+    if (!form.상차방법) errs.상차방법 = true;
+    if (!form.하차방법) errs.하차방법 = true;
+    if (!form.지급방식) errs.지급방식 = true;
+    if (!cargoRows.some(r => r.qty)) errs.화물내용 = true;
+
+    const rowErrs = {};
+    cargoRows.forEach((r, idx) => {
+      if (r.unit === "파레트" && r.qty && !r.palletCo) rowErrs[idx] = true;
+    });
+
+    setErrors(errs);
+    setCargoRowErrors(rowErrs);
+
+    if (Object.keys(errs).length > 0 || Object.keys(rowErrs).length > 0) {
+      alert("필수 항목을 입력/선택해주세요. (빨간색 테두리로 표시된 항목을 확인하세요)");
+      return false;
+    }
+    return true;
+  };
+
   const submit = async () => {
-    if (!form.상차지명 || !form.하차지명) return alert("상차지 / 하차지를 입력하세요.");
+    if (!validate()) return;
     const effectiveCompany = companyEditable ? companyEdit : company;
     await upsertPlace({ name: form.상차지명, address: form.상차지주소, 담당자명: form.상차담당자명, 담당자번호: form.상차담당자번호, 메모: form.상차메모 }, "상차");
     await upsertPlace({ name: form.하차지명, address: form.하차지주소, 담당자명: form.하차담당자명, 담당자번호: form.하차담당자번호, 메모: form.하차메모 }, "하차");
@@ -335,6 +399,7 @@ export default function ShipperOrder({ editData, onClose }) {
       alert("수정 완료");
       onClose ? onClose() : navigate("/shipper/status");
     } else {
+      try { localStorage.removeItem("shipperOrderDraft"); } catch {}
       navigate("/shipper/status");
     }
   };
@@ -469,6 +534,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
   if (loading) return <div className="py-20 text-center text-gray-400">불러오는 중...</div>;
 
+  const errCls = (key) => (errors[key] ? " border-red-500 ring-2 ring-red-200" : "");
+
   const timeLabel = (time, dir) => {
     const t = fmt12(time);
     return dir && dir !== "정각" ? `${t} ${dir}` : t;
@@ -550,13 +617,13 @@ export default function ShipperOrder({ editData, onClose }) {
             <div className="flex gap-2">
               {companyEditable ? (
                 <>
-                  <input value={companyEdit} onChange={e => setCompanyEdit(e.target.value)} className={inputCls} />
+                  <input value={companyEdit} onChange={e => { setCompanyEdit(e.target.value); setErrors(prev => (prev.거래처명 ? { ...prev, 거래처명: false } : prev)); }} className={inputCls + errCls("거래처명")} />
                   <button onClick={() => setCompanyEditable(false)} className="px-3 py-2 text-sm bg-[#1B2B4B] text-white rounded-lg font-semibold whitespace-nowrap">확인</button>
                   <button onClick={() => { setCompanyEditable(false); setCompanyEdit(company); }} className="px-3 py-2 text-sm bg-gray-200 rounded-lg whitespace-nowrap">취소</button>
                 </>
               ) : (
                 <>
-                  <input value={company} disabled className={inputCls + " bg-gray-100 font-semibold text-gray-800"} />
+                  <input value={company} disabled className={inputCls + " bg-gray-100 font-semibold text-gray-800" + errCls("거래처명")} />
                   <button onClick={() => setCompanyEditable(true)} className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg font-semibold whitespace-nowrap">변경</button>
                 </>
               )}
@@ -658,7 +725,7 @@ export default function ShipperOrder({ editData, onClose }) {
               <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">상차지</div>
               <div className="relative">
                 <label className={labelCls}>상차지명</label>
-                <input className={inputCls} placeholder="상차지명" value={form.상차지명}
+                <input className={inputCls + errCls("상차지명")} placeholder="상차지명" value={form.상차지명}
                   onChange={e => { onChange("상차지명", e.target.value); searchPlaces(e.target.value, "상차지명"); }}
                   onKeyDown={e => handleKeyDown(e, "상차지명")}
                   onFocus={() => setShowDropdown("상차지명")}
@@ -676,7 +743,7 @@ export default function ShipperOrder({ editData, onClose }) {
                   </div>
                 )}
               </div>
-              <div><label className={labelCls}>상차지주소</label><input className={inputCls} placeholder="상차지주소" value={form.상차지주소} onChange={e => onChange("상차지주소", e.target.value)} /></div>
+              <div><label className={labelCls}>상차지주소</label><input className={inputCls + errCls("상차지주소")} placeholder="상차지주소" value={form.상차지주소} onChange={e => onChange("상차지주소", e.target.value)} /></div>
               <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.상차담당자명} onChange={e => onChange("상차담당자명", e.target.value)} /></div>
               <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.상차담당자번호} onChange={e => onChange("상차담당자번호", e.target.value)} /></div>
               <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.상차메모} onChange={e => onChange("상차메모", e.target.value)} /></div>
@@ -700,7 +767,7 @@ export default function ShipperOrder({ editData, onClose }) {
               <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">하차지</div>
               <div className="relative">
                 <label className={labelCls}>하차지명</label>
-                <input className={inputCls} placeholder="하차지명" value={form.하차지명}
+                <input className={inputCls + errCls("하차지명")} placeholder="하차지명" value={form.하차지명}
                   onChange={e => { onChange("하차지명", e.target.value); searchPlaces(e.target.value, "하차지명"); }}
                   onKeyDown={e => handleKeyDown(e, "하차지명")}
                   onFocus={() => setShowDropdown("하차지명")}
@@ -718,7 +785,7 @@ export default function ShipperOrder({ editData, onClose }) {
                   </div>
                 )}
               </div>
-              <div><label className={labelCls}>하차지주소</label><input className={inputCls} placeholder="하차지주소" value={form.하차지주소} onChange={e => onChange("하차지주소", e.target.value)} /></div>
+              <div><label className={labelCls}>하차지주소</label><input className={inputCls + errCls("하차지주소")} placeholder="하차지주소" value={form.하차지주소} onChange={e => onChange("하차지주소", e.target.value)} /></div>
               <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.하차담당자명} onChange={e => onChange("하차담당자명", e.target.value)} /></div>
               <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.하차담당자번호} onChange={e => onChange("하차담당자번호", e.target.value)} /></div>
               <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.하차메모} onChange={e => onChange("하차메모", e.target.value)} /></div>
@@ -749,7 +816,7 @@ export default function ShipperOrder({ editData, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>차량종류</label>
-                <select className={inputCls} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
+                <select className={inputCls + errCls("차량종류")} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
                   <option value="">선택</option>
                   {["라보/다마스","카고","윙바디","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","리프트","오토바이"].map(v => <option key={v}>{v}</option>)}
                 </select>
@@ -757,7 +824,7 @@ export default function ShipperOrder({ editData, onClose }) {
               <div>
                 <label className={labelCls}>톤수</label>
                 <div className="flex gap-1.5">
-                  <input className={inputCls} style={{ flex: 2 }} placeholder="숫자" value={form.차량톤수}
+                  <input className={inputCls + errCls("차량톤수")} style={{ flex: 2 }} placeholder="숫자" value={form.차량톤수}
                     inputMode="decimal"
                     onChange={e => onChange("차량톤수", e.target.value.replace(/[^0-9.]/g, ""))} />
                   <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={form.차량톤수단위} onChange={e => onChange("차량톤수단위", e.target.value)}>
@@ -771,14 +838,14 @@ export default function ShipperOrder({ editData, onClose }) {
               <div className="space-y-2">
                 {cargoRows.map((row, idx) => (
                   <div key={idx} className="flex gap-1.5 items-center">
-                    <input className={inputCls} style={{ flex: 1 }} placeholder="수량" value={row.qty}
+                    <input className={inputCls + errCls("화물내용")} style={{ flex: 1 }} placeholder="수량" value={row.qty}
                       onChange={e => updateCargoRow(idx, "qty", e.target.value.replace(/[^0-9.]/g, ""))} />
                     <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={row.unit}
                       onChange={e => updateCargoRow(idx, "unit", e.target.value)}>
                       {["파레트","박스","없음","개"].map(v => <option key={v}>{v}</option>)}
                     </select>
                     {row.unit === "파레트" && (
-                      <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={row.palletCo}
+                      <select className={inputCls + (cargoRowErrors[idx] ? " border-red-500 ring-2 ring-red-200" : "")} style={{ flex: 1, minWidth: 0 }} value={row.palletCo}
                         onChange={e => updateCargoRow(idx, "palletCo", e.target.value)}>
                         <option value="">파렛트사</option>
                         <option value="아주">아주</option>
@@ -814,21 +881,21 @@ export default function ShipperOrder({ editData, onClose }) {
           <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>상차방법</label>
-              <select className={inputCls} value={form.상차방법} onChange={e => onChange("상차방법", e.target.value)}>
+              <select className={inputCls + errCls("상차방법")} value={form.상차방법} onChange={e => onChange("상차방법", e.target.value)}>
                 <option value="">선택</option>
                 {["지게차","수도움","수작업","크레인"].map(v => <option key={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className={labelCls}>하차방법</label>
-              <select className={inputCls} value={form.하차방법} onChange={e => onChange("하차방법", e.target.value)}>
+              <select className={inputCls + errCls("하차방법")} value={form.하차방법} onChange={e => onChange("하차방법", e.target.value)}>
                 <option value="">선택</option>
                 {["지게차","수도움","수작업","크레인"].map(v => <option key={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className={labelCls}>지급방식</label>
-              <select className={inputCls} value={form.지급방식} onChange={e => onChange("지급방식", e.target.value)}>
+              <select className={inputCls + errCls("지급방식")} value={form.지급방식} onChange={e => onChange("지급방식", e.target.value)}>
                 <option value="">선택</option>
                 {["계산서","선불","착불","계좌이체"].map(v => <option key={v}>{v}</option>)}
               </select>
@@ -844,6 +911,7 @@ export default function ShipperOrder({ editData, onClose }) {
           </button>
           <button
             onClick={async () => {
+              if (!validate()) return;
               if (!form.상차지주소 || !form.하차지주소) {
                 if (window.confirm("주소가 없어 경로 미리보기 없이 등록합니다. 계속하시겠습니까?")) await submit();
                 return;
