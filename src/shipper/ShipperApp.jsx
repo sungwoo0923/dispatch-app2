@@ -24,6 +24,7 @@ export default function ShipperApp() {
   const [companyName, setCompanyName] = useState("");
 const location = useLocation();
 const [myInfoOpen, setMyInfoOpen] = useState(false);
+const [transportMenuOpen, setTransportMenuOpen] = useState(false);
 const [form, setForm] = useState({
   name: "",
   phone: "",
@@ -117,13 +118,44 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
     onClick={() => navigate("/shipper")}
   />
 
-{/* 운송 */}
+{/* 운송 (호버 시 하위메뉴) */}
 {(isMaster || isSubMaster || userData?.permissions?.transport) && (
-  <MenuBtn
-    label="운송"
-    active={location.pathname.includes("/shipper/transport")}
-    onClick={() => navigate("/shipper/transport")}
-  />
+  <div
+    className="relative"
+    onMouseEnter={() => setTransportMenuOpen(true)}
+    onMouseLeave={() => setTransportMenuOpen(false)}
+  >
+    <MenuBtn
+      label="운송"
+      active={location.pathname.includes("/shipper/transport") || location.pathname.includes("/shipper/order")}
+      onClick={() => navigate("/shipper/transport")}
+    />
+    {transportMenuOpen && (
+      <div className="absolute left-0 top-full pt-2 z-50">
+        <div className="w-48 bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 overflow-hidden">
+          <button
+            onClick={() => { navigate("/shipper/transport"); setTransportMenuOpen(false); }}
+            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+          >
+            운송목록
+          </button>
+          <button
+            onClick={() => { navigate("/shipper/order"); setTransportMenuOpen(false); }}
+            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+          >
+            일반배차등록
+          </button>
+          <button
+            onClick={() => setTransportMenuOpen(false)}
+            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-300 cursor-not-allowed"
+            title="준비 중인 기능입니다"
+          >
+            대량배차등록 <span className="text-[10px] text-gray-300">(준비중)</span>
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
 )}
 
 {/* 정산 */}

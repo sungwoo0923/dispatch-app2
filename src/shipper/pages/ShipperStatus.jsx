@@ -103,7 +103,6 @@ export default function ShipperStatus() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
-  const [open, setOpen] = useState(true);
   const scrollRef = useRef(null);
   const prevAttachRef = useRef({});
   const [attachNotif, setAttachNotif] = useState(null);
@@ -410,7 +409,7 @@ export default function ShipperStatus() {
   const restoreOrder = (order) => {
     openConfirm("오더를 재등록하시겠습니까?", () => {
       setDetailOpen(false);
-      setEditData({ ...order, 상태: "요청" });
+      setEditData({ ...order, 상태: "요청", 배차상태: "배차중", 취소알림대기: false, 화주사확인대기: true });
       setEditOpen(true);
       setConfirmOpen(false);
     });
@@ -418,8 +417,9 @@ export default function ShipperStatus() {
 
   const cancelOrder = (id) => {
     openConfirm("오더를 취소하시겠습니까?", async () => {
-      await updateDoc(doc(db, "orders", id), { 상태: "취소" });
-      setSelectedOrder(prev => prev?.id === id ? { ...prev, 상태: "취소" } : prev);
+      // 운송사 배차현황에도 즉시 반영되도록 배차상태까지 함께 취소 처리
+      await updateDoc(doc(db, "orders", id), { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true });
+      setSelectedOrder(prev => prev?.id === id ? { ...prev, 상태: "취소", 배차상태: "배차취소" } : prev);
       setConfirmOpen(false);
     });
   };
@@ -499,33 +499,16 @@ export default function ShipperStatus() {
         ))}
       </div>
 
-      {/* 좌측 슬라이드 */}
-      <div className={`${open ? "w-56" : "w-16"} flex-shrink-0 bg-gray-100 border-r transition-all duration-300`}>
-        <div className="flex justify-end p-2">
-          <button
-            onClick={() => setOpen(!open)}
-            className="w-8 h-8 flex items-center justify-center rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold transition"
-          >
-            {open ? "<" : ">"}
-          </button>
-        </div>
-        <div className="p-3 space-y-2 text-sm">
-          <MenuItem label="운송목록" type="list" active open={open} />
-          <MenuItem label="일반 배차등록" type="truck" open={open} onClick={() => navigate("/shipper/order")} />
-          <MenuItem label="대량 배차등록" type="fast" open={open} />
-        </div>
-      </div>
-
-      {/* 우측 메인 */}
+      {/* 메인 */}
       <div className="flex-1 min-w-0 px-8 py-6 bg-[#f4f7fb] space-y-6 transition-all duration-300">
 
         {/* KPI */}
         <div className="grid grid-cols-5 gap-4">
           <KPI title="전체 오더" value={kpi.total} />
-          <KPI title="요청" value={kpi.요청} color="text-blue-600" />
+          <KPI title="요청" value={kpi.요청} color="text-slate-700" />
           <KPI title="배차완료" value={kpi.배차완료} color="text-emerald-600" />
-          <KPI title="취소" value={kpi.취소} color="text-red-500" />
-          <KPI title="총 운송료" value={`${kpi.총금액.toLocaleString()}원`} color="text-gray-700" />
+          <KPI title="취소" value={kpi.취소} color="text-rose-700" />
+          <KPI title="총 운송료" value={`${kpi.총금액.toLocaleString()}원`} color="text-[#1B2B4B]" />
         </div>
 
         <div className="bg-white rounded-xl p-4 space-y-3 shadow-sm">
@@ -655,7 +638,7 @@ export default function ShipperStatus() {
                 const st = STATUS[getStatus(o)];
                 const attachCnt = o.attachCount || 0;
                 const isCanceled = getStatus(o) === "배차취소";
-                const rowCls = isCanceled ? "bg-red-50 text-red-600" : "text-gray-800 hover:bg-blue-50 cursor-pointer";
+                const rowCls = isCanceled ? "bg-red-50 text-red-600" : "text-gray-800 hover:bg-[#eef1f7] cursor-pointer";
                 const tdCls = "px-3 py-3 text-center border-r border-gray-100 last:border-r-0 align-middle";
                 const pickupVia = getViaList(o.경유상차목록);
                 const dropVia = getViaList(o.경유하차목록);
@@ -755,7 +738,7 @@ export default function ShipperStatus() {
                     <td className={`${tdCls} font-semibold`}>{o.차량번호 || "-"}</td>
                     <td className={tdCls}>{o.이름 || "-"}</td>
                     <td className={`${tdCls} whitespace-nowrap`}>{o.전화번호 || "-"}</td>
-                    <td className={`${tdCls} font-bold text-blue-600 whitespace-nowrap`}>
+                    <td className={`${tdCls} font-bold text-[#1B2B4B] whitespace-nowrap`}>
                       {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
                     </td>
                     <td className={tdCls}>{o.지급방식 || "-"}</td>
@@ -842,7 +825,7 @@ export default function ShipperStatus() {
             <div><span className="text-gray-400 text-[12px]">거래처</span><div className="font-bold text-gray-900">{selectedOrder?.거래처명 || "-"}</div></div>
             <div><span className="text-gray-400 text-[12px]">등록일시</span><div className="font-semibold text-gray-700">{fmtDateTime(selectedOrder?.createdAt)}</div></div>
             <div><span className="text-gray-400 text-[12px]">상차</span><div className="font-semibold text-gray-800">{selectedOrder?.상차일} {selectedOrder?.상차시간 ? fmt12(selectedOrder.상차시간) : ""}{selectedOrder?.상차시간구분 && selectedOrder.상차시간구분 !== "정각" ? ` ${selectedOrder.상차시간구분}` : ""}</div></div>
-            <div><span className="text-gray-400 text-[12px]">청구운임</span><div className="font-bold text-blue-600">{selectedOrder?.청구운임 ? Number(selectedOrder.청구운임).toLocaleString() + "원" : "-"}</div></div>
+            <div><span className="text-gray-400 text-[12px]">청구운임</span><div className="font-bold text-[#1B2B4B]">{selectedOrder?.청구운임 ? Number(selectedOrder.청구운임).toLocaleString() + "원" : "-"}</div></div>
           </div>
 
           <div className="p-8 space-y-8 text-[20px]">
@@ -1265,57 +1248,6 @@ function KPI({ title, value, color = "text-gray-900" }) {
   );
 }
 
-function MenuItem({ label, type, active, open, onClick }) {
-  const renderIcon = () => {
-    switch (type) {
-      case "list":
-        return (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
-            <path d="M7 8h6M7 12h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            <path d="M15 12l2 2 3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        );
-      case "truck":
-        return (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <rect x="1" y="6" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="2"/>
-            <path d="M14 10h4l3 3v3h-7" stroke="currentColor" strokeWidth="2"/>
-            <circle cx="6" cy="18" r="2" stroke="currentColor" strokeWidth="2"/>
-            <circle cx="18" cy="18" r="2" stroke="currentColor" strokeWidth="2"/>
-          </svg>
-        );
-      case "fast":
-        return (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path d="M1 12h15l4-4" stroke="currentColor" strokeWidth="2"/>
-            <circle cx="6" cy="18" r="2" stroke="currentColor" strokeWidth="2"/>
-            <circle cx="18" cy="18" r="2" stroke="currentColor" strokeWidth="2"/>
-          </svg>
-        );
-      default: return null;
-    }
-  };
-
-  return (
-    <div className="relative group">
-      <div
-        onClick={onClick}
-        className={`flex items-center ${open ? "justify-start px-4" : "justify-center"} py-3 rounded cursor-pointer transition ${
-          active ? "bg-blue-100 text-blue-600" : "text-gray-600 hover:bg-gray-200"
-        }`}
-      >
-        {!open && <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-200">{renderIcon()}</div>}
-        {open && <span className="whitespace-nowrap text-base font-bold">{label}</span>}
-      </div>
-      {!open && (
-        <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-gray-800 text-white text-xs px-3 py-1.5 rounded opacity-0 group-hover:opacity-100 transition">
-          {label}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function Section({ title, children }) {
   return (
