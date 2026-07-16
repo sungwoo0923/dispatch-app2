@@ -676,16 +676,60 @@ function ShipperAttachmentViewer({ order, onClose }) {
   const [selected, setSelected] = useState(null);
   const [copyDone, setCopyDone] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [rotations, setRotations] = useState({});
 
   useEffect(() => {
     if (!order?.id) return;
     const colRef = collection(db, "orders", order.id, "attachments");
     const unsub = onSnapshot(colRef, (snap) => {
-      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const loaded = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setItems(loaded);
+      setRotations(prev => {
+        const next = { ...prev };
+        loaded.forEach(item => { if (item.rotation && !next[item.id]) next[item.id] = item.rotation; });
+        return next;
+      });
       setLoading(false);
     });
     return () => unsub();
   }, [order]);
+
+  const getRotation = (id) => rotations[id] || 0;
+
+  const handleRotate = async (item) => {
+    const newRot = (getRotation(item.id) + 90) % 360;
+    setRotations(prev => ({ ...prev, [item.id]: newRot }));
+    if (selected?.id === item.id) setSelected(prev => ({ ...prev, rotation: newRot }));
+    try {
+      await updateDoc(doc(db, "orders", order.id, "attachments", item.id), { rotation: newRot });
+    } catch (e) { console.error("rotate:", e); }
+  };
+
+  const downloadRotated = (item) => {
+    const rot = getRotation(item.id);
+    if (!rot) { handleDownload(item); return; }
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const w = img.naturalWidth, h = img.naturalHeight;
+      canvas.width = rot === 90 || rot === 270 ? h : w;
+      canvas.height = rot === 90 || rot === 270 ? w : h;
+      const ctx = canvas.getContext("2d");
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(rot * Math.PI / 180);
+      ctx.drawImage(img, -w / 2, -h / 2);
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/jpeg", 0.92);
+      a.download = item.name || "attachment.jpg";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    };
+    img.src = item.base64 || item.url;
+  };
+
+  const handleDownloadAll = () => {
+    if (!items.length) return;
+    items.forEach((item, i) => setTimeout(() => downloadRotated(item), i * 400));
+  };
 
   useEffect(() => {
     if (!selected) return;
@@ -783,6 +827,14 @@ function ShipperAttachmentViewer({ order, onClose }) {
                 disabled={uploading}
                 onChange={e => handleUpload(Array.from(e.target.files))} />
             </label>
+            {items.length > 1 && (
+              <button
+                onClick={handleDownloadAll}
+                className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition"
+              >
+                {`전체저장 (${items.length}장)`}
+              </button>
+            )}
             <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 text-lg">×</button>
           </div>
         </div>
@@ -807,7 +859,8 @@ function ShipperAttachmentViewer({ order, onClose }) {
                 <div key={item.id} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                   <div className="aspect-[4/3] bg-gray-50 cursor-zoom-in relative group" onClick={() => setSelected(item)}>
                     <img src={item.base64 || item.url} alt={item.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover transition-transform duration-200"
+                      style={{ transform: `rotate(${getRotation(item.id)}deg)` }}
                       onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-300 text-[12px]">미리보기 없음</div>'; }} />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                       <span className="opacity-0 group-hover:opacity-100 text-white text-[11px] font-bold bg-black/40 px-2 py-1 rounded-full transition-opacity">확대보기</span>
@@ -816,7 +869,7 @@ function ShipperAttachmentViewer({ order, onClose }) {
                   <div className="px-3 py-2.5 bg-white">
                     <div className="text-[11px] text-gray-400 truncate mb-2">{item.name || "파일"} {item.sizeKB ? `· ${item.sizeKB}KB` : ""}</div>
                     <div className="flex gap-1.5">
-                      <button onClick={() => handleDownload(item)}
+                      <button onClick={() => downloadRotated(item)}
                         className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-90 transition">
                         저장
                       </button>
@@ -825,6 +878,11 @@ function ShipperAttachmentViewer({ order, onClose }) {
                           copyDone === item.id ? "bg-emerald-500 text-white border-emerald-500" : "border-gray-200 text-gray-500 hover:bg-gray-50"
                         }`}>
                         {copyDone === item.id ? "복사됨" : "복사"}
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); handleRotate(item); }}
+                        className="px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[11px] font-bold hover:bg-gray-50 transition"
+                        title="90도 회전">
+                        ↻
                       </button>
                     </div>
                   </div>
@@ -838,7 +896,9 @@ function ShipperAttachmentViewer({ order, onClose }) {
       {/* 전체화면 뷰 */}
       {selected && (
         <div className="fixed inset-0 bg-black/95 z-[999999] flex items-center justify-center" onClick={() => setSelected(null)}>
-          <img src={selected.base64 || selected.url} alt="full" className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg" />
+          <img src={selected.base64 || selected.url} alt="full"
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg transition-transform duration-200"
+            style={{ transform: `rotate(${getRotation(selected.id)}deg)` }} />
           <button className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full text-white text-xl transition" onClick={() => setSelected(null)}>×</button>
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/40 text-[12px]">Ctrl+C 로 복사 | ESC 로 닫기</div>
           <div className="absolute bottom-6 flex gap-3">
@@ -846,8 +906,12 @@ function ShipperAttachmentViewer({ order, onClose }) {
               onClick={e => { e.stopPropagation(); handleCopy(selected, `fs_${selected.id}`); }}>
               {copyDone === `ctrl_${selected.id}` || copyDone === `fs_${selected.id}` ? "복사됨" : "복사"}
             </button>
+            <button className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[13px] font-bold transition"
+              onClick={e => { e.stopPropagation(); handleRotate(selected); }}>
+              회전 ↻
+            </button>
             <button className="px-5 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-xl text-[13px] font-bold transition"
-              onClick={e => { e.stopPropagation(); handleDownload(selected); }}>
+              onClick={e => { e.stopPropagation(); downloadRotated(selected); }}>
               저장하기
             </button>
           </div>
