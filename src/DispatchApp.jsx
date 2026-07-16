@@ -361,11 +361,11 @@ const sixMonthsAgo = getSixMonthsAgo();
 
         if (ch.type === "added" && !ordersPrev.has(id)) {
           if (d.상차지명 || d.거래처명) {
-            const prefix = d.source === "shipper" ? "[화주사 등록] " : "";
+            const prefix = d.source === "shipper" ? "[화주사 배차요청] " : "";
             sflowToast(
               `${prefix}${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
               "order",
-              { orderId: id }
+              { orderId: id, source: d.source }
             );
           }
         }
@@ -395,6 +395,13 @@ const sixMonthsAgo = getSixMonthsAgo();
         }
 
         if (ch.type === "removed") {
+          if (d.source === "shipper" && (d.상차지명 || d.거래처명)) {
+            sflowToast(
+              `[화주사 삭제] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "cancel",
+              {}
+            );
+          }
           ordersPrev.delete(id);
         } else {
           ordersPrev.set(id, {
@@ -1377,7 +1384,14 @@ function ToastProvider({ children }) {
                 <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed truncate">
                   {t.message}
                 </div>
-                {t.meta?.orderId && (
+                {t.meta?.orderId && t.meta?.source === "shipper" ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleToastClick(t); }}
+                    className="mt-2 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold transition"
+                  >
+                    배차확인
+                  </button>
+                ) : t.meta?.orderId && (
                   <div className="text-white/50 text-[10px] mt-1">
                     클릭하면 해당 오더로 이동합니다
                   </div>
@@ -12419,6 +12433,34 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     return () => unsub();
   }, [row]);
 
+  // 예전에(동기화 기능 추가 전) 올라간 첨부는 원본/전송카피 한쪽에만 있을 수 있어
+  // 첨부창을 열 때 양쪽을 비교해 누락분을 한 번 보정한다.
+  React.useEffect(() => {
+    if (!row?._id) return;
+    const mirror = getMirrorTarget();
+    if (!mirror) return;
+    const col = row.__col || "orders";
+    (async () => {
+      try {
+        const [localSnap, mirrorSnap] = await Promise.all([
+          getDocs(collection(db, col, row._id, "attachments")),
+          getDocs(collection(db, mirror.col, mirror.id, "attachments")),
+        ]);
+        const localIds = new Set(localSnap.docs.map(d => d.id));
+        const mirrorIds = new Set(mirrorSnap.docs.map(d => d.id));
+        let addedLocal = 0, addedMirror = 0;
+        for (const d of mirrorSnap.docs) {
+          if (!localIds.has(d.id)) { await setDoc(doc(db, col, row._id, "attachments", d.id), d.data()); addedLocal++; }
+        }
+        for (const d of localSnap.docs) {
+          if (!mirrorIds.has(d.id)) { await setDoc(doc(db, mirror.col, mirror.id, "attachments", d.id), d.data()); addedMirror++; }
+        }
+        if (addedLocal) await updateDoc(doc(db, col, row._id), { attachCount: localIds.size + addedLocal });
+        if (addedMirror) await updateDoc(doc(db, mirror.col, mirror.id), { attachCount: mirrorIds.size + addedMirror });
+      } catch (e) { console.warn("첨부 동기화 보정 실패(무시):", e); }
+    })();
+  }, [row?._id]);
+
   const getRotation = (id) => rotations[id] || 0;
 
   const handleRotate = async (item) => {
@@ -13639,7 +13681,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
 }
 
 // 오전/오후 토글 + 시간 선택 컴포넌트
-function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
+function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = false }) {
   const [ampm, setAmpm] = React.useState(() => {
     if (value && value.startsWith("오후")) return "오후";
     if (value && value.startsWith("오전")) return "오전";
@@ -13685,12 +13727,13 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
 
   return (
     <div className="flex items-center gap-1">
-      <button type="button" className={`${btnBase} ${ampm === "오전" ? act : needsError ? errInact : inact}`} onClick={() => handleAmpm("오전")}>오전</button>
-      <button type="button" className={`${btnBase} ${ampm === "오후" ? act : needsError ? errInact : inact}`} onClick={() => handleAmpm("오후")}>오후</button>
+      <button type="button" disabled={disabled} className={`${btnBase} ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}>오전</button>
+      <button type="button" disabled={disabled} className={`${btnBase} ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}>오후</button>
       <select
         value={value || ""}
+        disabled={disabled}
         onChange={e => onChange(e.target.value)}
-        className={selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"}
+        className={(selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]") + " disabled:bg-gray-100 disabled:text-gray-400"}
       >
         <option value="">시간 선택</option>
         {times.map(t => (
@@ -18134,26 +18177,72 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>{formatPhone(r.전화번호)}</td>
 
                  <td className={cell}>
-                    <button
-                      type="button"
-                      title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
-                      className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
-                        r.긴급 && r.배차상태 !== "배차완료"
-                          ? "bg-red-500 text-white"
-                          : r.배차상태 === "배차완료"
-                          ? "bg-[#1B2B4B] text-white"
-                          : r.배차상태 === "배차취소"
-                          ? "bg-red-600 text-white"
-                          : "bg-amber-500 text-white"
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (r.배차상태 !== "배차완료") return;
-                        setConfirmChange({ rowId: r._id, key: "배차상태", before: "배차완료", after: "배차중" });
-                      }}
-                    >
-                      {r.배차상태}
-                    </button>
+                    {r.화주사확인대기 ? (
+                      <>
+                        <style>{`@keyframes shipperReqBlink2 { 0%,100% { opacity:1; } 50% { opacity:0.5; } }`}</style>
+                        <button
+                          type="button"
+                          title="클릭 시 배차중으로 전환"
+                          className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
+                          style={{ animation: "shipperReqBlink2 1.4s ease-in-out infinite" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
+                          }}
+                        >
+                          배차요청
+                        </button>
+                      </>
+                    ) : r.배차상태 === "배차취소" && r.취소알림대기 ? (
+                      <>
+                        <style>{`@keyframes cancelSlowBlink2 { 0%,100% { opacity:1; } 50% { opacity:0.35; } }`}</style>
+                        <button
+                          type="button"
+                          title="클릭하여 배차취소 확인"
+                          className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-red-600 text-white hover:bg-red-700 transition"
+                          style={{ animation: "cancelSlowBlink2 2.4s ease-in-out infinite" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            patchDispatch(r._id, { 취소알림대기: false, __col: r.__col });
+                          }}
+                        >
+                          배차취소
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
+                        className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
+                          r.긴급 && r.배차상태 !== "배차완료"
+                            ? "bg-red-500 text-white"
+                            : r.배차상태 === "배차완료"
+                            ? "bg-[#1B2B4B] text-white"
+                            : r.배차상태 === "배차취소"
+                            ? "bg-red-600 text-white"
+                            : "bg-amber-500 text-white"
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (r.배차상태 !== "배차완료") return;
+                          setConfirmChange({ rowId: r._id, key: "배차상태", before: "배차완료", after: "배차중" });
+                        }}
+                      >
+                        {r.배차상태}
+                      </button>
+                    )}
+                    {r.취소요청 && r.배차상태 !== "배차취소" && (
+                      <>
+                        <style>{`@keyframes cancelSlowBlink2b { 0%,100% { opacity:1; } 50% { opacity:0.35; } }`}</style>
+                        <div
+                          title="화주사가 배차취소를 요청했습니다"
+                          className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 whitespace-nowrap"
+                          style={{ animation: "cancelSlowBlink2b 2.4s ease-in-out infinite" }}
+                        >
+                          취소요청
+                        </div>
+                      </>
+                    )}
                   </td>
                   {/* 청구운임 */}
                   <td className={cell}>
@@ -19944,7 +20033,8 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3 relative">
               <label>거래처명</label>
               <input
-                className="border p-2 rounded w-full"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                 value={editTarget.거래처명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -20044,7 +20134,8 @@ value={copyTarget?.화물수량 || ""}
     <label>상차일</label>
     <input
       type="date"
-      className="border p-2 rounded w-full"
+      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
       value={editTarget.상차일 || ""}
       onChange={(e) =>
         setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
@@ -20060,9 +20151,11 @@ value={copyTarget?.화물수량 || ""}
         value={editTarget.상차시간 || ""}
         onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
         selectCls="border p-2 rounded flex-1 min-w-0"
+        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
       />
       <select
-        className="border p-2 rounded text-sm shrink-0"
+        className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
+        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
         value={editTarget.상차시간기준 || ""}
         onChange={(e) =>
           setEditTarget((p) => ({ ...p, 상차시간기준: e.target.value }))
@@ -20080,7 +20173,8 @@ value={copyTarget?.화물수량 || ""}
     <label>하차일</label>
     <input
       type="date"
-      className="border p-2 rounded w-full"
+      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
       value={editTarget.하차일 || ""}
       onChange={(e) =>
         setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
@@ -20096,9 +20190,11 @@ value={copyTarget?.화물수량 || ""}
         value={editTarget.하차시간 || ""}
         onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
         selectCls="border p-2 rounded flex-1 min-w-0"
+        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
       />
       <select
-        className="border p-2 rounded text-sm shrink-0"
+        className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
+        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
         value={editTarget.하차시간기준 || ""}
         onChange={(e) =>
           setEditTarget((p) => ({ ...p, 하차시간기준: e.target.value }))
@@ -20119,7 +20215,8 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3 relative">
               <label>상차지명</label>
               <input
-                className="border p-2 rounded w-full"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                 value={editTarget.상차지명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -20206,7 +20303,8 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3">
               <label>상차지주소</label>
               <input
-                className="border p-2 rounded w-full"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                 value={editTarget.상차지주소 || ""}
                 onChange={(e) =>
                   setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
@@ -20216,15 +20314,15 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">상차지 담당자</label>
-                <input className="border p-2 rounded w-full" value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차지 연락처</label>
-                <input className="border p-2 rounded w-full" value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
-                <select className="border p-2 rounded w-full" value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
+                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
@@ -20264,7 +20362,8 @@ value={copyTarget?.화물수량 || ""}
               <label>하차지명</label>
 
               <input
-                className="border p-2 rounded w-full"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                 value={editTarget.하차지명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -20351,7 +20450,8 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3">
               <label>하차지주소</label>
               <input
-                className="border p-2 rounded w-full"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                 value={editTarget.하차지주소 || ""}
                 onChange={(e) =>
                   setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
@@ -20361,15 +20461,15 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">하차지 담당자</label>
-                <input className="border p-2 rounded w-full" value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차지 연락처</label>
-                <input className="border p-2 rounded w-full" value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
-                <select className="border p-2 rounded w-full" value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
+                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
@@ -20418,7 +20518,8 @@ value={copyTarget?.화물수량 || ""}
 
   {/* 입력 */}
   <input
-    className="border p-2 rounded w-full pr-[110px]"
+    className="border p-2 rounded w-full pr-[110px] disabled:bg-gray-100 disabled:text-gray-400"
+    disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
     value={editTarget.화물수량 || ""}
     onChange={(e) => {
       const v = e.target.value;
@@ -20433,7 +20534,8 @@ value={copyTarget?.화물수량 || ""}
   <div className="absolute top-0 right-0 h-full flex items-center pr-2">
 
     <select
-      className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
+      className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
+      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
       value={editTarget.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -20464,7 +20566,8 @@ value={copyTarget?.화물수량 || ""}
   <div>
     <label>차량종류</label>
     <select
-      className="border p-2 rounded w-full"
+      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
       value={editTarget.차량종류 || ""}
       onChange={(e) =>
         setEditTarget((p) => ({
@@ -20498,7 +20601,8 @@ value={copyTarget?.화물수량 || ""}
 
     {/* 🔹 입력창 */}
     <input
-      className="border p-2 rounded w-full pr-[70px]"
+      className="border p-2 rounded w-full pr-[70px] disabled:bg-gray-100 disabled:text-gray-400"
+      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
       value={editTarget.톤수값 || ""}
       onChange={(e) => {
   const v = e.target.value;
@@ -20518,7 +20622,8 @@ value={copyTarget?.화물수량 || ""}
     <div className="absolute top-0 right-0 h-full flex items-center pr-1">
 
 <select
-  className="h-full px-2 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
+  className="h-full px-2 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
+  disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
         value={
           editTarget.차량톤수?.includes("kg")
             ? "kg"
@@ -20810,9 +20915,10 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label>지급방식</label>
+                <label>지급방식{editTarget?.source === "shipper" && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
                 <select
-                  className="border p-2 rounded w-full"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  disabled={editTarget?.source === "shipper"}
                   value={editTarget.지급방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 지급방식: e.target.value }))
@@ -20831,7 +20937,8 @@ value={copyTarget?.화물수량 || ""}
               <div>
                 <label>배차방식</label>
                 <select
-                  className="border p-2 rounded w-full"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
@@ -21074,14 +21181,17 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
             {/* 본문 */}
             <div className="px-4 py-3">
               <div className="text-[13px] font-bold text-[#1B2B4B] truncate">
-                {a.from} → {a.to}
+                {(() => {
+                  const m = String(a.date || "").match(/^\d{4}-(\d{2})-(\d{2})/);
+                  const dateLabel = m ? `${Number(m[1])}월${Number(m[2])}일` : (a.date || "");
+                  return `${dateLabel} ${a.to || "-"}으로 파일이 등록되었습니다`;
+                })()}
               </div>
               <div className="flex items-center justify-between mt-1.5">
-                <div className="text-[12px] text-gray-500">
-                  {a.driver && <span className="mr-2">{a.driver}</span>}
-                  {a.date}
+                <div className="text-[12px] text-gray-500 truncate">
+                  {a.from} → {a.to}{a.driver ? ` · ${a.driver}` : ""}
                 </div>
-                <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
@@ -26696,7 +26806,8 @@ return (
             <div className="mb-3 relative">
               <label>거래처명</label>
               <input
-                className="border p-2 rounded w-full"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                 value={editTarget.거래처명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -27534,9 +27645,10 @@ return (
             {/* ------------------------------------------------ */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label>지급방식</label>
+                <label>지급방식{editTarget?.source === "shipper" && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
                 <select
-                  className="border p-2 rounded w-full"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  disabled={editTarget?.source === "shipper"}
                   value={editTarget.지급방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 지급방식: e.target.value }))
@@ -27555,7 +27667,8 @@ return (
               <div>
                 <label>배차방식</label>
                 <select
-                  className="border p-2 rounded w-full"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
@@ -34891,7 +35004,27 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           );
                         })()}
                       </td>
-                      <td className={cellBase}><StatusBadge s={r.배차상태} /></td>
+                      <td className={cellBase}>
+                        {r.화주사확인대기 ? (
+                          <>
+                            <style>{`@keyframes shipperReqBlink3 { 0%,100% { opacity:1; } 50% { opacity:0.5; } }`}</style>
+                            <button
+                              type="button"
+                              title="클릭 시 배차중으로 전환"
+                              className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
+                              style={{ animation: "shipperReqBlink3 1.4s ease-in-out infinite" }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
+                              }}
+                            >
+                              배차요청
+                            </button>
+                          </>
+                        ) : (
+                          <StatusBadge s={r.배차상태} />
+                        )}
+                      </td>
                       <td className={`${cellBase} max-w-[260px] text-left`}>
                         {r.메모 && r.메모.length > 40 ? (
                           openMemos.has(r._id) ? (
