@@ -15,6 +15,7 @@ import ShipperSettings from "./pages/ShipperSettings";
 import ChangePassword from "./pages/ChangePassword";
 import ShipperNotice from "./pages/ShipperNotice";
 import ShipperInquiry from "./pages/ShipperInquiry";
+import InternalMessenger from "../InternalMessenger";
 
 export default function ShipperApp() {
   const navigate = useNavigate();
@@ -208,6 +209,11 @@ location.pathname.startsWith("/shipper/transport")
           <Route path="*" element={<Navigate to="/shipper" replace />} />
         </Routes>
       </main>
+      <InternalMessenger
+        user={user}
+        userCompany={companyName}
+        linkedCompanyName={userData?.linkedTransportCompany?.companyName || ""}
+      />
       {myInfoOpen && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
     <div className="bg-white rounded-xl w-[420px] p-6 shadow-xl">

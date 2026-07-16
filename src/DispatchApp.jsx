@@ -2970,7 +2970,7 @@ return (
           />
         )}
 
-        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster" || isViewer) && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} isViewer={isViewer} />}
+        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster" || isViewer) && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} isViewer={isViewer} dispatchData={dispatchData} places={places} />}
 
         {menu === "관리센터" && role === "totalMaster" && (
           <div>
