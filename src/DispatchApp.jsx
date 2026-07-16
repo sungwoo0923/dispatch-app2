@@ -18584,6 +18584,7 @@ flashRow(savedId);
   <Field label="거래처명">
     <div className="relative">
       <input
+      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
         className="inputStyle"
         value={copyTarget?.거래처명 ?? ""}
         onChange={(e)=>{
@@ -18673,6 +18674,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           type="date"
           className="inputStyle"
           value={copyTarget?.상차일 ?? ""}
@@ -18682,6 +18684,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
       <Field label="상차시간">
         <TimeAmPmPicker
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
           selectCls="inputStyle"
@@ -18689,6 +18692,7 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
       <Field label="상차방법">
   <select
+  disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
     className="inputStyle"
     value={copyTarget?.상차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
@@ -18706,6 +18710,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label="상차지명">
         <div className="relative">
           <input
+          disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
             className="inputStyle"
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
@@ -18787,6 +18792,7 @@ checkWarningStatus(c.거래처명, "거래처");
       {/* 🔥 다시 추가된 칸들 */}
       <Field label="상차지주소">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
@@ -18795,6 +18801,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
       <Field label="상차지 담당자명">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.상차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
@@ -18803,6 +18810,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
             <Field label="상차지 연락처">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.상차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
@@ -18841,6 +18849,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           type="date"
           className="inputStyle"
           value={copyTarget?.하차일 ?? ""}
@@ -18850,6 +18859,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
       <Field label="하차시간">
         <TimeAmPmPicker
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
           selectCls="inputStyle"
@@ -18857,6 +18867,7 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 <Field label="하차방법">
   <select
+  disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
     className="inputStyle"
     value={copyTarget?.하차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
@@ -18872,6 +18883,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label="하차지명">
         <div className="relative">
           <input
+          disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
             className="inputStyle"
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
@@ -18953,6 +18965,7 @@ checkWarningStatus(c.거래처명, "거래처");
       {/* 🔥 다시 추가된 하차 칸들 */}
       <Field label="하차지주소">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
@@ -18961,6 +18974,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
       <Field label="하차지 담당자명">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.하차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
@@ -18969,6 +18983,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
            <Field label="하차지 연락처">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.하차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
@@ -19144,6 +19159,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="차량종류">
       <select
+      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
         className="inputStyle"
         value={copyTarget?.차량종류 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
@@ -19174,6 +19190,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
       {/* 입력 */}
       <input
+      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
         className="flex-1 px-3 py-2 outline-none"
         value={copyTarget?.톤수값 || ""}
         onChange={(e) => {
@@ -19192,6 +19209,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
       {/* 드롭다운 */}
       <select
+      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
         className="
           px-3 py-2
           bg-blue-50
@@ -19230,6 +19248,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     {/* 입력 */}
     <input
+    disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
       className="flex-1 px-3 py-2 outline-none"
 value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
@@ -19248,6 +19267,7 @@ value={copyTarget?.화물수량 || ""}
 
     {/* 드롭다운 */}
     <select
+    disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
       className="
         px-3 py-2
         bg-blue-50
@@ -19326,6 +19346,7 @@ value={copyTarget?.화물수량 || ""}
             </Field>
 <Field label="지급방식">
   <select
+  disabled={copyTarget?.source === "shipper"}
     className="inputStyle"
     value={copyTarget?.지급방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
@@ -19342,6 +19363,7 @@ value={copyTarget?.화물수량 || ""}
 
 <Field label="배차방식">
   <select
+  disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
     className="inputStyle"
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
@@ -28084,6 +28106,7 @@ return (
   <Field label="거래처명">
     <div className="relative">
       <input
+      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
         className="inputStyle"
         value={copyTarget?.거래처명 ?? ""}
         onChange={(e)=>{
@@ -28171,6 +28194,7 @@ setCopyTarget(prev=>({
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           type="date"
           className="inputStyle"
           value={copyTarget?.상차일 ?? ""}
@@ -28180,6 +28204,7 @@ setCopyTarget(prev=>({
 
       <Field label="상차시간">
         <TimeAmPmPicker
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
           selectCls="inputStyle"
@@ -28187,6 +28212,7 @@ setCopyTarget(prev=>({
       </Field>
       <Field label="상차방법">
   <select
+  disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
     className="inputStyle"
     value={copyTarget?.상차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
@@ -28204,6 +28230,7 @@ setCopyTarget(prev=>({
       <Field label="상차지명">
         <div className="relative">
           <input
+          disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
             className="inputStyle"
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
@@ -28285,6 +28312,7 @@ setCopyPlaceOptions(list);
       {/* 🔥 다시 추가된 칸들 */}
       <Field label="상차지주소">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
@@ -28293,6 +28321,7 @@ setCopyPlaceOptions(list);
 
       <Field label="상차지 담당자명">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.상차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
@@ -28301,6 +28330,7 @@ setCopyPlaceOptions(list);
 
       <Field label="상차지 연락처">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.상차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
@@ -28321,6 +28351,7 @@ setCopyPlaceOptions(list);
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           type="date"
           className="inputStyle"
           value={copyTarget?.하차일 ?? ""}
@@ -28330,6 +28361,7 @@ setCopyPlaceOptions(list);
 
       <Field label="하차시간">
         <TimeAmPmPicker
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
           selectCls="inputStyle"
@@ -28337,6 +28369,7 @@ setCopyPlaceOptions(list);
       </Field>
 <Field label="하차방법">
   <select
+  disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
     className="inputStyle"
     value={copyTarget?.하차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
@@ -28352,6 +28385,7 @@ setCopyPlaceOptions(list);
       <Field label="하차지명">
         <div className="relative">
           <input
+          disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
             className="inputStyle"
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
@@ -28433,6 +28467,7 @@ setCopyPlaceOptions(list);
       {/* 🔥 다시 추가된 하차 칸들 */}
       <Field label="하차지주소">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
@@ -28441,6 +28476,7 @@ setCopyPlaceOptions(list);
 
       <Field label="하차지 담당자명">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.하차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
@@ -28449,6 +28485,7 @@ setCopyPlaceOptions(list);
 
       <Field label="하차지 연락처">
         <input
+        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
           className="inputStyle"
           value={copyTarget?.하차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
@@ -28613,6 +28650,7 @@ setCopyPlaceOptions(list);
 
     <Field label="차량종류">
       <select
+      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
         className="inputStyle"
         value={copyTarget?.차량종류 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
@@ -28640,6 +28678,7 @@ setCopyPlaceOptions(list);
 
     {/* 숫자 */}
     <input
+    disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
       className="flex-1 px-3 py-2 outline-none"
       value={copyTarget?.톤수값 || ""}
       onChange={(e) => {
@@ -28658,6 +28697,7 @@ setCopyPlaceOptions(list);
 
     {/* 단위 */}
     <select
+    disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
       className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
       value={copyTarget?.톤수타입 || ""}
       onChange={(e) => {
@@ -28687,6 +28727,7 @@ setCopyPlaceOptions(list);
 
     {/* 수량 */}
     <input
+    disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
       className="flex-1 px-3 py-2 outline-none"
       value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
@@ -28701,6 +28742,7 @@ setCopyPlaceOptions(list);
 
     {/* 타입 */}
     <select
+    disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
       className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
@@ -28768,6 +28810,7 @@ setCopyPlaceOptions(list);
             </Field>
 <Field label="지급방식">
   <select
+  disabled={copyTarget?.source === "shipper"}
     className="inputStyle"
     value={copyTarget?.지급방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
@@ -28784,6 +28827,7 @@ setCopyPlaceOptions(list);
 
 <Field label="배차방식">
   <select
+  disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
     className="inputStyle"
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
@@ -35308,6 +35352,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   <Field label="거래처명">
                     <div className="relative">
                       <input
+                      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                         value={copyTarget?.거래처명 ?? ""}
                         onChange={(e) => {
@@ -35362,9 +35407,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
                       <Field label="상차일">
                         <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                        <Field label="상차시간">
                         <TimeAmPmPicker
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                           value={copyTarget?.상차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 상차시간: v}))}
                           selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
@@ -35372,6 +35419,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                        </Field>
                       <Field label="상차방법">
                         <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))}>
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                           <option value="">선택</option>
                           <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
                         </select>
@@ -35379,6 +35427,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="상차지명">
                         <div className="relative">
                           <input
+                          disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
                             value={copyTarget?.상차지명 ?? ""}
                             onChange={(e) => {
@@ -35426,12 +35475,15 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </Field>
                       <Field label="상차지주소">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                       <Field label="상차지 담당자명">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                       <Field label="상차지 연락처">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                       {/* 경유 상차지 */}
                       {(() => {
@@ -35447,9 +35499,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
                       <Field label="하차일">
                         <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                        <Field label="하차시간">
                         <TimeAmPmPicker
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                           value={copyTarget?.하차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 하차시간: v}))}
                           selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
@@ -35457,6 +35511,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                        </Field>
                       <Field label="하차방법">
                         <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))}>
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                           <option value="">선택</option>
                           <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
                         </select>
@@ -35464,6 +35519,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="하차지명">
                         <div className="relative">
                           <input
+                          disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
                             value={copyTarget?.하차지명 ?? ""}
                             onChange={(e) => {
@@ -35511,12 +35567,15 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </Field>
                       <Field label="하차지주소">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                       <Field label="하차지 담당자명">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                       <Field label="하차지 연락처">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))} />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                       </Field>
                       {/* 경유 하차지 */}
                       {(() => {
@@ -35647,6 +35706,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   <div className="grid grid-cols-3 gap-6">
                     <Field label="차량종류">
                       <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))}>
+                      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                         <option value="">선택</option>
                         <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="냉장/냉동탑">냉장/냉동탑</option><option value="냉장/냉동윙">냉장/냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
                       </select>
@@ -35654,7 +35714,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <Field label="차량톤수">
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                         <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }}>
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                           <option value="">선택</option><option value="톤">톤</option><option value="kg">kg</option>
                         </select>
                       </div>
@@ -35662,7 +35724,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" />
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                         <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }}>
+                        disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                           <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
                         </select>
                       </div>
@@ -35691,11 +35755,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     </Field>
                     <Field label="지급방식">
                       <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))}>
+                      disabled={copyTarget?.source === "shipper"}
                         <option value="">선택</option><option value="계산서">계산서</option><option value="착불">착불</option><option value="선불">선불</option><option value="손실">손실</option><option value="개인">개인</option><option value="취소">취소</option>
                       </select>
                     </Field>
                     <Field label="배차방식">
                       <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
+                      disabled={copyTarget?.source === "shipper" && role !== "totalMaster"}
                         <option value="">선택</option><option value="24시">24시</option><option value="직접배차">직접배차</option><option value="인성">인성</option>
                       </select>
                     </Field>
