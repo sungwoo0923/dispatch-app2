@@ -54,7 +54,7 @@ function Avatar({ name = "", photo = "", size = 36, bgColor = "#1B2B4B" }) {
   );
 }
 
-export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, mobileVisible = false, onClose, onUnreadChange, controlledOpen, onOpenChange }) {
+export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, mobileVisible = false, onClose, onUnreadChange, controlledOpen, onOpenChange, linkedCompanyName = "" }) {
   const myUid = user?.uid || "";
   const myEmail = user?.email || "";
   const company = userCompany || localStorage.getItem("userCompany") || "";
@@ -136,40 +136,52 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   }, [myUid]);
 
   // ── 같은 회사 사용자 목록 (users 컬렉션 companyName 기반, chat_profiles 머지) ──
+  // linkedCompanyName이 있으면(화주사<->연동 운송사) 해당 회사 구성원도 함께 불러와
+  // "연동" 표시와 함께 대화 상대로 노출한다.
+  const loadCompanyUsers = async (companyName, crossCompany) => {
+    const userSnap = await getDocs(query(collection(db, "users"), where("companyName", "==", companyName)));
+    const userList = userSnap.docs
+      .map(d => ({ uid: d.id || d.uid, ...d.data() }))
+      .filter(u => (u.uid || u.id) !== myUid && u.approved !== false);
+
+    const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", companyName)));
+    const profileMap = {};
+    profileSnap.docs.forEach(d => { profileMap[d.id] = d.data(); });
+
+    return userList.map(u => {
+      const uid = u.uid || u.id;
+      const p = profileMap[uid] || {};
+      return {
+        uid,
+        email: u.email || "",
+        name: p.name || u.name || u.displayName || u.email?.split("@")[0] || uid,
+        photo: p.photo || u.photo || "",
+        statusMsg: p.statusMsg || "",
+        position: p.position || u.position || u.직책 || "",
+        phone: p.phone || u.phone || u.phoneNumber || u.전화번호 || "",
+        company: companyName,
+        crossCompany,
+      };
+    });
+  };
+
   useEffect(() => {
     if (!company) return;
-    // users 컬렉션: companyName 필드 사용
-    const unsub = onSnapshot(
-      query(collection(db, "users"), where("companyName", "==", company)),
-      async (userSnap) => {
-        const userList = userSnap.docs
-          .map(d => ({ uid: d.id || d.uid, ...d.data() }))
-          .filter(u => (u.uid || u.id) !== myUid && u.approved !== false);
-
-        // chat_profiles 머지 (사진, 상태메시지, 직책, 전화번호)
-        const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", company)));
-        const profileMap = {};
-        profileSnap.docs.forEach(d => { profileMap[d.id] = d.data(); });
-
-        const merged = userList.map(u => {
-          const uid = u.uid || u.id;
-          const p = profileMap[uid] || {};
-          return {
-            uid,
-            email: u.email || "",
-            name: p.name || u.name || u.displayName || u.email?.split("@")[0] || uid,
-            photo: p.photo || u.photo || "",
-            statusMsg: p.statusMsg || "",
-            position: p.position || u.position || u.직책 || "",
-            phone: p.phone || u.phone || u.phoneNumber || u.전화번호 || "",
-            company,
-          };
-        });
-        setFriends(merged);
-      }
-    );
-    return unsub;
-  }, [company, myUid]);
+    let cancelled = false;
+    const refresh = async () => {
+      const [sameCompany, linked] = await Promise.all([
+        loadCompanyUsers(company, false),
+        linkedCompanyName ? loadCompanyUsers(linkedCompanyName, true) : Promise.resolve([]),
+      ]);
+      if (!cancelled) setFriends([...sameCompany, ...linked]);
+    };
+    refresh();
+    const unsub1 = onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), refresh);
+    const unsub2 = linkedCompanyName
+      ? onSnapshot(query(collection(db, "users"), where("companyName", "==", linkedCompanyName)), refresh)
+      : null;
+    return () => { cancelled = true; unsub1(); unsub2?.(); };
+  }, [company, myUid, linkedCompanyName]);
 
   // ── 채팅방 목록 ──
   useEffect(() => {
@@ -1325,7 +1337,14 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <Avatar name={f.name} photo={f.photo} size={40} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{f.name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", display: "flex", alignItems: "center", gap: 6 }}>
+                    {f.name}
+                    {f.crossCompany && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#1B2B4B", background: "#eef1f7", borderRadius: 6, padding: "1px 6px" }}>
+                        연동 · {f.company}
+                      </span>
+                    )}
+                  </div>
                   {f.statusMsg && <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1 }}>{f.statusMsg}</div>}
                 </div>
                 <button onClick={e => { e.stopPropagation(); onOpenDM(f); }}

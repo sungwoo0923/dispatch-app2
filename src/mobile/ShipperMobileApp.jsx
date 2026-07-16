@@ -7,6 +7,7 @@ import {
   doc, getDoc, addDoc, updateDoc, serverTimestamp, getDocs,
   orderBy, limit,
 } from "firebase/firestore";
+import InternalMessenger from "../InternalMessenger";
 
 // ======================================================================
 // 유틸
@@ -111,6 +112,8 @@ export default function ShipperMobileApp() {
   const [toast, setToast] = useState("");
   const [showMenu, setShowMenu] = useState(false);
   const [menuTime, setMenuTime] = useState(nowKSTStr());
+  const [showMessenger, setShowMessenger] = useState(false);
+  const [messengerUnread, setMessengerUnread] = useState(0);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
@@ -131,7 +134,7 @@ export default function ShipperMobileApp() {
 
   useEffect(() => {
     if (!user || !userData) return;
-    const q = query(collection(db, "orders"), where("shipperCompany", "==", userData.company));
+    const q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName));
     const unsub = onSnapshot(q, (snap) => {
       setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
@@ -190,7 +193,7 @@ export default function ShipperMobileApp() {
               <MMenuItem label="마이페이지" active={page === "mypage"} onClick={() => navTo("mypage")} />
             </div>
             <div className="border-t px-4 py-3">
-              <div className="text-xs text-gray-400 mb-0.5">{userData.company}</div>
+              <div className="text-xs text-gray-400 mb-0.5">{userData.companyName}</div>
               <div className="text-sm text-gray-600 mb-3">{user.email}</div>
               <button onClick={logout} className="w-full py-2 bg-red-500 text-white rounded-lg text-sm font-semibold">
                 로그아웃
@@ -204,9 +207,34 @@ export default function ShipperMobileApp() {
       <div className="flex items-center justify-between px-4 py-3 sticky top-0 z-30" style={{ background: NAVY }}>
         <button onClick={() => setShowMenu(true)} className="text-white text-sm font-semibold">MENU</button>
         <div className="text-white font-bold text-base">KP-Flow 화주</div>
-        <button onClick={() => navTo("mypage")} className="text-white text-xs opacity-80">
-          {userData.name || user.email?.split("@")[0]}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowMessenger(true)} className="relative text-white/90">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            {messengerUnread > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+                {messengerUnread > 99 ? "99+" : messengerUnread}
+              </span>
+            )}
+          </button>
+          <button onClick={() => navTo("mypage")} className="text-white text-xs opacity-80">
+            {userData.name || user.email?.split("@")[0]}
+          </button>
+        </div>
+      </div>
+
+      {/* 사내 메신저 */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMessenger ? "visible" : "hidden", pointerEvents: showMessenger ? "auto" : "none" }}>
+        <InternalMessenger
+          user={user}
+          userCompany={userData.companyName}
+          linkedCompanyName={userData?.linkedTransportCompany?.companyName || ""}
+          mobileMode={true}
+          mobileVisible={showMessenger}
+          onClose={() => setShowMessenger(false)}
+          onUnreadChange={setMessengerUnread}
+        />
       </div>
 
       {/* 페이지 */}
@@ -428,7 +456,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
     if (!snap.empty) {
       await updateDoc(doc(db, "places", snap.docs[0].id), { address, 담당자명, 담당자번호, updatedAt: serverTimestamp() });
     } else {
-      await addDoc(collection(db, "places"), { name, address, 담당자명, 담당자번호, type, userId: user.uid, company: userData?.company || "", createdAt: serverTimestamp() });
+      await addDoc(collection(db, "places"), { name, address, 담당자명, 담당자번호, type, userId: user.uid, company: userData?.companyName || "", createdAt: serverTimestamp() });
     }
   };
 
@@ -445,8 +473,8 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
         톤수값: undefined,
         톤수단위: undefined,
         shipperUid: user.uid,
-        거래처명: userData.company,
-        shipperCompany: userData.company,
+        거래처명: userData.companyName,
+        shipperCompany: userData.companyName,
         배차상태: "배차중",
         업체전달상태: "미전달",
         source: "shipper_mobile",
@@ -1012,7 +1040,7 @@ function ShipperMyPageM({ user, userData, onBack, showToast, orders }) {
         </div>
         <div className="font-bold text-base">{userData.name || "-"}</div>
         <div className="text-blue-200 text-sm mt-0.5">{user.email}</div>
-        <div className="text-blue-200 text-xs mt-0.5">{userData.company || ""}</div>
+        <div className="text-blue-200 text-xs mt-0.5">{userData.companyName || ""}</div>
       </div>
 
       {/* 이번달 통계 */}
@@ -1040,7 +1068,7 @@ function ShipperMyPageM({ user, userData, onBack, showToast, orders }) {
         <MCard>
           <MDetailRow label="이름" value={userData.name || "-"} />
           <MDetailRow label="이메일" value={user.email || "-"} />
-          <MDetailRow label="회사명" value={userData.company || "-"} />
+          <MDetailRow label="회사명" value={userData.companyName || "-"} />
           <MDetailRow label="부서" value={userData.department || "-"} />
           <MDetailRow label="직책" value={userData.position || "-"} />
           <MDetailRow label="권한" value={userData.role === "shipper" ? "화주 마스터" : userData.permissions?.subMaster ? "화주 서브마스터" : "일반 사용자"} />
@@ -1186,7 +1214,7 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
         title: form.title,
         content: form.content,
         userId: user.uid,
-        company: userData?.company || "",
+        company: userData?.companyName || "",
         name: userData?.name || user.email,
         status: "접수중",
         createdAt: serverTimestamp(),
@@ -1289,7 +1317,7 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
               <textarea className="input-m" rows={6} style={{ resize: "none" }} value={form.content}
                 onChange={(e) => setForm(p => ({ ...p, content: e.target.value }))} placeholder="문의 내용을 상세히 작성해주세요" />
             </div>
-            <div className="text-xs text-gray-400">회사: {userData?.company || ""} · 담당자: {userData?.name || user.email}</div>
+            <div className="text-xs text-gray-400">회사: {userData?.companyName || ""} · 담당자: {userData?.name || user.email}</div>
             <button onClick={submit} disabled={submitting}
               className="w-full py-3 text-white rounded-xl font-semibold text-sm disabled:opacity-50"
               style={{ background: NAVY }}>
