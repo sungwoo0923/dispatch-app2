@@ -10,7 +10,7 @@ import {
   getDoc,
   onSnapshot,
   updateDoc,
-  addDoc,
+  setDoc,
   serverTimestamp,
   increment,
 } from "firebase/firestore";
@@ -166,7 +166,6 @@ export default function ShipperStatus() {
 
     const isMaster = userData?.permissions?.master === true || userData?.isMaster === true;
     const isSubMaster = userData?.permissions?.subMaster === true;
-    const isTransport = userData?.permissions?.transport === true;
 
     let q;
     if (isMaster || isSubMaster) {
@@ -174,17 +173,14 @@ export default function ShipperStatus() {
         collection(db, "orders"),
         where("shipperCompany", "==", userData.companyName)
       );
-    } else if (isTransport) {
+    } else {
+      // 운송사에서 전송한 오더에는 shipperUid가 없으므로(등록자=운송사),
+      // 일반/운송권한 직원도 회사 전체 오더 목록을 봐야 함(개인 등록분만 보이던 버그 수정)
       const threeMonthsAgo = get3MonthsAgo();
       q = query(
         collection(db, "orders"),
         where("shipperCompany", "==", userData.companyName),
         where("상차일", ">=", threeMonthsAgo)
-      );
-    } else {
-      q = query(
-        collection(db, "orders"),
-        where("shipperUid", "==", user.uid)
       );
     }
 
@@ -1054,6 +1050,8 @@ function ShipperAttachmentViewer({ order, onClose }) {
   const handleUpload = async (files) => {
     if (!files?.length) return;
     setUploading(true);
+    // 운송사 원본 오더로 전송된 카피라면(originCol/originId) 원본 쪽에도 동일하게 반영
+    const mirror = (order.originCol && order.originId) ? { col: order.originCol, id: order.originId } : null;
     for (const file of files) {
       try {
         const reader = new FileReader();
@@ -1062,7 +1060,7 @@ function ShipperAttachmentViewer({ order, onClose }) {
           reader.onerror = rej;
           reader.readAsDataURL(file);
         });
-        await addDoc(collection(db, "orders", order.id, "attachments"), {
+        const payload = {
           url: base64,
           base64,
           name: file.name,
@@ -1070,8 +1068,16 @@ function ShipperAttachmentViewer({ order, onClose }) {
           sizeKB: Math.round(file.size / 1024),
           uploadedBy: auth.currentUser?.email || "shipper",
           createdAt: serverTimestamp(),
-        });
+        };
+        const newId = doc(collection(db, "orders", order.id, "attachments")).id;
+        await setDoc(doc(db, "orders", order.id, "attachments", newId), payload);
         await updateDoc(doc(db, "orders", order.id), { attachCount: increment(1) });
+        if (mirror) {
+          try {
+            await setDoc(doc(db, mirror.col, mirror.id, "attachments", newId), payload);
+            await updateDoc(doc(db, mirror.col, mirror.id), { attachCount: increment(1) });
+          } catch (e) { console.warn("첨부 동기화 실패(무시):", e); }
+        }
       } catch (e) { alert("업로드 실패: " + e.message); }
     }
     setUploading(false);
