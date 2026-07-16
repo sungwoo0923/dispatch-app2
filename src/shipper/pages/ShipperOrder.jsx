@@ -667,7 +667,10 @@ export default function ShipperOrder({ editData, onClose }) {
                   <div ref={listRefTop} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
                     {suggestions.map((item, idx) => (
                       <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-[#eef1f7]" : "hover:bg-gray-50"}`}
-                        onMouseDown={() => selectSuggestion(item, "상차지명")}>{item.name}</div>
+                        onMouseDown={() => selectSuggestion(item, "상차지명")}>
+                        <div className="font-semibold text-gray-900">{item.name}</div>
+                        {item.address && <div className="text-xs text-gray-500 mt-0.5">{item.address}</div>}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -706,7 +709,10 @@ export default function ShipperOrder({ editData, onClose }) {
                   <div ref={listRefBottom} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
                     {suggestions.map((item, idx) => (
                       <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-[#eef1f7]" : "hover:bg-gray-50"}`}
-                        onMouseDown={() => selectSuggestion(item, "하차지명")}>{item.name}</div>
+                        onMouseDown={() => selectSuggestion(item, "하차지명")}>
+                        <div className="font-semibold text-gray-900">{item.name}</div>
+                        {item.address && <div className="text-xs text-gray-500 mt-0.5">{item.address}</div>}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1032,7 +1038,34 @@ function ViaStopModal({ type, list, onSave, onClose }) {
   const label = type === "상차" ? "상차경유지" : "하차경유지";
   const timeKey = type === "상차" ? "상차시간" : "하차시간";
 
+  const [allPlaces, setAllPlaces] = useState([]);
+  const [placeDropdownIdx, setPlaceDropdownIdx] = useState(null);
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    getDocs(query(collection(db, "places"), where("userId", "==", uid)))
+      .then(snap => setAllPlaces(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+      .catch(() => {});
+  }, []);
+  const filterPlaces = (v) => {
+    if (!v.trim()) return [];
+    const lq = v.toLowerCase();
+    return allPlaces.filter(p => (p.name || "").toLowerCase().includes(lq)).slice(0, 8);
+  };
+
   const update = (idx, key, v) => setRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: v } : r));
+  const applyPlaceToRow = (idx, p) => {
+    const contacts = Array.isArray(p.contacts) ? p.contacts.filter(c => c.name || c.phone) : [];
+    const first = contacts[0];
+    setRows(prev => prev.map((r, i) => i === idx ? {
+      ...r,
+      업체명: p.name || "",
+      주소: p.address || "",
+      담당자: first?.name || p.담당자명 || "",
+      담당자번호: first?.phone || p.담당자번호 || "",
+    } : r));
+    setPlaceDropdownIdx(null);
+  };
   const addRow = () => setRows(prev => [...prev, emptyStop()]);
   const removeRow = (idx) => setRows(prev => prev.filter((_, i) => i !== idx));
   const handleSave = () => { onSave(rows.filter(s => s.업체명?.trim())); onClose(); };
@@ -1047,7 +1080,24 @@ function ViaStopModal({ type, list, onSave, onClose }) {
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
           {rows.map((stop, idx) => (
             <div key={idx} className="border border-gray-200 rounded-xl p-4 space-y-2 bg-gray-50">
-              <input className={inputCls} placeholder="경유지명" value={stop.업체명} onChange={e => update(idx, "업체명", e.target.value)} />
+              <div className="relative">
+                <input className={inputCls} placeholder="경유지명" value={stop.업체명}
+                  onChange={e => { update(idx, "업체명", e.target.value); setPlaceDropdownIdx(idx); }}
+                  onFocus={() => setPlaceDropdownIdx(idx)}
+                  onBlur={() => setTimeout(() => setPlaceDropdownIdx(null), 150)}
+                />
+                {placeDropdownIdx === idx && filterPlaces(stop.업체명).length > 0 && (
+                  <div className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-48 overflow-y-auto shadow-lg">
+                    {filterPlaces(stop.업체명).map((p, pi) => (
+                      <div key={p.id || pi} className="px-3 py-2 text-sm cursor-pointer hover:bg-[#eef1f7]"
+                        onMouseDown={() => applyPlaceToRow(idx, p)}>
+                        <div className="font-semibold text-gray-900">{p.name}</div>
+                        {p.address && <div className="text-xs text-gray-500 mt-0.5">{p.address}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <input className={inputCls} placeholder="주소" value={stop.주소} onChange={e => update(idx, "주소", e.target.value)} />
               <div className="grid grid-cols-2 gap-2">
                 <input className={inputCls} placeholder="담당자명" value={stop.담당자} onChange={e => update(idx, "담당자", e.target.value)} />
