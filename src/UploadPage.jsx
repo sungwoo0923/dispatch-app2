@@ -182,6 +182,13 @@ export default function UploadPage() {
   };
 
   // ✅ 이미지 압축 (최대 1200px, JPEG 75%)
+  // 네트워크가 불안정한 일부 기기에서 addDoc이 응답도 실패도 없이 무한 대기하는
+  // 경우가 있어, 일정 시간 안에 끝나지 않으면 명시적으로 실패 처리한다.
+  const withTimeout = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} 시간 초과 (네트워크 상태를 확인해주세요)`)), ms)),
+  ]);
+
   const compressImage = (file) => new Promise((resolve) => {
     if (file.type === "application/pdf") { resolve(file); return; }
     const reader = new FileReader();
@@ -275,33 +282,32 @@ export default function UploadPage() {
         // 첫 번째 파일 업로드 시 서명 이미지도 저장
         if (i === 0 && sigRef.current && signed) {
           const sigBase64 = sigRef.current.toDataURL("image/png");
-          await addDoc(collection(db, targetCol, targetId, "attachments"), {
+          await withTimeout(addDoc(collection(db, targetCol, targetId, "attachments"), {
             base64: sigBase64,
             name: "서명.png",
             type: "image/png",
             sizeKB: Math.round(sigBase64.length * 0.75 / 1024),
             uploadedAt: serverTimestamp(),
             source: "driver_signature",
-          });
+          }), 25000, "서명 저장");
         }
 
-        const docRef = await addDoc(collection(db, targetCol, targetId, "attachments"), {
+        const docRef = await withTimeout(addDoc(collection(db, targetCol, targetId, "attachments"), {
           base64,
           name: file.name,
           type: "image/jpeg",
           sizeKB,
           uploadedAt: serverTimestamp(),
           source: "driver_upload",
-        });
+        }), 25000, "파일 업로드");
 
         clearInterval(progressTimer);
         setProgress(prev => ({ ...prev, [i]: 100 }));
-        results.push({ name: file.name, url: base64, docId: docRef.id });
+        results.push({ name: file.name, url: base64, docId: docRef.id, fileIndex: i });
 
       } catch (err) {
         clearInterval(progressTimer);
         console.error("업로드 오류:", err);
-        alert(`${file.name} 업로드 실패: ${err.message}`);
         // 진행률이 중간에서 멈춘 채로 남지 않도록 실패 상태로 명확히 표시
         setProgress(prev => ({ ...prev, [i]: -1 }));
       }
@@ -314,19 +320,29 @@ export default function UploadPage() {
       } catch(e) { console.error("카운트 업데이트 실패:", e); }
     }
 
-    setUploaded(results);
-    setFiles([]);
-    setPreviews([]);
+    const failedCount = files.length - results.length;
+    const succeededIdx = new Set(results.map(r => r.fileIndex));
+    setUploaded(prev => [...prev, ...results]);
+    // 실패한 파일은 목록에 남겨 다시 업로드할 수 있게 하고, 성공한 파일만 제거한다
+    setFiles(prev => prev.filter((_, idx) => !succeededIdx.has(idx)));
+    setPreviews(prev => prev.filter((_, idx) => !succeededIdx.has(idx)));
     setProgress({});
     setUploading(false);
-    setStatus("done");
+
+    if (results.length > 0 && failedCount === 0) {
+      setStatus("done");
+    } else if (failedCount > 0) {
+      alert(results.length > 0
+        ? `${results.length}개 업로드 완료, ${failedCount}개 실패했습니다. 실패한 사진은 다시 시도해주세요.`
+        : `업로드에 실패했습니다 (${failedCount}개). 네트워크 상태를 확인 후 다시 시도해주세요.`);
+    }
   };
 
   // ────────────────────────────────────────────────────────
   // 렌더
   // ────────────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", minHeight: "100vh", background: "#f0f2f5" }}>
+    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", minHeight: "100vh", background: "#f0f2f5", overscrollBehaviorY: "contain", touchAction: "pan-y" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
 
       {/* ── 헤더 ── */}
