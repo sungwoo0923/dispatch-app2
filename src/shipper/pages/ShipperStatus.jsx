@@ -263,13 +263,36 @@ export default function ShipperStatus() {
     setSelectedIds(prev => checked ? [...prev, id] : prev.filter(v => v !== id));
   };
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     if (selectedIds.length === 0) { alert("선택된 항목 없음"); return; }
-    if (!window.confirm("정말 삭제하시겠습니까?")) return;
-    for (let id of selectedIds) {
-      await deleteDoc(doc(db, "orders", id));
+    const targets = orders.filter(o => selectedIds.includes(o.id));
+    const locked = targets.filter(o => o.차량번호 && o.차량번호.trim() && !o.취소요청);
+    const deletable = targets.filter(o => !(o.차량번호 && o.차량번호.trim()));
+
+    const requestCancelForLocked = async () => {
+      for (const o of locked) {
+        await updateDoc(doc(db, "orders", o.id), {
+          취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "",
+        });
+      }
+    };
+    const deleteDeletable = async () => {
+      for (const o of deletable) await deleteDoc(doc(db, "orders", o.id));
+    };
+
+    if (locked.length > 0 && deletable.length === 0) {
+      openConfirm(
+        `선택하신 ${locked.length}건은 이미 배차완료되어 직접 삭제할 수 없습니다. 운송사에 배차취소를 요청하시겠습니까?`,
+        async () => { await requestCancelForLocked(); setSelectedIds([]); setConfirmOpen(false); }
+      );
+    } else if (locked.length > 0) {
+      openConfirm(
+        `선택하신 항목 중 ${locked.length}건은 배차완료되어 삭제할 수 없습니다. 나머지 ${deletable.length}건만 삭제하고, 배차완료건은 운송사에 배차취소를 요청하시겠습니까?`,
+        async () => { await requestCancelForLocked(); await deleteDeletable(); setSelectedIds([]); setConfirmOpen(false); }
+      );
+    } else {
+      openConfirm("정말 삭제하시겠습니까?", async () => { await deleteDeletable(); setSelectedIds([]); setConfirmOpen(false); });
     }
-    setSelectedIds([]);
   };
 
   const handleEditSelected = () => {
@@ -310,8 +333,10 @@ export default function ShipperStatus() {
     });
   };
 
+  const STATUS_SORT_ORDER = { 요청: 0, 배차중: 1, 배차완료: 2, 배차취소: 3 };
+
   const rows = useMemo(() => {
-    return orders.filter((o) => {
+    const filtered = orders.filter((o) => {
       if (hideCanceled && filter !== "배차취소" && o.상태 === "취소") return false;
       const currentStatus = getStatus(o);
       if (filter !== "전체" && currentStatus !== filter) return false;
@@ -336,6 +361,17 @@ export default function ShipperStatus() {
           );
       }
     });
+
+    if (filter === "전체") {
+      filtered.sort((a, b) => {
+        const sa = STATUS_SORT_ORDER[getStatus(a)] ?? 9;
+        const sb = STATUS_SORT_ORDER[getStatus(b)] ?? 9;
+        if (sa !== sb) return sa - sb;
+        const da = toYMD(a.상차일), db = toYMD(b.상차일);
+        return db.localeCompare(da);
+      });
+    }
+    return filtered;
   }, [orders, filter, keyword, startDate, endDate, searchType, hideCanceled, getStatus]);
 
   // 알림 클릭으로 포커스 이동 -> 해당 오더가 있는 페이지로 이동 후 스크롤 + 하이라이트
@@ -437,7 +473,7 @@ export default function ShipperStatus() {
 
       {/* 알림 토스트 카드 (우측 하단) */}
       <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 999997, display: "flex", flexDirection: "column", gap: 10, width: 320 }}>
-        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }`}</style>
+        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } } @keyframes cancelReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }`}</style>
         {toasts.map(t => (
           <div key={t.id}
             onClick={() => {
@@ -495,24 +531,31 @@ export default function ShipperStatus() {
         <div className="bg-white rounded-xl p-4 space-y-3 shadow-sm">
 
           {/* 상태 필터 */}
-          <div className="flex gap-2 flex-wrap">
-            {["전체", "요청", "배차중", "배차완료", "배차취소"].map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilter(s)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                  filter === s
-                    ? "bg-[#1B2B4B] text-white"
-                    : "bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2]"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-            <label className="flex items-center gap-2 text-sm ml-4">
-              <input type="checkbox" checked={hideCanceled} onChange={(e) => setHideCanceled(e.target.checked)} />
-              취소 오더 숨기기
-            </label>
+          <div className="flex gap-2 flex-wrap items-center justify-between">
+            <div className="flex gap-2 flex-wrap items-center">
+              {["전체", "요청", "배차중", "배차완료", "배차취소"].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilter(s)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                    filter === s
+                      ? "bg-[#1B2B4B] text-white"
+                      : "bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2]"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+              <label className="flex items-center gap-2 text-sm ml-4">
+                <input type="checkbox" checked={hideCanceled} onChange={(e) => setHideCanceled(e.target.checked)} />
+                취소 오더 숨기기
+              </label>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#eef1f7] text-[13px] font-bold text-[#1B2B4B]">
+              <span>조회결과 {rows.length.toLocaleString()}건</span>
+              <span className="text-[#c7d1e3]">|</span>
+              <span>총 청구운임 {rows.reduce((sum, o) => sum + (Number(o.청구운임) || 0), 0).toLocaleString()}원</span>
+            </div>
           </div>
 
           <div className="flex justify-between items-center flex-wrap gap-2">
@@ -565,6 +608,7 @@ export default function ShipperStatus() {
 
             {/* 버튼 */}
             <div className="flex gap-2">
+              <button onClick={() => navigate("/shipper/order")} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold">+ 배차등록</button>
               <button onClick={handleEditSelected} className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-semibold">선택수정</button>
               <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold">선택삭제</button>
               <button onClick={handleExcelDownload} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold">엑셀다운</button>
@@ -597,8 +641,8 @@ export default function ShipperStatus() {
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
                   "순번","운송사","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
-                  "하차지","하차지주소","화물","파렛트사","차량","톤수","차량번호","이름","전화번호",
-                  "청구운임","지급방식","상태","첨부"
+                  "하차지","하차지주소","화물","파렛트사","상태","차량","톤수","차량번호","이름","전화번호",
+                  "청구운임","지급방식","첨부"
                 ].map((h, idx) => (
                   <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 last:border-r-0 whitespace-nowrap">
                     {h}
@@ -696,6 +740,16 @@ export default function ShipperStatus() {
                         );
                       })()}
                     </td>
+                    <td className={tdCls}>
+                      {o.취소요청 && getStatus(o) !== "배차취소" ? (
+                        <span className="px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap bg-orange-100 text-orange-700"
+                          style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }}>
+                          취소요청중
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
+                      )}
+                    </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
                     <td className={`${tdCls} font-semibold`}>{o.차량번호 || "-"}</td>
@@ -705,9 +759,6 @@ export default function ShipperStatus() {
                       {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
                     </td>
                     <td className={tdCls}>{o.지급방식 || "-"}</td>
-                    <td className={tdCls}>
-                      <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
-                    </td>
                     <td className={tdCls}>
                       {(() => {
                         const isUnseen = attachCnt > 0 && (o.attachViewedCount || 0) < attachCnt;
@@ -760,28 +811,30 @@ export default function ShipperStatus() {
             <div className={`text-[18px] font-bold ${selectedOrder?.상태 === "취소" ? "text-rose-700" : "text-[#1B2B4B]"}`}>
               {selectedOrder?.상태 === "취소" ? "배차취소 되었습니다." : selectedOrder?.차량번호 ? "배차완료 되었습니다." : "배차 요청중입니다."}
             </div>
-            <div className="flex gap-2">
-              <button
-                disabled={selectedOrder?.상태 === "취소"}
-                onClick={() => { setEditData(selectedOrder); setEditOpen(true); }}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-600 text-white hover:opacity-90"}`}
-              >수정</button>
-              <button
-                disabled={selectedOrder?.상태 === "취소"}
-                onClick={() => cancelOrder(selectedOrder.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
-              >오더취소</button>
-              <button
-                onClick={() => setAttachViewer(selectedOrder)}
-                className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90"
-              >
-                첨부 {selectedOrder.attachCount > 0 ? `(${selectedOrder.attachCount})` : ""}
-              </button>
-              {selectedOrder?.상태 === "취소" && (
-                <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">재등록</button>
-              )}
+            <div className="flex items-center gap-3 ml-auto">
+              <div className="flex gap-2">
+                <button
+                  disabled={selectedOrder?.상태 === "취소"}
+                  onClick={() => { setEditData(selectedOrder); setEditOpen(true); }}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-600 text-white hover:opacity-90"}`}
+                >수정</button>
+                <button
+                  disabled={selectedOrder?.상태 === "취소"}
+                  onClick={() => cancelOrder(selectedOrder.id)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
+                >오더취소</button>
+                <button
+                  onClick={() => setAttachViewer(selectedOrder)}
+                  className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90"
+                >
+                  첨부 {selectedOrder.attachCount > 0 ? `(${selectedOrder.attachCount})` : ""}
+                </button>
+                {selectedOrder?.상태 === "취소" && (
+                  <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">재등록</button>
+                )}
+              </div>
+              <button onClick={() => setDetailOpen(false)} className="text-gray-500 hover:text-black text-xl">×</button>
             </div>
-            <button onClick={() => setDetailOpen(false)} className="text-gray-500 hover:text-black text-xl">×</button>
           </div>
 
           {/* 상단 요약 */}
@@ -819,7 +872,12 @@ export default function ShipperStatus() {
                 )}
               </Section>
             ) : (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-[14px] text-amber-700 font-semibold">
+              <div
+                className="flex items-center gap-3 rounded-xl px-5 py-3 text-[13px] font-semibold border"
+                style={{ background: "#eef1f7", borderColor: "#c7d1e3", color: "#1B2B4B", animation: "pendingPulse 2.2s ease-in-out infinite" }}
+              >
+                <style>{`@keyframes pendingPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }`}</style>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "#1B2B4B" }} />
                 아직 배차가 완료되지 않았습니다. 배차 완료 시 기사 정보가 표시됩니다.
               </div>
             )}
@@ -1339,13 +1397,16 @@ function ConfirmModal({ message, onConfirm, onClose }) {
   }, [onConfirm, onClose]);
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[999] flex items-center justify-center">
-      <div className="bg-white w-[360px] rounded-2xl shadow-2xl p-6">
-        <div className="text-lg font-bold text-gray-800 mb-3">확인</div>
-        <div className="text-sm text-gray-600 mb-6">{message}</div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm">취소 (ESC)</button>
-          <button onClick={onConfirm} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-semibold">확인 (ENTER)</button>
+    <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center">
+      <div className="bg-white w-[380px] rounded-2xl shadow-2xl overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-2">
+          <span className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center text-white font-bold text-[14px] shrink-0">!</span>
+          <h3 className="text-white font-bold text-[15px]">확인이 필요합니다</h3>
+        </div>
+        <div className="px-6 py-5 text-[14px] text-gray-700 leading-relaxed">{message}</div>
+        <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-[13px] font-semibold">취소 (ESC)</button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold">확인 (ENTER)</button>
         </div>
       </div>
     </div>
