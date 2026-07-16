@@ -2749,7 +2749,7 @@ return (
             if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("toast-flash-border"); setTimeout(() => el.classList.remove("toast-flash-border"), 2000); }
           }}
         >
-          🚚 화주사 배차요청 {pendingShipperRequests.length}건이 대기 중입니다 — 클릭하여 확인
+          화주사 배차요청 {pendingShipperRequests.length}건이 대기 중입니다 — 클릭하여 확인
         </div>
       )}
 
@@ -2762,7 +2762,6 @@ return (
           `}</style>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[440px] overflow-hidden" style={{ animation: "nudgePopIn 0.25s ease-out" }}>
             <div className="bg-red-600 px-6 py-4 flex items-center gap-2" style={{ animation: "nudgeHeaderBlink 1.2s ease-in-out infinite" }}>
-              <span className="text-[22px] leading-none">⏰</span>
               <h3 className="text-white font-black text-[17px]">화주사 재촉 알림</h3>
               {pendingNudges.length > 1 && (
                 <span className="ml-auto bg-white/20 text-white text-[12px] font-bold px-2 py-0.5 rounded-full">
@@ -4321,7 +4320,7 @@ React.useEffect(() => {
     const cur = `${hh}:${mm}`;
 
     if (!alertShown && cur === alertTime) {
-      showAlert(`⏰ 알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
+      showAlert(`알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
       setAlertShown(true);
     }
   }, 10000);
@@ -18266,6 +18265,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>{formatPhone(r.전화번호)}</td>
 
                  <td className={cell}>
+                  <div className="relative inline-block">
                     {r.화주사확인대기 ? (
                       <button
                         type="button"
@@ -18324,16 +18324,13 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       </button>
                     )}
                     {r.취소요청 && r.배차상태 !== "배차취소" && (
-                      <>
-                        <div
-                          title="화주사가 배차취소를 요청했습니다"
-                          className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 whitespace-nowrap"
-                          style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
-                        >
-                          취소요청
-                        </div>
-                      </>
+                      <span
+                        title="화주사가 배차취소를 요청했습니다"
+                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white"
+                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                      />
                     )}
+                  </div>
                   </td>
                   {/* 청구운임 */}
                   <td className={cell}>
@@ -26667,6 +26664,7 @@ return (
 </td>
 
                  <td className="border text-center">
+                  <div className="relative inline-block">
                     {row.화주사확인대기 ? (
                       <button
                         onClick={() => {
@@ -26703,14 +26701,13 @@ return (
                       )
                     )}
                     {row.취소요청 && row.배차상태 !== "배차취소" && (
-                      <div
+                      <span
                         title="화주사가 배차취소를 요청했습니다"
-                        className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 whitespace-nowrap"
+                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
-                      >
-                        취소요청
-                      </div>
+                      />
                     )}
+                  </div>
                   </td>
 
                   {/* 금액 */}
