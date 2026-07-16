@@ -148,10 +148,47 @@ export default function ShipperStatus() {
   const [addrPopup, setAddrPopup] = useState(null);
   const [viaPopup, setViaPopup] = useState(null); // { label, list }
   const [palletPopup, setPalletPopup] = useState(null); // { text }
+  const [ctxMenu, setCtxMenu] = useState(null); // { x, y, order }
+  const [driverInfoPopup, setDriverInfoPopup] = useState(null); // order
+  const [copyToast, setCopyToast] = useState(false);
 
   const openConfirm = (message, onConfirm) => {
     setConfirmConfig({ message, onConfirm });
     setConfirmOpen(true);
+  };
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    return () => { window.removeEventListener("click", close); window.removeEventListener("scroll", close, true); };
+  }, [ctxMenu]);
+
+  const buildOrderCopyText = (o) => {
+    const pallet = getPalletSummary(o);
+    return [
+      `[오더정보] ${o.거래처명 || "-"}`,
+      `상차 : ${o.상차지명 || "-"} / ${fmtTimeCell(o.상차시간, o.상차시간구분)}`,
+      o.상차지주소 ? `주소 : ${o.상차지주소}` : null,
+      `하차 : ${o.하차지명 || "-"} / ${fmtTimeCell(o.하차시간, o.하차시간구분)}`,
+      o.하차지주소 ? `주소 : ${o.하차지주소}` : null,
+      `화물 : ${o.화물내용 || "-"}${pallet ? ` (파렛트사: ${pallet})` : ""}`,
+      `차량 : ${o.차량종류 || "-"} / ${o.차량톤수 || "-"}`,
+      `청구운임 : ${o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}`,
+      `지급방식 : ${o.지급방식 || "-"}`,
+      o.차량번호 ? `기사 : ${o.이름 || "-"} / ${o.차량번호} / ${o.전화번호 || "-"}` : null,
+    ].filter(Boolean).join("\n");
+  };
+
+  const handleCopyOrder = async (o) => {
+    try {
+      await navigator.clipboard.writeText(buildOrderCopyText(o));
+      setCopyToast(true);
+      setTimeout(() => setCopyToast(false), 2000);
+    } catch {
+      alert("복사 실패");
+    }
   };
 
   useEffect(() => {
@@ -263,9 +300,8 @@ export default function ShipperStatus() {
     setSelectedIds(prev => checked ? [...prev, id] : prev.filter(v => v !== id));
   };
 
-  const handleDeleteSelected = () => {
-    if (selectedIds.length === 0) { alert("선택된 항목 없음"); return; }
-    const targets = orders.filter(o => selectedIds.includes(o.id));
+  const deleteOrders = (targets, onDone) => {
+    if (targets.length === 0) { alert("선택된 항목 없음"); return; }
     const locked = targets.filter(o => o.차량번호 && o.차량번호.trim() && !o.취소요청);
     const deletable = targets.filter(o => !(o.차량번호 && o.차량번호.trim()));
 
@@ -283,16 +319,21 @@ export default function ShipperStatus() {
     if (locked.length > 0 && deletable.length === 0) {
       openConfirm(
         `선택하신 ${locked.length}건은 이미 배차완료되어 직접 삭제할 수 없습니다. 운송사에 배차취소를 요청하시겠습니까?`,
-        async () => { await requestCancelForLocked(); setSelectedIds([]); setConfirmOpen(false); }
+        async () => { await requestCancelForLocked(); onDone?.(); setConfirmOpen(false); }
       );
     } else if (locked.length > 0) {
       openConfirm(
         `선택하신 항목 중 ${locked.length}건은 배차완료되어 삭제할 수 없습니다. 나머지 ${deletable.length}건만 삭제하고, 배차완료건은 운송사에 배차취소를 요청하시겠습니까?`,
-        async () => { await requestCancelForLocked(); await deleteDeletable(); setSelectedIds([]); setConfirmOpen(false); }
+        async () => { await requestCancelForLocked(); await deleteDeletable(); onDone?.(); setConfirmOpen(false); }
       );
     } else {
-      openConfirm("정말 삭제하시겠습니까?", async () => { await deleteDeletable(); setSelectedIds([]); setConfirmOpen(false); });
+      openConfirm("정말 삭제하시겠습니까?", async () => { await deleteDeletable(); onDone?.(); setConfirmOpen(false); });
     }
+  };
+
+  const handleDeleteSelected = () => {
+    const targets = orders.filter(o => selectedIds.includes(o.id));
+    deleteOrders(targets, () => setSelectedIds([]));
   };
 
   const handleEditSelected = () => {
@@ -649,7 +690,8 @@ export default function ShipperStatus() {
                     ref={(el) => { if (el) rowRefs.current[o.id] = el; }}
                     className={`border-t border-gray-100 ${rowCls} transition-shadow duration-500`}
                     style={isFlashing ? { boxShadow: "inset 0 0 0 2px #1B2B4B, 0 0 14px rgba(27,43,75,0.45)", background: "#eef1f7" } : undefined}
-                    onDoubleClick={() => { setSelectedOrder(o); setDetailOpen(true); }}>
+                    onDoubleClick={() => { setSelectedOrder(o); setDetailOpen(true); }}
+                    onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, order: o }); }}>
                     <td className={tdCls}>
                       <input type="checkbox" checked={selectedIds.includes(o.id)}
                         onClick={(e) => e.stopPropagation()}
@@ -972,6 +1014,79 @@ export default function ShipperStatus() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 우클릭 컨텍스트 메뉴 */}
+      {ctxMenu && (
+        <div
+          className="fixed z-[999999] bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 w-48 overflow-hidden"
+          style={{ top: ctxMenu.y, left: ctxMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => { setSelectedIds([ctxMenu.order.id]); setEditData(ctxMenu.order); setEditOpen(true); setCtxMenu(null); }}
+            className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+          >
+            선택수정
+          </button>
+          <button
+            onClick={() => { deleteOrders([ctxMenu.order]); setCtxMenu(null); }}
+            className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-red-50 hover:text-red-600 transition"
+          >
+            선택삭제
+          </button>
+          <button
+            onClick={() => { setSelectedOrder(ctxMenu.order); setDetailOpen(true); setCtxMenu(null); }}
+            className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+          >
+            오더정보
+          </button>
+          <button
+            onClick={() => { setDriverInfoPopup(ctxMenu.order); setCtxMenu(null); }}
+            className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+          >
+            기사정보
+          </button>
+          <button
+            onClick={() => { handleCopyOrder(ctxMenu.order); setCtxMenu(null); }}
+            className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+          >
+            오더내용복사
+          </button>
+        </div>
+      )}
+
+      {/* 기사정보 팝업 */}
+      {driverInfoPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setDriverInfoPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">기사정보</h3>
+            </div>
+            <div className="px-6 py-5 space-y-2 text-[14px] text-gray-700">
+              {driverInfoPopup.차량번호 ? (
+                <>
+                  <div><span className="text-gray-400 text-[12px] mr-2">기사명</span>{driverInfoPopup.이름 || "-"}</div>
+                  <div><span className="text-gray-400 text-[12px] mr-2">차량번호</span>{driverInfoPopup.차량번호 || "-"}</div>
+                  <div><span className="text-gray-400 text-[12px] mr-2">전화번호</span>{driverInfoPopup.전화번호 || "-"}</div>
+                  <div><span className="text-gray-400 text-[12px] mr-2">운송사</span>{driverInfoPopup.운송사명 || "-"}</div>
+                </>
+              ) : (
+                <div className="text-gray-400">아직 배차가 완료되지 않았습니다.</div>
+              )}
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setDriverInfoPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 오더내용복사 완료 토스트 */}
+      {copyToast && (
+        <div className="fixed bottom-20 right-5 z-[999999] bg-[#1B2B4B] text-white text-[13px] font-semibold px-4 py-2.5 rounded-xl shadow-2xl">
+          오더내용이 복사되었습니다
         </div>
       )}
     </div>
