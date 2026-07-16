@@ -14,6 +14,7 @@ import {
   deleteDoc,
   collection,
   addDoc,
+  setDoc,
   serverTimestamp,
 } from "firebase/firestore";
 
@@ -248,6 +249,13 @@ export default function UploadPage() {
       }
     }
 
+    // 운송사 원본 <-> 화주사 전송카피 간 첨부파일이 어느 쪽에서 올려도 양쪽에 동일하게 반영되도록 동기화
+    const mirrorTarget = (!isManual && order)
+      ? (order._transmittedOrderId
+          ? { col: "orders", id: order._transmittedOrderId }
+          : (order.originCol && order.originId ? { col: order.originCol, id: order.originId } : null))
+      : null;
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       // 실제 업로드는 base64 변환 후 한 번에 저장되어 바이트 단위 진행률이 없으므로,
@@ -282,24 +290,39 @@ export default function UploadPage() {
         // 첫 번째 파일 업로드 시 서명 이미지도 저장
         if (i === 0 && sigRef.current && signed) {
           const sigBase64 = sigRef.current.toDataURL("image/png");
-          await withTimeout(addDoc(collection(db, targetCol, targetId, "attachments"), {
+          const sigPayload = {
             base64: sigBase64,
             name: "서명.png",
             type: "image/png",
             sizeKB: Math.round(sigBase64.length * 0.75 / 1024),
             uploadedAt: serverTimestamp(),
             source: "driver_signature",
-          }), 25000, "서명 저장");
+          };
+          const sigId = doc(collection(db, targetCol, targetId, "attachments")).id;
+          await withTimeout(setDoc(doc(db, targetCol, targetId, "attachments", sigId), sigPayload), 25000, "서명 저장");
+          if (mirrorTarget) {
+            try { await setDoc(doc(db, mirrorTarget.col, mirrorTarget.id, "attachments", sigId), sigPayload); }
+            catch (e) { console.warn("서명 동기화 실패(무시):", e); }
+          }
         }
 
-        const docRef = await withTimeout(addDoc(collection(db, targetCol, targetId, "attachments"), {
+        const filePayload = {
           base64,
           name: file.name,
           type: "image/jpeg",
           sizeKB,
           uploadedAt: serverTimestamp(),
           source: "driver_upload",
-        }), 25000, "파일 업로드");
+        };
+        const fileId = doc(collection(db, targetCol, targetId, "attachments")).id;
+        await withTimeout(setDoc(doc(db, targetCol, targetId, "attachments", fileId), filePayload), 25000, "파일 업로드");
+        if (mirrorTarget) {
+          try {
+            await setDoc(doc(db, mirrorTarget.col, mirrorTarget.id, "attachments", fileId), filePayload);
+            await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { attachCount: increment(1) });
+          } catch (e) { console.warn("첨부 동기화 실패(무시):", e); }
+        }
+        const docRef = { id: fileId };
 
         clearInterval(progressTimer);
         setProgress(prev => ({ ...prev, [i]: 100 }));

@@ -115,8 +115,20 @@ export default function ShipperOrder({ editData, onClose }) {
 
   useEffect(() => {
   if (!previewOpen || !coords?.start || !coords?.end) return;
-  const initMap = () => {
+  let cancelled = false;
+  const waitMapDiv = async () => {
+    for (let i = 0; i < 20; i++) {
+      const el = document.getElementById("shipper-map");
+      if (el && el.offsetWidth > 0 && el.offsetHeight > 0) return el;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return document.getElementById("shipper-map");
+  };
+  const initMap = async () => {
     if (!window.Tmapv2) { setTimeout(initMap, 200); return; }
+    const mapDiv = await waitMapDiv();
+    if (!mapDiv || cancelled) return;
+    mapDiv.innerHTML = "";
     const map = new window.Tmapv2.Map("shipper-map", {
       center: new window.Tmapv2.LatLng(coords.start.lat, coords.start.lon),
       width: "100%", height: "100%", zoom: 10,
@@ -145,6 +157,7 @@ export default function ShipperOrder({ editData, onClose }) {
     });
   };
   initMap();
+  return () => { cancelled = true; };
   }, [previewOpen, coords]);
 
   useEffect(() => {
@@ -731,7 +744,7 @@ export default function ShipperOrder({ editData, onClose }) {
                 <label className={labelCls}>차량종류</label>
                 <select className={inputCls} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
                   <option value="">선택</option>
-                  {["라보/다마스","냉장탑","냉동탑","냉동윙","냉장윙","리프트","오토바이","윙바디","탑차","카고"].map(v => <option key={v}>{v}</option>)}
+                  {["라보/다마스","카고","윙바디","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","리프트","오토바이"].map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
               <div>
@@ -901,20 +914,23 @@ export default function ShipperOrder({ editData, onClose }) {
       {/* 경로 미리보기 팝업 */}
       {previewOpen && (
         <div className="fixed inset-0 bg-black/40 z-[999] flex items-center justify-center">
-          <div className="bg-white w-[880px] h-[580px] rounded-2xl overflow-hidden flex shadow-2xl">
+          <div className="bg-white w-[980px] h-[620px] rounded-2xl overflow-hidden flex shadow-2xl">
             <div id="shipper-map" className="flex-1 h-full" />
-            <div className="w-[300px] p-6 flex flex-col justify-between border-l bg-white">
+            <div className="w-[360px] p-6 flex flex-col justify-between border-l bg-white overflow-y-auto">
               <div>
-                <h2 className="text-lg font-bold mb-5 text-gray-900">배차요청 확인</h2>
+                <h2 className="text-lg font-bold mb-1 text-gray-900">배차요청 확인</h2>
+                <div className="text-[12px] text-[#1B2B4B] font-bold mb-4">
+                  운송사: {form.운송사명 || "미지정"}
+                </div>
                 {routeInfo && (
-                  <div className="bg-blue-50 rounded-xl p-3 mb-4 grid grid-cols-2 gap-2">
+                  <div className="bg-[#eef1f7] rounded-xl p-3 mb-4 grid grid-cols-2 gap-2">
                     <div className="text-center">
                       <div className="text-xs text-gray-500">거리</div>
-                      <div className="font-bold text-blue-700">{routeInfo.distance} km</div>
+                      <div className="font-bold text-[#1B2B4B]">{routeInfo.distance} km</div>
                     </div>
                     <div className="text-center">
                       <div className="text-xs text-gray-500">소요시간</div>
-                      <div className="font-bold text-blue-700">{routeInfo.time} 분</div>
+                      <div className="font-bold text-[#1B2B4B]">{routeInfo.time} 분</div>
                     </div>
                   </div>
                 )}
@@ -929,9 +945,35 @@ export default function ShipperOrder({ editData, onClose }) {
                     <div className="font-semibold text-gray-900">{form.하차지명}</div>
                     <div className="text-xs text-gray-500">{form.하차지주소}</div>
                   </div>
+                  <div className="bg-gray-50 rounded-lg p-3 grid grid-cols-2 gap-y-2 gap-x-2 text-[13px]">
+                    <div>
+                      <div className="text-xs text-gray-400">화물내용</div>
+                      <div className="font-semibold text-gray-900">{buildCargoSummary(cargoRows) || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">파렛트사</div>
+                      <div className="font-semibold text-gray-900">{buildPalletSummary(cargoRows) || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">차량종류</div>
+                      <div className="font-semibold text-gray-900">{form.차량종류 || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">톤수</div>
+                      <div className="font-semibold text-gray-900">{form.차량톤수단위 === "없음" ? "-" : (form.차량톤수 ? `${form.차량톤수}${form.차량톤수단위}` : "-")}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">상차방법</div>
+                      <div className="font-semibold text-gray-900">{form.상차방법 || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">하차방법</div>
+                      <div className="font-semibold text-gray-900">{form.하차방법 || "-"}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-4">
                 <button onClick={() => setPreviewOpen(false)} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold text-sm">취소</button>
                 <button onClick={async () => { await submit(); setPreviewOpen(false); }}
                   className="flex-1 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-lg font-bold text-sm">배차요청</button>

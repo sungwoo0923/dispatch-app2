@@ -123,6 +123,8 @@ export default function DriverSearchPage() {
             );
             snap.forEach(d => {
               const data = d.data();
+              // 화주사 전송 카피는 원본과 동일 오더이므로 검색결과 중복을 막기 위해 제외
+              if (data.source === "transport_transmit") return;
               const vn = String(data.차량번호 || "").replace(/\s/g, "");
               const nm = String(data.이름 || "").trim();
               if (vn === trimVehicle && nm === trimName) {

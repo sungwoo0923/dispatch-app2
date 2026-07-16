@@ -1039,6 +1039,21 @@ function normalizePlate(v = "") {
     .replace(/-/g, "");
 }
 // ================================
+// 화주사 등록 오더(raw HH:mm + 구분필드)를 운송프로그램 표기(오전 8시 이후)로 변환
+// ================================
+function fmtDispatchTime(v, gubun) {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+  if (/^\d{1,2}:\d{2}$/.test(raw)) {
+    const [h, m] = raw.split(":").map(Number);
+    const isAM = h < 12;
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const base = `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
+    return gubun && gubun !== "정각" ? `${base} ${gubun}` : base;
+  }
+  return raw; // 이미 운송프로그램 형식으로 저장된 값
+}
+// ================================
 // 경유지 포함 화물내용+톤수 합산 헬퍼 (모듈 스코프)
 // ================================
 function _parseWaypointList(v) {
@@ -1160,7 +1175,7 @@ function OrderInfoModal({ row, onClose }) {
           <Section title="상차지">
             <Row label="업체명" value={row.상차지명} />
             <Row label="주소" value={row.상차지주소} />
-            <Row label="상차시간" value={row.상차시간 ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}` : "즉시"} />
+            <Row label="상차시간" value={row.상차시간 ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분) : "즉시"} />
           </Section>
           {pickupStops.length > 0 && (
             <Section title={`상차 경유지 (${pickupStops.length})`}>
@@ -1179,7 +1194,7 @@ function OrderInfoModal({ row, onClose }) {
           <Section title="하차지">
             <Row label="업체명" value={row.하차지명} />
             <Row label="주소" value={row.하차지주소} />
-            <Row label="하차시간" value={row.하차시간 ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}` : "즉시"} />
+            <Row label="하차시간" value={row.하차시간 ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분) : "즉시"} />
           </Section>
           {dropStops.length > 0 && (
             <Section title={`하차 경유지 (${dropStops.length})`}>
@@ -12482,13 +12497,27 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
       alert("이미지 복사를 지원하지 않는 브라우저입니다.\n이미지를 우클릭하여 저장하거나, 저장 버튼을 이용해주세요.");
     }
   };
-const handleDelete = async (item) => {
+  // ✅ 화주사 전송 카피 <-> 원본 오더 간 첨부파일 동기화용 링크 정보
+  const getMirrorTarget = () => {
+    if (row._transmittedOrderId) return { col: "orders", id: row._transmittedOrderId };
+    if (row.originCol && row.originId) return { col: row.originCol, id: row.originId };
+    return null;
+  };
+
+  const handleDelete = async (item) => {
     if (isViewer) { alert("조회전용 권한으로는 삭제할 수 없습니다."); return; }
     if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
     try {
       const col = row.__col || "orders";
       await deleteDoc(doc(db, col, row._id, "attachments", item.id));
       await updateDoc(doc(db, col, row._id), { attachCount: increment(-1) });
+      const mirror = getMirrorTarget();
+      if (mirror) {
+        try {
+          await deleteDoc(doc(db, mirror.col, mirror.id, "attachments", item.id));
+          await updateDoc(doc(db, mirror.col, mirror.id), { attachCount: increment(-1) });
+        } catch (e) { console.warn("첨부 동기화 삭제 실패(무시):", e); }
+      }
     } catch(e) { alert("삭제 실패: " + e.message); }
   };
 
@@ -12496,6 +12525,7 @@ const handleDelete = async (item) => {
     if (isViewer) { alert("조회전용 권한으로는 업로드할 수 없습니다."); return; }
     if (!files?.length) return;
     const col = row.__col || "orders";
+    const mirror = getMirrorTarget();
     for (const file of files) {
       try {
         const reader = new FileReader();
@@ -12504,7 +12534,7 @@ const handleDelete = async (item) => {
           reader.onerror = rej;
           reader.readAsDataURL(file);
         });
-        await addDoc(collection(db, col, row._id, "attachments"), {
+        const payload = {
           url: base64,
           base64,
           name: file.name,
@@ -12512,8 +12542,17 @@ const handleDelete = async (item) => {
           sizeKB: Math.round(file.size / 1024),
           uploadedBy: "dispatch",
           createdAt: serverTimestamp(),
-        });
+        };
+        // 원본/전송카피 양쪽에서 동일한 첨부 ID를 공유하도록 클라이언트에서 ID 미리 생성
+        const newId = doc(collection(db, col, row._id, "attachments")).id;
+        await setDoc(doc(db, col, row._id, "attachments", newId), payload);
         await updateDoc(doc(db, col, row._id), { attachCount: increment(1) });
+        if (mirror) {
+          try {
+            await setDoc(doc(db, mirror.col, mirror.id, "attachments", newId), payload);
+            await updateDoc(doc(db, mirror.col, mirror.id), { attachCount: increment(1) });
+          } catch (e) { console.warn("첨부 동기화 실패(무시):", e); }
+        }
       } catch(e) { alert("업로드 실패: " + e.message); }
     }
   };
@@ -17954,14 +17993,14 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
                   <td className={cell}>
   {r.상차시간
-    ? `${r.상차시간}${r.상차시간기준 ? ` ${r.상차시간기준}` : ""}`
+    ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분)
     : "즉시"}
 </td>
 
                   <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
                  <td className={cell}>
   {r.하차시간
-    ? `${r.하차시간}${r.하차시간기준 ? ` ${r.하차시간기준}` : ""}`
+    ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분)
     : "즉시"}
 </td>
 
@@ -26286,14 +26325,14 @@ return (
 ) : key === "상차시간" ? (
   <span>
     {row.상차시간
-      ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}`
+      ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분)
       : "즉시"}
   </span>
 
 ) : key === "하차시간" ? (
   <span>
     {row.하차시간
-      ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}`
+      ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분)
       : "즉시"}
   </span>
 
