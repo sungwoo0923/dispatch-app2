@@ -580,7 +580,7 @@ export default function ShipperStatus() {
 
       {/* 알림 토스트 카드 (우측 하단) */}
       <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 999997, display: "flex", flexDirection: "column", gap: 10, width: 320 }}>
-        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } } @keyframes cancelReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.4; } } @keyframes nudgeBtnBlink { 0%,100% { opacity:1; } 50% { opacity:0.55; } }`}</style>
+        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } } @keyframes cancelReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }`}</style>
         {toasts.map(t => (
           <div key={t.id}
             onClick={() => {
@@ -596,7 +596,7 @@ export default function ShipperStatus() {
           >
             <div className="flex items-center justify-between">
               <span style={{ fontSize: 12, fontWeight: 800, color: t.type === "dispatch" ? "#1B2B4B" : "#059669" }}>
-                {t.type === "dispatch" ? "🚚 " : "📎 "}{t.title}
+                {t.title}
               </span>
               <button onClick={(e) => { e.stopPropagation(); setToasts(prev => prev.filter(x => x.id !== t.id)); }}
                 className="text-gray-300 hover:text-gray-500 text-sm leading-none">×</button>
@@ -728,6 +728,7 @@ export default function ShipperStatus() {
               <col style={{ width: 200 }} /><col style={{ width: 140 }} />
               <col style={{ width: 120 }} /><col style={{ width: 110 }} />
               <col style={{ width: 90 }} />
+              <col style={{ width: 90 }} />
               <col style={{ width: 120 }} /><col style={{ width: 120 }} />
               <col style={{ width: 120 }} /><col style={{ width: 110 }} />
               <col style={{ width: 110 }} /><col style={{ width: 120 }} />
@@ -740,7 +741,7 @@ export default function ShipperStatus() {
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
                   "순번","등록일","운송사","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
-                  "하차지","하차지주소","화물","파렛트사","상태","차량","톤수","차량번호","이름","전화번호",
+                  "하차지","하차지주소","화물","파렛트사","상태","재촉","차량","톤수","차량번호","이름","전화번호",
                   "청구운임","지급방식","첨부"
                 ].map((h, idx) => (
                   <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 last:border-r-0 whitespace-nowrap">
@@ -841,27 +842,26 @@ export default function ShipperStatus() {
                       })()}
                     </td>
                     <td className={tdCls}>
-                      <div className="flex flex-col items-center gap-1">
-                        {o.취소요청 && getStatus(o) !== "배차취소" ? (
-                          <span className="px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap bg-orange-100 text-orange-700"
-                            style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }}>
-                            취소요청중
-                          </span>
-                        ) : (
-                          <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
-                        )}
-                        {canNudge(o) && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); handleNudge(o); }}
-                            title="상차 예정시간이 임박했는데 아직 처리되지 않았습니다. 클릭하면 운송사에 재촉 알림을 보냅니다."
-                            className="px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
-                            style={{ animation: "nudgeBtnBlink 1.4s ease-in-out infinite" }}
-                          >
-                            ⏰ 재촉
-                          </button>
-                        )}
-                      </div>
+                      {o.취소요청 && getStatus(o) !== "배차취소" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap bg-orange-100 text-orange-700">
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
+                          취소요청중
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
+                      )}
+                    </td>
+                    <td className={tdCls}>
+                      {canNudge(o) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleNudge(o); }}
+                          title="상차 예정시간이 임박했는데 아직 처리되지 않았습니다. 클릭하면 운송사에 재촉 알림을 보냅니다."
+                          className="px-2.5 py-1 rounded-lg text-[12px] font-bold whitespace-nowrap bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                        >
+                          재촉
+                        </button>
+                      ) : "-"}
                     </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
@@ -903,7 +903,7 @@ export default function ShipperStatus() {
                 );
               })}
               {pagedRows.length === 0 && (
-                <tr><td colSpan={24} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
+                <tr><td colSpan={25} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
               )}
             </tbody>
           </table>
@@ -946,7 +946,7 @@ export default function ShipperStatus() {
                   <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">재등록</button>
                 )}
                 {selectedOrder && canNudge(selectedOrder) && (
-                  <button onClick={() => handleNudge(selectedOrder)} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:opacity-90">⏰ 재촉</button>
+                  <button onClick={() => handleNudge(selectedOrder)} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:opacity-90">재촉</button>
                 )}
               </div>
               <button onClick={() => setDetailOpen(false)} className="text-gray-500 hover:text-black text-xl">×</button>
@@ -1149,7 +1149,7 @@ export default function ShipperStatus() {
               onClick={() => { handleNudge(ctxMenu.order); setCtxMenu(null); }}
               className="w-full text-left px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition"
             >
-              ⏰ 재촉하기
+              재촉하기
             </button>
           )}
         </div>
