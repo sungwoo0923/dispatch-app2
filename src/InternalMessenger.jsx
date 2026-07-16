@@ -54,7 +54,7 @@ function Avatar({ name = "", photo = "", size = 36, bgColor = "#1B2B4B" }) {
   );
 }
 
-export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, mobileVisible = false, onClose, onUnreadChange, controlledOpen, onOpenChange, linkedCompanyName = "" }) {
+export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, mobileVisible = false, onClose, onUnreadChange, controlledOpen, onOpenChange, linkedCompanyName = "", themeColor = "", excludeRoles = [] }) {
   const myUid = user?.uid || "";
   const myEmail = user?.email || "";
   const company = userCompany || localStorage.getItem("userCompany") || "";
@@ -142,7 +142,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     const userSnap = await getDocs(query(collection(db, "users"), where("companyName", "==", companyName)));
     const userList = userSnap.docs
       .map(d => ({ uid: d.id || d.uid, ...d.data() }))
-      .filter(u => (u.uid || u.id) !== myUid && u.approved !== false);
+      .filter(u => (u.uid || u.id) !== myUid && u.approved !== false && !excludeRoles.includes(u.role));
 
     const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", companyName)));
     const profileMap = {};
@@ -663,14 +663,14 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const myName = myProfile?.name || myEmail.split("@")[0] || "나";
   const filteredMsgs = msgSearch ? messages.filter(m => m.text?.includes(msgSearch)) : messages;
 
-  // ── 테마 (A형=블루/화이트, B형=네이비) ──
-  const isThemeA = localStorage.getItem("cardVersion") !== "B";
-  const themeHdr = isThemeA ? "linear-gradient(135deg, #3b82f6, #1d4ed8)" : "#1B2B4B";
-  const themeMyBubble = isThemeA ? "#2563eb" : "#1B2B4B";
-  const themeChatBg = isThemeA ? "#eff6ff" : "#f0f4f8";
+  // ── 테마 (themeColor prop이 있으면 그 색으로 고정, 없으면 A형=블루/화이트, B형=네이비) ──
+  const isThemeA = !themeColor && localStorage.getItem("cardVersion") !== "B";
+  const themeHdr = themeColor || (isThemeA ? "linear-gradient(135deg, #3b82f6, #1d4ed8)" : "#1B2B4B");
+  const themeMyBubble = themeColor || (isThemeA ? "#2563eb" : "#1B2B4B");
+  const themeChatBg = themeColor ? "#eef1f7" : (isThemeA ? "#eff6ff" : "#f0f4f8");
 
   // ── 패널 크기 & 위치 ──
-  const PANEL_W = mobileMode ? 360 : 700;
+  const PANEL_W = mobileMode ? 360 : 820;
   const PANEL_H = 580;
   const BTN_BOTTOM = 152;
   const [panelW, setPanelW] = useState(PANEL_W);
@@ -1336,19 +1336,19 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                 onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <Avatar name={f.name} photo={f.photo} size={40} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", display: "flex", alignItems: "center", gap: 6 }}>
-                    {f.name}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }}>{f.name}</span>
                     {f.crossCompany && (
-                      <span style={{ fontSize: 10, fontWeight: 700, color: "#1B2B4B", background: "#eef1f7", borderRadius: 6, padding: "1px 6px" }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#1B2B4B", background: "#eef1f7", borderRadius: 6, padding: "1px 6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0, maxWidth: 110 }}>
                         연동 · {f.company}
                       </span>
                     )}
                   </div>
-                  {f.statusMsg && <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1 }}>{f.statusMsg}</div>}
+                  {f.statusMsg && <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.statusMsg}</div>}
                 </div>
                 <button onClick={e => { e.stopPropagation(); onOpenDM(f); }}
-                  style={{ background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>대화</button>
+                  style={{ background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>대화</button>
               </div>
             ))}
           </>

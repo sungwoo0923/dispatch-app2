@@ -206,6 +206,8 @@ location.pathname.startsWith("/shipper/transport")
         user={user}
         userCompany={companyName}
         linkedCompanyName={userData?.linkedTransportCompany?.companyName || ""}
+        themeColor="#1B2B4B"
+        excludeRoles={["driver", "viewer"]}
       />
       {myInfoOpen && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
