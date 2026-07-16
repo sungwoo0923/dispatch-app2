@@ -90,6 +90,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [transmitting, setTransmitting] = useState(false);
   const [transmitResult, setTransmitResult] = useState(null);
 
+  // 화주사 문의 탭 state
+  const [allInquiries, setAllInquiries] = useState([]);
+  const [selectedInquiry, setSelectedInquiry] = useState(null);
+  const [inquiryReplyText, setInquiryReplyText] = useState("");
+  const [inquiryReplying, setInquiryReplying] = useState(false);
+
   const [myRole, setMyRole] = useState("");
   const [myCompany, setMyCompany] = useState("");
   const [myCompanyCode, setMyCompanyCode] = useState("");
@@ -139,6 +145,16 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       if (snap.exists()) setAppUserPerms(snap.data().permissions || {});
     });
   }, [managingLinkedApp?.userId]);
+
+  // 화주사 문의 구독
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "inquiries"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setAllInquiries(list);
+    });
+    return () => unsub();
+  }, []);
 
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) return users;
@@ -219,6 +235,40 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!q) return null;
     return approvedLinkedShippers.find(a => (a.companyName || "").trim() === q) || null;
   }, [approvedLinkedShippers, transmitCompanyQuery]);
+
+  // ====== 화주사 문의 탭 ======
+  const linkedShipperCompanyNames = useMemo(
+    () => new Set(approvedLinkedShippers.map(a => a.companyName)),
+    [approvedLinkedShippers]
+  );
+  const myLinkedInquiries = useMemo(() => {
+    if (isTotalMaster) return [];
+    return allInquiries.filter(q => {
+      const author = users.find(u => u.id === q.userId);
+      return author && linkedShipperCompanyNames.has(author.companyName);
+    }).map(q => ({ ...q, __authorCompany: users.find(u => u.id === q.userId)?.companyName || "" }));
+  }, [allInquiries, users, linkedShipperCompanyNames, isTotalMaster]);
+  const unansweredInquiryCount = myLinkedInquiries.filter(q => q.status !== "답변완료").length;
+
+  const handleReplyInquiry = async () => {
+    if (isViewer) { _viewerAlert(); return; }
+    if (!selectedInquiry || !inquiryReplyText.trim()) return;
+    setInquiryReplying(true);
+    try {
+      await updateDoc(doc(db, "inquiries", selectedInquiry.id), {
+        reply: inquiryReplyText.trim(),
+        status: "답변완료",
+        repliedAt: serverTimestamp(),
+        repliedBy: me?.email || "",
+      });
+      setSelectedInquiry(null);
+      setInquiryReplyText("");
+    } catch (e) {
+      alert("답변 등록 실패: " + e.message);
+    } finally {
+      setInquiryReplying(false);
+    }
+  };
 
   const transmitMatches = useMemo(() => {
     const q = transmitCompanyQuery.trim();
@@ -608,6 +658,19 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "transmit" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
           >
             화주사 전송
+          </button>
+        )}
+        {!isTotalMaster && (
+          <button
+            onClick={() => setAdminTab("inquiries")}
+            className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "inquiries" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+          >
+            화주사 문의
+            {unansweredInquiryCount > 0 && (
+              <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${adminTab === "inquiries" ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
+                {unansweredInquiryCount}
+              </span>
+            )}
           </button>
         )}
       </div>
@@ -1019,6 +1082,42 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               )}
             </div>
           )}
+
+          {/* ====== 화주사 문의 탭 ====== */}
+          {adminTab === "inquiries" && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {myLinkedInquiries.length === 0 ? (
+                <div className="text-[13px] text-gray-400 text-center py-16">연동된 화주사의 문의가 없습니다.</div>
+              ) : (
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#1B2B4B] text-white">
+                      <th className="px-4 py-2.5 text-left font-semibold">회사</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">제목</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">작성자</th>
+                      <th className="px-4 py-2.5 text-center font-semibold">등록일</th>
+                      <th className="px-4 py-2.5 text-center font-semibold">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {myLinkedInquiries.map(q => (
+                      <tr key={q.id} onClick={() => { setSelectedInquiry(q); setInquiryReplyText(q.reply || ""); }} className="cursor-pointer hover:bg-gray-50 transition">
+                        <td className="px-4 py-3 text-gray-600">{q.__authorCompany}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{q.title}</td>
+                        <td className="px-4 py-3 text-gray-500">{q.name}</td>
+                        <td className="px-4 py-3 text-center text-gray-400">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${q.status === "답변완료" ? "bg-emerald-100 text-emerald-700" : "bg-amber-50 text-amber-600"}`}>
+                            {q.status || "접수중"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 모바일 미리보기 */}
@@ -1233,6 +1332,44 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   거절 확인
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====== 화주사 문의 답변 팝업 ====== */}
+      {selectedInquiry && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setSelectedInquiry(null); setInquiryReplyText(""); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <div className="font-bold text-[15px] text-[#1B2B4B]">{selectedInquiry.title}</div>
+                <div className="text-[12px] text-gray-400 mt-0.5">{selectedInquiry.__authorCompany} · {selectedInquiry.name}</div>
+              </div>
+              <button onClick={() => { setSelectedInquiry(null); setInquiryReplyText(""); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <div className="text-[11px] font-semibold text-gray-500 mb-1">문의 내용</div>
+                <div className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedInquiry.content}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-gray-500 mb-1">답변</div>
+                <textarea
+                  value={inquiryReplyText}
+                  onChange={e => setInquiryReplyText(e.target.value)}
+                  rows={5}
+                  placeholder="답변 내용을 입력하세요"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+                />
+              </div>
+              <button
+                onClick={handleReplyInquiry}
+                disabled={inquiryReplying || isViewer || !inquiryReplyText.trim()}
+                className="w-full py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-40"
+              >
+                {inquiryReplying ? "등록 중..." : (selectedInquiry.status === "답변완료" ? "답변 수정" : "답변 등록")}
+              </button>
             </div>
           </div>
         </div>
