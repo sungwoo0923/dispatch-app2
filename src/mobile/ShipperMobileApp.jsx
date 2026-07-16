@@ -234,6 +234,8 @@ export default function ShipperMobileApp() {
           mobileVisible={showMessenger}
           onClose={() => setShowMessenger(false)}
           onUnreadChange={setMessengerUnread}
+          themeColor="#1B2B4B"
+          excludeRoles={["driver", "viewer"]}
         />
       </div>
 
