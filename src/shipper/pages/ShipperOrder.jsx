@@ -322,6 +322,7 @@ export default function ShipperOrder({ editData, onClose }) {
         shipperCompany: effectiveCompany,
         배차상태: "배차중",
         업체전달상태: "미전달",
+        화주사확인대기: true,
         createdAt: serverTimestamp(),
         role: "shipper",
         source: "shipper",
