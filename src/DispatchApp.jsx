@@ -2543,7 +2543,7 @@ React.useEffect(() => {
   // ---------------- 화주사 배차요청 대기 건수 (헤더 상시 알림용) ----------------
   const pendingShipperRequests = (dispatchData || []).filter(r => r.화주사확인대기 === true);
 
-  // ---------------- 화주사 재촉 알림 (상차 임박 시 화주사가 보낸 재촉 요청 — 확인 전까지 중앙 팝업 유지) ----------------
+  // ---------------- 화주사 푸시 알림 (상차 임박 시 화주사가 보낸 푸시 — 확인 전까지 중앙 팝업 유지) ----------------
   const pendingNudges = (dispatchData || []).filter(r => r.재촉대기 === true);
   const activeNudge = pendingNudges.length > 0
     ? [...pendingNudges].sort((a, b) => {
@@ -2753,7 +2753,7 @@ return (
         </div>
       )}
 
-      {/* 화주사 재촉 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 재촉하면 중앙에 확인 전까지 표시 */}
+      {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}
       {activeNudge && (
         <div className="fixed inset-0 z-[9999999] bg-black/55 flex items-center justify-center p-4">
           <style>{`
@@ -2762,7 +2762,7 @@ return (
           `}</style>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[440px] overflow-hidden" style={{ animation: "nudgePopIn 0.25s ease-out" }}>
             <div className="bg-red-600 px-6 py-4 flex items-center gap-2" style={{ animation: "nudgeHeaderBlink 1.2s ease-in-out infinite" }}>
-              <h3 className="text-white font-black text-[17px]">화주사 재촉 알림</h3>
+              <h3 className="text-white font-black text-[17px]">화주사 푸시 알림</h3>
               {pendingNudges.length > 1 && (
                 <span className="ml-auto bg-white/20 text-white text-[12px] font-bold px-2 py-0.5 rounded-full">
                   외 {pendingNudges.length - 1}건 대기
@@ -2777,10 +2777,10 @@ return (
               </div>
               <div className="text-gray-500 text-[13px]">현재 상태 : {activeNudge.배차상태 || "-"}</div>
               {Number(activeNudge.재촉횟수 || 0) > 1 && (
-                <div className="text-red-600 text-[12px] font-bold">{activeNudge.재촉횟수}번째 재촉 요청입니다.</div>
+                <div className="text-red-600 text-[12px] font-bold">{activeNudge.재촉횟수}번째 푸시입니다.</div>
               )}
               <div className="bg-red-50 text-red-700 rounded-lg px-3 py-2.5 text-[13px] font-semibold mt-1">
-                상차 예정시간이 임박했는데 아직 배차 처리가 완료되지 않아 화주사가 신속한 처리를 요청했습니다.
+                상차 예정시간이 임박했는데 아직 배차 처리가 완료되지 않아 화주사가 푸시를 보냈습니다.
               </div>
             </div>
             <div className="px-6 pb-6">
