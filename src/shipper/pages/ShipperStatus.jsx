@@ -95,6 +95,11 @@ export default function ShipperStatus() {
   const prevAttachRef = useRef({});
   const [attachNotif, setAttachNotif] = useState(null);
   const [attachViewer, setAttachViewer] = useState(null);
+  const prevVehicleRef = useRef({});
+  const [dispatchNotif, setDispatchNotif] = useState(null);
+  const [focusOrderId, setFocusOrderId] = useState(null);
+  const [flashId, setFlashId] = useState(null);
+  const rowRefs = useRef({});
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -179,12 +184,61 @@ export default function ShipperStatus() {
         prevAttachRef.current[o.id] = cur;
       });
 
+      // 배차완료 전환 감지 -> 알림
+      docs.forEach((o) => {
+        const curHasVehicle = !!(o.차량번호 && o.차량번호.trim());
+        const prev = prevVehicleRef.current[o.id];
+        if (prev === false && curHasVehicle) {
+          setDispatchNotif({
+            id: o.id,
+            text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호} · ${o.이름 || ""})`,
+            order: o,
+          });
+          setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+        }
+        prevVehicleRef.current[o.id] = curHasVehicle;
+      });
+
       setOrders(docs);
       setLoading(false);
     });
 
     return () => unsub();
   }, [user, userData]);
+
+  // 알림 클릭 -> 해당 오더로 포커스 이동 + 하이라이트
+  const focusOnOrder = (order) => {
+    setHideCanceled(false);
+    setFilter("전체");
+    setKeyword("");
+    const orderDate = toYMD(order.상차일);
+    if (orderDate && startDate && orderDate < startDate) setStartDate(orderDate);
+    if (orderDate && endDate && orderDate > endDate) setEndDate(orderDate);
+    setFocusOrderId(order.id);
+  };
+
+  useEffect(() => {
+    if (!focusOrderId) return;
+    const idx = rows.findIndex(r => r.id === focusOrderId);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / pageSize) + 1;
+    if (targetPage !== page) { setPage(targetPage); return; }
+
+    let rafId, tries = 0, timeoutId;
+    const run = () => {
+      const el = rowRefs.current[focusOrderId];
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setFlashId(focusOrderId);
+        timeoutId = setTimeout(() => { setFlashId(null); setFocusOrderId(null); }, 1600);
+        return;
+      }
+      if (tries++ < 30) rafId = requestAnimationFrame(run);
+      else setFocusOrderId(null);
+    };
+    rafId = requestAnimationFrame(run);
+    return () => { cancelAnimationFrame(rafId); clearTimeout(timeoutId); };
+  }, [focusOrderId, rows, page]);
 
   const getStatus = useCallback((o) => {
     if (["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태)) return "배차취소";
@@ -319,11 +373,31 @@ export default function ShipperStatus() {
   return (
     <div className="flex h-screen overflow-hidden">
 
+      {/* 배차완료 알림 배너 */}
+      {dispatchNotif && (
+        <div
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, zIndex: 999999,
+            background: "#1B2B4B", color: "white", textAlign: "center",
+            padding: "10px 16px", fontSize: "13px", fontWeight: 600,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+            animation: "bannerDown 0.4s ease-out forwards",
+          }}
+          onClick={() => { focusOnOrder(dispatchNotif.order); setDispatchNotif(null); }}
+          className="cursor-pointer"
+        >
+          <style>{`@keyframes bannerDown { from { opacity:0; transform:translateY(-100%); } to { opacity:1; transform:translateY(0); } }`}</style>
+          <span style={{ display:"inline-block", width:6, height:6, borderRadius:"50%", background:"#93c5fd", marginRight:8, verticalAlign:"middle" }} />
+          {dispatchNotif.text}
+          <span style={{ marginLeft:12, textDecoration:"underline", opacity:0.85 }}>클릭하여 확인</span>
+        </div>
+      )}
+
       {/* 첨부 알림 배너 */}
       {attachNotif && (
         <div
           style={{
-            position: "fixed", top: 0, left: 0, right: 0, zIndex: 999999,
+            position: "fixed", top: dispatchNotif ? 40 : 0, left: 0, right: 0, zIndex: 999998,
             background: "#059669", color: "white", textAlign: "center",
             padding: "10px 16px", fontSize: "13px", fontWeight: 600,
             boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
@@ -490,8 +564,12 @@ export default function ShipperStatus() {
                 const tdCls = "px-3 py-3 text-center border-r border-gray-100 last:border-r-0 align-middle";
                 const pickupVia = getViaList(o.경유상차목록);
                 const dropVia = getViaList(o.경유하차목록);
+                const isFlashing = flashId === o.id;
                 return (
-                  <tr key={o.id} className={`border-t border-gray-100 ${rowCls}`}
+                  <tr key={o.id}
+                    ref={(el) => { if (el) rowRefs.current[o.id] = el; }}
+                    className={`border-t border-gray-100 ${rowCls} transition-shadow duration-500`}
+                    style={isFlashing ? { boxShadow: "inset 0 0 0 2px #1B2B4B, 0 0 14px rgba(27,43,75,0.45)", background: "#eef1f7" } : undefined}
                     onDoubleClick={() => { setSelectedOrder(o); setDetailOpen(true); }}>
                     <td className={tdCls}>
                       <input type="checkbox" checked={selectedIds.includes(o.id)}
@@ -562,19 +640,31 @@ export default function ShipperStatus() {
                       <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
                     </td>
                     <td className={tdCls}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setAttachViewer(o); }}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-bold border transition mx-auto ${
-                          attachCnt > 0
-                            ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
-                            : "border-gray-200 text-gray-400 hover:bg-gray-50"
-                        }`}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                        </svg>
-                        {attachCnt > 0 ? attachCnt : "-"}
-                      </button>
+                      {(() => {
+                        const isUnseen = attachCnt > 0 && (o.attachViewedCount || 0) < attachCnt;
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAttachViewer(o);
+                              if (isUnseen) updateDoc(doc(db, "orders", o.id), { attachViewedCount: attachCnt }).catch(() => {});
+                            }}
+                            className={`relative flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-bold border transition mx-auto ${
+                              attachCnt === 0
+                                ? "border-gray-200 text-gray-400 hover:bg-gray-50"
+                                : isUnseen
+                                  ? "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                                  : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                            }`}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            {attachCnt > 0 ? attachCnt : "-"}
+                            {isUnseen && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500" />}
+                          </button>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );
@@ -598,28 +688,28 @@ export default function ShipperStatus() {
       {detailOpen && selectedOrder && (
         <div className="fixed top-0 right-0 h-full w-[720px] bg-white shadow-2xl z-50 overflow-y-auto">
           <div className="flex items-center justify-between px-5 py-4 border-b">
-            <div className={`text-[18px] font-bold ${selectedOrder?.상태 === "취소" ? "text-red-600" : "text-blue-600"}`}>
+            <div className={`text-[18px] font-bold ${selectedOrder?.상태 === "취소" ? "text-rose-700" : "text-[#1B2B4B]"}`}>
               {selectedOrder?.상태 === "취소" ? "배차취소 되었습니다." : selectedOrder?.차량번호 ? "배차완료 되었습니다." : "배차 요청중입니다."}
             </div>
             <div className="flex gap-2">
               <button
                 disabled={selectedOrder?.상태 === "취소"}
                 onClick={() => { setEditData(selectedOrder); setEditOpen(true); }}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-600 text-white hover:opacity-90"}`}
               >수정</button>
               <button
                 disabled={selectedOrder?.상태 === "취소"}
                 onClick={() => cancelOrder(selectedOrder.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-500 text-white hover:bg-red-600"}`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
               >오더취소</button>
               <button
                 onClick={() => setAttachViewer(selectedOrder)}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700"
+                className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90"
               >
                 첨부 {selectedOrder.attachCount > 0 ? `(${selectedOrder.attachCount})` : ""}
               </button>
               {selectedOrder?.상태 === "취소" && (
-                <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700">재등록</button>
+                <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">재등록</button>
               )}
             </div>
             <button onClick={() => setDetailOpen(false)} className="text-gray-500 hover:text-black text-xl">×</button>
@@ -649,11 +739,11 @@ export default function ShipperStatus() {
                 {selectedOrder?.전화번호 && (
                   <div className="flex gap-2 mt-3">
                     <a href={`tel:${selectedOrder.전화번호}`}
-                      className="flex-1 py-2 bg-emerald-500 text-white rounded-lg text-[13px] font-bold text-center hover:bg-emerald-600">
+                      className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold text-center hover:opacity-90">
                       전화 연결
                     </a>
                     <a href={`sms:${selectedOrder.전화번호}`}
-                      className="flex-1 py-2 bg-sky-500 text-white rounded-lg text-[13px] font-bold text-center hover:bg-sky-600">
+                      className="flex-1 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold text-center hover:opacity-90">
                       문자 전송
                     </a>
                   </div>
