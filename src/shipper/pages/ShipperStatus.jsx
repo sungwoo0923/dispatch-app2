@@ -8,6 +8,7 @@ import {
   doc,
   deleteDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   updateDoc,
   setDoc,
@@ -1117,6 +1118,32 @@ function ShipperAttachmentViewer({ order, onClose }) {
     });
     return () => unsub();
   }, [order]);
+
+  // 예전에(동기화 기능 추가 전) 올라간 첨부는 원본/전송카피 한쪽에만 있을 수 있어
+  // 첨부창을 열 때 양쪽을 비교해 누락분을 한 번 보정한다.
+  useEffect(() => {
+    if (!order?.id || !order?.originCol || !order?.originId) return;
+    const mirror = { col: order.originCol, id: order.originId };
+    (async () => {
+      try {
+        const [localSnap, mirrorSnap] = await Promise.all([
+          getDocs(collection(db, "orders", order.id, "attachments")),
+          getDocs(collection(db, mirror.col, mirror.id, "attachments")),
+        ]);
+        const localIds = new Set(localSnap.docs.map(d => d.id));
+        const mirrorIds = new Set(mirrorSnap.docs.map(d => d.id));
+        let addedLocal = 0, addedMirror = 0;
+        for (const d of mirrorSnap.docs) {
+          if (!localIds.has(d.id)) { await setDoc(doc(db, "orders", order.id, "attachments", d.id), d.data()); addedLocal++; }
+        }
+        for (const d of localSnap.docs) {
+          if (!mirrorIds.has(d.id)) { await setDoc(doc(db, mirror.col, mirror.id, "attachments", d.id), d.data()); addedMirror++; }
+        }
+        if (addedLocal) await updateDoc(doc(db, "orders", order.id), { attachCount: localIds.size + addedLocal });
+        if (addedMirror) await updateDoc(doc(db, mirror.col, mirror.id), { attachCount: mirrorIds.size + addedMirror });
+      } catch (e) { console.warn("첨부 동기화 보정 실패(무시):", e); }
+    })();
+  }, [order?.id]);
 
   const getRotation = (id) => rotations[id] || 0;
 
