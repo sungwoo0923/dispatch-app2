@@ -224,7 +224,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const isViewer = role === "viewer";
   const [boardTab, setBoardTab] = React.useState("공지사항");
   const [noticeOpen, setNoticeOpen] = useState(false);
-  const [noticeForm, setNoticeForm] = React.useState({ category: "공지사항", author: "", content: "" });
+  const [noticeForm, setNoticeForm] = React.useState({ category: "공지사항", author: "", content: "", audience: "internal" });
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [scheduleForm, setScheduleForm] = React.useState({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] });
   const [notices, setNotices] = React.useState([]);
@@ -854,7 +854,12 @@ React.useEffect(() => {
                       <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{n.date?.replaceAll("-", ".")}</td>
                       <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(n.createdAt)}</td>
                       <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{n.author}</td>
-                      <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800">{n.title || "공지사항"}</td>
+                      <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800">
+                        {n.audience === "shipper" && (
+                          <span className="inline-block mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 align-middle">화주사</span>
+                        )}
+                        {n.title || "공지사항"}
+                      </td>
                     </tr>
                   ))}
                 />
@@ -1007,6 +1012,14 @@ React.useEffect(() => {
       {noticeOpen && (
         <Modal title={selectedNotice ? "공지사항 수정" : "공지사항 등록"} onClose={() => { setNoticeOpen(false); setSelectedNotice(null); }}>
           <div className="space-y-3">
+            <div className="flex gap-1.5">
+              {[["internal", "내부용 (운송사만)"], ["shipper", "화주사 대상"]].map(([v, l]) => (
+                <button key={v} type="button" onClick={() => setNoticeForm({ ...noticeForm, audience: v })}
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold border transition ${noticeForm.audience === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
             <select className={formInput} value={noticeForm.category} onChange={e => setNoticeForm({ ...noticeForm, category: e.target.value })}>
               <option>공지사항</option>
               <option>업데이트</option>
@@ -1024,11 +1037,11 @@ React.useEffect(() => {
               const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
               const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
               if (selectedNotice?.id) {
-                await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content });
+                await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
               } else {
-                await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, authorUid: user?.uid || "", createdAt: serverTimestamp(), companyName: getViewCompany() });
+                await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: user?.uid || "", createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
-              setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(false); setSelectedNotice(null);
+              setNoticeForm({ category: "공지사항", author: "", content: "", audience: "internal" }); setNoticeOpen(false); setSelectedNotice(null);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
           </div>
         </Modal>
@@ -1049,7 +1062,7 @@ React.useEffect(() => {
             return (
             <div className="flex gap-2 mt-4 pt-4 border-t">
               <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-              <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+              <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
             </div>
             );
           })()}

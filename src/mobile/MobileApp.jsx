@@ -947,7 +947,7 @@ const [userReadScheduleAt, setUserReadScheduleAt] = useState(null);
 const [selectedSchedule, setSelectedSchedule] = useState(null);
 const [selectedNotice, setSelectedNotice] = useState(null);
 const [noticeOpen, setNoticeOpen] = useState(false);
-const [noticeForm, setNoticeForm] = useState({ category: "공지사항", author: "", content: "" });
+const [noticeForm, setNoticeForm] = useState({ category: "공지사항", author: "", content: "", audience: "internal" });
 const [scheduleOpen, setScheduleOpen] = useState(false);
 const [scheduleForm, setScheduleForm] = useState({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] });
 const [noticePage, setNoticePage] = useState(1);
@@ -3042,7 +3042,7 @@ onGoAttendance={() => {
         style={{ gridTemplateColumns: "72px 1fr 56px" }}>
         <span>날짜</span><span className="text-center">제목</span>
         {role !== "viewer" ? (
-          <button onClick={(e) => { e.stopPropagation(); setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" }); setNoticeOpen(true); }}
+          <button onClick={(e) => { e.stopPropagation(); setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "", audience: "internal" }); setNoticeOpen(true); }}
             className="text-right text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
         ) : (
           <span className="text-right">작성자</span>
@@ -3536,7 +3536,7 @@ onGoAttendance={() => {
           <div className="flex gap-2 pt-2 border-t border-gray-100">
             <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })}
               className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
-            <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content }); setNoticeOpen(true); }}
+            <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
           </div>
           );
@@ -3555,6 +3555,14 @@ onGoAttendance={() => {
         <button onClick={() => { setNoticeOpen(false); setSelectedNotice(null); }} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div className="p-5 space-y-3">
+        <div className="flex gap-1.5">
+          {[["internal", "내부용 (운송사만)"], ["shipper", "화주사 대상"]].map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setNoticeForm(f => ({ ...f, audience: v }))}
+              className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border transition ${noticeForm.audience === v ? (cardVersionB ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-blue-600 text-white border-blue-600") : "bg-white text-gray-500 border-gray-200"}`}>
+              {l}
+            </button>
+          ))}
+        </div>
         <select
           className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
           value={noticeForm.category}
@@ -3587,13 +3595,13 @@ onGoAttendance={() => {
             const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
             const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
             if (selectedNotice?.id) {
-              await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content });
+              await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
             } else {
-              await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, authorUid: currentUser?.uid || "", createdAt: serverTimestamp(), companyName: mobileUsers.find(u => (u.uid||u.id) === currentUser?.uid)?.companyName || "" });
+              await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: currentUser?.uid || "", createdAt: serverTimestamp(), companyName: mobileUsers.find(u => (u.uid||u.id) === currentUser?.uid)?.companyName || "" });
             }
             setNoticeOpen(false);
             setSelectedNotice(null);
-            setNoticeForm({ category: "공지사항", author: "", content: "" });
+            setNoticeForm({ category: "공지사항", author: "", content: "", audience: "internal" });
           }}
           className={`w-full py-3 rounded-xl text-white text-sm font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
         >저장</button>

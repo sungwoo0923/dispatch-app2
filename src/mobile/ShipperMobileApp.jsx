@@ -1087,9 +1087,26 @@ function ShipperNoticeM({ onBack }) {
   const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
-    getDocs(query(collection(db, "notices"), orderBy("createdAt", "desc"), limit(50))).then(snap => {
-      setNotices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }).catch(() => setNotices([])).finally(() => setLoading(false));
+    const user = auth.currentUser;
+    if (!user) { setLoading(false); return; }
+    (async () => {
+      try {
+        const userSnap = await getDoc(doc(db, "users", user.uid));
+        const linkedCompanyName = userSnap.exists() ? userSnap.data()?.linkedTransportCompany?.companyName : null;
+        if (!linkedCompanyName) { setNotices([]); setLoading(false); return; }
+        const snap = await getDocs(query(collection(db, "notices"), where("audience", "==", "shipper")));
+        const list = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(n => n.companyName === linkedCompanyName)
+          .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+          .slice(0, 50);
+        setNotices(list);
+      } catch {
+        setNotices([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   const fmtDate = (ts) => {
