@@ -75,6 +75,34 @@ export default function ShipperOrder({ editData, onClose }) {
   const [companyEditable, setCompanyEditable] = useState(false);
   const [companyEdit, setCompanyEdit] = useState("");
   const [contactPicker, setContactPicker] = useState(null); // { field, item, contacts }
+  const [cargoRows, setCargoRows] = useState([{ qty: "", unit: "파레트", palletCo: "" }]);
+
+  const updateCargoRow = (idx, key, value) => {
+    setCargoRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: value } : r));
+  };
+  const addCargoRow = () => {
+    setCargoRows(prev => prev.length >= 3 ? prev : [...prev, { qty: "", unit: "파레트", palletCo: "" }]);
+  };
+  const removeCargoRow = (idx) => {
+    setCargoRows(prev => prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx));
+  };
+  const buildCargoSummary = (rows) => rows.filter(r => r.qty).map(r => `${r.qty}${r.unit}`).join("+");
+  const buildPalletSummary = (rows) => {
+    const totals = {};
+    rows.forEach(r => {
+      if (r.unit !== "파레트" || !r.qty || !r.palletCo) return;
+      const label = r.palletCo === "KPP" ? "K" : r.palletCo === "아주" ? "AJ" : r.palletCo;
+      totals[label] = (totals[label] || 0) + Number(r.qty);
+    });
+    return Object.entries(totals).map(([label, n]) => `${label} ${n}장`).join("+");
+  };
+  const cargoRowsFromOrder = (item) =>
+    Array.isArray(item?.화물목록) && item.화물목록.length
+      ? item.화물목록.map(r => ({ qty: r.qty || "", unit: r.unit || "파레트", palletCo: r.palletCo || "" }))
+      : [{ qty: item?.화물내용 || "", unit: item?.화물단위 || "파레트", palletCo: "" }];
+
+  const [viaModal, setViaModal] = useState(null); // { type: "상차" | "하차" }
+  const emptyViaStop = () => ({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 화물내용: "", 차량톤수: "", 상차시간: "", 하차시간: "", 방법: "" });
 
   // 오더 불러오기
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -168,6 +196,7 @@ export default function ShipperOrder({ editData, onClose }) {
     하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
     차량종류: "", 차량톤수: "", 차량톤수단위: "톤", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
     운송사명: "", 운송사코드: "",
+    경유상차목록: [], 경유하차목록: [],
   });
 
   const onChange = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -179,6 +208,7 @@ export default function ShipperOrder({ editData, onClose }) {
         const data = snap.data();
         const { num, unit } = parseTonnage(data.차량톤수 || "");
         setForm(p => ({ ...p, ...data, 차량톤수: num, 차량톤수단위: unit }));
+        setCargoRows(cargoRowsFromOrder(data));
       }
       setLoading(false);
     });
@@ -188,6 +218,7 @@ export default function ShipperOrder({ editData, onClose }) {
     if (!editData) return;
     const { num, unit } = parseTonnage(editData.차량톤수 || "");
     setForm(p => ({ ...p, ...editData, 차량톤수: num, 차량톤수단위: unit }));
+    setCargoRows(cargoRowsFromOrder(editData));
     setLoading(false);
   }, [editData]);
 
@@ -200,7 +231,9 @@ export default function ShipperOrder({ editData, onClose }) {
       하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
       차량종류: "", 차량톤수: "", 차량톤수단위: "톤", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
       운송사명: "", 운송사코드: "",
+      경유상차목록: [], 경유하차목록: [],
     });
+    setCargoRows([{ qty: "", unit: "파레트", palletCo: "" }]);
     setSuggestions([]); setShowDropdown(null); setActiveIndex(-1);
   };
 
@@ -258,7 +291,13 @@ export default function ShipperOrder({ editData, onClose }) {
     await upsertPlace({ name: form.하차지명, address: form.하차지주소, 담당자명: form.하차담당자명, 담당자번호: form.하차담당자번호, 메모: form.하차메모 }, "하차");
 
     const 차량톤수Combined = form.차량톤수단위 === "없음" ? "" : form.차량톤수 ? `${form.차량톤수}${form.차량톤수단위}` : "";
-    const saveForm = { ...form, 차량톤수: 차량톤수Combined };
+    const saveForm = {
+      ...form,
+      차량톤수: 차량톤수Combined,
+      화물내용: buildCargoSummary(cargoRows),
+      화물목록: cargoRows,
+      파렛트사요약: buildPalletSummary(cargoRows),
+    };
     if (editId || editData?.id) {
       await updateDoc(doc(db, "orders", editId || editData.id), { ...saveForm, updatedAt: serverTimestamp() });
     } else {
@@ -346,7 +385,10 @@ export default function ShipperOrder({ editData, onClose }) {
       지급방식: item.지급방식 || "", 화물내용: item.화물내용 || "",
       화물단위: item.화물단위 || "파레트",
       운송사명: item.운송사명 || "", 운송사코드: item.운송사코드 || "",
+      경유상차목록: Array.isArray(item.경유상차목록) ? item.경유상차목록 : [],
+      경유하차목록: Array.isArray(item.경유하차목록) ? item.경유하차목록 : [],
     }));
+    setCargoRows(cargoRowsFromOrder(item));
   };
 
   /* 주소록 자동완성 */
@@ -621,6 +663,19 @@ export default function ShipperOrder({ editData, onClose }) {
               <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.상차담당자명} onChange={e => onChange("상차담당자명", e.target.value)} /></div>
               <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.상차담당자번호} onChange={e => onChange("상차담당자번호", e.target.value)} /></div>
               <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.상차메모} onChange={e => onChange("상차메모", e.target.value)} /></div>
+              <div className="pt-1">
+                {(form.경유상차목록 || []).filter(s => s.업체명?.trim()).length > 0 ? (
+                  <button type="button" onClick={() => setViaModal({ type: "상차" })}
+                    className="px-3 py-1.5 text-[12px] font-bold rounded-full bg-[#1B2B4B] text-white hover:opacity-90">
+                    경유+{(form.경유상차목록 || []).filter(s => s.업체명?.trim()).length} · 수정
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => setViaModal({ type: "상차" })}
+                    className="w-full py-2.5 rounded-lg border-2 border-dashed border-[#1B2B4B]/50 text-[#1B2B4B] text-sm font-bold hover:bg-[#eef1f7] transition">
+                    + 경유지 추가
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* 하차지 */}
@@ -647,6 +702,19 @@ export default function ShipperOrder({ editData, onClose }) {
               <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.하차담당자명} onChange={e => onChange("하차담당자명", e.target.value)} /></div>
               <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.하차담당자번호} onChange={e => onChange("하차담당자번호", e.target.value)} /></div>
               <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.하차메모} onChange={e => onChange("하차메모", e.target.value)} /></div>
+              <div className="pt-1">
+                {(form.경유하차목록 || []).filter(s => s.업체명?.trim()).length > 0 ? (
+                  <button type="button" onClick={() => setViaModal({ type: "하차" })}
+                    className="px-3 py-1.5 text-[12px] font-bold rounded-full bg-[#1B2B4B] text-white hover:opacity-90">
+                    경유+{(form.경유하차목록 || []).filter(s => s.업체명?.trim()).length} · 수정
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => setViaModal({ type: "하차" })}
+                    className="w-full py-2.5 rounded-lg border-2 border-dashed border-[#1B2B4B]/50 text-[#1B2B4B] text-sm font-bold hover:bg-[#eef1f7] transition">
+                    + 경유지 추가
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -657,33 +725,62 @@ export default function ShipperOrder({ editData, onClose }) {
             <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
             화물 정보
           </div>
-          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
-            <div>
-              <label className={labelCls}>차량종류</label>
-              <select className={inputCls} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
-                <option value="">선택</option>
-                {["라보/다마스","냉장탑","냉동탑","냉동윙","냉장윙","리프트","오토바이","윙바디","탑차","카고"].map(v => <option key={v}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>톤수</label>
-              <div className="flex gap-1.5">
-                <input className={inputCls} style={{ flex: 2 }} placeholder="숫자" value={form.차량톤수}
-                  inputMode="decimal"
-                  onChange={e => onChange("차량톤수", e.target.value.replace(/[^0-9.]/g, ""))} />
-                <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={form.차량톤수단위} onChange={e => onChange("차량톤수단위", e.target.value)}>
-                  <option>톤</option><option>kg</option><option>없음</option>
+          <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>차량종류</label>
+                <select className={inputCls} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
+                  <option value="">선택</option>
+                  {["라보/다마스","냉장탑","냉동탑","냉동윙","냉장윙","리프트","오토바이","윙바디","탑차","카고"].map(v => <option key={v}>{v}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className={labelCls}>톤수</label>
+                <div className="flex gap-1.5">
+                  <input className={inputCls} style={{ flex: 2 }} placeholder="숫자" value={form.차량톤수}
+                    inputMode="decimal"
+                    onChange={e => onChange("차량톤수", e.target.value.replace(/[^0-9.]/g, ""))} />
+                  <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={form.차량톤수단위} onChange={e => onChange("차량톤수단위", e.target.value)}>
+                    <option>톤</option><option>kg</option><option>없음</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div>
-              <label className={labelCls}>화물내용</label>
-              <div className="flex gap-1.5">
-                <input className={inputCls} style={{ flex: 2 }} placeholder="화물내용" value={form.화물내용} onChange={e => onChange("화물내용", e.target.value)} />
-                <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={form.화물단위} onChange={e => onChange("화물단위", e.target.value)}>
-                  {["파레트","박스","없음","개"].map(v => <option key={v}>{v}</option>)}
-                </select>
+              <label className={labelCls}>화물내용 (최대 3개까지 추가 가능)</label>
+              <div className="space-y-2">
+                {cargoRows.map((row, idx) => (
+                  <div key={idx} className="flex gap-1.5 items-center">
+                    <input className={inputCls} style={{ flex: 1 }} placeholder="수량" value={row.qty}
+                      onChange={e => updateCargoRow(idx, "qty", e.target.value.replace(/[^0-9.]/g, ""))} />
+                    <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={row.unit}
+                      onChange={e => updateCargoRow(idx, "unit", e.target.value)}>
+                      {["파레트","박스","없음","개"].map(v => <option key={v}>{v}</option>)}
+                    </select>
+                    {row.unit === "파레트" && (
+                      <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={row.palletCo}
+                        onChange={e => updateCargoRow(idx, "palletCo", e.target.value)}>
+                        <option value="">파렛트사</option>
+                        <option value="아주">아주</option>
+                        <option value="KPP">KPP</option>
+                      </select>
+                    )}
+                    {cargoRows.length > 1 && (
+                      <button type="button" onClick={() => removeCargoRow(idx)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 text-gray-400 hover:text-red-500 hover:border-red-300 shrink-0">×</button>
+                    )}
+                  </div>
+                ))}
+                {cargoRows.length < 3 && (
+                  <button type="button" onClick={addCargoRow}
+                    className="w-full py-2 rounded-lg border border-dashed border-gray-300 text-gray-500 text-sm font-semibold hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition">
+                    + 화물 추가 ({cargoRows.length}/3)
+                  </button>
+                )}
               </div>
+              {cargoRows.some(r => r.qty) && (
+                <div className="mt-2 text-xs text-[#1B2B4B] font-semibold">{buildCargoSummary(cargoRows)}</div>
+              )}
             </div>
           </div>
         </div>
@@ -870,6 +967,78 @@ export default function ShipperOrder({ editData, onClose }) {
           </div>
         </div>
       )}
+
+      {/* 경유지 추가/수정 팝업 */}
+      {viaModal && (
+        <ViaStopModal
+          type={viaModal.type}
+          list={viaModal.type === "상차" ? form.경유상차목록 : form.경유하차목록}
+          onSave={(newList) => onChange(viaModal.type === "상차" ? "경유상차목록" : "경유하차목록", newList)}
+          onClose={() => setViaModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ViaStopModal({ type, list, onSave, onClose }) {
+  const emptyStop = () => ({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 화물내용: "", 차량톤수: "", 상차시간: "", 하차시간: "", 방법: "" });
+  const [rows, setRows] = useState(() => {
+    const init = (list || []).filter(s => s?.업체명?.trim());
+    return init.length ? init.map(s => ({ ...emptyStop(), ...s })) : [emptyStop()];
+  });
+  const label = type === "상차" ? "상차경유지" : "하차경유지";
+  const timeKey = type === "상차" ? "상차시간" : "하차시간";
+
+  const update = (idx, key, v) => setRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: v } : r));
+  const addRow = () => setRows(prev => [...prev, emptyStop()]);
+  const removeRow = (idx) => setRows(prev => prev.filter((_, i) => i !== idx));
+  const handleSave = () => { onSave(rows.filter(s => s.업체명?.trim())); onClose(); };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+          <h3 className="text-white font-bold text-[15px]">{label} 추가/수정</h3>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          {rows.map((stop, idx) => (
+            <div key={idx} className="border border-gray-200 rounded-xl p-4 space-y-2 bg-gray-50">
+              <input className={inputCls} placeholder="경유지명" value={stop.업체명} onChange={e => update(idx, "업체명", e.target.value)} />
+              <input className={inputCls} placeholder="주소" value={stop.주소} onChange={e => update(idx, "주소", e.target.value)} />
+              <div className="grid grid-cols-2 gap-2">
+                <input className={inputCls} placeholder="담당자명" value={stop.담당자} onChange={e => update(idx, "담당자", e.target.value)} />
+                <input className={inputCls} placeholder="담당자번호" value={stop.담당자번호} onChange={e => update(idx, "담당자번호", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input className={inputCls} placeholder="화물내용 (예: 2파레트)" value={stop.화물내용} onChange={e => update(idx, "화물내용", e.target.value)} />
+                <input className={inputCls} placeholder="톤수 (예: 1톤)" value={stop.차량톤수} onChange={e => update(idx, "차량톤수", e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input className={inputCls} placeholder={`${type}시간`} value={stop[timeKey]} onChange={e => update(idx, timeKey, e.target.value)} />
+                <select className={inputCls} value={stop.방법} onChange={e => update(idx, "방법", e.target.value)}>
+                  <option value="">방법 선택</option>
+                  {["지게차", "수도움", "수작업", "크레인"].map(v => <option key={v}>{v}</option>)}
+                </select>
+              </div>
+              {rows.length > 1 && (
+                <div className="text-right">
+                  <button type="button" onClick={() => removeRow(idx)} className="text-[11px] text-red-500 hover:text-red-700 font-semibold">삭제</button>
+                </div>
+              )}
+            </div>
+          ))}
+          <button type="button" onClick={addRow}
+            className="w-full py-2 rounded-lg border border-dashed border-gray-300 text-gray-500 text-sm font-semibold hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition">
+            + 경유지 추가
+          </button>
+        </div>
+        <div className="border-t border-gray-100 px-5 py-3 flex justify-end gap-2 shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold">취소</button>
+          <button onClick={handleSave} className="px-4 py-2 text-sm rounded-lg bg-[#1B2B4B] text-white font-bold hover:opacity-90">저장</button>
+        </div>
+      </div>
     </div>
   );
 }

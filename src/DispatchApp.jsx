@@ -12566,6 +12566,35 @@ const handleDelete = async (item) => {
 
         {/* 본문 */}
         <div className="flex-1 overflow-y-auto p-4">
+          {/* 화주사 파렛트 등록 정보 */}
+          {(() => {
+            const cargoList = Array.isArray(row.화물목록) ? row.화물목록 : [];
+            const palletRows = cargoList.filter(r => r?.unit === "파레트" && r?.qty);
+            if (!palletRows.length && !row.파렛트사요약) return null;
+            const totals = {};
+            palletRows.forEach(r => {
+              if (!r.palletCo) return;
+              const label = r.palletCo === "KPP" ? "K" : r.palletCo === "아주" ? "AJ" : r.palletCo;
+              totals[label] = (totals[label] || 0) + Number(r.qty);
+            });
+            const coLabel = (co) => co === "KPP" ? "K (KPP)" : co === "아주" ? "AJ (아주)" : (co || "파렛트사 미지정");
+            const summary = Object.entries(totals).map(([label, n]) => `${label} ${n}장`).join("+") || row.파렛트사요약 || "";
+            return (
+              <div className="mb-4 rounded-xl border border-[#1B2B4B]/20 bg-[#eef1f7] px-4 py-3">
+                <div className="text-[12px] font-bold text-[#1B2B4B] mb-1.5">화주사 파렛트 등록 정보</div>
+                {summary && <div className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">{summary}</div>}
+                {palletRows.length > 0 && (
+                  <div className="space-y-1">
+                    {palletRows.map((r, i) => (
+                      <div key={i} className="text-[12px] text-gray-600">
+                        {r.qty}{r.unit} · {coLabel(r.palletCo)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {loading && (
             <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
               <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1B2B4B] rounded-full animate-spin" />

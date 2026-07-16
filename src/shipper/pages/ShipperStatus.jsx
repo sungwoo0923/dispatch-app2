@@ -52,6 +52,19 @@ const fmtTimeCell = (time, gubun) => {
 
 const getViaList = (v) => (Array.isArray(v) ? v.filter(s => s && (s.업체명 || s.주소)) : []);
 
+const getPalletSummary = (o) => {
+  if (Array.isArray(o.화물목록) && o.화물목록.length) {
+    const totals = {};
+    o.화물목록.forEach(r => {
+      if (r.unit !== "파레트" || !r.qty || !r.palletCo) return;
+      const label = r.palletCo === "KPP" ? "K" : r.palletCo === "아주" ? "AJ" : r.palletCo;
+      totals[label] = (totals[label] || 0) + Number(r.qty);
+    });
+    return Object.entries(totals).map(([label, n]) => `${label} ${n}장`).join("+");
+  }
+  return o.파렛트사요약 || "";
+};
+
 // 경유+N 뱃지 — 운송프로그램(StopInlineBadge)과 동일한 디자인/동작
 function ShipperViaBadge({ count, label, onOpen }) {
   if (!count) return null;
@@ -134,6 +147,7 @@ export default function ShipperStatus() {
   const [confirmConfig, setConfirmConfig] = useState({ message: "", onConfirm: null });
   const [addrPopup, setAddrPopup] = useState(null);
   const [viaPopup, setViaPopup] = useState(null); // { label, list }
+  const [palletPopup, setPalletPopup] = useState(null); // { text }
 
   const openConfirm = (message, onConfirm) => {
     setConfirmConfig({ message, onConfirm });
@@ -282,6 +296,7 @@ export default function ShipperStatus() {
         상차지: o.상차지명 || "",
         하차지: o.하차지명 || "",
         화물: o.화물내용 || "",
+        파렛트사: getPalletSummary(o),
         차량종류: o.차량종류 || "",
         톤수: o.차량톤수 || "",
         차량번호: o.차량번호 || "",
@@ -562,7 +577,7 @@ export default function ShipperStatus() {
         </div>
 
         <div ref={scrollRef} className="bg-white rounded-xl shadow-sm overflow-x-auto">
-          <table className="border-collapse text-[14px]" style={{ minWidth: "2640px", width: "100%" }}>
+          <table className="border-collapse text-[14px]" style={{ minWidth: "2730px", width: "100%" }}>
             <colgroup>
               <col style={{ width: 40 }} /><col style={{ width: 60 }} />
               <col style={{ width: 110 }} />
@@ -572,7 +587,8 @@ export default function ShipperStatus() {
               <col style={{ width: 140 }} /><col style={{ width: 140 }} />
               <col style={{ width: 200 }} /><col style={{ width: 140 }} />
               <col style={{ width: 200 }} /><col style={{ width: 140 }} />
-              <col style={{ width: 120 }} /><col style={{ width: 90 }} />
+              <col style={{ width: 120 }} /><col style={{ width: 110 }} />
+              <col style={{ width: 90 }} />
               <col style={{ width: 120 }} /><col style={{ width: 120 }} />
               <col style={{ width: 120 }} /><col style={{ width: 110 }} />
               <col style={{ width: 110 }} /><col style={{ width: 120 }} />
@@ -585,7 +601,7 @@ export default function ShipperStatus() {
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
                   "순번","운송사","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
-                  "하차지","하차지주소","화물","차량","톤수","차량번호","이름","전화번호",
+                  "하차지","하차지주소","화물","파렛트사","차량","톤수","차량번호","이름","전화번호",
                   "청구운임","지급방식","상태","첨부"
                 ].map((h, idx) => (
                   <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 last:border-r-0 whitespace-nowrap">
@@ -666,6 +682,24 @@ export default function ShipperStatus() {
                       })()}
                     </td>
                     <td className={`${tdCls} truncate max-w-[140px]`}>{o.화물내용 || "-"}</td>
+                    <td className={tdCls}>
+                      {(() => {
+                        const text = getPalletSummary(o);
+                        if (!text) return "-";
+                        const isLong = text.length > 12;
+                        return (
+                          <div className="flex items-center justify-center gap-1 min-w-0">
+                            <span className="whitespace-nowrap overflow-hidden text-ellipsis font-semibold" style={{ maxWidth: 90 }} title={text}>
+                              {isLong ? text.slice(0, 12) + "…" : text}
+                            </span>
+                            {isLong && (
+                              <button type="button" className="text-[11px] text-[#1B2B4B] underline shrink-0 hover:opacity-70"
+                                onClick={(e) => { e.stopPropagation(); setPalletPopup(text); }}>더보기</button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
                     <td className={`${tdCls} font-semibold`}>{o.차량번호 || "-"}</td>
@@ -709,7 +743,7 @@ export default function ShipperStatus() {
                 );
               })}
               {pagedRows.length === 0 && (
-                <tr><td colSpan={23} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
+                <tr><td colSpan={24} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
               )}
             </tbody>
           </table>
@@ -796,6 +830,7 @@ export default function ShipperStatus() {
 
             <Section title="물품정보">
               <Row label="화물" value={selectedOrder?.화물내용 || "-"} />
+              <Row label="파렛트사" value={selectedOrder ? (getPalletSummary(selectedOrder) || "-") : "-"} />
               <Row label="톤수" value={selectedOrder?.차량톤수 || "-"} />
               <div className="pt-3 border-t space-y-3">
                 <Row label="전달사항" value={selectedOrder?.전달사항 || "-"} />
@@ -855,6 +890,23 @@ export default function ShipperStatus() {
             </div>
             <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
               <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 파렛트사 전체보기 팝업 */}
+      {palletPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setPalletPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">파렛트사 전체보기</h3>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{palletPopup}</p>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setPalletPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
             </div>
           </div>
         </div>
