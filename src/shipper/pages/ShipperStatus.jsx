@@ -276,6 +276,35 @@ export default function ShipperStatus() {
     setFocusOrderId(order.id);
   };
 
+  // ---------------- 재촉 기능 (상차 1시간 전까지 미배차/미확정 시 운송사에 재촉 알림) ----------------
+  const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
+  const canNudge = useCallback((o) => {
+    const st = getStatus(o);
+    if (st !== "요청" && st !== "배차중") return false;
+    if (!o.상차일 || !o.상차시간) return false;
+    const target = new Date(`${o.상차일}T${o.상차시간}:00+09:00`);
+    if (isNaN(target.getTime())) return false;
+    return target.getTime() - Date.now() <= 60 * 60 * 1000;
+  }, []);
+  const handleNudge = async (o) => {
+    const lastMs = typeof o.재촉일시 === "number" ? o.재촉일시 : (o.재촉일시?.toMillis ? o.재촉일시.toMillis() : 0);
+    if (o.재촉대기 && lastMs && Date.now() - lastMs < NUDGE_COOLDOWN_MS) {
+      const remain = Math.ceil((NUDGE_COOLDOWN_MS - (Date.now() - lastMs)) / 60000);
+      alert(`이미 재촉 요청을 보냈습니다. ${remain}분 후 다시 시도해주세요.`);
+      return;
+    }
+    try {
+      await updateDoc(doc(db, "orders", o.id), {
+        재촉대기: true,
+        재촉일시: Date.now(),
+        재촉횟수: increment(1),
+      });
+      alert("운송사에 재촉 알림을 보냈습니다.");
+    } catch {
+      alert("재촉 요청 전송에 실패했습니다.");
+    }
+  };
+
   const getStatus = useCallback((o) => {
     if (["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태)) return "배차취소";
     if (o.차량번호 && o.차량번호.trim()) return "배차완료";
@@ -551,7 +580,7 @@ export default function ShipperStatus() {
 
       {/* 알림 토스트 카드 (우측 하단) */}
       <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 999997, display: "flex", flexDirection: "column", gap: 10, width: 320 }}>
-        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } } @keyframes cancelReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }`}</style>
+        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } } @keyframes cancelReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.4; } } @keyframes nudgeBtnBlink { 0%,100% { opacity:1; } 50% { opacity:0.55; } }`}</style>
         {toasts.map(t => (
           <div key={t.id}
             onClick={() => {
@@ -812,14 +841,27 @@ export default function ShipperStatus() {
                       })()}
                     </td>
                     <td className={tdCls}>
-                      {o.취소요청 && getStatus(o) !== "배차취소" ? (
-                        <span className="px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap bg-orange-100 text-orange-700"
-                          style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }}>
-                          취소요청중
-                        </span>
-                      ) : (
-                        <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
-                      )}
+                      <div className="flex flex-col items-center gap-1">
+                        {o.취소요청 && getStatus(o) !== "배차취소" ? (
+                          <span className="px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap bg-orange-100 text-orange-700"
+                            style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }}>
+                            취소요청중
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
+                        )}
+                        {canNudge(o) && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleNudge(o); }}
+                            title="상차 예정시간이 임박했는데 아직 처리되지 않았습니다. 클릭하면 운송사에 재촉 알림을 보냅니다."
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                            style={{ animation: "nudgeBtnBlink 1.4s ease-in-out infinite" }}
+                          >
+                            ⏰ 재촉
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
@@ -902,6 +944,9 @@ export default function ShipperStatus() {
                 </button>
                 {selectedOrder?.상태 === "취소" && (
                   <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">재등록</button>
+                )}
+                {selectedOrder && canNudge(selectedOrder) && (
+                  <button onClick={() => handleNudge(selectedOrder)} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:opacity-90">⏰ 재촉</button>
                 )}
               </div>
               <button onClick={() => setDetailOpen(false)} className="text-gray-500 hover:text-black text-xl">×</button>
@@ -1099,6 +1144,14 @@ export default function ShipperStatus() {
           >
             오더내용복사
           </button>
+          {canNudge(ctxMenu.order) && (
+            <button
+              onClick={() => { handleNudge(ctxMenu.order); setCtxMenu(null); }}
+              className="w-full text-left px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition"
+            >
+              ⏰ 재촉하기
+            </button>
+          )}
         </div>
       )}
 
