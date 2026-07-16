@@ -136,6 +136,7 @@ export default function ShipperStatus() {
   const [startDate, setStartDate] = useState(get3MonthsAgo());
   const [endDate, setEndDate] = useState(getTodayKST());
   const [searchType, setSearchType] = useState("통합");
+  const [transportFilter, setTransportFilter] = useState("전체");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -278,13 +279,14 @@ export default function ShipperStatus() {
   const getStatus = useCallback((o) => {
     if (["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태)) return "배차취소";
     if (o.차량번호 && o.차량번호.trim()) return "배차완료";
-    return "요청";
+    if (o.화주사확인대기 === true) return "요청"; // 운송사가 아직 확인하지 않은 신규 요청
+    return "배차중"; // 운송사가 확인했거나(false) 필드가 없는 레거시/전송 건은 이미 처리중으로 간주
   }, []);
 
   const activeOrders = orders.filter(o => o.상태 !== "취소");
   const kpi = useMemo(() => ({
     total: activeOrders.length,
-    요청: activeOrders.filter(o => !o.차량번호).length,
+    요청: activeOrders.filter(o => o.화주사확인대기 === true && !(o.차량번호 && o.차량번호.trim())).length,
     배차완료: activeOrders.filter(o => o.차량번호).length,
     취소: orders.filter(o => o.상태 === "취소").length,
     총금액: activeOrders.reduce((sum, o) => sum + (Number(o.청구운임) || 0), 0),
@@ -377,11 +379,18 @@ export default function ShipperStatus() {
 
   const STATUS_SORT_ORDER = { 요청: 0, 배차중: 1, 배차완료: 2, 배차취소: 3 };
 
+  const transportOptions = useMemo(() => {
+    const set = new Set();
+    orders.forEach(o => { if (o.운송사명) set.add(o.운송사명); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+  }, [orders]);
+
   const rows = useMemo(() => {
     const filtered = orders.filter((o) => {
       if (hideCanceled && filter !== "배차취소" && o.상태 === "취소") return false;
       const currentStatus = getStatus(o);
       if (filter !== "전체" && currentStatus !== filter) return false;
+      if (transportFilter !== "전체" && (o.운송사명 || "") !== transportFilter) return false;
       const orderDate = toYMD(o.상차일);
       if (startDate && orderDate && orderDate < startDate) return false;
       if (endDate && orderDate && orderDate > endDate) return false;
@@ -404,17 +413,43 @@ export default function ShipperStatus() {
       }
     });
 
+    const toMs = (ts) => {
+      if (!ts) return 0;
+      if (ts?.toMillis) return ts.toMillis();
+      if (ts?.seconds) return ts.seconds * 1000;
+      if (typeof ts === "number") return ts;
+      if (ts instanceof Date) return ts.getTime();
+      return 0;
+    };
+
     if (filter === "전체") {
       filtered.sort((a, b) => {
         const sa = STATUS_SORT_ORDER[getStatus(a)] ?? 9;
         const sb = STATUS_SORT_ORDER[getStatus(b)] ?? 9;
         if (sa !== sb) return sa - sb;
+        const st = getStatus(a);
+        if (st === "요청") {
+          // 요청은 입력한 순서대로(오래된 요청이 먼저)
+          return toMs(a.createdAt) - toMs(b.createdAt);
+        }
+        if (st === "배차중") {
+          // 요청에서 배차중으로 전환된 순(최근 전환건이 상단)
+          const ma = toMs(a.배차중전환일시) || toMs(a.createdAt);
+          const mb = toMs(b.배차중전환일시) || toMs(b.createdAt);
+          return mb - ma;
+        }
+        if (st === "배차완료") {
+          // 가장 최근에 배차완료된 건이 상단
+          const ma = toMs(a.배차완료일시 || a.dispatchedAt) || toMs(a.createdAt);
+          const mb = toMs(b.배차완료일시 || b.dispatchedAt) || toMs(b.createdAt);
+          return mb - ma;
+        }
         const da = toYMD(a.상차일), db = toYMD(b.상차일);
         return db.localeCompare(da);
       });
     }
     return filtered;
-  }, [orders, filter, keyword, startDate, endDate, searchType, hideCanceled, getStatus]);
+  }, [orders, filter, keyword, startDate, endDate, searchType, hideCanceled, getStatus, transportFilter]);
 
   // 알림 클릭으로 포커스 이동 -> 해당 오더가 있는 페이지로 이동 후 스크롤 + 하이라이트
   useEffect(() => {
@@ -472,7 +507,7 @@ export default function ShipperStatus() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex min-h-screen">
 
       {/* 배차완료 알림 배너 */}
       {dispatchNotif && (
@@ -613,6 +648,15 @@ export default function ShipperStatus() {
               >3개월</button>
 
               <select
+                value={transportFilter}
+                onChange={(e) => setTransportFilter(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm font-semibold text-[#1B2B4B]"
+              >
+                <option value="전체">운송사 전체</option>
+                {transportOptions.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+
+              <select
                 value={searchType}
                 onChange={(e) => setSearchType(e.target.value)}
                 className="border rounded-lg px-3 py-2 text-sm"
@@ -646,8 +690,8 @@ export default function ShipperStatus() {
           <table className="border-collapse text-[14px]" style={{ minWidth: "2730px", width: "100%" }}>
             <colgroup>
               <col style={{ width: 40 }} /><col style={{ width: 60 }} />
-              <col style={{ width: 110 }} />
               <col style={{ width: 100 }} />
+              <col style={{ width: 110 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
               <col style={{ width: 140 }} /><col style={{ width: 140 }} />
@@ -666,7 +710,7 @@ export default function ShipperStatus() {
                   <input key="chk" type="checkbox"
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
-                  "순번","운송사","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
+                  "순번","등록일","운송사","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
                   "하차지","하차지주소","화물","파렛트사","상태","차량","톤수","차량번호","이름","전화번호",
                   "청구운임","지급방식","첨부"
                 ].map((h, idx) => (
@@ -699,8 +743,8 @@ export default function ShipperStatus() {
                         onChange={(e) => toggleSelect(o.id, e.target.checked)} />
                     </td>
                     <td className={tdCls}>{(page - 1) * pageSize + i + 1}</td>
-                    <td className={`${tdCls} font-semibold text-gray-900`}>{o.운송사명 || "-"}</td>
                     <td className={`${tdCls} text-gray-500`}>{fmtDate(o.createdAt)}</td>
+                    <td className={`${tdCls} font-semibold text-gray-900`}>{o.운송사명 || "-"}</td>
                     <td className={`${tdCls} font-semibold`}>{o.상차일 || "-"}</td>
                     <td className={`${tdCls} font-semibold whitespace-nowrap`}>{fmtTimeCell(o.상차시간, o.상차시간구분)}</td>
                     <td className={`${tdCls} font-semibold`}>{o.하차일 || "-"}</td>
