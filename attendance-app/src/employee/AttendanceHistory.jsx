@@ -9,7 +9,7 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 import { useToast } from "../hooks/useToast";
 import { useLanguage } from "../hooks/useLanguage";
-import { formatDate, formatTime } from "../utils/dateUtils";
+import { formatDate, formatTime, toDateKey } from "../utils/dateUtils";
 
 const STATUS_TONE = { 출근: "success", 지각: "warning", 결근: "danger", 조퇴: "warning" };
 const STATUS_BAR = { 출근: "bg-primary", 지각: "bg-warning", 결근: "bg-danger", 조퇴: "bg-warning" };
@@ -31,6 +31,7 @@ export default function AttendanceHistory() {
   const [records, setRecords] = useState([]);
   const [payrolls, setPayrolls] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
+  const [todaySchedule, setTodaySchedule] = useState(null);
   const [detail, setDetail] = useState(null);
   const [requestField, setRequestField] = useState(null); // "checkInTime" | "checkOutTime"
   const [requestTime, setRequestTime] = useState("");
@@ -63,6 +64,20 @@ export default function AttendanceHistory() {
       setPayrolls(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
     return () => unsub();
+  }, [user]);
+
+  // 오늘 실제 출근기록이 아직 없더라도, 관리자가 오늘을 근무일로 등록해뒀으면
+  // (schedules.status === "출근확정") 그 사실을 알아야 상단 "오늘 현황"
+  // 카드에 "출근 예정"을 보여줄 수 있다.
+  const todayKey = toDateKey();
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      query(collection(db, "schedules"), where("uid", "==", user.uid), where("date", "==", todayKey)),
+      (snap) => setTodaySchedule(snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null)
+    );
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const grouped = useMemo(() => {
@@ -106,6 +121,29 @@ export default function AttendanceHistory() {
 
   const requestsFor = (date) => changeRequests.filter((c) => c.date === date).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   const latestRequestFor = (date, field) => requestsFor(date).find((c) => c.field === field);
+
+  // 출근현황에 들어오면 오늘 기록/예정이 있을 때 과거·미래 내역보다 먼저
+  // 눈에 띄어야 한다 — 아직 실제 체크인이 없어도(오늘 근무 예정) 카드
+  // 자체는 보여주고, 실제 체크인 기록이 생기면 그 기록으로 대체한다.
+  const todayRecord = records.find((r) => r.date === todayKey);
+  const todayCard = todayRecord
+    ? {
+        scheduled: false,
+        tone: STATUS_TONE[todayRecord.status] || "muted",
+        label: todayRecord.status ? t(STATUS_KEY[todayRecord.status]) : t("attendance.status.미출근"),
+        checkInTime: todayRecord.checkInTime,
+        checkOutTime: todayRecord.checkOutTime,
+      }
+    : todaySchedule?.status === "출근확정"
+    ? {
+        scheduled: true,
+        tone: "primary",
+        label: "출근 예정",
+        startTime: todaySchedule.startTime,
+        endTime: todaySchedule.endTime,
+        siteName: todaySchedule.siteName,
+      }
+    : null;
 
   const openDetail = (r) => {
     setDetail(r);
@@ -220,6 +258,31 @@ export default function AttendanceHistory() {
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
       <h2 className="text-sm font-semibold text-ink">{t("attendance.title")}</h2>
+
+      {todayCard && (
+        <Card className="border-primary/30 bg-primary-light/30 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-primary">오늘 · {formatDate(todayKey)}</p>
+            <Badge tone={todayCard.tone}>{todayCard.label}</Badge>
+          </div>
+          {todayCard.scheduled ? (
+            <p className="mt-2 text-xs text-muted">
+              {todayCard.startTime ? `${todayCard.startTime}${todayCard.endTime ? `~${todayCard.endTime}` : ""} 근무 예정` : "오늘 근무 예정"}
+              {todayCard.siteName ? ` · ${todayCard.siteName}` : ""}
+            </p>
+          ) : (
+            <div className="mt-2 flex items-center gap-3 text-xs text-muted">
+              <span className="flex items-center gap-1">
+                <LogIn size={12} /> {todayCard.checkInTime ? formatTime(todayCard.checkInTime) : "-"}
+              </span>
+              <span className="flex items-center gap-1">
+                <LogOut size={12} /> {todayCard.checkOutTime ? formatTime(todayCard.checkOutTime) : "-"}
+              </span>
+            </div>
+          )}
+        </Card>
+      )}
+
       {grouped.length === 0 && (
         <Card className="flex flex-col items-center gap-2 p-10 text-center">
           <Clock size={26} className="text-muted" />

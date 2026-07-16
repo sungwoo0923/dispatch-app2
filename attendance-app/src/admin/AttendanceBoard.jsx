@@ -76,6 +76,10 @@ const GRID_CELL_META = {
   오후반차: { label: "오후", className: "bg-amber-100 text-amber-700 text-[9px] font-semibold" },
   병가: { label: "병", className: "bg-purple-100 text-purple-700 font-semibold" },
   결근: { label: "결", className: "bg-red-50 text-danger" },
+  // 관리자가 스케줄만 등록했을 뿐 아직 실제 출근(체크인)은 일어나지 않은
+  // 오늘/미래 날짜 — 실제 출근과 혼동되지 않도록 파란 실선 대신 점선 테두리로
+  // 구분한다. 근로자가 실제로 체크인하면 그때 비로소 출근/지각으로 바뀐다.
+  출근예정: { label: "예정", className: "bg-primary-light text-primary text-[9px] font-semibold border border-dashed border-primary/50" },
   "": { label: "", className: "text-slate-300" },
   // 입사 전/퇴사 후 — 근무 대상 기간이 아니므로 결근과 구분되는 통짜 회색으로 표시하고 집계에서 뺀다.
   OUT: { label: "", className: "bg-slate-200/70" },
@@ -578,26 +582,33 @@ export default function AttendanceBoard() {
   // 확정한다. 이 잠정 상태는 실제로 attendance/leaves 문서에 저장하지
   // 않는 화면 표시용 판단이라, 근로자가 나중에 실제로 체크인하면 그
   // 시점의 실제 시각 기준으로 정상 판정된다.
+  //
+  // 오늘/미래 날짜에 실제 attendance 기록이 아직 없을 때는, 스케줄등록
+  // (schedules.status === "출근확정")이 되어있는지로 "출근예정"과 "미정"을
+  // 구분한다 — 관리자가 스케줄표에 출근을 지정하는 행위는 "이 날은 근무일"
+  // 이라는 일정 등록일 뿐, 실제 출근(attendance)은 근로자의 지오펜스
+  // 체크인이나 관리자의 강제출근으로만 기록된다(writeDayStatus 참고).
   const DEFAULT_SHIFT_START_MINUTES = 9 * 60;
   const DEFAULT_SHIFT_END_MINUTES = 18 * 60;
-  const resolveDayStatus = (uid, emp, dateKey, attendanceList, leavesList) => {
+  const resolveDayStatus = (uid, emp, dateKey, attendanceList, leavesList, schedulesList = gridSchedules) => {
     if (emp?.hireDate && dateKey < emp.hireDate) return "OUT";
     if (emp?.resignDate && dateKey > emp.resignDate) return "OUT";
     const att = attendanceList.find((a) => a.uid === uid && a.date === dateKey);
     if (att && (att.status === "출근" || att.status === "지각" || att.status === "특근")) return att.status;
     const leave = leaveStatusOn(leavesList, [], uid, dateKey);
     if (leave) return leave.type;
-    if (dateKey > gridTodayKey) return "";
+    const isScheduledWorkday = schedulesList.some((s) => s.uid === uid && s.date === dateKey && s.status === "출근확정");
+    if (dateKey > gridTodayKey) return isScheduledWorkday ? "출근예정" : "";
     if (dateKey === gridTodayKey) {
       const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
-      if (nowMinutes < DEFAULT_SHIFT_START_MINUTES + LATE_GRACE_MINUTES) return "";
-      if (nowMinutes < DEFAULT_SHIFT_END_MINUTES) return "지각";
+      if (nowMinutes < DEFAULT_SHIFT_START_MINUTES + LATE_GRACE_MINUTES) return isScheduledWorkday ? "출근예정" : "";
+      if (nowMinutes < DEFAULT_SHIFT_END_MINUTES) return isScheduledWorkday ? "지각" : "";
     }
     return "결근";
   };
   const gridDayStatus = (uid, day) => {
     const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
-    return resolveDayStatus(uid, employeeByUid.get(uid), dateKey, gridAttendance, gridLeaves);
+    return resolveDayStatus(uid, employeeByUid.get(uid), dateKey, gridAttendance, gridLeaves, gridSchedules);
   };
   const gridCellMeta = (statusKey) => GRID_CELL_META[statusKey] || (statusKey ? { label: statusKey.slice(0, 1), className: "bg-slate-100 text-slate-600" } : GRID_CELL_META[""]);
 
@@ -623,6 +634,7 @@ export default function AttendanceBoard() {
       else if (status === "오전반차" || status === "오후반차") annual += 0.5;
       else if (status === "병가") sick += 1;
       else if (status === "결근") absent += 1;
+      else if (status === "출근예정") { /* 아직 결과가 나지 않은 예정 상태는 어느 집계에도 넣지 않는다 */ }
       else if (status) off += 1; // 휴무/관리자 처리/경조사/외근 등
     }
     // 만근 = 결근 없이 재직 구간 전체를 채웠을 때의 총 근무 대상 일수
@@ -702,7 +714,24 @@ export default function AttendanceBoard() {
   // 결근/미정은 손대지 않고 대기 상태를 유지한다(별도 "결근" 인원현황이
   // 없으므로). 같은 uid+date의 schedules 문서가 이미 있으면 그 상태만
   // 갱신하고, 없으면 새로 만든다.
-  const syncScheduleStatus = async (emp, uid, name, dateKey, statusKey) => {
+  //
+  // Schedule.jsx의 행 메뉴로 상태를 바꾸면 근로자에게 알림이 가는데, 이
+  // 월별 스케줄표(그리드)로 바꿀 때는 지금까지 알림이 전혀 가지 않았다 —
+  // 셀 하나씩 지정하는 단발성 조작(gridApplyStatus)일 때만 notify=true로
+  // 알려준다. 일괄편집/엑셀업로드처럼 한 번에 수십 건이 바뀌는 경우까지
+  // 매번 알림을 보내면 알림함이 도배되므로 그 경로들은 알리지 않는다.
+  const notifyScheduleStatus = (uid, message) => {
+    if (!uid) return;
+    addDoc(collection(db, "notifications"), {
+      companyId: profile.companyId,
+      uid,
+      title: "근무 스케줄 안내",
+      message,
+      read: false,
+      createdAt: serverTimestamp(),
+    }).catch(() => {});
+  };
+  const syncScheduleStatus = async (emp, uid, name, dateKey, statusKey, notify = false) => {
     if (!emp) return;
     let targetStatus = null;
     if (statusKey === "출근" || statusKey === "지각" || statusKey === "특근") targetStatus = "출근확정";
@@ -725,33 +754,46 @@ export default function AttendanceBoard() {
         createdAt: serverTimestamp(),
       }).catch(() => {});
     }
+    if (notify) notifyScheduleStatus(uid, `${dateKey} 근무 상태가 '${targetStatus}'(으)로 변경되었습니다.`);
   };
 
-  const writeDayStatus = async (uid, name, dateKey, statusKey) => {
+  const writeDayStatus = async (uid, name, dateKey, statusKey, { notify = false } = {}) => {
     const oldLeaves = gridLeaves.filter(
       (l) => l.uid === uid && l.status === "approved" && dateKey >= l.startDate && dateKey <= (l.endDate || l.startDate)
     );
     for (const l of oldLeaves) await deleteDoc(doc(db, "leaves", l.id)).catch(() => {});
     if (statusKey === "출근" || statusKey === "지각" || statusKey === "특근") {
-      // 지각으로 수동 지정할 때는 지각 판정 기준(LATE_GRACE_MINUTES)보다
-      // 늦은 시각을 출근시각으로 남겨, 이후 출근현황 상세에서 시각을 다시
-      // 봐도 "지각"이라는 상태와 앞뒤가 맞도록 한다.
-      const checkInTime =
-        statusKey === "지각" ? `${dateKey}T09:${String(LATE_GRACE_MINUTES + 1).padStart(2, "0")}:00` : `${dateKey}T09:00:00`;
-      await setDoc(
-        doc(db, "attendance", attendanceDocId(uid, dateKey)),
-        {
-          uid,
-          name,
-          companyId: profile.companyId,
-          date: dateKey,
-          month: dateKey.slice(0, 7),
-          status: statusKey,
-          checkInTime,
-          source: "manual",
-        },
-        { merge: true }
-      );
+      // 오늘/미래 날짜에 관리자가 스케줄표에서 출근/지각/특근을 지정하는
+      // 것은 "이 날은 근무 예정일"이라는 일정 등록일 뿐, 근로자가 실제로
+      // 체크인했다는 뜻이 아니다 — 여기서 attendance 문서를 만들어버리면
+      // 근로자 모바일이 아직 출근하지도 않았는데 "출근완료"로 보이는 문제가
+      // 생긴다. 실제 출근은 근로자의 지오펜스/수동 체크인
+      // (useGeofenceCheckIn) 또는 관리자의 강제출근(Schedule.jsx)으로만
+      // 기록하고, 여기서는 아래 syncScheduleStatus로 스케줄만 출근확정
+      // 처리한다. 과거 날짜는 이미 지난 근무일의 사실관계를 바로잡는
+      // 것이므로(예: 자동판정 오류 교정, 출근기록부 업로드) 그대로 실제
+      // attendance 문서에 반영한다.
+      if (dateKey < gridTodayKey) {
+        // 지각으로 수동 지정할 때는 지각 판정 기준(LATE_GRACE_MINUTES)보다
+        // 늦은 시각을 출근시각으로 남겨, 이후 출근현황 상세에서 시각을 다시
+        // 봐도 "지각"이라는 상태와 앞뒤가 맞도록 한다.
+        const checkInTime =
+          statusKey === "지각" ? `${dateKey}T09:${String(LATE_GRACE_MINUTES + 1).padStart(2, "0")}:00` : `${dateKey}T09:00:00`;
+        await setDoc(
+          doc(db, "attendance", attendanceDocId(uid, dateKey)),
+          {
+            uid,
+            name,
+            companyId: profile.companyId,
+            date: dateKey,
+            month: dateKey.slice(0, 7),
+            status: statusKey,
+            checkInTime,
+            source: "manual",
+          },
+          { merge: true }
+        );
+      }
     } else {
       await deleteDoc(doc(db, "attendance", attendanceDocId(uid, dateKey))).catch(() => {});
       if (statusKey) {
@@ -768,14 +810,14 @@ export default function AttendanceBoard() {
         });
       }
     }
-    await syncScheduleStatus(employeeByUid.get(uid), uid, name, dateKey, statusKey);
+    await syncScheduleStatus(employeeByUid.get(uid), uid, name, dateKey, statusKey, notify);
   };
 
   const gridApplyStatus = async (statusKey) => {
     if (!gridEditCell) return;
     setGridSaving(true);
     try {
-      await writeDayStatus(gridEditCell.uid, gridEditCell.name, gridEditCell.dateKey, statusKey);
+      await writeDayStatus(gridEditCell.uid, gridEditCell.name, gridEditCell.dateKey, statusKey, { notify: true });
       toast.success(`${statusKey}(으)로 표시했습니다`);
       setGridEditCell(null);
     } catch (err) {
@@ -813,20 +855,35 @@ export default function AttendanceBoard() {
     try {
       let attList = gridAttendance;
       let leavesList = gridLeaves;
+      let schedList = gridSchedules;
       if (monthKey !== gridMonth) {
-        const [attSnap, leavesSnap] = await Promise.all([
+        const monthStart = `${monthKey}-01`;
+        const monthEnd = `${monthKey}-31`;
+        const [attSnap, leavesSnap, schedSnap] = await Promise.all([
           getDocs(query(collection(db, "attendance"), where("companyId", "==", profile.companyId), where("month", "==", monthKey))),
           getDocs(query(collection(db, "leaves"), where("companyId", "==", profile.companyId), where("status", "==", "approved"))),
+          getDocs(
+            query(
+              collection(db, "schedules"),
+              where("companyId", "==", profile.companyId),
+              where("date", ">=", monthStart),
+              where("date", "<=", monthEnd)
+            )
+          ),
         ]);
         attList = attSnap.docs.map((d) => d.data());
         leavesList = leavesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        schedList = schedSnap.docs.map((d) => d.data());
       }
       const numDays = daysInMonth(monthKey);
       const map = {};
       for (let day = 1; day <= numDays; day += 1) {
         const dateKey = `${monthKey}-${String(day).padStart(2, "0")}`;
-        const status = resolveDayStatus(emp.id, emp, dateKey, attList, leavesList);
-        if (status && status !== "OUT") map[day] = status;
+        const status = resolveDayStatus(emp.id, emp, dateKey, attList, leavesList, schedList);
+        // "출근예정"은 아직 실제 출근이 확정되지 않은 화면 표시용 잠정
+        // 상태라 달력에 지정된 값으로 프리필하지 않는다 — 미지정 상태로
+        // 남겨두면 저장 시 기존과 동일하게 출근으로 재확인된다.
+        if (status && status !== "OUT" && status !== "출근예정") map[day] = status;
       }
       setBulkDayMap(map);
     } finally {
