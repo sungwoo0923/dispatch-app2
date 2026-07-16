@@ -653,13 +653,30 @@ const patchDispatch = async (_id, patch) => {
     }
   }
 
+  // 경유지 필드 등은 매번 safeStops()로 새 배열을 만들어 cleanPatch에 채워 넣기 때문에
+  // 내용이 같아도 참조가 달라져 아래 !== 비교가 항상 "변경됨"으로 오탐한다.
+  // 객체/배열 값은 내용 기준(JSON)으로, 빈 값(undefined/null/[])은 서로 동일하게 취급해 비교한다.
+  const normalizeForHistoryCompare = (v) => {
+    if (v === undefined || v === null) return null;
+    if (Array.isArray(v) && v.length === 0) return null;
+    return v;
+  };
+  const historyValuesEqual = (a, b) => {
+    const na = normalizeForHistoryCompare(a);
+    const nb = normalizeForHistoryCompare(b);
+    if (na && typeof na === "object" || nb && typeof nb === "object") {
+      return JSON.stringify(na) === JSON.stringify(nb);
+    }
+    return na === nb;
+  };
+
   const histories = [];
   Object.keys(cleanPatch).forEach((key) => {
     if (IGNORE_HISTORY_FIELDS.has(key)) return;
     if (cleanPatch.__system === true) return;
     if (key === "업체전달상태") return;
     if (key === "업체전달일시") return;
-    if (prev[key] !== cleanPatch[key]) {
+    if (!historyValuesEqual(prev[key], cleanPatch[key])) {
       histories.push(makeDispatchHistory({
         userEmail: auth.currentUser?.email,
         field: key, before: prev[key] ?? null, after: cleanPatch[key] ?? null,
