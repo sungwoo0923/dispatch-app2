@@ -17,10 +17,10 @@ import {
 import { useNavigate } from "react-router-dom";
 
 const STATUS = {
-  요청: { label: "요청", cls: "bg-blue-100 text-blue-700" },
-  배차중: { label: "배차중", cls: "bg-amber-100 text-amber-700" },
-  배차완료: { label: "배차완료", cls: "bg-emerald-100 text-emerald-700" },
-  배차취소: { label: "취소", cls: "bg-red-100 text-red-600" },
+  요청: { label: "요청", cls: "bg-slate-100 text-slate-700" },
+  배차중: { label: "배차중", cls: "bg-amber-100 text-amber-800" },
+  배차완료: { label: "배차완료", cls: "bg-emerald-100 text-emerald-800" },
+  배차취소: { label: "취소", cls: "bg-rose-100 text-rose-800" },
 };
 
 const getTodayKST = () => {
@@ -44,6 +44,26 @@ const fmt12 = (t) => {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
 };
+
+const fmtTimeCell = (time, gubun) => {
+  if (!time) return "즉시";
+  return gubun && gubun !== "정각" ? `${fmt12(time)} ${gubun}` : fmt12(time);
+};
+
+const getViaList = (v) => (Array.isArray(v) ? v.filter(s => s && (s.업체명 || s.주소)) : []);
+
+// 경유+N 뱃지 — 운송프로그램(StopInlineBadge)과 동일한 디자인/동작
+function ShipperViaBadge({ count, label, onOpen }) {
+  if (!count) return null;
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onOpen(); }}
+      className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
+    >
+      경유+{count}
+    </button>
+  );
+}
 
 const fmtDate = (ts) => {
   if (!ts) return "-";
@@ -75,6 +95,11 @@ export default function ShipperStatus() {
   const prevAttachRef = useRef({});
   const [attachNotif, setAttachNotif] = useState(null);
   const [attachViewer, setAttachViewer] = useState(null);
+  const prevVehicleRef = useRef({});
+  const [dispatchNotif, setDispatchNotif] = useState(null);
+  const [focusOrderId, setFocusOrderId] = useState(null);
+  const [flashId, setFlashId] = useState(null);
+  const rowRefs = useRef({});
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -91,7 +116,6 @@ export default function ShipperStatus() {
   const [searchType, setSearchType] = useState("통합");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [expandedRows, setExpandedRows] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
   const [editData, setEditData] = useState(null);
@@ -100,6 +124,8 @@ export default function ShipperStatus() {
   const pageSize = 100;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({ message: "", onConfirm: null });
+  const [addrPopup, setAddrPopup] = useState(null);
+  const [viaPopup, setViaPopup] = useState(null); // { label, list }
 
   const openConfirm = (message, onConfirm) => {
     setConfirmConfig({ message, onConfirm });
@@ -158,12 +184,61 @@ export default function ShipperStatus() {
         prevAttachRef.current[o.id] = cur;
       });
 
+      // 배차완료 전환 감지 -> 알림
+      docs.forEach((o) => {
+        const curHasVehicle = !!(o.차량번호 && o.차량번호.trim());
+        const prev = prevVehicleRef.current[o.id];
+        if (prev === false && curHasVehicle) {
+          setDispatchNotif({
+            id: o.id,
+            text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호} · ${o.이름 || ""})`,
+            order: o,
+          });
+          setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+        }
+        prevVehicleRef.current[o.id] = curHasVehicle;
+      });
+
       setOrders(docs);
       setLoading(false);
     });
 
     return () => unsub();
   }, [user, userData]);
+
+  // 알림 클릭 -> 해당 오더로 포커스 이동 + 하이라이트
+  const focusOnOrder = (order) => {
+    setHideCanceled(false);
+    setFilter("전체");
+    setKeyword("");
+    const orderDate = toYMD(order.상차일);
+    if (orderDate && startDate && orderDate < startDate) setStartDate(orderDate);
+    if (orderDate && endDate && orderDate > endDate) setEndDate(orderDate);
+    setFocusOrderId(order.id);
+  };
+
+  useEffect(() => {
+    if (!focusOrderId) return;
+    const idx = rows.findIndex(r => r.id === focusOrderId);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / pageSize) + 1;
+    if (targetPage !== page) { setPage(targetPage); return; }
+
+    let rafId, tries = 0, timeoutId;
+    const run = () => {
+      const el = rowRefs.current[focusOrderId];
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setFlashId(focusOrderId);
+        timeoutId = setTimeout(() => { setFlashId(null); setFocusOrderId(null); }, 1600);
+        return;
+      }
+      if (tries++ < 30) rafId = requestAnimationFrame(run);
+      else setFocusOrderId(null);
+    };
+    rafId = requestAnimationFrame(run);
+    return () => { cancelAnimationFrame(rafId); clearTimeout(timeoutId); };
+  }, [focusOrderId, rows, page]);
 
   const getStatus = useCallback((o) => {
     if (["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태)) return "배차취소";
@@ -185,10 +260,6 @@ export default function ShipperStatus() {
     if (d?.toDate) return d.toDate().toISOString().slice(0, 10);
     if (d instanceof Date) return d.toISOString().slice(0, 10);
     return String(d).slice(0, 10);
-  };
-
-  const toggleExpand = (id, type) => {
-    setExpandedRows(prev => ({ ...prev, [`${id}_${type}`]: !prev[`${id}_${type}`] }));
   };
 
   const toggleSelect = (id, checked) => {
@@ -302,11 +373,31 @@ export default function ShipperStatus() {
   return (
     <div className="flex h-screen overflow-hidden">
 
+      {/* 배차완료 알림 배너 */}
+      {dispatchNotif && (
+        <div
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, zIndex: 999999,
+            background: "#1B2B4B", color: "white", textAlign: "center",
+            padding: "10px 16px", fontSize: "13px", fontWeight: 600,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+            animation: "bannerDown 0.4s ease-out forwards",
+          }}
+          onClick={() => { focusOnOrder(dispatchNotif.order); setDispatchNotif(null); }}
+          className="cursor-pointer"
+        >
+          <style>{`@keyframes bannerDown { from { opacity:0; transform:translateY(-100%); } to { opacity:1; transform:translateY(0); } }`}</style>
+          <span style={{ display:"inline-block", width:6, height:6, borderRadius:"50%", background:"#93c5fd", marginRight:8, verticalAlign:"middle" }} />
+          {dispatchNotif.text}
+          <span style={{ marginLeft:12, textDecoration:"underline", opacity:0.85 }}>클릭하여 확인</span>
+        </div>
+      )}
+
       {/* 첨부 알림 배너 */}
       {attachNotif && (
         <div
           style={{
-            position: "fixed", top: 0, left: 0, right: 0, zIndex: 999999,
+            position: "fixed", top: dispatchNotif ? 40 : 0, left: 0, right: 0, zIndex: 999998,
             background: "#059669", color: "white", textAlign: "center",
             padding: "10px 16px", fontSize: "13px", fontWeight: 600,
             boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
@@ -361,8 +452,8 @@ export default function ShipperStatus() {
                 onClick={() => setFilter(s)}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold ${
                   filter === s
-                    ? "bg-blue-600 text-white"
-                    : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    ? "bg-[#1B2B4B] text-white"
+                    : "bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2]"
                 }`}
               >
                 {s}
@@ -424,9 +515,9 @@ export default function ShipperStatus() {
 
             {/* 버튼 */}
             <div className="flex gap-2">
-              <button onClick={handleEditSelected} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">선택수정</button>
-              <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-semibold">선택삭제</button>
-              <button onClick={handleExcelDownload} className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold">엑셀다운</button>
+              <button onClick={handleEditSelected} className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-semibold">선택수정</button>
+              <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold">선택삭제</button>
+              <button onClick={handleExcelDownload} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold">엑셀다운</button>
             </div>
           </div>
         </div>
@@ -435,6 +526,7 @@ export default function ShipperStatus() {
           <table className="border-collapse text-[14px]" style={{ minWidth: "2640px", width: "100%" }}>
             <colgroup>
               <col style={{ width: 40 }} /><col style={{ width: 60 }} />
+              <col style={{ width: 110 }} />
               <col style={{ width: 100 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
@@ -445,7 +537,7 @@ export default function ShipperStatus() {
               <col style={{ width: 120 }} /><col style={{ width: 120 }} />
               <col style={{ width: 120 }} /><col style={{ width: 110 }} />
               <col style={{ width: 110 }} /><col style={{ width: 120 }} />
-              <col style={{ width: 90 }} /><col style={{ width: 75 }} />
+              <col style={{ width: 75 }} />
             </colgroup>
             <thead>
               <tr className="bg-[#eef3fb] text-gray-800 font-extrabold text-[13px]">
@@ -453,9 +545,9 @@ export default function ShipperStatus() {
                   <input key="chk" type="checkbox"
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
-                  "순번","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
+                  "순번","운송사","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
                   "하차지","하차지주소","화물","차량","톤수","차량번호","이름","전화번호",
-                  "청구운임","지급방식","상태","운송사","첨부"
+                  "청구운임","지급방식","상태","첨부"
                 ].map((h, idx) => (
                   <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 last:border-r-0 whitespace-nowrap">
                     {h}
@@ -470,8 +562,14 @@ export default function ShipperStatus() {
                 const isCanceled = getStatus(o) === "배차취소";
                 const rowCls = isCanceled ? "bg-red-50 text-red-600" : "text-gray-800 hover:bg-blue-50 cursor-pointer";
                 const tdCls = "px-3 py-3 text-center border-r border-gray-100 last:border-r-0 align-middle";
+                const pickupVia = getViaList(o.경유상차목록);
+                const dropVia = getViaList(o.경유하차목록);
+                const isFlashing = flashId === o.id;
                 return (
-                  <tr key={o.id} className={`border-t border-gray-100 ${rowCls}`}
+                  <tr key={o.id}
+                    ref={(el) => { if (el) rowRefs.current[o.id] = el; }}
+                    className={`border-t border-gray-100 ${rowCls} transition-shadow duration-500`}
+                    style={isFlashing ? { boxShadow: "inset 0 0 0 2px #1B2B4B, 0 0 14px rgba(27,43,75,0.45)", background: "#eef1f7" } : undefined}
                     onDoubleClick={() => { setSelectedOrder(o); setDetailOpen(true); }}>
                     <td className={tdCls}>
                       <input type="checkbox" checked={selectedIds.includes(o.id)}
@@ -479,25 +577,54 @@ export default function ShipperStatus() {
                         onChange={(e) => toggleSelect(o.id, e.target.checked)} />
                     </td>
                     <td className={tdCls}>{(page - 1) * pageSize + i + 1}</td>
+                    <td className={`${tdCls} font-semibold text-gray-900`}>{o.운송사명 || "-"}</td>
                     <td className={`${tdCls} text-gray-500`}>{fmtDate(o.createdAt)}</td>
                     <td className={`${tdCls} font-semibold`}>{o.상차일 || "-"}</td>
-                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>
-                      {o.상차시간 ? (o.상차시간구분 && o.상차시간구분 !== "정각" ? `${fmt12(o.상차시간)} ${o.상차시간구분}` : fmt12(o.상차시간)) : "-"}
-                    </td>
+                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>{fmtTimeCell(o.상차시간, o.상차시간구분)}</td>
                     <td className={`${tdCls} font-semibold`}>{o.하차일 || "-"}</td>
-                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>
-                      {o.하차시간 ? (o.하차시간구분 && o.하차시간구분 !== "정각" ? `${fmt12(o.하차시간)} ${o.하차시간구분}` : fmt12(o.하차시간)) : "-"}
-                    </td>
+                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>{fmtTimeCell(o.하차시간, o.하차시간구분)}</td>
                     <td className={`${tdCls} font-bold text-gray-900`}>{o.거래처명 || "-"}</td>
-                    <td className={tdCls}>{o.상차지명 || "-"}</td>
-                    <td className={`${tdCls} text-gray-600 cursor-pointer`}
-                      onClick={() => toggleExpand(o.id, "up")}>
-                      <span className={expandedRows[`${o.id}_up`] ? "" : "line-clamp-1 block text-left"}>{o.상차지주소 || "-"}</span>
+                    <td className={tdCls}>
+                      {o.상차지명 || "-"}
+                      <ShipperViaBadge count={pickupVia.length} label="상차경유지" onOpen={() => setViaPopup({ label: "상차경유지", list: pickupVia })} />
                     </td>
-                    <td className={tdCls}>{o.하차지명 || "-"}</td>
-                    <td className={`${tdCls} text-gray-600 cursor-pointer`}
-                      onClick={() => toggleExpand(o.id, "down")}>
-                      <span className={expandedRows[`${o.id}_down`] ? "" : "line-clamp-1 block text-left"}>{o.하차지주소 || "-"}</span>
+                    <td className={`${tdCls} text-gray-600`}>
+                      {(() => {
+                        const text = o.상차지주소 || "";
+                        const isLong = text.length > 14;
+                        return (
+                          <div className="flex items-center justify-center gap-1 min-w-0">
+                            <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 120 }} title={text}>
+                              {isLong ? text.slice(0, 14) + "…" : (text || "-")}
+                            </span>
+                            {isLong && (
+                              <button type="button" className="text-[11px] text-[#1B2B4B] underline shrink-0 hover:opacity-70"
+                                onClick={(e) => { e.stopPropagation(); setAddrPopup(text); }}>더보기</button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className={tdCls}>
+                      {o.하차지명 || "-"}
+                      <ShipperViaBadge count={dropVia.length} label="하차경유지" onOpen={() => setViaPopup({ label: "하차경유지", list: dropVia })} />
+                    </td>
+                    <td className={`${tdCls} text-gray-600`}>
+                      {(() => {
+                        const text = o.하차지주소 || "";
+                        const isLong = text.length > 14;
+                        return (
+                          <div className="flex items-center justify-center gap-1 min-w-0">
+                            <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 120 }} title={text}>
+                              {isLong ? text.slice(0, 14) + "…" : (text || "-")}
+                            </span>
+                            {isLong && (
+                              <button type="button" className="text-[11px] text-[#1B2B4B] underline shrink-0 hover:opacity-70"
+                                onClick={(e) => { e.stopPropagation(); setAddrPopup(text); }}>더보기</button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className={`${tdCls} truncate max-w-[140px]`}>{o.화물내용 || "-"}</td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
@@ -512,21 +639,32 @@ export default function ShipperStatus() {
                     <td className={tdCls}>
                       <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
                     </td>
-                    <td className={`${tdCls} font-semibold text-gray-900`}>{o.운송사명 || "-"}</td>
                     <td className={tdCls}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setAttachViewer(o); }}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-bold border transition mx-auto ${
-                          attachCnt > 0
-                            ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
-                            : "border-gray-200 text-gray-400 hover:bg-gray-50"
-                        }`}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                        </svg>
-                        {attachCnt > 0 ? attachCnt : "-"}
-                      </button>
+                      {(() => {
+                        const isUnseen = attachCnt > 0 && (o.attachViewedCount || 0) < attachCnt;
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAttachViewer(o);
+                              if (isUnseen) updateDoc(doc(db, "orders", o.id), { attachViewedCount: attachCnt }).catch(() => {});
+                            }}
+                            className={`relative flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-bold border transition mx-auto ${
+                              attachCnt === 0
+                                ? "border-gray-200 text-gray-400 hover:bg-gray-50"
+                                : isUnseen
+                                  ? "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                                  : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                            }`}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            {attachCnt > 0 ? attachCnt : "-"}
+                            {isUnseen && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500" />}
+                          </button>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );
@@ -550,28 +688,28 @@ export default function ShipperStatus() {
       {detailOpen && selectedOrder && (
         <div className="fixed top-0 right-0 h-full w-[720px] bg-white shadow-2xl z-50 overflow-y-auto">
           <div className="flex items-center justify-between px-5 py-4 border-b">
-            <div className={`text-[18px] font-bold ${selectedOrder?.상태 === "취소" ? "text-red-600" : "text-blue-600"}`}>
+            <div className={`text-[18px] font-bold ${selectedOrder?.상태 === "취소" ? "text-rose-700" : "text-[#1B2B4B]"}`}>
               {selectedOrder?.상태 === "취소" ? "배차취소 되었습니다." : selectedOrder?.차량번호 ? "배차완료 되었습니다." : "배차 요청중입니다."}
             </div>
             <div className="flex gap-2">
               <button
                 disabled={selectedOrder?.상태 === "취소"}
                 onClick={() => { setEditData(selectedOrder); setEditOpen(true); }}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-600 text-white hover:opacity-90"}`}
               >수정</button>
               <button
                 disabled={selectedOrder?.상태 === "취소"}
                 onClick={() => cancelOrder(selectedOrder.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-500 text-white hover:bg-red-600"}`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
               >오더취소</button>
               <button
                 onClick={() => setAttachViewer(selectedOrder)}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700"
+                className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90"
               >
                 첨부 {selectedOrder.attachCount > 0 ? `(${selectedOrder.attachCount})` : ""}
               </button>
               {selectedOrder?.상태 === "취소" && (
-                <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700">재등록</button>
+                <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">재등록</button>
               )}
             </div>
             <button onClick={() => setDetailOpen(false)} className="text-gray-500 hover:text-black text-xl">×</button>
@@ -601,11 +739,11 @@ export default function ShipperStatus() {
                 {selectedOrder?.전화번호 && (
                   <div className="flex gap-2 mt-3">
                     <a href={`tel:${selectedOrder.전화번호}`}
-                      className="flex-1 py-2 bg-emerald-500 text-white rounded-lg text-[13px] font-bold text-center hover:bg-emerald-600">
+                      className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold text-center hover:opacity-90">
                       전화 연결
                     </a>
                     <a href={`sms:${selectedOrder.전화번호}`}
-                      className="flex-1 py-2 bg-sky-500 text-white rounded-lg text-[13px] font-bold text-center hover:bg-sky-600">
+                      className="flex-1 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold text-center hover:opacity-90">
                       문자 전송
                     </a>
                   </div>
@@ -664,6 +802,48 @@ export default function ShipperStatus() {
           order={attachViewer}
           onClose={() => setAttachViewer(null)}
         />
+      )}
+
+      {/* 주소 전체보기 팝업 */}
+      {addrPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{addrPopup}</p>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 경유지 팝업 */}
+      {viaPopup && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]" onClick={() => setViaPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[75vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 flex items-center justify-between bg-[#1B2B4B]">
+              <h3 className="text-white font-bold text-[16px]">{viaPopup.label} ({viaPopup.list.length}곳)</h3>
+              <button onClick={() => setViaPopup(null)} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
+              {viaPopup.list.map((s, i) => (
+                <div key={i} className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+                  <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">{i + 1}. {s.업체명 || "-"}</div>
+                  {s.주소 && <div className="text-[12px] text-gray-600 mb-1">주소: {s.주소}</div>}
+                  {(s.담당자 || s.담당자번호) && (
+                    <div className="text-[12px] text-gray-600 mb-1">담당자: {s.담당자 || "-"} {s.담당자번호 ? `(${s.담당자번호})` : ""}</div>
+                  )}
+                  {s.화물내용 && <div className="text-[12px] text-gray-600 mb-1">화물: {s.화물내용}</div>}
+                  {s.메모 && <div className="text-[12px] text-gray-500">메모: {s.메모}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

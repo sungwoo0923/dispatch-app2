@@ -72,19 +72,17 @@ export default function ShipperHome() {
   }, [orders, todayOrders, monthOrders]);
 
   const recent = useMemo(() => {
-    return [...orders]
-      .sort((a, b) => {
-        const ta = a.createdAt?.toDate?.() ?? new Date(a.createdAt || 0);
-        const tb = b.createdAt?.toDate?.() ?? new Date(b.createdAt || 0);
-        return tb - ta;
-      })
-      .slice(0, 10);
-  }, [orders]);
+    return [...todayOrders].sort((a, b) => {
+      const ta = a.createdAt?.toDate?.() ?? new Date(a.createdAt || 0);
+      const tb = b.createdAt?.toDate?.() ?? new Date(b.createdAt || 0);
+      return tb - ta;
+    });
+  }, [todayOrders]);
 
   const getStatus = (o) => {
-    if (["취소", "배차취소", "오더취소"].includes(o.상태)) return { label: "취소", cls: "bg-red-100 text-red-600" };
-    if (o.차량번호) return { label: "배차완료", cls: "bg-emerald-100 text-emerald-700" };
-    return { label: "요청", cls: "bg-blue-100 text-blue-700" };
+    if (["취소", "배차취소", "오더취소"].includes(o.상태)) return { label: "취소", cls: "bg-rose-100 text-rose-800" };
+    if (o.차량번호) return { label: "배차완료", cls: "bg-emerald-100 text-emerald-800" };
+    return { label: "요청", cls: "bg-slate-100 text-slate-700" };
   };
 
   // 이번 달 요일별 건수
@@ -142,7 +140,7 @@ export default function ShipperHome() {
 
         {/* 최근 오더 (나머지 2칸 차지) */}
         <div className="col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <div className="px-5 py-4 border-b font-bold text-gray-800">최근 오더</div>
+          <div className="px-5 py-4 border-b font-bold text-gray-800">당일 오더 ({today})</div>
           <div className="flex-1 overflow-y-auto">
             {recent.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-gray-400 text-sm">등록된 오더가 없습니다</div>
