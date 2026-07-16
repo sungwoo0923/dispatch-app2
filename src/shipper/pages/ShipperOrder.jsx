@@ -53,7 +53,7 @@ const getDate = (offset = 0) => {
 
 const SEARCH_TYPES = ["통합", "상차지명", "하차지명", "상차지주소", "하차지주소", "운송사명"];
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none";
+const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
 const labelCls = "block text-xs font-bold text-gray-600 mb-1";
 
 export default function ShipperOrder({ editData, onClose }) {
@@ -74,6 +74,7 @@ export default function ShipperOrder({ editData, onClose }) {
   const [routeInfo, setRouteInfo] = useState(null);
   const [companyEditable, setCompanyEditable] = useState(false);
   const [companyEdit, setCompanyEdit] = useState("");
+  const [contactPicker, setContactPicker] = useState(null); // { field, item, contacts }
 
   // 오더 불러오기
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -128,8 +129,20 @@ export default function ShipperOrder({ editData, onClose }) {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem("transportList");
-    if (saved) setTransportList(JSON.parse(saved));
+    getDocs(query(
+      collection(db, "transportApplications"),
+      where("type", "==", "신규"),
+      where("status", "==", "approved"),
+    )).then(snap => {
+      const seen = new Map();
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.companyName && !seen.has(data.companyName)) {
+          seen.set(data.companyName, { name: data.companyName, code: data.companyCode || "" });
+        }
+      });
+      setTransportList(Array.from(seen.values()));
+    }).catch(() => setTransportList([]));
   }, []);
 
   useEffect(() => {
@@ -200,14 +213,26 @@ export default function ShipperOrder({ editData, onClose }) {
       where("type", "==", type)
     );
     const snap = await getDocs(q);
+    const newContact = (data.담당자명 || data.담당자번호) ? { name: data.담당자명 || "", phone: data.담당자번호 || "" } : null;
     if (!snap.empty) {
+      const existing = snap.docs[0].data();
+      const prevContacts = Array.isArray(existing.contacts) ? existing.contacts : (
+        (existing.담당자명 || existing.담당자번호) ? [{ name: existing.담당자명 || "", phone: existing.담당자번호 || "" }] : []
+      );
+      let contacts = prevContacts;
+      if (newContact) {
+        const dupIdx = prevContacts.findIndex(c => c.name === newContact.name && c.phone === newContact.phone);
+        contacts = dupIdx >= 0 ? prevContacts : [newContact, ...prevContacts].slice(0, 5);
+      }
       await updateDoc(doc(db, "places", snap.docs[0].id), {
         address: data.address, 담당자명: data.담당자명, 담당자번호: data.담당자번호,
-        메모: data.메모, company: currentCompany, updatedAt: serverTimestamp(),
+        메모: data.메모, company: currentCompany, contacts, updatedAt: serverTimestamp(),
       });
     } else {
       await addDoc(collection(db, "places"), {
-        ...data, type, userId: user.uid, company: currentCompany, createdAt: serverTimestamp(),
+        ...data, type, userId: user.uid, company: currentCompany,
+        contacts: newContact ? [newContact] : [],
+        createdAt: serverTimestamp(),
       });
     }
   };
@@ -358,12 +383,26 @@ export default function ShipperOrder({ editData, onClose }) {
     if (e.key === "Enter") { e.preventDefault(); if (activeIndex >= 0) selectSuggestion(suggestions[activeIndex], field); }
   };
 
-  const selectSuggestion = (item, field) => {
+  const applyPlaceContact = (item, field, contact) => {
+    const name = contact?.name || item.담당자명 || "";
+    const phone = contact?.phone || item.담당자번호 || "";
     if (field === "상차지명") {
-      setForm(p => ({ ...p, 상차지명: item.name || "", 상차지주소: item.address || "", 상차담당자명: item.담당자명 || "", 상차담당자번호: item.담당자번호 || "", 상차메모: item.메모 || "" }));
+      setForm(p => ({ ...p, 상차지명: item.name || "", 상차지주소: item.address || "", 상차담당자명: name, 상차담당자번호: phone, 상차메모: item.메모 || "" }));
     }
     if (field === "하차지명") {
-      setForm(p => ({ ...p, 하차지명: item.name || "", 하차지주소: item.address || "", 하차담당자명: item.담당자명 || "", 하차담당자번호: item.담당자번호 || "", 하차메모: item.메모 || "" }));
+      setForm(p => ({ ...p, 하차지명: item.name || "", 하차지주소: item.address || "", 하차담당자명: name, 하차담당자번호: phone, 하차메모: item.메모 || "" }));
+    }
+  };
+
+  const selectSuggestion = (item, field) => {
+    if (field === "상차지명" || field === "하차지명") {
+      const contacts = Array.isArray(item.contacts) ? item.contacts.filter(c => c.name || c.phone) : [];
+      if (contacts.length > 1) {
+        setContactPicker({ field, item, contacts });
+        setShowDropdown(null);
+        return;
+      }
+      applyPlaceContact(item, field, contacts[0]);
     }
     if (field === "운송사명") {
       setForm(p => ({ ...p, 운송사명: item.name, 운송사코드: item.code || "" }));
@@ -397,7 +436,7 @@ export default function ShipperOrder({ editData, onClose }) {
         {/* 운송의뢰사 */}
         <div>
           <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
             운송의뢰사
           </div>
           <div className="bg-gray-50 rounded-xl p-4 space-y-3">
@@ -415,7 +454,7 @@ export default function ShipperOrder({ editData, onClose }) {
               {showDropdown === "운송사명" && suggestions.length > 0 && (
                 <div className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
                   {suggestions.map((item, idx) => (
-                    <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : "hover:bg-gray-50"}`}
+                    <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-[#eef1f7]" : "hover:bg-gray-50"}`}
                       onMouseDown={() => selectSuggestion(item, "운송사명")}>{item.name}</div>
                   ))}
                 </div>
@@ -447,7 +486,7 @@ export default function ShipperOrder({ editData, onClose }) {
         {/* 거래처 정보 */}
         <div>
           <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
             거래처 정보
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
@@ -456,13 +495,13 @@ export default function ShipperOrder({ editData, onClose }) {
               {companyEditable ? (
                 <>
                   <input value={companyEdit} onChange={e => setCompanyEdit(e.target.value)} className={inputCls} />
-                  <button onClick={() => setCompanyEditable(false)} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg font-semibold whitespace-nowrap">확인</button>
+                  <button onClick={() => setCompanyEditable(false)} className="px-3 py-2 text-sm bg-[#1B2B4B] text-white rounded-lg font-semibold whitespace-nowrap">확인</button>
                   <button onClick={() => { setCompanyEditable(false); setCompanyEdit(company); }} className="px-3 py-2 text-sm bg-gray-200 rounded-lg whitespace-nowrap">취소</button>
                 </>
               ) : (
                 <>
                   <input value={company} disabled className={inputCls + " bg-gray-100 font-semibold text-gray-800"} />
-                  <button onClick={() => setCompanyEditable(true)} className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg font-semibold whitespace-nowrap">변경</button>
+                  <button onClick={() => setCompanyEditable(true)} className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg font-semibold whitespace-nowrap">변경</button>
                 </>
               )}
             </div>
@@ -486,7 +525,7 @@ export default function ShipperOrder({ editData, onClose }) {
         {/* 운송 일정 */}
         <div>
           <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
             운송 일정
           </div>
           <div className="bg-gray-50 rounded-xl p-4 space-y-4">
@@ -505,16 +544,16 @@ export default function ShipperOrder({ editData, onClose }) {
                   <option value="정각">정각</option>
                 </select>
                 <button type="button" onClick={() => onChange("상차일", getDate(0))}
-                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.상차일 === getDate(0) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.상차일 === getDate(0) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-700 border-gray-300"}`}>
                   당일
                 </button>
                 <button type="button" onClick={() => onChange("상차일", getDate(1))}
-                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.상차일 === getDate(1) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.상차일 === getDate(1) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-700 border-gray-300"}`}>
                   내일
                 </button>
               </div>
               {form.상차시간 && (
-                <div className="mt-1 text-xs text-blue-600 font-semibold">
+                <div className="mt-1 text-xs text-[#1B2B4B] font-semibold">
                   {timeLabel(form.상차시간, form.상차시간구분)}
                 </div>
               )}
@@ -534,16 +573,16 @@ export default function ShipperOrder({ editData, onClose }) {
                   <option value="정각">정각</option>
                 </select>
                 <button type="button" onClick={() => onChange("하차일", getDate(0))}
-                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.하차일 === getDate(0) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.하차일 === getDate(0) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-700 border-gray-300"}`}>
                   당일
                 </button>
                 <button type="button" onClick={() => onChange("하차일", getDate(1))}
-                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.하차일 === getDate(1) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.하차일 === getDate(1) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-700 border-gray-300"}`}>
                   내일
                 </button>
               </div>
               {form.하차시간 && (
-                <div className="mt-1 text-xs text-blue-600 font-semibold">
+                <div className="mt-1 text-xs text-[#1B2B4B] font-semibold">
                   {timeLabel(form.하차시간, form.하차시간구분)}
                 </div>
               )}
@@ -554,7 +593,7 @@ export default function ShipperOrder({ editData, onClose }) {
         {/* 상·하차 정보 */}
         <div>
           <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
             상·하차 정보
           </div>
           <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-4">
@@ -572,7 +611,7 @@ export default function ShipperOrder({ editData, onClose }) {
                 {showDropdown === "상차지명" && suggestions.length > 0 && (
                   <div ref={listRefTop} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
                     {suggestions.map((item, idx) => (
-                      <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : "hover:bg-gray-50"}`}
+                      <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-[#eef1f7]" : "hover:bg-gray-50"}`}
                         onMouseDown={() => selectSuggestion(item, "상차지명")}>{item.name}</div>
                     ))}
                   </div>
@@ -598,7 +637,7 @@ export default function ShipperOrder({ editData, onClose }) {
                 {showDropdown === "하차지명" && suggestions.length > 0 && (
                   <div ref={listRefBottom} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
                     {suggestions.map((item, idx) => (
-                      <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : "hover:bg-gray-50"}`}
+                      <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-[#eef1f7]" : "hover:bg-gray-50"}`}
                         onMouseDown={() => selectSuggestion(item, "하차지명")}>{item.name}</div>
                     ))}
                   </div>
@@ -615,7 +654,7 @@ export default function ShipperOrder({ editData, onClose }) {
         {/* 화물 정보 */}
         <div>
           <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
             화물 정보
           </div>
           <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
@@ -652,7 +691,7 @@ export default function ShipperOrder({ editData, onClose }) {
         {/* 상하차방법 / 결제방식 */}
         <div>
           <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
             상하차방법 / 결제방식
           </div>
           <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
@@ -701,7 +740,7 @@ export default function ShipperOrder({ editData, onClose }) {
               setCoords({ start, end });
               setPreviewOpen(true);
             }}
-            className="px-8 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm"
+            className="px-8 py-2.5 rounded-lg bg-[#1B2B4B] hover:opacity-90 text-white font-bold text-sm"
           >
             {editId || editData ? "저장" : "오더 등록"}
           </button>
@@ -723,7 +762,7 @@ export default function ShipperOrder({ editData, onClose }) {
               placeholder="검색어 입력 (Enter)"
               className={inputCls + " flex-1"} />
             <button onClick={handleSearch}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold whitespace-nowrap">
+              className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold whitespace-nowrap">
               {searchLoading ? "검색중..." : "조회"}
             </button>
           </div>
@@ -731,7 +770,6 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {searchResults.length === 0 && !searchLoading && (
           <div className="text-center py-8 text-gray-400 text-sm">
-            <div className="text-2xl mb-2">📋</div>
             <div>조회 버튼을 눌러 과거 오더를 불러오세요</div>
             <div className="text-xs mt-1 text-gray-300">검색어 없으면 최근 200건 표시</div>
           </div>
@@ -739,7 +777,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         <div className="space-y-2 flex-1 overflow-y-auto max-h-[680px]">
           {searchResults.map(item => (
-            <div key={item.id} className="border border-gray-200 rounded-xl p-3 hover:bg-blue-50 hover:border-blue-200 transition cursor-pointer"
+            <div key={item.id} className="border border-gray-200 rounded-xl p-3 hover:bg-[#eef1f7] hover:border-[#c7d1e3] transition cursor-pointer"
               onClick={() => applyOrder(item)}>
               <div className="font-bold text-sm text-gray-900">
                 {item.상차지명 || "-"} → {item.하차지명 || "-"}
@@ -750,11 +788,11 @@ export default function ShipperOrder({ editData, onClose }) {
                 {item.차량톤수 && <span>{item.차량톤수}</span>}
               </div>
               <div className="text-xs text-gray-400 mt-0.5">
-                {item.상차일} {fmt12(item.상차시간)}{item.상차시간구분 && item.상차시간구분 !== "정각" ? ` ${item.상차시간구분}` : ""}
+                {item.상차일} {item.상차시간 ? `${fmt12(item.상차시간)}${item.상차시간구분 && item.상차시간구분 !== "정각" ? ` ${item.상차시간구분}` : ""}` : "즉시"}
               </div>
               {item.화물내용 && <div className="text-xs text-gray-500 truncate mt-0.5">{item.화물내용}</div>}
               <div className="mt-2">
-                <button className="w-full py-1 text-xs bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
+                <button className="w-full py-1 text-xs bg-[#1B2B4B] text-white rounded-lg font-semibold hover:opacity-90">
                   이 오더 불러오기
                 </button>
               </div>
@@ -799,8 +837,35 @@ export default function ShipperOrder({ editData, onClose }) {
               <div className="flex gap-2">
                 <button onClick={() => setPreviewOpen(false)} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold text-sm">취소</button>
                 <button onClick={async () => { await submit(); setPreviewOpen(false); }}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm">배차요청</button>
+                  className="flex-1 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-lg font-bold text-sm">배차요청</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 담당자 선택 팝업 */}
+      {contactPicker && (
+        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center" onClick={() => setContactPicker(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">{contactPicker.item.name} 담당자 선택</h3>
+              <p className="text-white/60 text-[12px] mt-0.5">저장된 담당자가 여러 명입니다. 사용할 담당자를 선택하세요.</p>
+            </div>
+            <div className="p-4 space-y-2">
+              {contactPicker.contacts.map((c, i) => (
+                <button
+                  key={i}
+                  onClick={() => { applyPlaceContact(contactPicker.item, contactPicker.field, c); setContactPicker(null); }}
+                  className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-[#1B2B4B] hover:bg-[#eef1f7] transition"
+                >
+                  <div className="font-bold text-[14px] text-gray-900">{c.name || "(이름 없음)"}</div>
+                  <div className="text-[12px] text-gray-500 mt-0.5">{c.phone || "-"}</div>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-gray-100 px-4 py-3 flex justify-end">
+              <button onClick={() => setContactPicker(null)} className="px-4 py-2 text-[13px] font-semibold text-gray-500 hover:text-gray-700">취소</button>
             </div>
           </div>
         </div>
