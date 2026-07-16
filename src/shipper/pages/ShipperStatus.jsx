@@ -265,6 +265,42 @@ export default function ShipperStatus() {
     return () => unsub();
   }, [user, userData]);
 
+  // 운송사에서 전송받은 오더(originCol/originId 보유)는 첨부파일이 원본(운송사) 쪽 서브컬렉션에
+  // 먼저 올라간 뒤 이 화면 쪽으로 미러링되는데, 예전 건들 중 미러링이 안 된 채로 남아있는
+  // 경우가 있어 목록을 불러올 때마다(오더당 1회) 자동으로 양쪽을 비교해 누락분을 보정한다.
+  // (첨부 뷰어를 직접 열어야만 동기화되던 방식이라 목록의 첨부 개수 표시가 실제보다 적게 보였음)
+  const attachAutoSyncRef = useRef(new Set());
+  useEffect(() => {
+    const targets = orders.filter(o => o.originCol && o.originId && !attachAutoSyncRef.current.has(o.id));
+    if (!targets.length) return;
+    (async () => {
+      for (const o of targets) {
+        attachAutoSyncRef.current.add(o.id);
+        try {
+          const [localSnap, originSnap] = await Promise.all([
+            getDocs(collection(db, "orders", o.id, "attachments")),
+            getDocs(collection(db, o.originCol, o.originId, "attachments")),
+          ]);
+          const localIds = new Set(localSnap.docs.map(d => d.id));
+          const originIds = new Set(originSnap.docs.map(d => d.id));
+          let addedLocal = 0, addedOrigin = 0;
+          for (const d of originSnap.docs) {
+            if (!localIds.has(d.id)) { await setDoc(doc(db, "orders", o.id, "attachments", d.id), d.data()); addedLocal++; }
+          }
+          for (const d of localSnap.docs) {
+            if (!originIds.has(d.id)) { await setDoc(doc(db, o.originCol, o.originId, "attachments", d.id), d.data()); addedOrigin++; }
+          }
+          if (addedLocal) {
+            const newCount = localIds.size + addedLocal;
+            prevAttachRef.current[o.id] = newCount; // 자동 보정으로 인한 "첨부파일 추가" 오알림 방지
+            await updateDoc(doc(db, "orders", o.id), { attachCount: newCount });
+          }
+          if (addedOrigin) await updateDoc(doc(db, o.originCol, o.originId), { attachCount: originIds.size + addedOrigin });
+        } catch (e) { console.warn("첨부 자동 동기화 실패(무시):", o.id, e); }
+      }
+    })();
+  }, [orders]);
+
   // 알림 클릭 -> 해당 오더로 포커스 이동 + 하이라이트
   const focusOnOrder = (order) => {
     setHideCanceled(false);
