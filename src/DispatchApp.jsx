@@ -17304,6 +17304,19 @@ const handleCloseFileUpload = async (e) => {
     return !readOnly.includes(key);
   };
 
+  // 🔒 화주사가 등록한 오더는 최고관리자 외에는 결제정보(지급방식 제외)만 수정 가능
+  //    — 기사정보(차량번호/이름/전화번호)는 별도 경로(기사스마트검색 등)로만 수정되며
+  //      원래도 canEdit의 readOnly 목록에 포함돼 있어 여기서 별도 처리하지 않는다.
+  const isShipperFieldLocked = (key, id) => {
+    const row = (dispatchData || []).find(r => r._id === id);
+    if (!row || row.source !== "shipper") return false;
+    // 지급방식은 화주사만 변경 가능 — 최고관리자 예외 없이 운송사측 전체에서 잠금
+    if (key === "지급방식") return true;
+    if (role === "totalMaster") return false;
+    const settlementAllowed = ["청구운임", "기사운임", "수수료"];
+    return !settlementAllowed.includes(key);
+  };
+
   // ------------------------
   // 📌 editable input
   // ------------------------
@@ -17315,6 +17328,10 @@ const handleCloseFileUpload = async (e) => {
   };
 
   const editableInput = (key, val, rowId) => {
+    // 🔒 화주사 오더는 결제정보(지급방식 제외) 외 필드는 최고관리자만 수정 가능
+    //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
+    if (isShipperFieldLocked(key, rowId)) return val;
+
     // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
     if (
       !canEdit(key, rowId) &&
@@ -26271,8 +26288,11 @@ return (
     className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap"
   >
 
-    {/* ✅ 차량종류 즉시변경 드롭다운 */}
-    {key === "차량종류" ? (
+    {/* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */}
+    {key === "차량종류" && (row.source === "shipper" && role !== "totalMaster") ? (
+      row.차량종류 || "-"
+
+    ) : key === "차량종류" ? (
       <select
         className="border rounded px-1 py-0.5 w-full text-center"
         value={row.차량종류 || ""}
@@ -26299,7 +26319,7 @@ return (
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
 
-    ) : editMode && selected.has(id) && editableKeys.includes(key) ? (
+    ) : editMode && selected.has(id) && editableKeys.includes(key) && !(row.source === "shipper" && role !== "totalMaster") ? (
       <div className="relative w-full">
         <input
           className="border rounded px-1 py-0.5 w-full text-center"
@@ -26490,23 +26510,27 @@ return (
                     <span className={`font-bold ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>{fee.toLocaleString()}</span>
                   </td>
 
-                  {/* 지급 / 배차 방식 */}
+                  {/* 지급 / 배차 방식 — 화주사 오더의 지급방식은 화주사만 변경 가능 */}
                   <td className="border text-center">
-                    <select
-                      className="border rounded px-1 py-0.5 w-full text-center"
-                      value={row.지급방식 || ""}
-                      onChange={(e) =>
-                        handleImmediateSelectChange(row, "지급방식", e.target.value)
-                      }
-                    >
-                      <option value="">선택없음</option>
-                      <option value="계산서">계산서</option>
-                      <option value="착불">착불</option>
-                      <option value="선불">선불</option>
-                      <option value="손실">손실</option>
-                      <option value="개인">개인</option>
-                      <option value="취소">취소</option>
-                    </select>
+                    {row.source === "shipper" ? (
+                      <span title="지급방식은 화주사만 변경할 수 있습니다">{row.지급방식 || "-"}</span>
+                    ) : (
+                      <select
+                        className="border rounded px-1 py-0.5 w-full text-center"
+                        value={row.지급방식 || ""}
+                        onChange={(e) =>
+                          handleImmediateSelectChange(row, "지급방식", e.target.value)
+                        }
+                      >
+                        <option value="">선택없음</option>
+                        <option value="계산서">계산서</option>
+                        <option value="착불">착불</option>
+                        <option value="선불">선불</option>
+                        <option value="손실">손실</option>
+                        <option value="개인">개인</option>
+                        <option value="취소">취소</option>
+                      </select>
+                    )}
                   </td>
 
 
