@@ -100,6 +100,14 @@ export default function ShipperStatus() {
   const [focusOrderId, setFocusOrderId] = useState(null);
   const [flashId, setFlashId] = useState(null);
   const rowRefs = useRef({});
+  const [toasts, setToasts] = useState([]);
+  const toastIdRef = useRef(0);
+
+  const pushToast = (t) => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { ...t, id }].slice(-4));
+    setTimeout(() => setToasts(prev => prev.filter(x => x.id !== id)), 7000);
+  };
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -180,6 +188,7 @@ export default function ShipperStatus() {
             order: o,
           });
           setTimeout(() => setAttachNotif(null), 5000);
+          pushToast({ type: "attach", order: o, title: "첨부파일 추가", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
         }
         prevAttachRef.current[o.id] = cur;
       });
@@ -195,6 +204,7 @@ export default function ShipperStatus() {
             order: o,
           });
           setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+          pushToast({ type: "dispatch", order: o, title: "배차완료", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
         }
         prevVehicleRef.current[o.id] = curHasVehicle;
       });
@@ -412,6 +422,34 @@ export default function ShipperStatus() {
           <span style={{ marginLeft:12, textDecoration:"underline", opacity:0.85 }}>클릭하여 확인</span>
         </div>
       )}
+
+      {/* 알림 토스트 카드 (우측 하단) */}
+      <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 999997, display: "flex", flexDirection: "column", gap: 10, width: 320 }}>
+        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }`}</style>
+        {toasts.map(t => (
+          <div key={t.id}
+            onClick={() => {
+              if (t.type === "attach") setAttachViewer(t.order);
+              else focusOnOrder(t.order);
+              setToasts(prev => prev.filter(x => x.id !== t.id));
+            }}
+            style={{
+              background: "#fff", borderRadius: 14, boxShadow: "0 8px 28px rgba(0,0,0,0.18)",
+              borderLeft: `4px solid ${t.type === "dispatch" ? "#1B2B4B" : "#059669"}`,
+              padding: "12px 14px", cursor: "pointer", animation: "toastIn 0.25s ease-out",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <span style={{ fontSize: 12, fontWeight: 800, color: t.type === "dispatch" ? "#1B2B4B" : "#059669" }}>
+                {t.type === "dispatch" ? "🚚 " : "📎 "}{t.title}
+              </span>
+              <button onClick={(e) => { e.stopPropagation(); setToasts(prev => prev.filter(x => x.id !== t.id)); }}
+                className="text-gray-300 hover:text-gray-500 text-sm leading-none">×</button>
+            </div>
+            <div style={{ fontSize: 13, color: "#374151", marginTop: 4, fontWeight: 600 }}>{t.desc}</div>
+          </div>
+        ))}
+      </div>
 
       {/* 좌측 슬라이드 */}
       <div className={`${open ? "w-56" : "w-16"} flex-shrink-0 bg-gray-100 border-r transition-all duration-300`}>
