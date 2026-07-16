@@ -333,9 +333,14 @@ const sixMonthsAgo = getSixMonthsAgo();
         };
       });
 
-      ordersCache = arr;
+      // "화주사 전송"으로 새로 생성된 사본은 화주사 화면에만 보이면 되는 문서라
+      // 운송사 자체 배차 화면(dispatchData)에는 섞여 나오면 안 된다 — 원본 문서는
+      // 건드리지 않으므로, 여기서 사본만 제외해도 데이터 손실은 없다.
+      const filteredArr = arr.filter(row => row.source !== "transport_transmit");
+
+      ordersCache = filteredArr;
       setDispatchData([...ordersCache, ...dispatchCache]);
-      safeSave("dispatchData", arr);
+      safeSave("dispatchData", filteredArr);
 
       // 🔔 최초 로드: prevMap 구축만
       if (ordersFirstLoad) {
