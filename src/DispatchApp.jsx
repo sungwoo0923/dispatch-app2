@@ -1334,6 +1334,9 @@ function ToastProvider({ children }) {
           0%   { opacity: 1; transform: translateY(0); }
           100% { opacity: 0; transform: translateY(-100%); }
         }
+        /* 화주사 배차요청/취소 배지 깜빡임 — 행마다 <style> 태그를 반복 삽입하지 않도록 전역에서 한 번만 정의 */
+        @keyframes shipperReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+        @keyframes cancelSlowBlink { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
         .toast-enter {
           animation: toastSlideDown 0.35s ease-out forwards;
         }
@@ -2537,6 +2540,9 @@ React.useEffect(() => {
       </div>
     );
   }
+  // ---------------- 화주사 배차요청 대기 건수 (헤더 상시 알림용) ----------------
+  const pendingShipperRequests = (dispatchData || []).filter(r => r.화주사확인대기 === true);
+
   // ---------------- 메뉴 UI ----------------
 return (
     <ToastProvider>
@@ -2717,6 +2723,26 @@ return (
 
         </div>
       </header>
+
+      {/* 화주사 배차요청 대기 상시 알림 바 — 새로고침/재접속과 무관하게 미확인 건이 있으면 항상 표시 */}
+      {pendingShipperRequests.length > 0 && (
+        <div
+          className="w-full sticky top-14 z-40 cursor-pointer"
+          style={{
+            background: "linear-gradient(90deg, #0369a1 0%, #0ea5e9 100%)",
+            color: "white", textAlign: "center", padding: "8px 16px", fontSize: 13, fontWeight: 700,
+            boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+          }}
+          onClick={() => {
+            const first = pendingShipperRequests[0];
+            const el = document.getElementById(`row-${first._id}`);
+            if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("toast-flash-border"); setTimeout(() => el.classList.remove("toast-flash-border"), 2000); }
+          }}
+        >
+          🚚 화주사 배차요청 {pendingShipperRequests.length}건이 대기 중입니다 — 클릭하여 확인
+        </div>
+      )}
+
       {/* ---------------- 화면 렌더링 ---------------- */}
       <main className={`rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         <div style={{ display: menu === "HOME" ? "block" : "none" }}>
@@ -17350,9 +17376,15 @@ const handleCloseFileUpload = async (e) => {
   // 🔒 화주사가 등록한 오더는 최고관리자 외에는 결제정보(지급방식 제외)만 수정 가능
   //    — 기사정보(차량번호/이름/전화번호)는 별도 경로(기사스마트검색 등)로만 수정되며
   //      원래도 canEdit의 readOnly 목록에 포함돼 있어 여기서 별도 처리하지 않는다.
+  // ⚡ id→source 조회를 매 셀마다 O(N) find()로 하면 행×열 규모에서 체감 렉이 생기므로
+  //    dispatchData가 바뀔 때만 한 번 Set을 만들어 O(1)로 조회한다.
+  const shipperOrderIdSet = React.useMemo(() => {
+    const s = new Set();
+    (dispatchData || []).forEach(r => { if (r.source === "shipper") s.add(r._id); });
+    return s;
+  }, [dispatchData]);
   const isShipperFieldLocked = (key, id) => {
-    const row = (dispatchData || []).find(r => r._id === id);
-    if (!row || row.source !== "shipper") return false;
+    if (!shipperOrderIdSet.has(id)) return false;
     // 지급방식은 화주사만 변경 가능 — 최고관리자 예외 없이 운송사측 전체에서 잠금
     if (key === "지급방식") return true;
     if (role === "totalMaster") return false;
@@ -18178,41 +18210,39 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
                  <td className={cell}>
                     {r.화주사확인대기 ? (
-                      <>
-                        <style>{`@keyframes shipperReqBlink2 { 0%,100% { opacity:1; } 50% { opacity:0.5; } }`}</style>
-                        <button
-                          type="button"
-                          title="클릭 시 배차중으로 전환"
-                          className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
-                          style={{ animation: "shipperReqBlink2 1.4s ease-in-out infinite" }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
-                          }}
-                        >
-                          배차요청
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        title="클릭 시 배차중으로 전환"
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
+                        style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
+                        }}
+                      >
+                        배차요청
+                      </button>
                     ) : r.배차상태 === "배차취소" && r.취소알림대기 ? (
-                      <>
-                        <style>{`@keyframes cancelSlowBlink2 { 0%,100% { opacity:1; } 50% { opacity:0.35; } }`}</style>
-                        <button
-                          type="button"
-                          title="클릭하여 배차취소 확인"
-                          className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-red-600 text-white hover:bg-red-700 transition"
-                          style={{ animation: "cancelSlowBlink2 2.4s ease-in-out infinite" }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            patchDispatch(r._id, { 취소알림대기: false, __col: r.__col });
-                          }}
-                        >
-                          배차취소
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        title="클릭하여 배차취소 확인"
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-red-600 text-white hover:bg-red-700 transition"
+                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          patchDispatch(r._id, { 취소알림대기: false, __col: r.__col });
+                        }}
+                      >
+                        배차취소
+                      </button>
                     ) : (
                       <button
                         type="button"
-                        title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
+                        title={
+                          r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경"
+                          : r.배차상태 === "배차중" && r.source === "shipper" ? "클릭 시 배차요청으로 되돌리기"
+                          : ""
+                        }
                         className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
                           r.긴급 && r.배차상태 !== "배차완료"
                             ? "bg-red-500 text-white"
@@ -18224,8 +18254,13 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (r.배차상태 !== "배차완료") return;
-                          setConfirmChange({ rowId: r._id, key: "배차상태", before: "배차완료", after: "배차중" });
+                          if (r.배차상태 === "배차완료") {
+                            setConfirmChange({ rowId: r._id, key: "배차상태", before: "배차완료", after: "배차중" });
+                            return;
+                          }
+                          if (r.배차상태 === "배차중" && r.source === "shipper") {
+                            patchDispatch(r._id, { 화주사확인대기: true, __col: r.__col });
+                          }
                         }}
                       >
                         {r.배차상태}
@@ -18233,11 +18268,10 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     )}
                     {r.취소요청 && r.배차상태 !== "배차취소" && (
                       <>
-                        <style>{`@keyframes cancelSlowBlink2b { 0%,100% { opacity:1; } 50% { opacity:0.35; } }`}</style>
                         <div
                           title="화주사가 배차취소를 요청했습니다"
                           className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 whitespace-nowrap"
-                          style={{ animation: "cancelSlowBlink2b 2.4s ease-in-out infinite" }}
+                          style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
                         >
                           취소요청
                         </div>
@@ -26555,49 +26589,48 @@ return (
 
                  <td className="border text-center">
                     {row.화주사확인대기 ? (
-                      <>
-                        <style>{`@keyframes shipperReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.5; } }`}</style>
-                        <button
-                          onClick={() => {
-                            if (isViewer) return;
-                            patchDispatch(row._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: row.__col });
-                          }}
-                          title="클릭 시 배차중으로 전환"
-                          className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
-                          style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
-                        >
-                          배차요청
-                        </button>
-                      </>
+                      <button
+                        onClick={() => {
+                          if (isViewer) return;
+                          patchDispatch(row._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: row.__col });
+                        }}
+                        title="클릭 시 배차중으로 전환"
+                        className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
+                        style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
+                      >
+                        배차요청
+                      </button>
                     ) : row.배차상태 === "배차취소" && row.취소알림대기 ? (
-                      <>
-                        <style>{`@keyframes cancelSlowBlink { 0%,100% { opacity:1; } 50% { opacity:0.35; } }`}</style>
-                        <button
-                          onClick={() => {
-                            if (isViewer) return;
-                            patchDispatch(row._id, { 취소알림대기: false, __col: row.__col });
-                          }}
-                          title="클릭하여 배차취소 확인"
-                          className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap bg-red-600 text-white hover:bg-red-700 transition"
-                          style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
-                        >
-                          배차취소
-                        </button>
-                      </>
+                      <button
+                        onClick={() => {
+                          if (isViewer) return;
+                          patchDispatch(row._id, { 취소알림대기: false, __col: row.__col });
+                        }}
+                        title="클릭하여 배차취소 확인"
+                        className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap bg-red-600 text-white hover:bg-red-700 transition"
+                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                      >
+                        배차취소
+                      </button>
                     ) : (
-                      <StatusBadge s={row.배차상태} urgent={row.긴급} />
+                      row.배차상태 === "배차중" && row.source === "shipper" ? (
+                        <button type="button" title="클릭 시 배차요청으로 되돌리기"
+                          onClick={(e) => { e.stopPropagation(); patchDispatch(row._id, { 화주사확인대기: true, __col: row.__col }); }}
+                          className="cursor-pointer">
+                          <StatusBadge s={row.배차상태} urgent={row.긴급} />
+                        </button>
+                      ) : (
+                        <StatusBadge s={row.배차상태} urgent={row.긴급} />
+                      )
                     )}
                     {row.취소요청 && row.배차상태 !== "배차취소" && (
-                      <>
-                        <style>{`@keyframes cancelSlowBlink { 0%,100% { opacity:1; } 50% { opacity:0.35; } }`}</style>
-                        <div
-                          title="화주사가 배차취소를 요청했습니다"
-                          className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 whitespace-nowrap"
-                          style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
-                        >
-                          취소요청
-                        </div>
-                      </>
+                      <div
+                        title="화주사가 배차취소를 요청했습니다"
+                        className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 whitespace-nowrap"
+                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                      >
+                        취소요청
+                      </div>
                     )}
                   </td>
 
@@ -35006,21 +35039,24 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </td>
                       <td className={cellBase}>
                         {r.화주사확인대기 ? (
-                          <>
-                            <style>{`@keyframes shipperReqBlink3 { 0%,100% { opacity:1; } 50% { opacity:0.5; } }`}</style>
-                            <button
-                              type="button"
-                              title="클릭 시 배차중으로 전환"
-                              className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
-                              style={{ animation: "shipperReqBlink3 1.4s ease-in-out infinite" }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
-                              }}
-                            >
-                              배차요청
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            title="클릭 시 배차중으로 전환"
+                            className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
+                            style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
+                            }}
+                          >
+                            배차요청
+                          </button>
+                        ) : r.배차상태 === "배차중" && r.source === "shipper" ? (
+                          <button type="button" title="클릭 시 배차요청으로 되돌리기"
+                            onClick={(e) => { e.stopPropagation(); patchDispatch(r._id, { 화주사확인대기: true, __col: r.__col }); }}
+                            className="cursor-pointer">
+                            <StatusBadge s={r.배차상태} />
+                          </button>
                         ) : (
                           <StatusBadge s={r.배차상태} />
                         )}
