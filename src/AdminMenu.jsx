@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { auth, db } from "./firebase";
 import {
   collection,
+  addDoc,
   setDoc,
   deleteDoc,
   doc,
@@ -57,7 +58,7 @@ const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
   </span>
 );
 
-export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false }) {
+export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false, dispatchData = [], places = [] }) {
   const [adminTab, setAdminTab] = useState("members");
   const [users, setUsers] = useState([]);
   const [allShipperApps, setAllShipperApps] = useState([]);
@@ -80,8 +81,18 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [linkedSearch, setLinkedSearch] = useState("");
   const [linkedStatusFilter, setLinkedStatusFilter] = useState("pending");
 
+  // 화주사 전송 탭 state
+  const monthNow = new Date().toISOString().slice(0, 7);
+  const [transmitCompanyQuery, setTransmitCompanyQuery] = useState("");
+  const [transmitFromMonth, setTransmitFromMonth] = useState(monthNow);
+  const [transmitToMonth, setTransmitToMonth] = useState(monthNow);
+  const [transmitSearched, setTransmitSearched] = useState(false);
+  const [transmitting, setTransmitting] = useState(false);
+  const [transmitResult, setTransmitResult] = useState(null);
+
   const [myRole, setMyRole] = useState("");
   const [myCompany, setMyCompany] = useState("");
+  const [myCompanyCode, setMyCompanyCode] = useState("");
   const [appUserPerms, setAppUserPerms] = useState(null);
 
   const me = auth.currentUser;
@@ -98,6 +109,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
         const d = snap.data();
         setMyRole(d.role || "");
         setMyCompany(d.companyName || "");
+        setMyCompanyCode(d.companyCode || "");
       }
     });
     return () => unsub();
@@ -192,6 +204,163 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     }
     return list;
   }, [linkedShipperApps, linkedSearch, linkedStatusFilter, isTotalMaster]);
+
+  // ====== 화주사 전송 탭 ======
+  // 내 회사에 연동 승인된 화주사 목록 (거래처명 매칭 대상)
+  const approvedLinkedShippers = useMemo(() => {
+    return allShipperApps.filter(a =>
+      a.linkedTransportCompany?.companyName === effectiveCompany &&
+      a.transportApprovalStatus === "approved"
+    );
+  }, [allShipperApps, effectiveCompany]);
+
+  const matchedShipper = useMemo(() => {
+    const q = transmitCompanyQuery.trim();
+    if (!q) return null;
+    return approvedLinkedShippers.find(a => (a.companyName || "").trim() === q) || null;
+  }, [approvedLinkedShippers, transmitCompanyQuery]);
+
+  const transmitMatches = useMemo(() => {
+    const q = transmitCompanyQuery.trim();
+    if (!q || !transmitFromMonth || !transmitToMonth) return [];
+    const fromKey = transmitFromMonth; // "YYYY-MM"
+    const toKey = transmitToMonth;
+    return (dispatchData || []).filter(r => {
+      if ((r.거래처명 || "").trim() !== q) return false;
+      const pickupDate = (r.상차일 || "").slice(0, 7);
+      if (!pickupDate) return false;
+      return pickupDate >= fromKey && pickupDate <= toKey;
+    });
+  }, [dispatchData, transmitCompanyQuery, transmitFromMonth, transmitToMonth]);
+
+  const pendingTransmitMatches = useMemo(
+    () => transmitMatches.filter(r => !r._transmittedToShipper),
+    [transmitMatches]
+  );
+  const alreadyTransmittedCount = transmitMatches.length - pendingTransmitMatches.length;
+
+  const combineTonString = (r) => {
+    const ton = (r.차량톤수 || "").toString().trim();
+    if (!ton) return "";
+    if (/톤|kg|킬로/.test(ton)) return ton; // 이미 단위 포함
+    const unit = (r.톤수타입 || "톤").trim();
+    return `${ton}${unit}`;
+  };
+
+  const mapOrderForShipper = (r, shipperApp) => ({
+    거래처명: shipperApp.companyName,
+    shipperCompany: shipperApp.companyName,
+    company: effectiveCompany,
+    companyCode: myCompanyCode || "",
+    운송사명: effectiveCompany,
+    운송사코드: myCompanyCode || "",
+    작성자: me?.email || "",
+    상차지명: r.상차지명 || "",
+    상차지주소: r.상차지주소 || "",
+    상차담당자명: r.상차지담당자 || "",
+    상차담당자번호: r.상차지담당자번호 || "",
+    하차지명: r.하차지명 || "",
+    하차지주소: r.하차지주소 || "",
+    하차담당자명: r.하차지담당자 || "",
+    하차담당자번호: r.하차지담당자번호 || "",
+    등록일: r.등록일 || r.상차일 || "",
+    상차일: r.상차일 || "",
+    상차시간: r.상차시간 || "",
+    상차시간구분: r.상차시간기준 || "정각",
+    하차일: r.하차일 || "",
+    하차시간: r.하차시간 || "",
+    하차시간구분: r.하차시간기준 || "정각",
+    차량종류: r.차량종류 || "",
+    차량톤수: combineTonString(r),
+    상차방법: r.상차방법 || "",
+    하차방법: r.하차방법 || "",
+    지급방식: r.지급방식 || "",
+    화물내용: r.화물내용 || "",
+    화물단위: r.화물타입 || "",
+    청구운임: Number(r.청구운임) || 0,
+    차량번호: r.차량번호 || "",
+    이름: r.이름 || "",
+    전화번호: r.전화번호 || "",
+    배차상태: r.차량번호 ? "배차완료" : "배차중",
+    source: "transport_transmit",
+    originCol: r.__col || "dispatch",
+    originId: r._id,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  const handleTransmit = async () => {
+    if (isViewer) { _viewerAlert(); return; }
+    if (!matchedShipper) { alert("연동 승인된 화주사 중 일치하는 거래처명이 없습니다. 화주사의 회사명과 거래처명이 정확히 일치해야 합니다."); return; }
+    if (pendingTransmitMatches.length === 0) { alert("전송할 데이터가 없습니다."); return; }
+    if (!window.confirm(`${matchedShipper.companyName}(으)로 ${pendingTransmitMatches.length}건을 전송하시겠습니까?`)) return;
+
+    setTransmitting(true);
+    let success = 0;
+    let failed = 0;
+    try {
+      for (const r of pendingTransmitMatches) {
+        try {
+          const payload = mapOrderForShipper(r, matchedShipper);
+          const newDocRef = await addDoc(collection(db, "orders"), payload);
+
+          // 첨부파일 이전
+          try {
+            const attachSnap = await getDocs(collection(db, payload.originCol, r._id, "attachments"));
+            for (const a of attachSnap.docs) {
+              await setDoc(doc(db, "orders", newDocRef.id, "attachments", a.id), a.data());
+            }
+            if (attachSnap.size > 0) {
+              await updateDoc(newDocRef, { attachCount: attachSnap.size });
+            }
+          } catch (e) {
+            console.warn("첨부파일 이전 실패(무시하고 계속):", e);
+          }
+
+          // 하차지 → 화주사 주소록(places) 업서트
+          if (payload.하차지명 && payload.하차지주소) {
+            try {
+              const dupKey = (payload.하차지명 || "").trim().toLowerCase();
+              const existing = (places || []).find(p =>
+                (p.company || "") === matchedShipper.companyName &&
+                (p.name || "").trim().toLowerCase() === dupKey
+              );
+              if (!existing) {
+                await addDoc(collection(db, "places"), {
+                  name: payload.하차지명,
+                  address: payload.하차지주소,
+                  담당자명: payload.하차담당자명 || "",
+                  담당자번호: payload.하차담당자번호 || "",
+                  메모: "",
+                  type: "하차",
+                  company: matchedShipper.companyName,
+                  userId: matchedShipper.uid || matchedShipper.userId || "",
+                  createdAt: serverTimestamp(),
+                });
+              }
+            } catch (e) {
+              console.warn("주소록 이전 실패(무시하고 계속):", e);
+            }
+          }
+
+          // 원본 오더에 전송 완료 표시 (중복 전송 방지)
+          await updateDoc(doc(db, payload.originCol, r._id), {
+            _transmittedToShipper: matchedShipper.companyName,
+            _transmittedOrderId: newDocRef.id,
+            _transmittedAt: Date.now(),
+          });
+
+          success++;
+        } catch (e) {
+          console.error("전송 실패:", r._id, e);
+          failed++;
+        }
+      }
+      setTransmitResult({ success, failed, shipper: matchedShipper.companyName });
+    } finally {
+      setTransmitting(false);
+    }
+  };
 
   const _viewerAlert = () => { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); };
 
@@ -433,6 +602,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             </span>
           )}
         </button>
+        {!isTotalMaster && (
+          <button
+            onClick={() => setAdminTab("transmit")}
+            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "transmit" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+          >
+            화주사 전송
+          </button>
+        )}
       </div>
 
       <div className="flex gap-6">
@@ -738,6 +915,109 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 </table>
               </div>
             </>
+          )}
+
+          {/* ====== 화주사 전송 탭 ====== */}
+          {adminTab === "transmit" && (
+            <div>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 mb-4">
+                <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">화주사로 오더 전송</div>
+                <div className="flex items-end gap-3 flex-wrap">
+                  <div>
+                    <div className="text-[11px] text-gray-500 mb-1">거래처명</div>
+                    <input
+                      value={transmitCompanyQuery}
+                      onChange={e => { setTransmitCompanyQuery(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
+                      placeholder="예) 반찬단지"
+                      list="admin-transmit-company-list"
+                      className="w-[200px] border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                    />
+                    <datalist id="admin-transmit-company-list">
+                      {approvedLinkedShippers.map(a => <option key={a.id} value={a.companyName} />)}
+                    </datalist>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500 mb-1">시작월</div>
+                    <input type="month" value={transmitFromMonth} onChange={e => { setTransmitFromMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500 mb-1">종료월</div>
+                    <input type="month" value={transmitToMonth} onChange={e => { setTransmitToMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                  </div>
+                  <button
+                    onClick={() => { setTransmitSearched(true); setTransmitResult(null); }}
+                    disabled={!transmitCompanyQuery.trim()}
+                    className="h-[38px] px-5 rounded-lg text-[13px] font-semibold bg-[#1B2B4B] text-white disabled:opacity-40"
+                  >
+                    조회
+                  </button>
+                </div>
+
+                {transmitCompanyQuery.trim() && !matchedShipper && (
+                  <div className="mt-3 text-[12px] text-amber-600">
+                    ⚠ "{transmitCompanyQuery.trim()}"(으)로 연동 승인된 화주사를 찾을 수 없습니다. 화주사의 회사명과 거래처명이 정확히 일치해야 전송할 수 있습니다.
+                  </div>
+                )}
+
+                {transmitSearched && matchedShipper && (
+                  <div className="mt-4 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-3">
+                    <div className="text-[13px] text-[#1B2B4B]">
+                      <span className="font-bold">{matchedShipper.companyName}</span>에 전송할 데이터 총 <span className="font-bold">{transmitMatches.length}건</span>을 찾았습니다.
+                      {alreadyTransmittedCount > 0 && (
+                        <span className="text-gray-500"> (이미 전송됨 {alreadyTransmittedCount}건 제외 시 {pendingTransmitMatches.length}건)</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleTransmit}
+                      disabled={transmitting || isViewer || pendingTransmitMatches.length === 0}
+                      className="h-9 px-5 rounded-lg text-[13px] font-semibold bg-emerald-600 text-white disabled:opacity-40"
+                    >
+                      {transmitting ? "전송 중..." : `전송 (${pendingTransmitMatches.length}건)`}
+                    </button>
+                  </div>
+                )}
+
+                {transmitResult && (
+                  <div className="mt-3 text-[12px] text-emerald-700">
+                    ✅ {transmitResult.shipper}(으)로 {transmitResult.success}건 전송 완료
+                    {transmitResult.failed > 0 && <span className="text-red-500"> ({transmitResult.failed}건 실패)</span>}
+                  </div>
+                )}
+              </div>
+
+              {transmitSearched && matchedShipper && transmitMatches.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="bg-[#1B2B4B] text-white">
+                        <th className="px-3 py-2 text-left font-semibold">상차일</th>
+                        <th className="px-3 py-2 text-left font-semibold">상차지</th>
+                        <th className="px-3 py-2 text-left font-semibold">하차지</th>
+                        <th className="px-3 py-2 text-left font-semibold">청구운임</th>
+                        <th className="px-3 py-2 text-center font-semibold">상태</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {transmitMatches.map(r => (
+                        <tr key={r._id}>
+                          <td className="px-3 py-2">{r.상차일}</td>
+                          <td className="px-3 py-2">{r.상차지명}</td>
+                          <td className="px-3 py-2">{r.하차지명}</td>
+                          <td className="px-3 py-2">{Number(r.청구운임 || 0).toLocaleString()}원</td>
+                          <td className="px-3 py-2 text-center">
+                            {r._transmittedToShipper
+                              ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">전송됨</span>
+                              : <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">전송 대기</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
