@@ -23,6 +23,8 @@ import {
   Eraser,
   Upload,
   Clock,
+  LogIn,
+  LogOut,
 } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -101,7 +103,7 @@ function nextMonthKey(monthKey) {
 const VIEW_OPTIONS = ["출근현황", "휴무현황", "수정현황", "변경요청"];
 const CHANGE_REQUEST_STATUS_TONE = { pending: "warning", approved: "success", rejected: "danger" };
 const CHANGE_REQUEST_STATUS_LABEL = { pending: "승인대기", approved: "승인됨", rejected: "반려됨" };
-const EDIT_STATUS_OPTIONS = ["출근", "지각", "조퇴", "출근전", "결근"];
+const EDIT_STATUS_OPTIONS = ["출근", "지각", "특근", "조퇴", "출근전", "결근"];
 
 const EMPTY_FILTERS = {
   siteId: "",
@@ -703,7 +705,34 @@ export default function AttendanceBoard() {
 
   const openGridCell = (emp, day) => {
     const dateKey = `${gridMonth}-${String(day).padStart(2, "0")}`;
-    setGridEditCell({ uid: emp.id, name: emp.name, day, dateKey, current: gridDayStatus(emp.id, day) });
+    const attendance = gridAttendance.find((a) => a.uid === emp.id && a.date === dateKey) || null;
+    setGridEditCell({ uid: emp.id, name: emp.name, day, dateKey, current: gridDayStatus(emp.id, day), attendance });
+  };
+
+  // 그리드 셀에 실제 출근기록(attendance)이 있으면(과거 교정 기록이나 이미
+  // 실제로 체크인한 오늘 기록), 상태만 바꾸는 이 팝업 대신 실제 출퇴근시각을
+  // 보고 고칠 수 있는 기존 "출근현황 상세" 팝업(openDetail/saveDetailEdit)을
+  // 그대로 재사용한다 — 퇴근시각을 실제 퇴근한 시각으로 정확히 고쳐두면,
+  // 정산 시(Payroll.jsx runSettlement) 8시간 초과분이 연장근무로 자동
+  // 집계되므로 별도의 연장근무 입력 기능을 새로 만들 필요가 없다.
+  const openTimeDetailFromGrid = () => {
+    if (!gridEditCell) return;
+    const { uid, name, dateKey, attendance } = gridEditCell;
+    const emp = employeeByUid.get(uid);
+    setGridEditCell(null);
+    openDetail({
+      record: {
+        id: attendanceDocId(uid, dateKey),
+        uid,
+        name,
+        date: dateKey,
+        status: attendance?.status || "",
+        checkInTime: attendance?.checkInTime || "",
+        checkOutTime: attendance?.checkOutTime || "",
+        siteName: attendance?.siteName || "",
+      },
+      emp,
+    });
   };
 
   // 하루치 상태를 실제 문서에 반영 — 출근/특근은 attendance 문서 하나,
@@ -2276,6 +2305,28 @@ export default function AttendanceBoard() {
                 {gridEditCell.current ? GRID_STATUS_OPTIONS.find((o) => o.key === gridEditCell.current)?.label || gridEditCell.current : "미정"}
               </span>
             </div>
+            {gridEditCell.attendance && (
+              <div className="rounded-xl border border-primary/20 bg-primary-light/30 px-3.5 py-3">
+                <p className="text-xs font-semibold text-primary">실제 출퇴근 기록</p>
+                <div className="mt-1.5 flex items-center gap-4 text-sm text-ink">
+                  <span className="flex items-center gap-1.5">
+                    <LogIn size={14} className="text-muted" />
+                    {gridEditCell.attendance.checkInTime ? formatTime(gridEditCell.attendance.checkInTime) : "-"}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <LogOut size={14} className="text-muted" />
+                    {gridEditCell.attendance.checkOutTime ? formatTime(gridEditCell.attendance.checkOutTime) : "-"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={openTimeDetailFromGrid}
+                  className="mt-2 flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                >
+                  <Pencil size={12} /> 출퇴근시간 확인/수정 (연장근무 반영)
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {GRID_STATUS_OPTIONS.map((o) => (
                 <button
@@ -2553,7 +2604,15 @@ export default function AttendanceBoard() {
                   ))}
                 </select>
               ) : (
-                <Badge tone={detail.record.status === "출근" ? "success" : detail.record.status === "지각" || detail.record.status === "조퇴" ? "warning" : "danger"}>
+                <Badge
+                  tone={
+                    detail.record.status === "출근" || detail.record.status === "특근"
+                      ? "success"
+                      : detail.record.status === "지각" || detail.record.status === "조퇴"
+                      ? "warning"
+                      : "danger"
+                  }
+                >
                   {detail.record.status || "미출근"}
                 </Badge>
               )}
