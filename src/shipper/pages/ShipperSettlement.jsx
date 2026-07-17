@@ -2,6 +2,37 @@ import { useState, useEffect, useMemo } from "react";
 import { db, auth } from "../../firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+
+const numberToKorean = (num) => {
+  if (!num) return "영";
+  const units = ["", "만", "억", "조"];
+  const nums = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
+  const tens = ["", "십", "백", "천"];
+  let result = "";
+  let n = Math.abs(Math.round(num));
+  let unitIndex = 0;
+  while (n > 0) {
+    const chunk = n % 10000;
+    if (chunk > 0) {
+      let chunkStr = "";
+      let c = chunk;
+      for (let i = 0; i < 4; i++) {
+        const digit = c % 10;
+        if (digit > 0) {
+          const digitStr = (digit === 1 && i > 0) ? "" : nums[digit];
+          chunkStr = digitStr + tens[i] + chunkStr;
+        }
+        c = Math.floor(c / 10);
+      }
+      result = chunkStr + units[unitIndex] + result;
+    }
+    n = Math.floor(n / 10000);
+    unitIndex++;
+  }
+  return result || "영";
+};
 
 const getTodayKST = () => {
   const now = new Date();
@@ -36,6 +67,9 @@ export default function ShipperSettlement() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [sortKey, setSortKey] = useState("상차일");
   const [sortDir, setSortDir] = useState("desc");
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [invoiceTransport, setInvoiceTransport] = useState("");
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -120,6 +154,80 @@ export default function ShipperSettlement() {
   const totalBilling = activeFiltered.reduce((s, o) => s + (Number(o.청구운임) || 0), 0);
   const maxGroupBilling = Math.max(...groups.map(g => g.총청구), 1);
 
+  // ── 정산 내역서 ──
+  const invoiceTransportOptions = useMemo(() => {
+    const set = new Set();
+    activeFiltered.forEach(o => { if (o.운송사명) set.add(o.운송사명); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+  }, [activeFiltered]);
+
+  const invoiceOrders = useMemo(() => {
+    const list = invoiceTransport
+      ? activeFiltered.filter(o => (o.운송사명 || "") === invoiceTransport)
+      : activeFiltered;
+    return [...list].sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+  }, [activeFiltered, invoiceTransport]);
+
+  const invoiceRows = invoiceOrders.map((o, i) => ({
+    idx: i + 1,
+    상차일: o.상차일 || "",
+    상차지: o.상차지명 || "",
+    하차지: o.하차지명 || "",
+    화물: o.화물내용 || "",
+    차량번호: o.차량번호 || "",
+    공급가액: Number(o.청구운임) || 0,
+    세액: Math.round((Number(o.청구운임) || 0) * 0.1),
+  }));
+  const invoiceSupply = invoiceRows.reduce((s, r) => s + r.공급가액, 0);
+  const invoiceTax = invoiceRows.reduce((s, r) => s + r.세액, 0);
+  const invoiceTotal = invoiceSupply + invoiceTax;
+
+  const openInvoice = () => {
+    if (activeFiltered.length === 0) { alert("조회된 오더가 없습니다. 먼저 정산 기간을 확인해주세요."); return; }
+    if (!invoiceTransport && invoiceTransportOptions.length === 1) setInvoiceTransport(invoiceTransportOptions[0]);
+    setShowInvoice(true);
+  };
+
+  const saveInvoiceImage = async () => {
+    setInvoiceSaving(true);
+    try {
+      const area = document.getElementById("shipperInvoiceArea");
+      const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `정산내역서_${invoiceTransport || "전체"}_${startDate}~${endDate}.png`;
+      a.click();
+    } catch {
+      alert("이미지 저장에 실패했습니다.");
+    }
+    setInvoiceSaving(false);
+  };
+
+  const saveInvoicePDF = async () => {
+    setInvoiceSaving(true);
+    try {
+      const area = document.getElementById("shipperInvoiceArea");
+      const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgWidth = 210, pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight, position = 0;
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      pdf.save(`정산내역서_${invoiceTransport || "전체"}_${startDate}~${endDate}.pdf`);
+    } catch {
+      alert("PDF 저장에 실패했습니다.");
+    }
+    setInvoiceSaving(false);
+  };
+
   const handleExcel = () => {
     import("xlsx").then(XLSX => {
       const data = activeFiltered.map((o, i) => ({
@@ -203,6 +311,7 @@ export default function ShipperSettlement() {
         </div>
 
         <div className="flex gap-2 ml-auto">
+          <button onClick={openInvoice} className="px-4 py-2 bg-white border border-[#1B2B4B] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#eef1f7]">정산 내역서</button>
           <button onClick={handleExcel} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">엑셀 다운로드</button>
         </div>
       </div>
@@ -337,6 +446,112 @@ export default function ShipperSettlement() {
           </div>
         </div>
       </div>
+
+      {/* 정산 내역서 미리보기 */}
+      {showInvoice && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-6" onClick={() => setShowInvoice(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-[95vw] max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 bg-[#1B2B4B] flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-white font-bold text-[16px]">정산 내역서</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">{startDate} ~ {endDate}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select value={invoiceTransport} onChange={e => setInvoiceTransport(e.target.value)}
+                  className="border-0 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#1B2B4B]">
+                  <option value="">운송사 전체</option>
+                  {invoiceTransportOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <button onClick={() => setShowInvoice(false)} className="text-white/60 hover:text-white text-xl leading-none">×</button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6 bg-gray-100">
+              <div id="shipperInvoiceArea" style={{ fontFamily: "'Malgun Gothic','Apple SD Gothic Neo',sans-serif", background: "#fff", width: 1000, margin: "0 auto", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ background: "#1B2B4B", padding: "20px 32px" }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>정산 내역서</div>
+                  <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>거래기간 : {startDate} ~ {endDate}</div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #e5e7eb" }}>
+                  <div style={{ padding: 20, borderRight: "1px solid #e5e7eb" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.08em", textTransform: "uppercase" }}>화주사 정보</div>
+                    <InvoiceInfoRow label="상호" value={userData?.companyName} />
+                    <InvoiceInfoRow label="담당자" value={userData?.name} />
+                    <InvoiceInfoRow label="연락처" value={userData?.phone} />
+                    <InvoiceInfoRow label="이메일" value={user?.email} last />
+                  </div>
+                  <div style={{ padding: 20 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.08em", textTransform: "uppercase" }}>운송사 정보</div>
+                    <InvoiceInfoRow label="상호" value={invoiceTransport || `전체 (${invoiceTransportOptions.length}개사)`} />
+                    <InvoiceInfoRow label="거래건수" value={`${invoiceRows.length}건`} last />
+                  </div>
+                </div>
+                <div style={{ padding: "12px 24px", background: "#f9fafb", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#6b7280" }}>합계금액 (공급가액+부가세)</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#1B2B4B" }}>
+                    일금 {numberToKorean(invoiceTotal)} 원정 <span style={{ fontSize: 13, fontWeight: 400, color: "#6b7280" }}>(W {invoiceTotal.toLocaleString()})</span>
+                  </div>
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "#1B2B4B" }}>
+                      {["No", "날짜", "상차지", "하차지", "화물명", "차량번호", "공급가액", "세액(10%)", "합계"].map(h => (
+                        <th key={h} style={{ padding: "9px 10px", fontSize: 12, color: "#fff", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceRows.map((r, i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid #f3f4f6", background: i % 2 === 0 ? "#fff" : "#f9fafb" }}>
+                        <td style={{ padding: "7px 10px", textAlign: "center", fontSize: 12, color: "#9ca3af" }}>{r.idx}</td>
+                        <td style={{ padding: "7px 10px", fontSize: 12, color: "#374151" }}>{r.상차일}</td>
+                        <td style={{ padding: "7px 10px", fontSize: 12, color: "#374151" }}>{r.상차지}</td>
+                        <td style={{ padding: "7px 10px", fontSize: 12, color: "#374151" }}>{r.하차지}</td>
+                        <td style={{ padding: "7px 10px", fontSize: 12, color: "#374151" }}>{r.화물}</td>
+                        <td style={{ padding: "7px 10px", fontSize: 12, color: "#374151" }}>{r.차량번호}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "right", fontSize: 12, color: "#374151" }}>{r.공급가액.toLocaleString()}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "right", fontSize: 12, color: "#374151" }}>{r.세액.toLocaleString()}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "right", fontSize: 12, fontWeight: 600, color: "#1B2B4B" }}>{(r.공급가액 + r.세액).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: "#1B2B4B" }}>
+                      <td colSpan={6} style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: "#fff", textAlign: "center" }}>소 계</td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", fontSize: 13, fontWeight: 700, color: "#fff" }}>{invoiceSupply.toLocaleString()}</td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", fontSize: 13, fontWeight: 700, color: "#93c5fd" }}>{invoiceTax.toLocaleString()}</td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", fontSize: 13, fontWeight: 700, color: "#fde68a" }}>{invoiceTotal.toLocaleString()}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+                <div style={{ padding: "14px 24px", background: "#f0f2f6", borderTop: "2px solid #1B2B4B", fontSize: 12, color: "#6b7280", textAlign: "center" }}>
+                  본 내역서는 KP-Flow 화주사 프로그램에서 자동 생성되었습니다.
+                </div>
+                {invoiceRows.length === 0 && (
+                  <div style={{ padding: 40, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>선택한 조건에 해당하는 오더가 없습니다.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t bg-white flex justify-end gap-2 shrink-0">
+              <button onClick={() => setShowInvoice(false)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold">닫기</button>
+              <button onClick={saveInvoiceImage} disabled={invoiceSaving} className="px-4 py-2 text-sm rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] font-semibold hover:bg-[#eef1f7] disabled:opacity-50">이미지 저장</button>
+              <button onClick={saveInvoicePDF} disabled={invoiceSaving} className="px-4 py-2 text-sm rounded-lg bg-[#1B2B4B] text-white font-semibold hover:opacity-90 disabled:opacity-50">
+                {invoiceSaving ? "저장 중..." : "PDF 저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InvoiceInfoRow({ label, value, last = false }) {
+  return (
+    <div style={{ display: "flex", padding: "6px 0", borderBottom: last ? "none" : "1px solid #f3f4f6" }}>
+      <div style={{ width: 70, color: "#6b7280", fontWeight: 600, fontSize: 13 }}>{label}</div>
+      <div style={{ color: "#111827", fontWeight: 500, fontSize: 13 }}>{value || "-"}</div>
     </div>
   );
 }
