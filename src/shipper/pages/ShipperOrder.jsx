@@ -10,7 +10,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
   limit,
 } from "firebase/firestore";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -409,16 +408,16 @@ export default function ShipperOrder({ editData, onClose }) {
     if (!user) return;
     setSearchLoading(true);
     try {
-      let q;
-      const isMaster = false; // 모든 화주는 자신 오더 검색
-      q = query(
+      // 오더등록자(shipperUid) 기준으로 찾으면 다른 담당자가 등록한 오더나 전송받은 오더가
+      // 전부 빠져 검색결과가 비어있던 문제 — 화주사(회사) 전체 오더를 대상으로 검색한다.
+      const q = query(
         collection(db, "orders"),
-        where("shipperUid", "==", user.uid),
-        orderBy("createdAt", "desc"),
+        where("shipperCompany", "==", company),
         limit(200)
       );
       const snap = await getDocs(q);
-      let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0));
 
       if (searchKeyword.trim()) {
         const kw = searchKeyword.trim().toLowerCase();
@@ -448,26 +447,26 @@ export default function ShipperOrder({ editData, onClose }) {
     setSearchLoading(false);
   };
 
+  // 운송사 프로그램의 "오더복사" 기능과 동일한 규칙: 날짜는 오늘로, 상하차시간은 원본과 동일하게,
+  // 화물내용/톤수/파렛트사는 새로 입력하도록 비워둔다.
   const applyOrder = (item) => {
-    const { num, unit } = parseTonnage(item.차량톤수 || "");
     setForm(p => ({
       ...p,
-      청구운임: item.청구운임 || "",
       상차지명: item.상차지명 || "", 상차지주소: item.상차지주소 || "",
       상차담당자명: item.상차담당자명 || item.상차지담당자 || "", 상차담당자번호: item.상차담당자번호 || item.상차지담당자번호 || "",
       하차지명: item.하차지명 || "", 하차지주소: item.하차지주소 || "",
       하차담당자명: item.하차담당자명 || item.하차지담당자 || "", 하차담당자번호: item.하차담당자번호 || item.하차지담당자번호 || "",
-      상차시간: item.상차시간 || "08:00", 상차시간구분: item.상차시간구분 || "이후",
-      하차시간: item.하차시간 || "12:00", 하차시간구분: item.하차시간구분 || "이후",
-      차량종류: item.차량종류 || "", 차량톤수: num, 차량톤수단위: unit,
+      상차일: getDate(0), 상차시간: item.상차시간 || "08:00", 상차시간구분: item.상차시간구분 || "이후",
+      하차일: getDate(0), 하차시간: item.하차시간 || "12:00", 하차시간구분: item.하차시간구분 || "이후",
+      차량종류: item.차량종류 || "", 차량톤수: "", 차량톤수단위: "톤",
       상차방법: item.상차방법 || "", 하차방법: item.하차방법 || "",
-      지급방식: item.지급방식 || "", 화물내용: item.화물내용 || "",
-      화물단위: item.화물단위 || "파레트",
+      지급방식: item.지급방식 || "", 화물내용: "",
+      화물단위: "파레트",
       운송사명: item.운송사명 || "", 운송사코드: item.운송사코드 || "",
       경유상차목록: Array.isArray(item.경유상차목록) ? item.경유상차목록 : [],
       경유하차목록: Array.isArray(item.경유하차목록) ? item.경유하차목록 : [],
     }));
-    setCargoRows(cargoRowsFromOrder(item));
+    setCargoRows([{ qty: "", unit: "파레트", palletCo: "" }]);
   };
 
   /* 주소록 자동완성 */
