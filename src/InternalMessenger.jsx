@@ -109,6 +109,43 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const prevUnreadRef = useRef(0);
   // 채팅창이 실제로 보이는지 추적 (읽음 처리 기준)
   const isVisibleRef = useRef(false);
+  const audioCtxRef = useRef(null);
+
+  // 새 메시지 알림음 (DispatchApp의 playNotifSound와 동일한 3음 차임)
+  const playNotifSound = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      const doPlay = () => {
+        const notes = [
+          { freq: 698.5, t: 0, dur: 0.14 },
+          { freq: 880, t: 0.15, dur: 0.14 },
+          { freq: 1046, t: 0.31, dur: 0.22 },
+        ];
+        notes.forEach(({ freq, t, dur }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "triangle";
+          osc.frequency.value = freq;
+          const start = ctx.currentTime + t;
+          gain.gain.setValueAtTime(0, start);
+          gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+          osc.start(start);
+          osc.stop(start + dur + 0.02);
+        });
+      };
+      if (ctx.state === "suspended") {
+        ctx.resume().then(doPlay).catch(() => {});
+      } else {
+        doPlay();
+      }
+    } catch {}
+  }, []);
 
   // ── 내 프로필 로드 & 자동 생성 ──
   useEffect(() => {
@@ -249,7 +286,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       const myLastRead = room.lastRead?.[myUid]?.toMillis?.() || 0;
       const lastMsgAt = room.lastAt?.toMillis?.() || 0;
       if (lastMsgAt > myLastRead && room.lastSenderUid !== myUid) {
-        map[room.id] = (room.unreadCount?.[myUid] || 1);
+        map[room.id] = (room.unreadCount?.[myUid] ?? 1);
       } else {
         map[room.id] = 0;
       }
@@ -261,6 +298,16 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
   // 모바일 부모에게 안읽음 수 전달
   useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]);
+
+  // 앱 아이콘 배지 (홈화면에 설치된 PWA에서 안읽음 수 표시, 백그라운드 상태에서도 갱신됨)
+  useEffect(() => {
+    if (!("setAppBadge" in navigator)) return;
+    if (totalUnread > 0) {
+      navigator.setAppBadge(totalUnread).catch(() => {});
+    } else {
+      navigator.clearAppBadge?.().catch(() => {});
+    }
+  }, [totalUnread]);
 
   // 새 메시지 진동 알림 (안읽음 수 증가 시) — 설정에서 끌 수 있음
   useEffect(() => {
@@ -300,6 +347,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           const senderName = room.memberProfiles?.[room.lastSenderUid]?.name
             || (room.type === "dm" ? getRoomName(room) : (friends.find(f => f.uid === room.lastSenderUid)?.name || getRoomName(room)));
           setMsgToast({ room, senderName, text: room.lastMsg || "" });
+          playNotifSound();
         }
       }
       roomsSeenRef.current.set(room.id, ms);
