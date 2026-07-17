@@ -1417,16 +1417,6 @@ function ShipperSettlementM({ orders = [], onBack }) {
 
   const total = filtered.reduce((s, o) => s + (Number(o.청구운임) || 0), 0);
 
-  const topClients = useMemo(() => {
-    const map = {};
-    filtered.forEach(o => {
-      const k = o.거래처명 || "(미지정)";
-      map[k] = (map[k] || 0) + (Number(o.청구운임) || 0);
-    });
-    const maxV = Math.max(...Object.values(map), 1);
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, amt]) => ({ name, amt, pct: Math.round((amt / maxV) * 100) }));
-  }, [filtered]);
-
   const SORT_OPTIONS = [
     ["date_desc", "최신순"], ["date_asc", "오래된순"],
     ["amount_desc", "금액높은순"], ["amount_asc", "금액낮은순"],
@@ -1462,25 +1452,6 @@ function ShipperSettlementM({ orders = [], onBack }) {
         <KpiCard title="조회 건수" value={`${filtered.length}건`} color="text-gray-800" />
         <KpiCard title="총 청구금액" value={fmtMoney(total)} color="text-[#1B2B4B]" />
       </div>
-
-      {topClients.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-3">
-          <div className="text-xs font-bold text-gray-500 mb-2">거래처별 청구금액 TOP 5</div>
-          <div className="space-y-2">
-            {topClients.map(c => (
-              <div key={c.name}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[13px] font-semibold text-gray-700 truncate max-w-[180px]">{c.name}</span>
-                  <span className="text-[12px] font-bold text-[#1B2B4B]">{fmtMoney(c.amt)}</span>
-                </div>
-                <div className="bg-gray-100 rounded-full h-1.5">
-                  <div className="h-1.5 rounded-full" style={{ width: `${c.pct}%`, background: NAVY }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="flex items-center justify-between">
         <div className="text-sm font-bold text-gray-700">오더 목록 ({sorted.length}건)</div>
@@ -1536,39 +1507,50 @@ function ShipperSettingsM({ onBack, showToast, uiScale, setUiScale }) {
         <div className="font-bold text-base">설정</div>
       </div>
 
-      <MSection title="화면">
-        <MRow label="글씨 크기">
-          <div className="flex gap-1.5">
-            {[["기본", 1], ["크게", 1.1], ["아주 크게", 1.2]].map(([label, v]) => (
-              <button key={v} onClick={() => { setUiScale(v); localStorage.setItem("shipperUiScale", v); }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition ${uiScale === v ? "text-white border-transparent" : "text-gray-600 border-gray-200"}`}
-                style={uiScale === v ? { background: NAVY } : {}}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </MRow>
-      </MSection>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <SettingsGroup label="화면">
+          <MRow label="글씨 크기">
+            <div className="flex gap-1.5">
+              {[["기본", 1], ["크게", 1.1], ["아주 크게", 1.2]].map(([label, v]) => (
+                <button key={v} onClick={() => { setUiScale(v); localStorage.setItem("shipperUiScale", v); }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition ${uiScale === v ? "text-white border-transparent" : "text-gray-600 border-gray-200"}`}
+                  style={uiScale === v ? { background: NAVY } : {}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </MRow>
+        </SettingsGroup>
 
-      <MSection title="알림">
-        <MRow label="새 메시지 알림">
-          <ToggleRow checked={notifyEnabled} onChange={toggleNotify} desc="메신저로 메시지가 오면 화면 상단에 알림을 표시합니다." />
-        </MRow>
-        <MRow label="진동 알림">
-          <ToggleRow checked={vibrateEnabled} onChange={toggleVibrate} desc="새 메시지 수신 시 진동으로 알려줍니다." />
-        </MRow>
-      </MSection>
+        <SettingsGroup label="알림">
+          <MRow label="새 메시지 알림">
+            <ToggleRow checked={notifyEnabled} onChange={toggleNotify} desc="메신저로 메시지가 오면 화면 상단에 알림을 표시합니다." />
+          </MRow>
+          <MRow label="진동 알림">
+            <ToggleRow checked={vibrateEnabled} onChange={toggleVibrate} desc="새 메시지 수신 시 진동으로 알려줍니다." />
+          </MRow>
+        </SettingsGroup>
 
-      <MSection title="기타">
-        <MRow label="임시 데이터 초기화">
-          <button onClick={clearCache} className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-            초기화
-          </button>
-        </MRow>
-        <MRow label="앱 버전">
-          <span className="text-xs text-gray-400">KP-Flow 화주 모바일</span>
-        </MRow>
-      </MSection>
+        <SettingsGroup label="기타" last>
+          <MRow label="임시 데이터 초기화">
+            <button onClick={clearCache} className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+              초기화
+            </button>
+          </MRow>
+          <MRow label="앱 버전">
+            <span className="text-xs text-gray-400">KP-Flow 화주 모바일</span>
+          </MRow>
+        </SettingsGroup>
+      </div>
+    </div>
+  );
+}
+
+function SettingsGroup({ label, children, last = false }) {
+  return (
+    <div className={last ? "" : "border-b border-gray-100"}>
+      <div className="px-3 pt-3 pb-1 text-[11px] font-bold text-gray-400 uppercase tracking-wide">{label}</div>
+      <div className="divide-y divide-gray-100">{children}</div>
     </div>
   );
 }
