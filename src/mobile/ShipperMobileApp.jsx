@@ -38,6 +38,19 @@ const getMonthEnd = (offset = 0) => {
 
 const fmtMoney = (v) => `${Number(v || 0).toLocaleString("ko-KR")}원`;
 
+const getPalletSummary = (o) => {
+  if (Array.isArray(o.화물목록) && o.화물목록.length) {
+    const totals = {};
+    o.화물목록.forEach(r => {
+      if (r.unit !== "파레트" || !r.qty || !r.palletCo) return;
+      const label = r.palletCo === "KPP" ? "K" : r.palletCo === "아주" ? "AJ" : r.palletCo;
+      totals[label] = (totals[label] || 0) + Number(r.qty);
+    });
+    return Object.entries(totals).map(([label, n]) => `${label} ${n}장`).join("+");
+  }
+  return o.파렛트사요약 || "";
+};
+
 const numberToKorean = (num) => {
   if (!num) return "영";
   const units = ["", "만", "억", "조"];
@@ -138,9 +151,9 @@ const EMPTY_FORM = () => ({
   상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
   하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
   차량종류: "", 톤수값: "", 톤수단위: "톤",
-  화물내용: "", 화물단위: "파레트", 파렛트사: "",
   상차방법: "", 하차방법: "", 지급방식: "",
 });
+const EMPTY_CARGO_ROW = () => ({ qty: "", unit: "파레트", palletCo: "" });
 
 // ======================================================================
 // 메인
@@ -348,8 +361,27 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder }) {
     .filter((o) => String(o.상차일 || "").slice(0, 10) === queriedDate && o.상태 !== "취소")
     .sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || "")));
 
+  const monthAmount = useMemo(() => {
+    const start = getMonthStart(0), end = getMonthEnd(0);
+    return orders
+      .filter((o) => {
+        const d = String(o.상차일 || "").slice(0, 10);
+        return d >= start && d <= end && o.상태 !== "취소";
+      })
+      .reduce((sum, o) => sum + Number(o.청구운임 || 0), 0);
+  }, [orders]);
+
   return (
     <div className="px-4 py-4 space-y-4">
+      <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg, #0f1f33, #1e3a5f)" }}>
+        <div className="text-[11px] font-semibold tracking-wide mb-1" style={{ color: "rgba(191,219,254,0.7)" }}>
+          이번달 예상 정산액
+        </div>
+        <div className="text-3xl font-bold text-white tabular-nums" style={{ fontFamily: "monospace", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
+          <OdometerNumber value={monthAmount} suffix="원" />
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <KpiCard title="전체 운송" value={kpi.total} color="text-gray-800" />
         <KpiCard title="오늘 운송" value={kpi.today} color="text-blue-600" />
@@ -416,8 +448,29 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
   const [copySearch, setCopySearch] = useState("");
   const [copyType, setCopyType] = useState("통합");
   const [copyResults, setCopyResults] = useState(null);
+  const [cargoRows, setCargoRows] = useState([EMPTY_CARGO_ROW()]);
 
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const updateCargoRow = (idx, key, value) => {
+    setCargoRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [key]: value } : r)));
+  };
+  const addCargoRow = () => {
+    setCargoRows((prev) => (prev.length >= 3 ? prev : [...prev, EMPTY_CARGO_ROW()]));
+  };
+  const removeCargoRow = (idx) => {
+    setCargoRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+  };
+  const buildCargoSummary = (rows) => rows.filter((r) => r.qty).map((r) => `${r.qty}${r.unit}`).join("+");
+  const buildPalletSummary = (rows) => {
+    const totals = {};
+    rows.forEach((r) => {
+      if (r.unit !== "파레트" || !r.qty || !r.palletCo) return;
+      const label = r.palletCo === "KPP" ? "K" : r.palletCo === "아주" ? "AJ" : r.palletCo;
+      totals[label] = (totals[label] || 0) + Number(r.qty);
+    });
+    return Object.entries(totals).map(([label, n]) => `${label} ${n}장`).join("+");
+  };
 
   // 운송사 리스트 — PC(ShipperOrder.jsx)와 동일하게 승인된 운송사 목록에서 회사코드까지 가져온다.
   useEffect(() => {
@@ -459,6 +512,24 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       setPlaces(Array.from(map.values()));
     });
   }, [user]);
+
+  // 자주 쓰는 경로 — 과거 오더에서 상/하차지 조합이 2회 이상 반복된 경로를 뽑아 1탭으로 재사용
+  const favoriteRoutes = useMemo(() => {
+    const freq = new Map();
+    orders.forEach((o) => {
+      if (!o.상차지명 || !o.하차지명) return;
+      const key = `${o.상차지명}→${o.하차지명}`;
+      const entry = freq.get(key) || { count: 0, sample: o };
+      entry.count += 1;
+      if ((o.createdAt?.seconds || 0) > (entry.sample.createdAt?.seconds || 0)) entry.sample = o;
+      freq.set(key, entry);
+    });
+    return Array.from(freq.entries())
+      .filter(([, v]) => v.count >= 2)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 4)
+      .map(([key, v]) => ({ key, ...v }));
+  }, [orders]);
 
   const searchPlaces = (val) => {
     if (!val.trim()) return [];
@@ -506,10 +577,10 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       상차일: getDate(0), 상차시간: src.상차시간 || "08:00", 상차시간구분: src.상차시간구분 || "이후",
       하차일: getDate(0), 하차시간: src.하차시간 || "12:00", 하차시간구분: src.하차시간구분 || "이후",
       차량종류: src.차량종류 || "", 톤수값: "", 톤수단위: "톤",
-      화물내용: "", 화물단위: "파레트", 파렛트사: "",
       상차방법: src.상차방법 || "", 하차방법: src.하차방법 || "",
       지급방식: src.지급방식 || "",
     }));
+    setCargoRows([EMPTY_CARGO_ROW()]);
     setCopyOpen(false);
     showToast("오더 복사 완료");
   };
@@ -526,6 +597,8 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
 
   const submit = async () => {
     if (!form.상차지명 || !form.하차지명) { alert("상차지 / 하차지는 필수입니다."); return; }
+    if (!cargoRows.some((r) => r.qty)) { alert("화물내용을 입력해주세요."); return; }
+    if (cargoRows.some((r) => r.unit === "파레트" && r.qty && !r.palletCo)) { alert("파렛트사를 선택해주세요."); return; }
     setSubmitting(true);
     try {
       await upsertPlace(form.상차지명, form.상차지주소, form.상차지담당자, form.상차지담당자번호, "상차");
@@ -533,14 +606,13 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       const 차량톤수 = form.톤수단위 === "없음" ? "" : form.톤수값 ? `${form.톤수값}${form.톤수단위}` : "";
       // PC(ShipperOrder.jsx)와 동일하게 화물내용은 "수량+단위"를 하나로 합친 문자열로 저장한다
       // (분리 저장 시 상세화면에서 단위를 재조합하면서 "1파레트 파레트"처럼 중복 표시되던 버그의 원인)
-      const 화물내용 = form.화물단위 === "없음" ? form.화물내용 : (form.화물내용 ? `${form.화물내용}${form.화물단위}` : "");
-      const 파렛트사요약 = (form.화물단위 === "파레트" && form.화물내용 && form.파렛트사)
-        ? `${form.파렛트사 === "KPP" ? "K" : form.파렛트사 === "아주" ? "AJ" : form.파렛트사} ${form.화물내용}장`
-        : "";
+      const 화물내용 = buildCargoSummary(cargoRows);
+      const 파렛트사요약 = buildPalletSummary(cargoRows);
       await addDoc(collection(db, "orders"), {
         ...form,
         차량톤수,
         화물내용,
+        화물목록: cargoRows,
         파렛트사요약,
         톤수값: undefined,
         톤수단위: undefined,
@@ -568,11 +640,25 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
           <button onClick={onBack} className="text-gray-500 text-lg">←</button>
           <div className="font-bold text-base">배차요청</div>
         </div>
-        <button onClick={() => setCopyOpen(true)}
+        <button onClick={() => { setCopyOpen(true); doCopySearch(); }}
           className="px-3 py-1.5 text-xs border rounded-lg font-semibold text-gray-600 hover:bg-gray-100">
           오더 복사
         </button>
       </div>
+
+      {favoriteRoutes.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-3">
+          <div className="text-xs font-bold text-gray-400 mb-2">자주 쓰는 경로</div>
+          <div className="flex flex-wrap gap-2">
+            {favoriteRoutes.map((r) => (
+              <button key={r.key} type="button" onClick={() => copyFrom(r.sample)}
+                className="px-3 py-1.5 rounded-full border text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                {r.sample.상차지명} → {r.sample.하차지명}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 운송사 */}
       <MSection title="운송사">
@@ -735,25 +821,42 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
             </select>
           </div>
         </MRow>
-        <MRow label="화물내용">
-          <div className="flex gap-2">
-            <input className="input-m" style={{ flex: 2 }} value={form.화물내용}
-              onChange={(e) => update("화물내용", e.target.value)} placeholder="수량" inputMode="decimal" />
-            <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.화물단위}
-              onChange={(e) => update("화물단위", e.target.value)}>
-              {화물단위목록.map(v => <option key={v}>{v}</option>)}
-            </select>
+        <MRow label={`화물내용 (최대 3개)`}>
+          <div className="space-y-2">
+            {cargoRows.map((row, idx) => (
+              <div key={idx} className="flex gap-1.5 items-center">
+                <input className="input-m" style={{ flex: 2 }} value={row.qty}
+                  onChange={(e) => updateCargoRow(idx, "qty", e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="수량" inputMode="decimal" />
+                <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={row.unit}
+                  onChange={(e) => updateCargoRow(idx, "unit", e.target.value)}>
+                  {화물단위목록.map(v => <option key={v}>{v}</option>)}
+                </select>
+                {row.unit === "파레트" && (
+                  <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={row.palletCo}
+                    onChange={(e) => updateCargoRow(idx, "palletCo", e.target.value)}>
+                    <option value="">파렛트사</option>
+                    <option value="아주">아주</option>
+                    <option value="KPP">KPP</option>
+                  </select>
+                )}
+                {cargoRows.length > 1 && (
+                  <button type="button" onClick={() => removeCargoRow(idx)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 text-gray-400 shrink-0">×</button>
+                )}
+              </div>
+            ))}
+            {cargoRows.length < 3 && (
+              <button type="button" onClick={addCargoRow}
+                className="w-full py-2 rounded-lg border border-dashed border-gray-300 text-gray-500 text-sm font-semibold">
+                + 화물 추가 ({cargoRows.length}/3)
+              </button>
+            )}
+            {cargoRows.some(r => r.qty) && (
+              <div className="text-xs font-semibold" style={{ color: NAVY }}>{buildCargoSummary(cargoRows)}</div>
+            )}
           </div>
         </MRow>
-        {form.화물단위 === "파레트" && (
-          <MRow label="파렛트사">
-            <select className="input-m" value={form.파렛트사} onChange={(e) => update("파렛트사", e.target.value)}>
-              <option value="">선택</option>
-              <option value="아주">아주</option>
-              <option value="KPP">KPP</option>
-            </select>
-          </MRow>
-        )}
       </MSection>
 
       {/* 작업방식/결제 */}
@@ -842,14 +945,57 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
 }
 
 // ======================================================================
+// 카운트업 숫자 (디지털 다이얼)
+// ======================================================================
+function OdometerNumber({ value, suffix = "" }) {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = Number(value) || 0;
+    const start = performance.now();
+    const duration = 700;
+    let raf;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (to - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = to;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <span>{display.toLocaleString("ko-KR")}{suffix}</span>;
+}
+
+// ======================================================================
 // 운송내역
 // ======================================================================
 function ShipperHistoryM({ orders, onSelect, onBack }) {
-  const [startDate, setStartDate] = useState(getDate(-30));
-  const [endDate, setEndDate] = useState(getDate(0));
+  const nowY = new Date(Date.now() + 9 * 3600000).getFullYear();
+  const parseMD = (dateStr) => {
+    const [, m, d] = (dateStr || "").split("-");
+    return { month: Number(m) || 1, day: Number(d) || 1 };
+  };
+  const defaultStart = getDate(-30);
+  const defaultEnd = getDate(0);
+
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(defaultEnd);
+  const [draftStart, setDraftStart] = useState(parseMD(defaultStart));
+  const [draftEnd, setDraftEnd] = useState(parseMD(defaultEnd));
   const [keyword, setKeyword] = useState("");
   const [searchType, setSearchType] = useState("통합");
   const [statusFilter, setStatusFilter] = useState("");
+
+  const daysInMonth = (m) => new Date(nowY, m, 0).getDate();
+
+  const applyDateQuery = () => {
+    const pad = (n) => String(n).padStart(2, "0");
+    setStartDate(`${nowY}-${pad(draftStart.month)}-${pad(draftStart.day)}`);
+    setEndDate(`${nowY}-${pad(draftEnd.month)}-${pad(draftEnd.day)}`);
+  };
 
   const filtered = useMemo(() => {
     return orders
@@ -876,6 +1022,8 @@ function ShipperHistoryM({ orders, onSelect, onBack }) {
       .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
   }, [orders, startDate, endDate, keyword, searchType, statusFilter]);
 
+  const totalAmount = useMemo(() => filtered.reduce((sum, o) => sum + Number(o.청구운임 || 0), 0), [filtered]);
+
   return (
     <div className="px-4 py-4 space-y-3">
       <div className="flex items-center gap-2 mb-2">
@@ -884,12 +1032,28 @@ function ShipperHistoryM({ orders, onSelect, onBack }) {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
-        <div className="flex gap-2">
-          <input type="date" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
-            value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <span className="text-gray-400 self-center text-sm">~</span>
-          <input type="date" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
-            value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        <div className="flex items-center gap-1 flex-wrap">
+          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+            value={draftStart.month} onChange={(e) => setDraftStart(p => ({ ...p, month: Number(e.target.value) }))}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
+          </select>
+          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+            value={draftStart.day} onChange={(e) => setDraftStart(p => ({ ...p, day: Number(e.target.value) }))}>
+            {Array.from({ length: daysInMonth(draftStart.month) }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}일</option>)}
+          </select>
+          <span className="text-gray-400 text-sm shrink-0">~</span>
+          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+            value={draftEnd.month} onChange={(e) => setDraftEnd(p => ({ ...p, month: Number(e.target.value) }))}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
+          </select>
+          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+            value={draftEnd.day} onChange={(e) => setDraftEnd(p => ({ ...p, day: Number(e.target.value) }))}>
+            {Array.from({ length: daysInMonth(draftEnd.month) }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}일</option>)}
+          </select>
+          <button onClick={applyDateQuery}
+            className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0" style={{ background: NAVY }}>
+            조회
+          </button>
         </div>
         <div className="flex gap-2">
           <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-24 shrink-0"
@@ -913,7 +1077,22 @@ function ShipperHistoryM({ orders, onSelect, onBack }) {
             </button>
           ))}
         </div>
-        <div className="text-xs text-gray-400">총 {filtered.length}건</div>
+      </div>
+
+      <div className="rounded-xl p-4 grid grid-cols-2 gap-3"
+        style={{ background: "linear-gradient(135deg, #0f1f33, #1e3a5f)" }}>
+        <div>
+          <div className="text-[11px] font-semibold tracking-wide mb-1" style={{ color: "rgba(191,219,254,0.7)" }}>조회 건수</div>
+          <div className="text-2xl font-bold text-white tabular-nums" style={{ fontFamily: "monospace", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
+            <OdometerNumber value={filtered.length} suffix="건" />
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold tracking-wide mb-1" style={{ color: "rgba(191,219,254,0.7)" }}>총 청구운임</div>
+          <div className="text-2xl font-bold text-white tabular-nums" style={{ fontFamily: "monospace", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
+            <OdometerNumber value={totalAmount} suffix="원" />
+          </div>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -930,6 +1109,15 @@ function ShipperHistoryM({ orders, onSelect, onBack }) {
 // ======================================================================
 // 상세보기
 // ======================================================================
+function DetailGroup({ label, children, last = false }) {
+  return (
+    <div className={last ? "" : "border-b border-gray-100"}>
+      <div className="px-3 pt-3 pb-1 text-[11px] font-bold text-gray-400 uppercase tracking-wide">{label}</div>
+      <div className="divide-y divide-gray-100">{children}</div>
+    </div>
+  );
+}
+
 function ShipperDetailM({ order, onBack }) {
   const { label, cls } = getStatusBadge(order);
   const [attachments, setAttachments] = useState([]);
@@ -943,11 +1131,6 @@ function ShipperDetailM({ order, onBack }) {
       setAttachments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }).catch(() => {}).finally(() => setLoadingAttach(false));
   }, [order.id]);
-
-  const openMap = (addr) => {
-    if (!addr) return alert("주소 정보가 없습니다.");
-    window.open(`https://map.kakao.com/?q=${encodeURIComponent(addr)}`, "_blank");
-  };
 
   const timeLabel = (time, dir) => {
     const t = fmt12(time);
@@ -971,94 +1154,89 @@ function ShipperDetailM({ order, onBack }) {
         <span className={`ml-auto px-2 py-0.5 rounded-full border text-xs font-semibold ${cls}`}>{label}</span>
       </div>
 
-      <MCard>
-        <MDetailRow label="거래처" value={order.거래처명 || "-"} />
-        <MDetailRow label="상차" value={`${order.상차일 || "-"} ${timeLabel(order.상차시간, order.상차시간구분)}`} />
-        <MDetailRow label="하차" value={`${order.하차일 || "-"} ${timeLabel(order.하차시간, order.하차시간구분)}`} />
-        <MDetailRow label="등록일시" value={fmtDateTime(order.createdAt)} />
-      </MCard>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <DetailGroup label="기본정보">
+          <MDetailRow label="거래처" value={order.거래처명 || "-"} />
+          <MDetailRow label="상차" value={`${order.상차일 || "-"} ${timeLabel(order.상차시간, order.상차시간구분)}`} />
+          <MDetailRow label="하차" value={`${order.하차일 || "-"} ${timeLabel(order.하차시간, order.하차시간구분)}`} />
+          <MDetailRow label="등록일시" value={fmtDateTime(order.createdAt)} />
+        </DetailGroup>
 
-      <MCard title="상차지">
-        <MDetailRow label="지명" value={order.상차지명 || "-"} />
-        <MDetailRow label="주소" value={order.상차지주소 || "-"} />
-        {order.상차지담당자 && <MDetailRow label="담당자" value={order.상차지담당자} />}
-        {order.상차지담당자번호 && <MDetailRow label="연락처" value={order.상차지담당자번호} />}
-        <button onClick={() => openMap(order.상차지주소 || order.상차지명)}
-          className="mt-2 w-full py-2 bg-blue-500 text-white rounded-lg text-sm font-semibold">
-          상차지 지도
-        </button>
-      </MCard>
+        <DetailGroup label="상차지">
+          <MDetailRow label="지명" value={order.상차지명 || "-"} />
+          <MDetailRow label="주소" value={order.상차지주소 || "-"} />
+          {order.상차지담당자 && <MDetailRow label="담당자" value={order.상차지담당자} />}
+          {order.상차지담당자번호 && <MDetailRow label="연락처" value={order.상차지담당자번호} />}
+          {order.상차메모 && <MDetailRow label="메모" value={order.상차메모} />}
+        </DetailGroup>
 
-      <MCard title="하차지">
-        <MDetailRow label="지명" value={order.하차지명 || "-"} />
-        <MDetailRow label="주소" value={order.하차지주소 || "-"} />
-        {order.하차지담당자 && <MDetailRow label="담당자" value={order.하차지담당자} />}
-        {order.하차지담당자번호 && <MDetailRow label="연락처" value={order.하차지담당자번호} />}
-        <button onClick={() => openMap(order.하차지주소 || order.하차지명)}
-          className="mt-2 w-full py-2 bg-indigo-500 text-white rounded-lg text-sm font-semibold">
-          하차지 지도
-        </button>
-      </MCard>
+        <DetailGroup label="하차지">
+          <MDetailRow label="지명" value={order.하차지명 || "-"} />
+          <MDetailRow label="주소" value={order.하차지주소 || "-"} />
+          {order.하차지담당자 && <MDetailRow label="담당자" value={order.하차지담당자} />}
+          {order.하차지담당자번호 && <MDetailRow label="연락처" value={order.하차지담당자번호} />}
+          {order.하차메모 && <MDetailRow label="메모" value={order.하차메모} />}
+        </DetailGroup>
 
-      <MCard title="화물 / 차량">
-        <MDetailRow label="차량종류" value={order.차량종류 || order.차종 || "-"} />
-        <MDetailRow label="톤수" value={order.차량톤수 || order.톤수 || "-"} />
-        <MDetailRow label="화물내용" value={order.화물내용 || "-"} />
-        {order.파렛트사요약 && <MDetailRow label="파렛트사" value={order.파렛트사요약} />}
-        <MDetailRow label="상차방법" value={order.상차방법 || "-"} />
-        <MDetailRow label="하차방법" value={order.하차방법 || "-"} />
-      </MCard>
+        <DetailGroup label="화물 / 차량">
+          <MDetailRow label="차량종류" value={order.차량종류 || order.차종 || "-"} />
+          <MDetailRow label="톤수" value={order.차량톤수 || order.톤수 || "-"} />
+          <MDetailRow label="화물내용" value={order.화물내용 || "-"} />
+          {getPalletSummary(order) && <MDetailRow label="파렛트사" value={getPalletSummary(order)} />}
+          <MDetailRow label="상차방법" value={order.상차방법 || "-"} />
+          <MDetailRow label="하차방법" value={order.하차방법 || "-"} />
+        </DetailGroup>
 
-      {order.차량번호 ? (
-        <MCard title="배차 / 기사 정보">
-          <MDetailRow label="차량번호" value={order.차량번호} />
-          <MDetailRow label="기사명" value={order.이름 || order.기사명 || "-"} />
-          <MDetailRow label="연락처" value={order.전화번호 || "-"} />
-          <MDetailRow label="운송사" value={order.운송사명 || "-"} />
-          {order.전화번호 && (
-            <div className="flex gap-2 mt-3">
-              <a href={`tel:${order.전화번호}`} className="flex-1 py-2.5 bg-emerald-500 text-white rounded-lg text-sm font-semibold text-center">전화 연결</a>
-              <a href={`sms:${order.전화번호}`} className="flex-1 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-semibold text-center">문자 전송</a>
+        <DetailGroup label="배차 / 기사 정보">
+          {order.차량번호 ? (
+            <>
+              <MDetailRow label="차량번호" value={order.차량번호} />
+              <MDetailRow label="기사명" value={order.이름 || order.기사명 || "-"} />
+              <MDetailRow label="연락처" value={order.전화번호 || "-"} />
+              <MDetailRow label="운송사" value={order.운송사명 || "-"} />
+              {order.전화번호 && (
+                <div className="flex gap-2 px-3 py-2.5">
+                  <a href={`tel:${order.전화번호}`} className="flex-1 py-2.5 bg-emerald-500 text-white rounded-lg text-sm font-semibold text-center">전화 연결</a>
+                  <a href={`sms:${order.전화번호}`} className="flex-1 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-semibold text-center">문자 전송</a>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="py-4 text-center text-sm text-amber-600 font-medium">
+              배차 완료 후 기사 정보가 표시됩니다
             </div>
           )}
-        </MCard>
-      ) : (
-        <MCard title="배차 / 기사 정보">
-          <div className="py-4 text-center text-sm text-amber-600 font-medium">
-            배차 완료 후 기사 정보가 표시됩니다
-          </div>
-        </MCard>
-      )}
+        </DetailGroup>
 
-      <MCard title="운임">
-        <MDetailRow label="청구운임" value={fmtMoney(order.청구운임)} />
-        <MDetailRow label="지급방식" value={order.지급방식 || "-"} />
-      </MCard>
+        <DetailGroup label="운임">
+          <MDetailRow label="청구운임" value={fmtMoney(order.청구운임)} />
+          <MDetailRow label="지급방식" value={order.지급방식 || "-"} />
+        </DetailGroup>
 
-      {/* 첨부사진 */}
-      <MCard title={`첨부사진 ${attachments.length > 0 ? `(${attachments.length}장)` : ""}`}>
-        {loadingAttach ? (
-          <div className="py-4 text-center text-sm text-gray-400">로딩 중...</div>
-        ) : attachments.length === 0 ? (
-          <div className="py-4 text-center text-sm text-gray-400">첨부된 파일이 없습니다</div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2 pt-2">
-            {attachments.map(item => (
-              <div key={item.id} className="rounded-lg overflow-hidden border">
-                <div className="aspect-square" onClick={() => setViewImg(item)}>
-                  <img src={item.base64 || item.url} alt={item.name} className="w-full h-full object-cover" />
+        <DetailGroup label={`첨부사진 ${attachments.length > 0 ? `(${attachments.length}장)` : ""}`} last>
+          {loadingAttach ? (
+            <div className="py-4 text-center text-sm text-gray-400">로딩 중...</div>
+          ) : attachments.length === 0 ? (
+            <div className="py-4 text-center text-sm text-gray-400">첨부된 파일이 없습니다</div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 px-3 py-2">
+              {attachments.map(item => (
+                <div key={item.id} className="rounded-lg overflow-hidden border">
+                  <div className="aspect-square" onClick={() => setViewImg(item)}>
+                    <img src={item.base64 || item.url} alt={item.name} className="w-full h-full object-cover" />
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); downloadImg(item); }}
+                    className="w-full py-1.5 bg-gray-50 text-gray-600 text-[11px] font-bold border-t"
+                  >
+                    저장
+                  </button>
                 </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); downloadImg(item); }}
-                  className="w-full py-1.5 bg-gray-50 text-gray-600 text-[11px] font-bold border-t"
-                >
-                  저장
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </MCard>
+              ))}
+            </div>
+          )}
+        </DetailGroup>
+      </div>
 
       {/* 사진 전체보기 */}
       {viewImg && (
@@ -1784,7 +1962,7 @@ function KpiCard({ title, value, color }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
       <div className="text-xs text-gray-400 mb-1">{title}</div>
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      <div className={`text-2xl font-bold tabular-nums ${color}`}><OdometerNumber value={value} /></div>
     </div>
   );
 }
