@@ -1104,12 +1104,15 @@ const collections = ["dispatch", "orders"];
 
 collections.forEach((name) => {
     const unsub = onSnapshot(collection(db, name), (snap) => {
+      // "화주사 전송"으로 생성된 사본(orders 컬렉션, source: "transport_transmit")은
+      // 화주사 화면 전용 문서라 운송사 자체 배차 화면(dispatch 컬렉션 원본)과 중복으로
+      // 표시되면 안 된다 — PC(DispatchApp.jsx)와 동일한 기준으로 제외한다.
       const list = snap.docs.map((d) => ({
         _id: d.id,
         id: d.id,
         __col: name,
         ...d.data(),
-      }));
+      })).filter((o) => o.source !== "transport_transmit");
       setOrdersLoaded(true);
       setOrders((prev) => {
         const filtered = prev.filter((o) => o.__col !== name);
