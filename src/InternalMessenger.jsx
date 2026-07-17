@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   collection, addDoc, onSnapshot, query, orderBy, limit,
   serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc,
@@ -884,7 +885,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const panelContent = mobileMode ? mobileContent : pcSplitContent;
 
   // ── 새 메시지 알림 배너 (카톡 스타일, 화면 최상단 고정) ──
-  const msgToastEl = msgToast && (
+  // 모바일 앱은 메신저 패널을 visibility:hidden 래퍼로 감싸 항상 마운트해두는 구조라,
+  // 배너가 그 안에 있으면 메신저를 열기 전까지 화면에 보이지 않는다.
+  // document.body에 포탈로 그려서 메신저 창 열림 여부와 무관하게 항상 보이도록 한다.
+  const msgToastEl = msgToast && createPortal(
     <div
       onClick={openToastRoom}
       style={{
@@ -907,7 +911,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         onClick={(e) => { e.stopPropagation(); setMsgToast(null); }}
         style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 16, cursor: "pointer", lineHeight: 1, padding: 4, flexShrink: 0 }}
       >×</button>
-    </div>
+    </div>,
+    document.body
   );
 
   if (mobileMode) {
