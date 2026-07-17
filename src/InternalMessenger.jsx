@@ -269,6 +269,56 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     prevUnreadRef.current = totalUnread;
   }, [totalUnread]);
 
+  // ── 새 메시지 전역 알림 배너 (카톡처럼 화면 상단에 표시, 메신저 창이 닫혀 있어도 동작) ──
+  const [notifyEnabled, setNotifyEnabled] = useState(() => localStorage.getItem("messengerNotifyEnabled") !== "0");
+  const toggleNotify = () => {
+    setNotifyEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem("messengerNotifyEnabled", next ? "1" : "0");
+      return next;
+    });
+  };
+  const [msgToast, setMsgToast] = useState(null); // { room, senderName, text }
+  const roomsSeenRef = useRef(new Map());
+  const roomsFirstLoadRef = useRef(true);
+  useEffect(() => {
+    if (!myUid || !rooms.length) return;
+    // 최초 로드 시에는 기존 방들을 "이미 본 것"으로만 기록하고 알림은 띄우지 않는다
+    if (roomsFirstLoadRef.current) {
+      roomsFirstLoadRef.current = false;
+      rooms.forEach(r => roomsSeenRef.current.set(r.id, r.lastAt?.toMillis?.() || 0));
+      return;
+    }
+    rooms.forEach(room => {
+      const ms = room.lastAt?.toMillis?.() || 0;
+      const prevMs = roomsSeenRef.current.get(room.id) || 0;
+      if (ms > prevMs && room.lastSenderUid && room.lastSenderUid !== myUid) {
+        const alreadyViewing = isVisibleRef.current && activeRoom?.id === room.id;
+        if (notifyEnabled && !alreadyViewing) {
+          const senderName = room.memberProfiles?.[room.lastSenderUid]?.name
+            || (room.type === "dm" ? getRoomName(room) : (friends.find(f => f.uid === room.lastSenderUid)?.name || getRoomName(room)));
+          setMsgToast({ room, senderName, text: room.lastMsg || "" });
+        }
+      }
+      roomsSeenRef.current.set(room.id, ms);
+    });
+  }, [rooms, myUid, notifyEnabled]);
+
+  useEffect(() => {
+    if (!msgToast) return;
+    const t = setTimeout(() => setMsgToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [msgToast]);
+
+  const openToastRoom = () => {
+    if (!msgToast) return;
+    setActiveRoom(msgToast.room);
+    setPendingRoom(null);
+    if (mobileMode) setView("chat");
+    setOpen(true);
+    setMsgToast(null);
+  };
+
   // 채팅창 실제 가시성 추적 (읽음 처리 기준)
   useEffect(() => {
     const visible = mobileMode
@@ -751,6 +801,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     myUid, mobileMode,
     themeHdr,
     activeRoomId: activeRoom?.id || (pendingRoom ? "_pending_" : null),
+    notifyEnabled, onToggleNotify: toggleNotify,
   };
 
   // ── PC: 좌우 분할 레이아웃 ──
@@ -830,6 +881,33 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   );
 
   const panelContent = mobileMode ? mobileContent : pcSplitContent;
+
+  // ── 새 메시지 알림 배너 (카톡 스타일, 화면 최상단 고정) ──
+  const msgToastEl = msgToast && (
+    <div
+      onClick={openToastRoom}
+      style={{
+        position: "fixed", top: "env(safe-area-inset-top, 0px)", left: "50%", transform: "translateX(-50%)",
+        marginTop: 10, zIndex: 2147483000, cursor: "pointer",
+        width: "min(360px, calc(100vw - 24px))",
+        background: "#fff", borderRadius: 14, boxShadow: "0 8px 28px rgba(0,0,0,0.22)",
+        border: "1px solid #eef0f4", padding: "12px 14px",
+        display: "flex", alignItems: "center", gap: 10,
+        animation: "kpfMsgToastIn 0.25s ease-out",
+      }}
+    >
+      <style>{`@keyframes kpfMsgToastIn { from { opacity:0; transform:translate(-50%,-12px); } to { opacity:1; transform:translate(-50%,0); } }`}</style>
+      <Avatar name={msgToast.senderName} size={36} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#1B2B4B" }}>{msgToast.senderName}</div>
+        <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{msgToast.text}</div>
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); setMsgToast(null); }}
+        style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 16, cursor: "pointer", lineHeight: 1, padding: 4, flexShrink: 0 }}
+      >×</button>
+    </div>
+  );
 
   if (mobileMode) {
     return (
@@ -973,6 +1051,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
             </div>
           </div>
         )}
+        {msgToastEl}
       </>
     );
   }
@@ -1175,12 +1254,13 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           </div>
         </div>
       )}
+      {msgToastEl}
     </>
   );
 }
 
 // ════════════════ 친구 목록 뷰 ════════════════
-function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, themeHdr, activeRoomId }) {
+function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, themeHdr, activeRoomId, notifyEnabled, onToggleNotify }) {
   const [tab, setTab] = useState("friends"); // friends | chats
   const [search, setSearch] = useState("");
   const [contextMenu, setContextMenu] = useState(null); // { room, x, y }
@@ -1221,6 +1301,10 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>메신저</span>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={onToggleNotify} title={notifyEnabled ? "새 메시지 알림 끄기" : "새 메시지 알림 켜기"} style={{ background: "rgba(255,255,255,0.12)", border: "none", color: notifyEnabled ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.35)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              {!notifyEnabled && <span style={{ position: "absolute", width: 22, height: 1.5, background: "rgba(255,255,255,0.9)", transform: "rotate(-45deg)" }} />}
+            </button>
             <button onClick={onNewGroup} title="단체 채팅" style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "rgba(255,255,255,0.8)", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </button>
