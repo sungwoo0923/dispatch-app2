@@ -96,8 +96,8 @@ const EMPTY_FORM = () => ({
   상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
   하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
   차량종류: "", 톤수값: "", 톤수단위: "톤",
-  화물내용: "", 화물단위: "파레트",
-  상차방법: "", 하차방법: "", 지급방식: "", 청구운임: "",
+  화물내용: "", 화물단위: "파레트", 파렛트사: "",
+  상차방법: "", 하차방법: "", 지급방식: "",
 });
 
 // ======================================================================
@@ -362,20 +362,22 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
 
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
-  // 운송사 리스트
+  // 운송사 리스트 — PC(ShipperOrder.jsx)와 동일하게 승인된 운송사 목록에서 회사코드까지 가져온다.
   useEffect(() => {
-    let list = [];
-    const saved = localStorage.getItem("transportList");
-    if (saved) { try { list = JSON.parse(saved); } catch {} }
-    if (list.length === 0 && orders.length > 0) {
-      const nameMap = new Map();
-      orders.forEach(o => {
-        if (o.운송사명 && !nameMap.has(o.운송사명))
-          nameMap.set(o.운송사명, { name: o.운송사명, code: o.운송사코드 || "" });
+    getDocs(query(
+      collection(db, "transportApplications"),
+      where("type", "==", "신규"),
+      where("status", "==", "approved"),
+    )).then(snap => {
+      const seen = new Map();
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.companyName && !seen.has(data.companyName)) {
+          seen.set(data.companyName, { name: data.companyName, code: data.companyCode || "" });
+        }
       });
-      list = Array.from(nameMap.values());
-    }
-    setTransportList(list);
+      setTransportList(Array.from(seen.values()));
+    }).catch(() => setTransportList([]));
     const fixed = localStorage.getItem("fixedTransport");
     if (fixed) {
       try {
@@ -384,7 +386,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
         setForm(prev => ({ ...prev, 운송사명: p.name, 운송사코드: p.code || "" }));
       } catch {}
     }
-  }, [orders]);
+  }, []);
 
   // 장소 로드
   useEffect(() => {
@@ -431,8 +433,9 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
     setCopyResults(result);
   };
 
+  // 운송사 프로그램의 "오더복사" 기능과 동일한 규칙: 날짜는 오늘로, 상하차시간은 원본과 동일하게,
+  // 화물내용/톤수/파렛트사는 새로 입력하도록 비워둔다.
   const copyFrom = (src) => {
-    const { num, unit } = parseTonnage(src.차량톤수 || "");
     setForm(prev => ({
       ...prev,
       운송사명: fixedTransport?.name || src.운송사명 || "",
@@ -443,10 +446,12 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       하차지명: src.하차지명 || "", 하차지주소: src.하차지주소 || "",
       하차지담당자: src.하차지담당자 || src.하차담당자명 || "",
       하차지담당자번호: src.하차지담당자번호 || src.하차담당자번호 || "",
-      차량종류: src.차량종류 || "", 톤수값: num, 톤수단위: unit,
-      화물내용: src.화물내용 || "", 화물단위: src.화물단위 || "파레트",
+      상차일: getDate(0), 상차시간: src.상차시간 || "08:00", 상차시간구분: src.상차시간구분 || "이후",
+      하차일: getDate(0), 하차시간: src.하차시간 || "12:00", 하차시간구분: src.하차시간구분 || "이후",
+      차량종류: src.차량종류 || "", 톤수값: "", 톤수단위: "톤",
+      화물내용: "", 화물단위: "파레트", 파렛트사: "",
       상차방법: src.상차방법 || "", 하차방법: src.하차방법 || "",
-      지급방식: src.지급방식 || "", 청구운임: src.청구운임 || "",
+      지급방식: src.지급방식 || "",
     }));
     setCopyOpen(false);
     showToast("오더 복사 완료");
@@ -469,9 +474,17 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       await upsertPlace(form.상차지명, form.상차지주소, form.상차지담당자, form.상차지담당자번호, "상차");
       await upsertPlace(form.하차지명, form.하차지주소, form.하차지담당자, form.하차지담당자번호, "하차");
       const 차량톤수 = form.톤수단위 === "없음" ? "" : form.톤수값 ? `${form.톤수값}${form.톤수단위}` : "";
+      // PC(ShipperOrder.jsx)와 동일하게 화물내용은 "수량+단위"를 하나로 합친 문자열로 저장한다
+      // (분리 저장 시 상세화면에서 단위를 재조합하면서 "1파레트 파레트"처럼 중복 표시되던 버그의 원인)
+      const 화물내용 = form.화물단위 === "없음" ? form.화물내용 : (form.화물내용 ? `${form.화물내용}${form.화물단위}` : "");
+      const 파렛트사요약 = (form.화물단위 === "파레트" && form.화물내용 && form.파렛트사)
+        ? `${form.파렛트사 === "KPP" ? "K" : form.파렛트사 === "아주" ? "AJ" : form.파렛트사} ${form.화물내용}장`
+        : "";
       await addDoc(collection(db, "orders"), {
         ...form,
         차량톤수,
+        화물내용,
+        파렛트사요약,
         톤수값: undefined,
         톤수단위: undefined,
         shipperUid: user.uid,
@@ -668,12 +681,22 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
         <MRow label="화물내용">
           <div className="flex gap-2">
             <input className="input-m" style={{ flex: 2 }} value={form.화물내용}
-              onChange={(e) => update("화물내용", e.target.value)} placeholder="화물내용" />
-            <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.화물단위} onChange={(e) => update("화물단위", e.target.value)}>
+              onChange={(e) => update("화물내용", e.target.value)} placeholder="수량" inputMode="decimal" />
+            <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.화물단위}
+              onChange={(e) => update("화물단위", e.target.value)}>
               {화물단위목록.map(v => <option key={v}>{v}</option>)}
             </select>
           </div>
         </MRow>
+        {form.화물단위 === "파레트" && (
+          <MRow label="파렛트사">
+            <select className="input-m" value={form.파렛트사} onChange={(e) => update("파렛트사", e.target.value)}>
+              <option value="">선택</option>
+              <option value="아주">아주</option>
+              <option value="KPP">KPP</option>
+            </select>
+          </MRow>
+        )}
       </MSection>
 
       {/* 작업방식/결제 */}
@@ -692,10 +715,6 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
           <select className="input-m" value={form.지급방식} onChange={(e) => update("지급방식", e.target.value)}>
             <option value="">선택</option><option>계산서</option><option>선불</option><option>착불</option><option>계좌이체</option>
           </select>
-        </MRow>
-        <MRow label="청구운임">
-          <input className="input-m" type="number" value={form.청구운임}
-            onChange={(e) => update("청구운임", e.target.value)} placeholder="0" />
         </MRow>
       </MSection>
 
@@ -927,7 +946,8 @@ function ShipperDetailM({ order, onBack }) {
       <MCard title="화물 / 차량">
         <MDetailRow label="차량종류" value={order.차량종류 || order.차종 || "-"} />
         <MDetailRow label="톤수" value={order.차량톤수 || order.톤수 || "-"} />
-        <MDetailRow label="화물내용" value={[order.화물내용, order.화물단위].filter(Boolean).join(" ") || "-"} />
+        <MDetailRow label="화물내용" value={order.화물내용 || "-"} />
+        {order.파렛트사요약 && <MDetailRow label="파렛트사" value={order.파렛트사요약} />}
         <MDetailRow label="상차방법" value={order.상차방법 || "-"} />
         <MDetailRow label="하차방법" value={order.하차방법 || "-"} />
       </MCard>
@@ -967,8 +987,16 @@ function ShipperDetailM({ order, onBack }) {
         ) : (
           <div className="grid grid-cols-3 gap-2 pt-2">
             {attachments.map(item => (
-              <div key={item.id} className="relative aspect-square" onClick={() => setViewImg(item)}>
-                <img src={item.base64 || item.url} alt={item.name} className="w-full h-full object-cover rounded-lg border" />
+              <div key={item.id} className="rounded-lg overflow-hidden border">
+                <div className="aspect-square" onClick={() => setViewImg(item)}>
+                  <img src={item.base64 || item.url} alt={item.name} className="w-full h-full object-cover" />
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); downloadImg(item); }}
+                  className="w-full py-1.5 bg-gray-50 text-gray-600 text-[11px] font-bold border-t"
+                >
+                  저장
+                </button>
               </div>
             ))}
           </div>
