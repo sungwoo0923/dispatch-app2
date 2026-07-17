@@ -4683,6 +4683,38 @@ function MobileSideMenu({
     currentUser?.email ||
     "사용자";
 
+  const [showCodeLookup, setShowCodeLookup] = useState(false);
+  const [codeLookupQuery, setCodeLookupQuery] = useState("");
+  const [codeLookupList, setCodeLookupList] = useState([]);
+  const [codeLookupLoading, setCodeLookupLoading] = useState(false);
+
+  const openCodeLookup = async () => {
+    setShowCodeLookup(true);
+    setCodeLookupLoading(true);
+    try {
+      const [companySnap, transportSnap] = await Promise.all([
+        getDocs(collection(db, "companyApplications")),
+        getDocs(collection(db, "transportApplications")),
+      ]);
+      const allApproved = [
+        ...companySnap.docs.map(d => d.data()).filter(a => a.status === "approved" && a.companyCode).map(a => ({ ...a, appType: "화주" })),
+        ...transportSnap.docs.map(d => d.data()).filter(a => a.status === "approved" && a.companyCode).map(a => ({ ...a, appType: "운송" })),
+      ];
+      const grouped = Object.values(
+        allApproved.reduce((acc, a) => {
+          const key = a.companyName;
+          if (!acc[key]) acc[key] = { companyName: key, code: a.companyCode, types: [] };
+          if (!acc[key].types.includes(a.appType)) acc[key].types.push(a.appType);
+          return acc;
+        }, {})
+      ).sort((a, b) => (a.companyName || "").localeCompare(b.companyName || ""));
+      setCodeLookupList(grouped);
+    } catch (e) {
+      console.error("회사코드조회 실패:", e);
+    }
+    setCodeLookupLoading(false);
+  };
+
   const fmtLoginTime = (date) => {
     if (!date) return "";
     return date.toLocaleString("ko-KR", {
@@ -4706,6 +4738,7 @@ function MobileSideMenu({
   const dark = cardVersionB;
 
   return (
+    <>
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className={`absolute left-0 top-0 bottom-0 w-72 shadow-2xl flex flex-col ${
@@ -4768,6 +4801,7 @@ function MobileSideMenu({
             <MenuSection title="관리자 전용" dark={dark}>
               <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
               <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />
+              <MenuItem label="회사코드조회" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}
           <MenuSection title="내 계정" dark={dark}>
@@ -4841,6 +4875,85 @@ function MobileSideMenu({
         </div>
       </div>
     </div>
+
+    {showCodeLookup && (() => {
+      const q = codeLookupQuery.trim().toLowerCase();
+      const filtered = q
+        ? codeLookupList.filter(g => (g.companyName || "").toLowerCase().includes(q))
+        : codeLookupList;
+      return (
+        <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={() => setShowCodeLookup(false)}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-white rounded-t-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+              <div>
+                <div className="font-bold text-[15px] text-[#1B2B4B]">회사코드조회</div>
+                <div className="text-[11px] text-gray-400 mt-0.5">회사명으로 코드를 검색합니다</div>
+              </div>
+              <button onClick={() => setShowCodeLookup(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-bold">×</button>
+            </div>
+            <div className="px-5 py-3 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
+                <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input
+                  autoFocus
+                  value={codeLookupQuery}
+                  onChange={e => setCodeLookupQuery(e.target.value)}
+                  placeholder="회사명 입력"
+                  className="flex-1 px-2 py-2.5 text-[13px] outline-none"
+                />
+                {codeLookupQuery && (
+                  <button onClick={() => setCodeLookupQuery("")} className="mr-2 text-gray-400 hover:text-gray-600 text-[12px]">×</button>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {codeLookupLoading ? (
+                <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1B2B4B] rounded-full animate-spin" />
+                  <span className="text-sm">불러오는 중...</span>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="py-12 text-center text-[13px] text-gray-400">
+                  {q ? "검색 결과가 없습니다" : "승인된 회사가 없습니다"}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filtered.map(g => (
+                    <div key={g.companyName} className="border border-gray-100 rounded-xl px-4 py-3 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="font-bold text-[13px] text-gray-800 truncate">{g.companyName}</div>
+                        <div className="mt-1 flex gap-1">
+                          {g.types.map(t => (
+                            <span key={t} className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1B2B4B]/10 text-[#1B2B4B]">{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-[13px] font-bold text-[#1B2B4B]">{g.code}</span>
+                        <button
+                          onClick={() => navigator.clipboard?.writeText(g.code)}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30"
+                        >
+                          복사
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 text-[11px] text-gray-400 shrink-0" style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}>
+              총 {filtered.length}개 회사
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+    </>
   );
 }
 
@@ -5046,6 +5159,13 @@ function MobileOrderList({
   drivers,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
+  const handleOpenAttach = (order) => {
+    setAttachViewOrder(order);
+    // PC(DispatchApp.jsx)와 동일한 attachViewed 필드를 사용해 확인 상태를 실시간 연동한다.
+    const col = order.__col || order._col || "dispatch";
+    const docId = order._id || order.id;
+    if (docId) updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
+  };
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
@@ -5516,7 +5636,7 @@ const summary = useMemo(() => {
                           showUndeliveredOnly={false}
                           onSelect={multiSelectMode ? () => toggleSelect(o) : () => onSelect(o)}
                           onOpenMemo={multiSelectMode ? () => {} : setOpenMemo}
-                          onOpenAttach={setAttachViewOrder}
+                          onOpenAttach={handleOpenAttach}
                           selected={isChecked}
                           multiSelectMode={multiSelectMode}
                           cardVersionB={cardVersionB}
@@ -6364,7 +6484,9 @@ const dropTime = order.하차시간 || "시간 없음";
               style={{ touchAction: "manipulation" }}
               onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
               className={`flex items-center gap-0.5 text-[0.68em] font-semibold ${
-                (order.attachCount > 0) ? "text-gray-500" : "text-gray-300"
+                order.attachCount > 0
+                  ? (order.attachViewed ? "text-[#1B2B4B]" : "text-emerald-600")
+                  : "text-gray-300"
               }`}
             >
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -6522,8 +6644,10 @@ const dropTime = order.하차시간 || "시간 없음";
     style={{ touchAction: "manipulation" }}
     onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
     className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-      (order.attachCount > 0)
-        ? "bg-gray-50 border-gray-300 text-gray-600"
+      order.attachCount > 0
+        ? (order.attachViewed
+            ? "bg-[#eef1f7] border-[#c7d1e3] text-[#1B2B4B]"
+            : "bg-emerald-50 border-emerald-300 text-emerald-700")
         : "bg-white border-dashed border-gray-200 text-gray-300"
     }`}
   >
@@ -7584,7 +7708,16 @@ const handleAssignClick = () => {
 
     {/* 첨부파일 */}
     <div className="border-b border-gray-100">
-      <button onClick={() => setShowAttachments(true)} style={{ touchAction: "manipulation" }} className="w-full flex items-center justify-between px-4 py-3">
+      <button
+        onClick={() => {
+          setShowAttachments(true);
+          const col = order.__col || order._col || "dispatch";
+          const docId = order._id || order.id;
+          if (docId) updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
+        }}
+        style={{ touchAction: "manipulation" }}
+        className="w-full flex items-center justify-between px-4 py-3"
+      >
         <div className="flex items-center gap-2.5">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -7597,6 +7730,9 @@ const handleAssignClick = () => {
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          {liveAttachCount > 0 && !order.attachViewed && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          )}
           {liveAttachCount > 0 && <span className={`min-w-[20px] h-5 px-1 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>{liveAttachCount}</span>}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
