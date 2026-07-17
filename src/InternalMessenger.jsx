@@ -261,9 +261,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   // 모바일 부모에게 안읽음 수 전달
   useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]);
 
-  // 새 메시지 진동 알림 (안읽음 수 증가 시)
+  // 새 메시지 진동 알림 (안읽음 수 증가 시) — 설정에서 끌 수 있음
   useEffect(() => {
-    if (totalUnread > prevUnreadRef.current && "vibrate" in navigator) {
+    const vibrateEnabled = localStorage.getItem("messengerVibrateEnabled") !== "0";
+    if (vibrateEnabled && totalUnread > prevUnreadRef.current && "vibrate" in navigator) {
       navigator.vibrate([100, 60, 100]);
     }
     prevUnreadRef.current = totalUnread;

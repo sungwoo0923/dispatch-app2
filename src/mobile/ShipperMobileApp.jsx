@@ -23,6 +23,18 @@ const getDate = (offset = 0) => {
   return d.toISOString().slice(0, 10);
 };
 
+const getMonthStart = (offset = 0) => {
+  const d = new Date(Date.now() + 9 * 3600000);
+  d.setMonth(d.getMonth() + offset, 1);
+  return d.toISOString().slice(0, 10);
+};
+
+const getMonthEnd = (offset = 0) => {
+  const d = new Date(Date.now() + 9 * 3600000);
+  d.setMonth(d.getMonth() + offset + 1, 0);
+  return d.toISOString().slice(0, 10);
+};
+
 const fmtMoney = (v) => `${Number(v || 0).toLocaleString("ko-KR")}원`;
 
 const fmtDateTime = (ts) => {
@@ -114,8 +126,13 @@ export default function ShipperMobileApp() {
   const [menuTime, setMenuTime] = useState(nowKSTStr());
   const [showMessenger, setShowMessenger] = useState(false);
   const [messengerUnread, setMessengerUnread] = useState(0);
+  const [uiScale, setUiScale] = useState(() => Number(localStorage.getItem("shipperUiScale") || 1));
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+
+  const isMaster = userData?.permissions?.master === true || userData?.isMaster === true;
+  const isSubMaster = userData?.permissions?.subMaster === true;
+  const canViewSettlement = isMaster || isSubMaster || userData?.permissions?.settlement === true;
 
   useEffect(() => {
     const t = setInterval(() => setMenuTime(nowKSTStr()), 30000);
@@ -187,10 +204,14 @@ export default function ShipperMobileApp() {
               <MMenuItem label="홈" active={page === "home"} onClick={() => navTo("home")} />
               <MMenuItem label="배차요청" active={page === "order"} onClick={() => navTo("order")} />
               <MMenuItem label="운송내역" active={page === "history"} onClick={() => navTo("history")} />
+              {canViewSettlement && (
+                <MMenuItem label="정산" active={page === "settlement"} onClick={() => navTo("settlement")} />
+              )}
               <div className="text-xs text-gray-400 font-semibold px-2 py-1 mt-2">정보</div>
               <MMenuItem label="공지사항" active={page === "notice"} onClick={() => navTo("notice")} />
               <MMenuItem label="문의사항" active={page === "inquiry"} onClick={() => navTo("inquiry")} />
               <MMenuItem label="마이페이지" active={page === "mypage"} onClick={() => navTo("mypage")} />
+              <MMenuItem label="설정" active={page === "settings"} onClick={() => navTo("settings")} />
             </div>
             <div className="border-t px-4 py-3">
               <div className="text-xs text-gray-400 mb-0.5">{userData.companyName}</div>
@@ -240,7 +261,7 @@ export default function ShipperMobileApp() {
       </div>
 
       {/* 페이지 */}
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-24" style={{ fontSize: uiScale === 1 ? "1rem" : uiScale === 1.1 ? "1.1rem" : "1.2rem" }}>
         {page === "home" && (
           <ShipperHomeM kpi={kpi} orders={orders}
             onSelect={(o) => { setSelectedOrder(o); setPage("detail"); }}
@@ -267,6 +288,12 @@ export default function ShipperMobileApp() {
         )}
         {page === "inquiry" && (
           <ShipperInquiryM user={user} userData={userData} onBack={() => setPage("home")} showToast={showToast} />
+        )}
+        {page === "settlement" && canViewSettlement && (
+          <ShipperSettlementM orders={orders} onBack={() => setPage("home")} />
+        )}
+        {page === "settings" && (
+          <ShipperSettingsM onBack={() => setPage("home")} showToast={showToast} uiScale={uiScale} setUiScale={setUiScale} />
         )}
       </div>
 
@@ -1357,6 +1384,204 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
           <style>{`.input-m { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 14px; background: white; outline: none; box-sizing: border-box; }`}</style>
         </MCard>
       )}
+    </div>
+  );
+}
+
+// ======================================================================
+// 정산
+// ======================================================================
+function ShipperSettlementM({ orders = [], onBack }) {
+  const [startDate, setStartDate] = useState(getMonthStart(0));
+  const [endDate, setEndDate] = useState(getMonthEnd(0));
+  const [sortKey, setSortKey] = useState("date_desc");
+
+  const filtered = useMemo(() => {
+    return orders.filter(o => {
+      if (o.상태 === "취소") return false;
+      const d = String(o.상차일 || "").slice(0, 10);
+      if (startDate && d < startDate) return false;
+      if (endDate && d > endDate) return false;
+      return true;
+    });
+  }, [orders, startDate, endDate]);
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    if (sortKey === "date_asc") list.sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")));
+    else if (sortKey === "amount_desc") list.sort((a, b) => (Number(b.청구운임) || 0) - (Number(a.청구운임) || 0));
+    else if (sortKey === "amount_asc") list.sort((a, b) => (Number(a.청구운임) || 0) - (Number(b.청구운임) || 0));
+    else list.sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
+    return list;
+  }, [filtered, sortKey]);
+
+  const total = filtered.reduce((s, o) => s + (Number(o.청구운임) || 0), 0);
+
+  const topClients = useMemo(() => {
+    const map = {};
+    filtered.forEach(o => {
+      const k = o.거래처명 || "(미지정)";
+      map[k] = (map[k] || 0) + (Number(o.청구운임) || 0);
+    });
+    const maxV = Math.max(...Object.values(map), 1);
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, amt]) => ({ name, amt, pct: Math.round((amt / maxV) * 100) }));
+  }, [filtered]);
+
+  const SORT_OPTIONS = [
+    ["date_desc", "최신순"], ["date_asc", "오래된순"],
+    ["amount_desc", "금액높은순"], ["amount_asc", "금액낮은순"],
+  ];
+
+  return (
+    <div className="px-4 py-4 space-y-3">
+      <div className="flex items-center gap-2 mb-2">
+        <button onClick={onBack} className="text-gray-500 text-lg">←</button>
+        <div className="font-bold text-base">정산</div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+        <div className="flex gap-2">
+          <input type="date" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+            value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <span className="text-gray-400 self-center text-sm">~</span>
+          <input type="date" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+            value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </div>
+        <div className="flex gap-2">
+          {[["이번달", 0], ["지난달", -1], ["전전달", -2]].map(([label, offset]) => (
+            <button key={label}
+              onClick={() => { setStartDate(getMonthStart(offset)); setEndDate(getMonthEnd(offset)); }}
+              className="flex-1 py-1.5 text-xs rounded-lg border font-semibold text-gray-600 border-gray-200 hover:bg-gray-50">
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <KpiCard title="조회 건수" value={`${filtered.length}건`} color="text-gray-800" />
+        <KpiCard title="총 청구금액" value={fmtMoney(total)} color="text-[#1B2B4B]" />
+      </div>
+
+      {topClients.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-3">
+          <div className="text-xs font-bold text-gray-500 mb-2">거래처별 청구금액 TOP 5</div>
+          <div className="space-y-2">
+            {topClients.map(c => (
+              <div key={c.name}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[13px] font-semibold text-gray-700 truncate max-w-[180px]">{c.name}</span>
+                  <span className="text-[12px] font-bold text-[#1B2B4B]">{fmtMoney(c.amt)}</span>
+                </div>
+                <div className="bg-gray-100 rounded-full h-1.5">
+                  <div className="h-1.5 rounded-full" style={{ width: `${c.pct}%`, background: NAVY }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-bold text-gray-700">오더 목록 ({sorted.length}건)</div>
+        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+          value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+          {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="text-center text-gray-400 text-sm py-10 bg-white rounded-xl border">해당 기간 데이터가 없습니다.</div>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map(o => <OrderCard key={o.id} order={o} onSelect={() => {}} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ======================================================================
+// 설정
+// ======================================================================
+function ShipperSettingsM({ onBack, showToast, uiScale, setUiScale }) {
+  const [notifyEnabled, setNotifyEnabled] = useState(() => localStorage.getItem("messengerNotifyEnabled") !== "0");
+  const [vibrateEnabled, setVibrateEnabled] = useState(() => localStorage.getItem("messengerVibrateEnabled") !== "0");
+
+  const toggleNotify = () => {
+    setNotifyEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem("messengerNotifyEnabled", next ? "1" : "0");
+      return next;
+    });
+  };
+  const toggleVibrate = () => {
+    setVibrateEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem("messengerVibrateEnabled", next ? "1" : "0");
+      return next;
+    });
+  };
+
+  const clearCache = () => {
+    if (!window.confirm("저장된 운송사 목록, 임시 설정을 초기화하시겠습니까?\n(등록된 오더 데이터에는 영향이 없습니다)")) return;
+    ["transportList", "fixedTransport", "shipperUiScale"].forEach(k => localStorage.removeItem(k));
+    showToast?.("초기화되었습니다.");
+  };
+
+  return (
+    <div className="px-4 py-4 space-y-3">
+      <div className="flex items-center gap-2 mb-2">
+        <button onClick={onBack} className="text-gray-500 text-lg">←</button>
+        <div className="font-bold text-base">설정</div>
+      </div>
+
+      <MSection title="화면">
+        <MRow label="글씨 크기">
+          <div className="flex gap-1.5">
+            {[["기본", 1], ["크게", 1.1], ["아주 크게", 1.2]].map(([label, v]) => (
+              <button key={v} onClick={() => { setUiScale(v); localStorage.setItem("shipperUiScale", v); }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition ${uiScale === v ? "text-white border-transparent" : "text-gray-600 border-gray-200"}`}
+                style={uiScale === v ? { background: NAVY } : {}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </MRow>
+      </MSection>
+
+      <MSection title="알림">
+        <MRow label="새 메시지 알림">
+          <ToggleRow checked={notifyEnabled} onChange={toggleNotify} desc="메신저로 메시지가 오면 화면 상단에 알림을 표시합니다." />
+        </MRow>
+        <MRow label="진동 알림">
+          <ToggleRow checked={vibrateEnabled} onChange={toggleVibrate} desc="새 메시지 수신 시 진동으로 알려줍니다." />
+        </MRow>
+      </MSection>
+
+      <MSection title="기타">
+        <MRow label="임시 데이터 초기화">
+          <button onClick={clearCache} className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+            초기화
+          </button>
+        </MRow>
+        <MRow label="앱 버전">
+          <span className="text-xs text-gray-400">KP-Flow 화주 모바일</span>
+        </MRow>
+      </MSection>
+    </div>
+  );
+}
+
+function ToggleRow({ checked, onChange, desc }) {
+  return (
+    <div>
+      <button onClick={onChange}
+        className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${checked ? "bg-blue-600" : "bg-gray-300"}`}
+        style={checked ? { background: NAVY } : {}}>
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"}`} />
+      </button>
+      {desc && <div className="text-[11px] text-gray-400 mt-1.5 leading-snug">{desc}</div>}
     </div>
   );
 }
