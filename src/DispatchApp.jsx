@@ -17379,6 +17379,12 @@ const handleCloseFileUpload = async (e) => {
   const executeDelete = async () => {
     if (isViewer) return showAlert("조회전용 권한으로 삭제할 수 없습니다.");
 
+    const isShipperOrder = (r) => r.source === "shipper" || r.source === "shipper_mobile";
+    const isDispatched = (r) => !!(r.차량번호 && r.차량번호.trim());
+    if (deleteList.some(r => isShipperOrder(r) && isDispatched(r)) && role !== "totalMaster") {
+      return showAlert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+    }
+
     const ids = deleteList.map(r => r._id);
 
     for (const id of ids) {
@@ -25483,6 +25489,14 @@ if (first) {
 
     // 삭제될 항목 백업
     const backup = ids.map(id => dispatchData.find(r => getId(r) === id));
+
+    const isShipperOrder = (r) => r?.source === "shipper" || r?.source === "shipper_mobile";
+    const isDispatched = (r) => !!(r?.차량번호 && r.차량번호.trim());
+    if (backup.some(r => isShipperOrder(r) && isDispatched(r)) && role !== "totalMaster") {
+      alert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+      return;
+    }
+
     setBackupDeleted(backup);
 
     // Firestore에서 실제 삭제
