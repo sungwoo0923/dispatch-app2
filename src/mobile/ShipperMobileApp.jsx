@@ -608,14 +608,13 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       // (분리 저장 시 상세화면에서 단위를 재조합하면서 "1파레트 파레트"처럼 중복 표시되던 버그의 원인)
       const 화물내용 = buildCargoSummary(cargoRows);
       const 파렛트사요약 = buildPalletSummary(cargoRows);
+      const { 톤수값, 톤수단위, ...formToSave } = form;
       await addDoc(collection(db, "orders"), {
-        ...form,
+        ...formToSave,
         차량톤수,
         화물내용,
         화물목록: cargoRows,
         파렛트사요약,
-        톤수값: undefined,
-        톤수단위: undefined,
         shipperUid: user.uid,
         거래처명: userData.companyName,
         shipperCompany: userData.companyName,
