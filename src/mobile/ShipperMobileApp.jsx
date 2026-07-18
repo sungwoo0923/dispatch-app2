@@ -124,13 +124,48 @@ const fmt12 = (t) => {
   return `${h < 12 ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
 };
 
-const getStatusBadge = (o) => {
-  if (["취소", "배차취소", "오더취소"].includes(o.상태))
-    return { label: "취소", cls: "bg-red-100 text-red-600 border-red-300" };
-  if (o.차량번호) return { label: "배차완료", cls: "bg-emerald-100 text-emerald-700 border-emerald-300" };
-  if (o.화주사확인대기) return { label: "배차요청", cls: "bg-amber-100 text-amber-700 border-amber-300", blink: true };
-  return { label: "배차중", cls: "bg-blue-100 text-blue-700 border-blue-300", blink: true };
+const STATUS_DOT_STYLE = {
+  취소: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
+  배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)" },
+  배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)" },
+  배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)" },
 };
+
+const getStatusBadge = (o) => {
+  let label = "배차중";
+  let blink = false;
+  if (["취소", "배차취소", "오더취소"].includes(o.상태)) label = "취소";
+  else if (o.차량번호) label = "배차완료";
+  else if (o.화주사확인대기) { label = "배차요청"; blink = true; }
+  else { label = "배차중"; blink = true; }
+  const s = STATUS_DOT_STYLE[label];
+  return { label, blink, ...s };
+};
+
+function StatusBadge({ order, className = "" }) {
+  const { label, blink, dot, text, ring } = getStatusBadge(order);
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide whitespace-nowrap ${className}`}
+      style={{
+        background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
+        color: text,
+        border: `1px solid ${ring}`,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={{
+          background: dot,
+          boxShadow: `0 0 4px ${dot}`,
+          animation: blink ? "dotPulse 1.4s ease-in-out infinite" : "none",
+        }}
+      />
+      {label}
+    </span>
+  );
+}
 
 const parseTonnage = (val = "") => {
   if (!val) return { num: "", unit: "톤" };
@@ -252,7 +287,7 @@ export default function ShipperMobileApp() {
 
   return (
     <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
-      <style>{`@keyframes statusBlink { 0%,100% { opacity:1; } 50% { opacity:0.45; } }`}</style>
+      <style>{`@keyframes dotPulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }`}</style>
 
       {toast && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm">
@@ -1131,7 +1166,6 @@ function DetailGroup({ label, children, last = false }) {
 }
 
 function ShipperDetailM({ order, onBack }) {
-  const { label, cls, blink } = getStatusBadge(order);
   const [attachments, setAttachments] = useState([]);
   const [loadingAttach, setLoadingAttach] = useState(false);
   const [viewImg, setViewImg] = useState(null);
@@ -1163,8 +1197,7 @@ function ShipperDetailM({ order, onBack }) {
       <div className="flex items-center gap-2 mb-2">
         <button onClick={onBack} className="text-gray-500 text-lg">←</button>
         <div className="font-bold text-base">운송 상세</div>
-        <span className={`ml-auto px-2 py-0.5 rounded-full border text-xs font-semibold ${cls}`}
-          style={blink ? { animation: "statusBlink 1.4s ease-in-out infinite" } : {}}>{label}</span>
+        <StatusBadge order={order} className="ml-auto" />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1945,7 +1978,6 @@ function ToggleRow({ checked, onChange, desc }) {
 // 공통 컴포넌트
 // ======================================================================
 function OrderCard({ order, onSelect }) {
-  const { label, cls, blink } = getStatusBadge(order);
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-3 py-3 active:scale-[0.99] transition"
       onClick={onSelect}>
@@ -1953,8 +1985,7 @@ function OrderCard({ order, onSelect }) {
         <div className="text-sm font-semibold text-gray-800 truncate flex-1">
           {order.상차지명 || "-"} → {order.하차지명 || "-"}
         </div>
-        <span className={`ml-2 px-2 py-0.5 rounded-full border text-[10px] font-semibold whitespace-nowrap ${cls}`}
-          style={blink ? { animation: "statusBlink 1.4s ease-in-out infinite" } : {}}>{label}</span>
+        <StatusBadge order={order} className="ml-2" />
       </div>
       <div className="text-xs text-gray-500">
         {order.상차일 || "-"} {order.상차시간 ? fmt12(order.상차시간) : ""}
