@@ -2503,9 +2503,8 @@ const handleOrderDuplicateWithDriver = (order) => {
 const deleteSingleOrder = async (order) => {
   if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
   const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
-  const isDispatched = !!(order.차량번호 && order.차량번호.trim());
-  if (isShipperOrder && isDispatched && role !== "totalMaster") {
-    alert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+  if (isShipperOrder && !order.취소요청) {
+    alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
     return;
   }
   const col = order.__col || collName;
@@ -2662,11 +2661,10 @@ const deleteSingleOrder = async (order) => {
     if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     const blocked = selectedOrders.some(order => {
       const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
-      const isDispatched = !!(order.차량번호 && order.차량번호.trim());
-      return isShipperOrder && isDispatched;
+      return isShipperOrder && !order.취소요청;
     });
-    if (blocked && role !== "totalMaster") {
-      alert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+    if (blocked) {
+      alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
       return;
     }
     if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.`)) return;
@@ -6536,6 +6534,14 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
       await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차중전환일시: Date.now() });
     } catch {}
   };
+  const isCancelRequested = order.취소요청 === true && order.배차상태 !== "배차취소";
+  const approveCancelDelete = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
+    try {
+      await deleteDoc(doc(db, order.__col || "orders", order.id));
+    } catch {}
+  };
 const isToday =
   String(order.상차일 || "").slice(0, 10) === todayKST();
       useEffect(() => {
@@ -6811,7 +6817,13 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   {isPendingShipperConfirm && (
     <button onClick={confirmShipperOrder}
       className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-[#1B2B4B]">
-      확인
+      배차승인
+    </button>
+  )}
+  {isCancelRequested && (
+    <button onClick={approveCancelDelete}
+      className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-orange-500 badge-dispatching">
+      취소승인
     </button>
   )}
   </div>
@@ -7373,8 +7385,19 @@ function MobileOrderDetail({
   const isPendingShipperConfirm = state !== "배차완료" && order.화주사확인대기 === true;
   const displayLabel = isPendingShipperConfirm ? "배차요청" : state;
   const confirmShipperOrder = async () => {
+    const patch = { 화주사확인대기: false, 배차중전환일시: Date.now() };
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차중전환일시: Date.now() });
+      await updateDoc(doc(db, order.__col || "orders", order.id), patch);
+      setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : prev));
+      onOrderUpdate?.(order.id, patch);
+    } catch {}
+  };
+  const isCancelRequested = order.취소요청 === true && order.배차상태 !== "배차취소";
+  const approveCancelDelete = async () => {
+    if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
+    try {
+      await deleteDoc(doc(db, order.__col || "orders", order.id));
+      setPage("list");
     } catch {}
   };
 const [localDelivered, setLocalDelivered] = React.useState(
@@ -7715,7 +7738,13 @@ const handleAssignClick = () => {
                 {isPendingShipperConfirm && (
                   <button onClick={confirmShipperOrder}
                     className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-[#1B2B4B]">
-                    확인
+                    배차승인
+                  </button>
+                )}
+                {isCancelRequested && (
+                  <button onClick={approveCancelDelete}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-orange-500 badge-dispatching">
+                    취소승인
                   </button>
                 )}
                 {state === "배차완료" && order.배차완료일시?.seconds && (
@@ -9681,6 +9710,8 @@ const pickDrop = (c) => {
           화주사가 등록한 오더입니다. 배차 관련 정보(차량/기사/운임)만 수정할 수 있으며, 주소·시간·화물 정보는 변경할 수 없습니다.
         </div>
       )}
+      {!isLockedShipperEdit && (
+        <>
       {/* 음성 등록 버튼 */}
       {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
         <button
@@ -9705,6 +9736,8 @@ const pickDrop = (c) => {
         </svg>
         스마트 오더 분석
       </button>
+        </>
+      )}
 
       {/* 총운임 / 산재 */}
       <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
@@ -9730,6 +9763,7 @@ const pickDrop = (c) => {
         </div>
       </div>
 
+      <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
       {/* 상차/하차 일시 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
@@ -10431,6 +10465,7 @@ const pickDrop = (c) => {
           </div>
         </button>
       )}
+      </fieldset>
 
       {/* 금액 */}
       <div className="bg-white rounded-lg border shadow-sm">
@@ -10604,8 +10639,9 @@ const pickDrop = (c) => {
           label="적요"
           input={
             <textarea
-              className="w-full border rounded px-2 py-1 text-sm h-16"
+              className="w-full border rounded px-2 py-1 text-sm h-16 disabled:bg-gray-100 disabled:text-gray-400"
               value={form.적요}
+              disabled={isLockedShipperEdit}
               onChange={(e) => update("적요", e.target.value)}
             />
           }

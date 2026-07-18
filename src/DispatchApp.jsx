@@ -17380,9 +17380,8 @@ const handleCloseFileUpload = async (e) => {
     if (isViewer) return showAlert("조회전용 권한으로 삭제할 수 없습니다.");
 
     const isShipperOrder = (r) => r.source === "shipper" || r.source === "shipper_mobile";
-    const isDispatched = (r) => !!(r.차량번호 && r.차량번호.trim());
-    if (deleteList.some(r => isShipperOrder(r) && isDispatched(r)) && role !== "totalMaster") {
-      return showAlert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+    if (deleteList.some(r => isShipperOrder(r) && !r.취소요청)) {
+      return showAlert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
     }
 
     const ids = deleteList.map(r => r._id);
@@ -18332,9 +18331,16 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       </button>
                     )}
                     {r.취소요청 && r.배차상태 !== "배차취소" && (
-                      <span
-                        title="화주사가 배차취소를 요청했습니다"
-                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white"
+                      <button
+                        type="button"
+                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
+                          await removeDispatch(r._id);
+                          setRows(prev => prev.filter(row => row._id !== r._id));
+                        }}
+                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
                       />
                     )}
@@ -25491,9 +25497,8 @@ if (first) {
     const backup = ids.map(id => dispatchData.find(r => getId(r) === id));
 
     const isShipperOrder = (r) => r?.source === "shipper" || r?.source === "shipper_mobile";
-    const isDispatched = (r) => !!(r?.차량번호 && r.차량번호.trim());
-    if (backup.some(r => isShipperOrder(r) && isDispatched(r)) && role !== "totalMaster") {
-      alert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+    if (backup.some(r => isShipperOrder(r) && !r?.취소요청)) {
+      alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
       return;
     }
 
@@ -26717,9 +26722,16 @@ return (
                       )
                     )}
                     {row.취소요청 && row.배차상태 !== "배차취소" && (
-                      <span
-                        title="화주사가 배차취소를 요청했습니다"
-                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white"
+                      <button
+                        type="button"
+                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
+                          await removeDispatch(row._id);
+                          setDispatchData(prev => prev.filter(r => r._id !== row._id));
+                        }}
+                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
                       />
                     )}
