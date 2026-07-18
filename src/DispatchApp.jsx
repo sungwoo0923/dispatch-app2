@@ -575,6 +575,8 @@ const patchDispatch = async (_id, patch) => {
         }, 100);
       }
     }
+    // 화주사 배차요청 확인 없이 바로 기사가 배정된 경우에도 "배차요청" 상태로 남지 않도록 안전장치로 해제
+    patch.화주사확인대기 = false;
   }
 
   delete patch.createdAt;
@@ -35089,9 +35091,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         })() : ""}
                       </td>
                       <td className={cellBase}>{r.상차일 || ""}</td>
-                      <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 || ""}</td>
+                      <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : ""}</td>
                       <td className={cellBase}>{r.하차일 || ""}</td>
-                      <td className={cellBase}>{r.하차시간 || ""}</td>
+                      <td className={cellBase}>{r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : ""}</td>
                       <td className={`${cellBase} font-semibold text-gray-800`}>{r.거래처명 || ""}</td>
                       <td className={`${cellBase} font-medium`}>
                         <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">

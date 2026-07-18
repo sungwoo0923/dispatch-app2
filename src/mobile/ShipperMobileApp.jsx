@@ -128,7 +128,8 @@ const getStatusBadge = (o) => {
   if (["취소", "배차취소", "오더취소"].includes(o.상태))
     return { label: "취소", cls: "bg-red-100 text-red-600 border-red-300" };
   if (o.차량번호) return { label: "배차완료", cls: "bg-emerald-100 text-emerald-700 border-emerald-300" };
-  return { label: "배차중", cls: "bg-blue-100 text-blue-700 border-blue-300" };
+  if (o.화주사확인대기) return { label: "배차요청", cls: "bg-amber-100 text-amber-700 border-amber-300", blink: true };
+  return { label: "배차중", cls: "bg-blue-100 text-blue-700 border-blue-300", blink: true };
 };
 
 const parseTonnage = (val = "") => {
@@ -201,6 +202,31 @@ export default function ShipperMobileApp() {
     return () => unsub();
   }, [user, userData]);
 
+  // 배차완료 / 재배차 / 기사취소 상단 알림 배너 — 차량번호 유무 전환을 감지
+  const [dispatchNotif, setDispatchNotif] = useState(null); // { id, text }
+  const prevVehicleRef = useRef({});
+  const vehicleFirstLoadRef = useRef(true);
+  useEffect(() => {
+    if (!orders.length) return;
+    if (vehicleFirstLoadRef.current) {
+      vehicleFirstLoadRef.current = false;
+      orders.forEach((o) => { prevVehicleRef.current[o.id] = !!(o.차량번호 && o.차량번호.trim()); });
+      return;
+    }
+    orders.forEach((o) => {
+      const cur = !!(o.차량번호 && o.차량번호.trim());
+      const prev = prevVehicleRef.current[o.id];
+      if (prev === false && cur === true) {
+        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호}${o.이름 ? " · " + o.이름 : ""})` });
+        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+      } else if (prev === true && cur === false) {
+        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 취소되었습니다.` });
+        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+      }
+      prevVehicleRef.current[o.id] = cur;
+    });
+  }, [orders]);
+
   const kpi = useMemo(() => ({
     total: orders.length,
     배차중: orders.filter((o) => !o.차량번호 && o.상태 !== "취소").length,
@@ -226,12 +252,22 @@ export default function ShipperMobileApp() {
 
   return (
     <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
+      <style>{`@keyframes statusBlink { 0%,100% { opacity:1; } 50% { opacity:0.45; } }`}</style>
 
       {toast && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm">
           {toast}
         </div>
       )}
+
+      {dispatchNotif && (
+        <div className="fixed top-0 left-0 right-0 z-[9998] px-4 py-3 text-white text-sm font-semibold shadow-lg"
+          style={{ background: NAVY, animation: "bannerDownM 0.25s ease-out" }}
+          onClick={() => setDispatchNotif(null)}>
+          {dispatchNotif.text}
+        </div>
+      )}
+      <style>{`@keyframes bannerDownM { from { transform: translateY(-100%); } to { transform: translateY(0); } }`}</style>
 
       {/* 사이드 메뉴 */}
       {showMenu && (
@@ -513,23 +549,6 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
     });
   }, [user]);
 
-  // 자주 쓰는 경로 — 과거 오더에서 상/하차지 조합이 2회 이상 반복된 경로를 뽑아 1탭으로 재사용
-  const favoriteRoutes = useMemo(() => {
-    const freq = new Map();
-    orders.forEach((o) => {
-      if (!o.상차지명 || !o.하차지명) return;
-      const key = `${o.상차지명}→${o.하차지명}`;
-      const entry = freq.get(key) || { count: 0, sample: o };
-      entry.count += 1;
-      if ((o.createdAt?.seconds || 0) > (entry.sample.createdAt?.seconds || 0)) entry.sample = o;
-      freq.set(key, entry);
-    });
-    return Array.from(freq.entries())
-      .filter(([, v]) => v.count >= 2)
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 4)
-      .map(([key, v]) => ({ key, ...v }));
-  }, [orders]);
 
   const searchPlaces = (val) => {
     if (!val.trim()) return [];
@@ -619,6 +638,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
         거래처명: userData.companyName,
         shipperCompany: userData.companyName,
         배차상태: "배차중",
+        화주사확인대기: true,
         업체전달상태: "미전달",
         source: "shipper_mobile",
         createdAt: serverTimestamp(),
@@ -644,20 +664,6 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
           오더 복사
         </button>
       </div>
-
-      {favoriteRoutes.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-3">
-          <div className="text-xs font-bold text-gray-400 mb-2">자주 쓰는 경로</div>
-          <div className="flex flex-wrap gap-2">
-            {favoriteRoutes.map((r) => (
-              <button key={r.key} type="button" onClick={() => copyFrom(r.sample)}
-                className="px-3 py-1.5 rounded-full border text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                {r.sample.상차지명} → {r.sample.하차지명}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 운송사 */}
       <MSection title="운송사">
@@ -893,12 +899,14 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
             </div>
             <div className="px-3 py-2 border-b space-y-2">
               <div className="flex gap-2">
-                <select className="input-m w-24 shrink-0" value={copyType} onChange={(e) => setCopyType(e.target.value)}>
-                  <option value="통합">통합</option>
-                  <option value="상차지">상차지</option>
-                  <option value="하차지">하차지</option>
-                  <option value="거래처">거래처</option>
-                </select>
+                <div className="w-24 shrink-0">
+                  <select className="input-m" value={copyType} onChange={(e) => setCopyType(e.target.value)}>
+                    <option value="통합">통합</option>
+                    <option value="상차지">상차지</option>
+                    <option value="하차지">하차지</option>
+                    <option value="거래처">거래처</option>
+                  </select>
+                </div>
                 <input className="input-m flex-1" value={copySearch}
                   onChange={(e) => setCopySearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && doCopySearch()}
@@ -926,6 +934,11 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
                   <div className="text-xs text-gray-500 mt-0.5">
                     {o.상차일 || "-"} · {o.차량종류 || ""} {o.차량톤수 || ""}
                   </div>
+                  {o.운송사명 && (
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      운송사: {o.운송사명}{o.운송사코드 ? ` (${o.운송사코드})` : ""}
+                    </div>
+                  )}
                   {(o.상차지담당자 || o.상차담당자명) && (
                     <div className="text-xs text-gray-400 mt-0.5">
                       상차 담당: {o.상차지담당자 || o.상차담당자명}
@@ -1118,7 +1131,7 @@ function DetailGroup({ label, children, last = false }) {
 }
 
 function ShipperDetailM({ order, onBack }) {
-  const { label, cls } = getStatusBadge(order);
+  const { label, cls, blink } = getStatusBadge(order);
   const [attachments, setAttachments] = useState([]);
   const [loadingAttach, setLoadingAttach] = useState(false);
   const [viewImg, setViewImg] = useState(null);
@@ -1150,7 +1163,8 @@ function ShipperDetailM({ order, onBack }) {
       <div className="flex items-center gap-2 mb-2">
         <button onClick={onBack} className="text-gray-500 text-lg">←</button>
         <div className="font-bold text-base">운송 상세</div>
-        <span className={`ml-auto px-2 py-0.5 rounded-full border text-xs font-semibold ${cls}`}>{label}</span>
+        <span className={`ml-auto px-2 py-0.5 rounded-full border text-xs font-semibold ${cls}`}
+          style={blink ? { animation: "statusBlink 1.4s ease-in-out infinite" } : {}}>{label}</span>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1931,7 +1945,7 @@ function ToggleRow({ checked, onChange, desc }) {
 // 공통 컴포넌트
 // ======================================================================
 function OrderCard({ order, onSelect }) {
-  const { label, cls } = getStatusBadge(order);
+  const { label, cls, blink } = getStatusBadge(order);
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-3 py-3 active:scale-[0.99] transition"
       onClick={onSelect}>
@@ -1939,7 +1953,8 @@ function OrderCard({ order, onSelect }) {
         <div className="text-sm font-semibold text-gray-800 truncate flex-1">
           {order.상차지명 || "-"} → {order.하차지명 || "-"}
         </div>
-        <span className={`ml-2 px-2 py-0.5 rounded-full border text-[10px] font-semibold whitespace-nowrap ${cls}`}>{label}</span>
+        <span className={`ml-2 px-2 py-0.5 rounded-full border text-[10px] font-semibold whitespace-nowrap ${cls}`}
+          style={blink ? { animation: "statusBlink 1.4s ease-in-out infinite" } : {}}>{label}</span>
       </div>
       <div className="text-xs text-gray-500">
         {order.상차일 || "-"} {order.상차시간 ? fmt12(order.상차시간) : ""}
@@ -1995,8 +2010,8 @@ function MCard({ title, children }) {
 
 function MDetailRow({ label, value }) {
   return (
-    <div className="flex py-1.5 gap-2">
-      <div className="w-20 text-xs text-gray-400 shrink-0">{label}</div>
+    <div className="flex items-center py-1.5 gap-2">
+      <div className="w-20 text-xs text-gray-400 shrink-0 text-center">{label}</div>
       <div className="flex-1 text-sm text-gray-800 font-medium">{value}</div>
     </div>
   );

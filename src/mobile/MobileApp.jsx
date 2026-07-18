@@ -381,6 +381,20 @@ const getPickupDate = (o = {}) => {
 // 청구운임 / 인수증
 const getClaim = (o = {}) => o.청구운임 ?? o.인수증 ?? 0;
 
+// 상차/하차시간 "HH:mm" -> "오전/오후 N시" 변환 (이미 변환된 문자열이면 그대로 반환)
+function fmtDispatchTimeM(v, gubun) {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+  if (/^\d{1,2}:\d{2}$/.test(raw)) {
+    const [h, m] = raw.split(":").map(Number);
+    const isAM = h < 12;
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const base = `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
+    return gubun && gubun !== "정각" ? `${base} ${gubun}` : base;
+  }
+  return raw;
+}
+
 // 좁은 화면용 금액 축약 표시 (만원/억원)
 const fmtM = (v) => {
   const n = Number(v) || 0;
@@ -1233,6 +1247,10 @@ collections.forEach((name) => {
           const prevCancelStatus = change.doc._document?.data?.value?.mapValue?.fields?.상태?.stringValue || "";
           const nextCancelStatus = data.상태 || "";
           if (nextCancelStatus === "취소" && prevCancelStatus !== "취소") {
+            sendPush(
+              "오더 취소",
+              `${data.거래처명 || ""} ${data.상차지명 || ""} → ${data.하차지명 || ""}`
+            );
             addNotification("취소", data);
           }
         }
@@ -2532,6 +2550,7 @@ const deleteSingleOrder = async (order) => {
       전화: 전화번호,
       배차상태: "배차완료",
       상태: "배차완료",
+      화주사확인대기: false,
       배차완료일시: serverTimestamp(),
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
@@ -6459,6 +6478,14 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
+  const isPendingShipperConfirm = state !== "배차완료" && order.화주사확인대기 === true;
+  const displayLabel = isPendingShipperConfirm ? "배차요청" : state;
+  const confirmShipperOrder = async (e) => {
+    e.stopPropagation();
+    try {
+      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차중전환일시: Date.now() });
+    } catch {}
+  };
 const isToday =
   String(order.상차일 || "").slice(0, 10) === todayKST();
       useEffect(() => {
@@ -6474,6 +6501,8 @@ const isToday =
   const stateBadgeClass =
     state === "배차완료"
       ? "bg-blue-600 text-white border-blue-600"
+      : isPendingShipperConfirm
+      ? "bg-amber-100 text-amber-700 border-amber-300"
       : "bg-gray-100 text-gray-600 border-gray-300";
 
   const pickupName = order.상차지명 || "-";
@@ -6482,8 +6511,8 @@ const isToday =
   const pickupAddrShort = shortAddr(order.상차지주소 || "");
   const dropAddrShort = shortAddr(order.하차지주소 || "");
 
-const pickupTime = order.상차시간 || "시간 없음";
-const dropTime = order.하차시간 || "시간 없음";
+const pickupTime = order.상차시간 ? fmtDispatchTimeM(order.상차시간, order.상차시간기준 || order.상차시간구분) : "시간 없음";
+const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order.하차시간기준 || order.하차시간구분) : "시간 없음";
 
 
   const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
@@ -6725,9 +6754,15 @@ const dropTime = order.하차시간 || "시간 없음";
   </button>
 
   {state === "배차완료" ? (
-    <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{state}</span>
+    <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{displayLabel}</span>
   ) : (
-    <span className={"badge-dispatching px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{state}</span>
+    <span className={"badge-dispatching px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{displayLabel}</span>
+  )}
+  {isPendingShipperConfirm && (
+    <button onClick={confirmShipperOrder}
+      className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-[#1B2B4B]">
+      확인
+    </button>
   )}
   </div>
 </div>
@@ -7284,16 +7319,23 @@ function MobileOrderDetail({
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
   const state = getStatus(order);
+  const isPendingShipperConfirm = state !== "배차완료" && order.화주사확인대기 === true;
+  const displayLabel = isPendingShipperConfirm ? "배차요청" : state;
+  const confirmShipperOrder = async () => {
+    try {
+      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차중전환일시: Date.now() });
+    } catch {}
+  };
 const [localDelivered, setLocalDelivered] = React.useState(
     order?.업체전달상태 === "전달완료" || order?.정보전달완료 === true
   );
   const isDelivered = localDelivered;
 
 const pickupTimeText = order.상차시간
-    ? `${order.상차시간}${order.상차시간기준 ? ` ${order.상차시간기준}` : ""}`
+    ? fmtDispatchTimeM(order.상차시간, order.상차시간기준 || order.상차시간구분)
     : "";
   const dropTimeText = order.하차시간
-    ? `${order.하차시간}${order.하차시간기준 ? ` ${order.하차시간기준}` : ""}`
+    ? fmtDispatchTimeM(order.하차시간, order.하차시간기준 || order.하차시간구분)
     : "";
   const 상차일시 = order.상차일시 || [order.상차일, pickupTimeText].filter(Boolean).join(" ");
   const 하차일시 = order.하차일시 || [order.하차일, dropTimeText].filter(Boolean).join(" ");
@@ -7610,12 +7652,20 @@ const handleAssignClick = () => {
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-0.5">
               <div className="text-[13px] font-bold text-gray-900 flex-1 min-w-0">{order.상차지명 || "-"}</div>
-              <div className="shrink-0 flex flex-col items-end">
+              <div className="shrink-0 flex flex-col items-end gap-1">
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                  cardVersionB
+                  isPendingShipperConfirm
+                    ? "bg-amber-100 text-amber-700 border-amber-300 badge-dispatching"
+                    : cardVersionB
                     ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-white")
                     : (state === "배차완료" ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-600 border-blue-200")
-                }`}>{state}</span>
+                }`}>{displayLabel}</span>
+                {isPendingShipperConfirm && (
+                  <button onClick={confirmShipperOrder}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-[#1B2B4B]">
+                    확인
+                  </button>
+                )}
                 {state === "배차완료" && order.배차완료일시?.seconds && (
                   <span className="text-[9px] text-gray-400 mt-0.5">
                     {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}

@@ -883,7 +883,8 @@ export default function ShipperStatus() {
                           취소요청중
                         </span>
                       ) : (
-                        <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
+                        <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}
+                          style={(getStatus(o) === "요청" || getStatus(o) === "배차중") ? { animation: "cancelReqBlink 1.6s ease-in-out infinite" } : {}}>{st.label}</span>
                       )}
                     </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
