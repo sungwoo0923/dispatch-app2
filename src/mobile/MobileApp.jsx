@@ -1070,6 +1070,11 @@ const quickRange = (days) => {
 
   const [toast, setToast] = useState("");
   const [toastMuted, setToastMuted] = useState(false);
+  const [topOrderBanner, setTopOrderBanner] = useState(null); // { text }
+  const showTopOrderBanner = (text) => {
+    setTopOrderBanner({ text });
+    setTimeout(() => setTopOrderBanner((p) => (p?.text === text ? null : p)), 6000);
+  };
   const [quickAssignTarget, setQuickAssignTarget] = useState(null);
   const [successBanner, setSuccessBanner] = useState(null);
 
@@ -1229,6 +1234,9 @@ collections.forEach((name) => {
             `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""}`
           );
           addNotification("등록", data);
+          if (data.source === "shipper" || data.source === "shipper_mobile") {
+            showTopOrderBanner(`${data.거래처명 || "화주사"}에서 신규 오더를 등록했습니다. (${data.상차지명 || "-"} → ${data.하차지명 || "-"})`);
+          }
         }
 
         if (change.type === "modified") {
@@ -1252,6 +1260,9 @@ collections.forEach((name) => {
               `${data.거래처명 || ""} ${data.상차지명 || ""} → ${data.하차지명 || ""}`
             );
             addNotification("취소", data);
+            if (data.source === "shipper" || data.source === "shipper_mobile") {
+              showTopOrderBanner(`${data.거래처명 || "화주사"} 오더가 취소되었습니다. (${data.상차지명 || "-"} → ${data.하차지명 || "-"})`);
+            }
           }
         }
 
@@ -2282,6 +2293,19 @@ const groupedByDate = useMemo(() => {
       _lastModified: Date.now(),
     };
 
+    // 🔒 화주사가 등록한 오더는 PC와 동일하게 최고관리자 외에는 결제정보/기사배정 외 필드를 수정할 수 없다
+    if (form._editId) {
+      const isShipperOrder = selectedOrder?.source === "shipper" || selectedOrder?.source === "shipper_mobile";
+      if (isShipperOrder && role !== "totalMaster") {
+        const editableKeys = ["청구운임", "기사운임", "수수료", "산재보험료", "차량번호", "기사명", "전화번호", "이름", "전화", "배차상태", "상태", "updatedAt", "_lastModified"];
+        Object.keys(docData).forEach((k) => {
+          if (!editableKeys.includes(k) && selectedOrder && selectedOrder[k] !== undefined) {
+            docData[k] = selectedOrder[k];
+          }
+        });
+      }
+    }
+
     // 🔹 수정 모드
     if (form._editId) {
       await updateDoc(doc(db, selectedOrder.__col, form._editId), {
@@ -2478,6 +2502,12 @@ const handleOrderDuplicateWithDriver = (order) => {
 
 const deleteSingleOrder = async (order) => {
   if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
+  const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
+  const isDispatched = !!(order.차량번호 && order.차량번호.trim());
+  if (isShipperOrder && isDispatched && role !== "totalMaster") {
+    alert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+    return;
+  }
   const col = order.__col || collName;
   const id = order.id || order._id;
   if (!col || !id) return;
@@ -2630,6 +2660,15 @@ const deleteSingleOrder = async (order) => {
 
   const deleteSelectedOrders = async (selectedOrders) => {
     if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
+    const blocked = selectedOrders.some(order => {
+      const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
+      const isDispatched = !!(order.차량번호 && order.차량번호.trim());
+      return isShipperOrder && isDispatched;
+    });
+    if (blocked && role !== "totalMaster") {
+      alert("화주사가 등록한 오더는 배차 완료 후에는 삭제할 수 없습니다. (최고관리자만 가능)");
+      return;
+    }
     if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.`)) return;
     try {
       for (const order of selectedOrders) {
@@ -2707,6 +2746,16 @@ const title =
             : "1.25rem",  // 아주 크게
       }}
     >
+      {/* 화주사 오더 등록/취소 상단 배너 (FCM 왕복과 무관하게 Firestore 변경 감지로 즉시 표시) */}
+      {topOrderBanner && (
+        <div className="fixed top-0 left-0 right-0 z-[9998] px-4 py-3 text-white text-sm font-semibold shadow-lg cursor-pointer"
+          style={{ background: "#1B2B4B", animation: "bannerDownMT 0.25s ease-out" }}
+          onClick={() => setTopOrderBanner(null)}>
+          {topOrderBanner.text}
+        </div>
+      )}
+      <style>{`@keyframes bannerDownMT { from { transform: translateY(-100%); } to { transform: translateY(0); } }`}</style>
+
       {/* 🔔 토스트 알림 */}
       {toast && (
   <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50
@@ -3893,6 +3942,7 @@ setOpenMemo={setOpenMemo}
             upsertDriver={upsertDriver}
             orders={orders}
             cardVersionB={cardVersionB}
+            role={role}
           />
         )}
 
@@ -7310,6 +7360,7 @@ function MobileOrderDetail({
       전화번호: order.전화번호 || "",
       경유상차목록: order.경유상차목록 || [],
       경유하차목록: order.경유하차목록 || [],
+      source: order.source || "",
       _editId: order.id,
       _returnToDetail: true,
       _pendingContactItems,
@@ -7603,6 +7654,7 @@ const handleAssignClick = () => {
       기사명: name || "", 전화번호: phone || "",
       경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
       경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
+      source: order.source || "",
       _editId: order.id, _returnToDetail: true, _pendingContactItems,
     });
   };
@@ -8990,7 +9042,11 @@ function MobileOrderForm({
   upsertDriver,
   orders = [],
   cardVersionB = false,
+  role,
 }) {
+    const isLockedShipperEdit = !!form._editId &&
+      (form.source === "shipper" || form.source === "shipper_mobile") &&
+      role !== "totalMaster";
     const handleSwapPickupDrop = () => {
     setForm((prev) => ({
       ...prev,
@@ -9620,6 +9676,11 @@ const pickDrop = (c) => {
 
   return (
     <div className="px-4 py-3 space-y-3">
+      {isLockedShipperEdit && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-800 font-semibold">
+          화주사가 등록한 오더입니다. 배차 관련 정보(차량/기사/운임)만 수정할 수 있으며, 주소·시간·화물 정보는 변경할 수 없습니다.
+        </div>
+      )}
       {/* 음성 등록 버튼 */}
       {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
         <button
