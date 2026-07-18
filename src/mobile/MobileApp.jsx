@@ -389,6 +389,52 @@ const fmtM = (v) => {
   return `${n.toLocaleString()}원`;
 };
 
+// 디지털 다이얼 스타일 카운트업 숫자
+function DialNumber({ value, formatter = fmtM, duration = 700 }) {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = Number(value) || 0;
+    const start = performance.now();
+    let raf;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(from + (to - from) * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = to;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{formatter(display)}</>;
+}
+
+function IconCalendar({ className = "" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconChevronDown({ className = "" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconSearch({ className = "" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M20 20l-4.2-4.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // 경유지 배열 안전 파싱
 const safeParseStops = (raw) => {
   if (Array.isArray(raw) && raw.length > 0) return raw;
@@ -5355,146 +5401,169 @@ const summary = useMemo(() => {
       </div>
 
       {/* 날짜/퀵범위/필터 */}
-      <div className={`border-b px-4 pt-3 pb-3 space-y-2 overflow-hidden ${cardVersionB ? "bg-white" : "bg-white"}`}>
-        {/* KPI 요약 */}
-{cardVersionB ? (
-  <div className="flex border border-gray-200 rounded-xl overflow-hidden mt-2">
-    {[
-      { label: "청구", value: summary.totalClaim },
-      { label: "기사", value: summary.totalDriver },
-      { label: "수수료", value: summary.totalFee },
-    ].map(({ label, value }, i) => (
-      <div key={label} className={`flex-1 py-2.5 text-center ${i < 2 ? "border-r border-gray-200" : ""}`}>
-        <div className="text-[10px] text-gray-400 mb-0.5">{label}</div>
-        <div className="text-[13px] font-extrabold text-[#1B2B4B] whitespace-nowrap">{fmtM(value)}</div>
-      </div>
-    ))}
-  </div>
-) : (
-  <div className="grid grid-cols-3 gap-2 mt-2">
-    <div className="bg-blue-50 rounded-xl p-2 text-center">
-      <div className="text-[11px] text-gray-500">청구</div>
-      <div className="text-[12px] font-bold text-blue-700 whitespace-nowrap">{fmtM(summary.totalClaim)}</div>
-    </div>
-    <div className="bg-gray-100 rounded-xl p-2 text-center">
-      <div className="text-[11px] text-gray-500">기사</div>
-      <div className="text-[12px] font-bold text-gray-700 whitespace-nowrap">{fmtM(summary.totalDriver)}</div>
-    </div>
-    <div className="bg-green-50 rounded-xl p-2 text-center">
-      <div className="text-[11px] text-gray-500">수수료</div>
-      <div className="text-[12px] font-bold text-green-700 whitespace-nowrap">{fmtM(summary.totalFee)}</div>
-    </div>
-  </div>
-)}
-        <div className="flex items-center justify-between">
-  {/* 조회 기간 텍스트 */}
-  <div className="text-xs font-semibold text-gray-600">
-    {formatRangeShort(startDate, endDate)}
-  </div>
+      <div className="border-b px-4 pt-3 pb-3 space-y-2.5 overflow-hidden bg-white">
+        {(() => {
+          // KPI 다이얼 패널만 A/B 테마를 따르고(하나는 다크 네이비, 하나는 라이트),
+          // 그 아래 필터 영역은 페이지 배경이 항상 흰색이므로 공통 라이트 스타일을 사용한다.
+          const dt = cardVersionB
+            ? {
+                panel: "bg-gradient-to-br from-[#16233d] to-[#1B2B4B] shadow-lg shadow-[#1B2B4B]/20",
+                label: "text-white/40",
+                value: "text-white",
+                divider: "border-white/10",
+                glow: "0 0 10px rgba(120,170,255,0.35)",
+              }
+            : {
+                panel: "bg-gradient-to-br from-white to-[#f2f5fa] border border-gray-100 shadow-sm",
+                label: "text-gray-400",
+                value: "text-[#1B2B4B]",
+                divider: "border-gray-200",
+                glow: "none",
+              };
+          const segTrack = "bg-gray-100";
+          const segActive = "bg-white text-[#1B2B4B] shadow";
+          const segInactive = "text-gray-500";
+          const field = "bg-gray-50 text-gray-800 border border-gray-200 focus:border-[#1B2B4B]/30 focus:ring-[#1B2B4B]/10";
+          const icon = "text-gray-400";
+          const rangeText = "text-gray-500";
+          return (
+            <>
+              {/* KPI 디지털 다이얼 */}
+              <div className={`flex rounded-2xl overflow-hidden mt-2 py-3 ${dt.panel}`}>
+                {[
+                  { label: "청구", value: summary.totalClaim },
+                  { label: "기사", value: summary.totalDriver },
+                  { label: "수수료", value: summary.totalFee },
+                ].map(({ label, value }, i) => (
+                  <div key={label} className={`flex-1 text-center px-1 ${i > 0 ? `border-l ${dt.divider}` : ""}`}>
+                    <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 ${dt.label}`}>{label}</div>
+                    <div
+                      className={`text-[14px] font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
+                      style={{ fontFamily: "monospace", textShadow: dt.glow }}
+                    >
+                      <DialNumber value={value} />
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-  {/* 당일 / 내일 버튼 */}
-  <div className="flex gap-1">
-    <button
-      onClick={setTodayRange}
-      className={`px-2.5 py-0.5 text-[11px] font-semibold border transition ${
-        cardVersionB
-          ? "rounded-lg bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/20 hover:bg-[#1B2B4B]/10"
-          : "rounded-full bg-blue-50 text-blue-700 border-blue-300"
-      }`}
-    >
-      당일
-    </button>
-    <button
-      onClick={setTomorrowRange}
-      className={`px-2.5 py-0.5 text-[11px] font-semibold border transition ${
-        cardVersionB
-          ? "rounded-lg bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
-          : "rounded-full bg-indigo-50 text-indigo-700 border-indigo-300"
-      }`}
-    >
-      내일
-    </button>
-  </div>
-</div>
-        {/* 시작/종료 날짜 */}
-        <div className="flex items-center gap-2 text-sm">
-          <input
-            type="date"
-            className={`flex-1 border px-3 py-1.5 text-sm bg-gray-50 focus:outline-none focus:ring-1 ${
-              cardVersionB ? "rounded-lg focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B]/40" : "rounded-full"
-            }`}
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-          <span className="text-xs text-gray-400">~</span>
-          <input
-            type="date"
-            className={`flex-1 border px-3 py-1.5 text-sm bg-gray-50 focus:outline-none focus:ring-1 ${
-              cardVersionB ? "rounded-lg focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B]/40" : "rounded-full"
-            }`}
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-        </div>
+              {/* 조회기간 + 당일/내일 세그먼트 */}
+              <div className="flex items-center justify-between pt-0.5">
+                <div className={`text-[11px] font-semibold ${rangeText}`}>
+                  {formatRangeShort(startDate, endDate)}
+                </div>
+                <div className={`flex items-center gap-0.5 p-0.5 rounded-full ${segTrack}`}>
+                  <button
+                    onClick={setTodayRange}
+                    className={`px-3 py-1 text-[11px] font-bold rounded-full transition ${segActive}`}
+                  >
+                    당일
+                  </button>
+                  <button
+                    onClick={setTomorrowRange}
+                    className={`px-3 py-1 text-[11px] font-bold rounded-full transition ${segInactive}`}
+                  >
+                    내일
+                  </button>
+                </div>
+              </div>
 
-        {/* 차량종류 / 배차상태 드롭다운 */}
-        <div className="flex gap-2 text-sm">
-          <select
-            className={`flex-1 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
-            value={vehicleFilter}
-            onChange={(e) => setVehicleFilter(e.target.value)}
-          >
-            <option value="">차종 전체</option>
-            <option value="라보">라보</option>
-            <option value="다마스">다마스</option>
-            <option value="카고">카고</option>
-            <option value="윙바디">윙바디</option>
-            <option value="탑차">탑차</option>
-            <option value="냉장탑">냉장탑</option>
-            <option value="냉동탑">냉동탑</option>
-            <option value="냉장/냉동탑">냉장/냉동탑</option>
-            <option value="냉장/냉동윙">냉장/냉동윙</option>
-            <option value="오토바이">오토바이</option>
-          </select>
+              {/* 시작/종료 날짜 */}
+              <div className="flex items-center gap-2 text-sm">
+                <div className="relative flex-1">
+                  <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
+                  <input
+                    type="date"
+                    className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <span className={`text-xs ${icon}`}>~</span>
+                <div className="relative flex-1">
+                  <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
+                  <input
+                    type="date"
+                    className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
 
-          <select
-            className={`flex-1 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
-            value={assignFilter}
-            onChange={(e) => setAssignFilter(e.target.value)}
-          >
-            <option value="">배차 전체</option>
-            <option value="배차중">배차중</option>
-            <option value="배차완료">배차완료</option>
-          </select>
-        </div>
+              {/* 차량종류 / 배차상태 드롭다운 */}
+              <div className="flex gap-2 text-sm">
+                <div className="relative flex-1">
+                  <select
+                    className={`w-full appearance-none rounded-xl pl-3 pr-8 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    value={vehicleFilter}
+                    onChange={(e) => setVehicleFilter(e.target.value)}
+                  >
+                    <option value="">차종 전체</option>
+                    <option value="라보">라보</option>
+                    <option value="다마스">다마스</option>
+                    <option value="카고">카고</option>
+                    <option value="윙바디">윙바디</option>
+                    <option value="탑차">탑차</option>
+                    <option value="냉장탑">냉장탑</option>
+                    <option value="냉동탑">냉동탑</option>
+                    <option value="냉장/냉동탑">냉장/냉동탑</option>
+                    <option value="냉장/냉동윙">냉장/냉동윙</option>
+                    <option value="오토바이">오토바이</option>
+                  </select>
+                  <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
+                </div>
 
-        {/* 검색줄 */}
-        <div className="flex gap-2 text-sm">
-          <select
-            className={`w-28 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
-            value={searchType}
-            onChange={(e) => setSearchType(e.target.value)}
-          >
-            <option value="거래처명">거래처명</option>
-            <option value="기사명">기사명</option>
-            <option value="차량번호">차량번호</option>
-            <option value="상차지명">상차지명</option>
-            <option value="상차지주소">상차지주소</option>
-            <option value="하차지명">하차지명</option>
-            <option value="하차지주소">하차지주소</option>
-            <option value="메모">메모</option>
-          </select>
-          <input
-            className={`flex-1 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
-            placeholder={
-              searchType === "상차지주소" ? "상차지 주소 검색"
-              : searchType === "하차지주소" ? "하차지 주소 검색"
-              : "검색어 입력"
-            }
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-          />
-        </div>
+                <div className="relative flex-1">
+                  <select
+                    className={`w-full appearance-none rounded-xl pl-3 pr-8 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    value={assignFilter}
+                    onChange={(e) => setAssignFilter(e.target.value)}
+                  >
+                    <option value="">배차 전체</option>
+                    <option value="배차중">배차중</option>
+                    <option value="배차완료">배차완료</option>
+                  </select>
+                  <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
+                </div>
+              </div>
+
+              {/* 검색줄 */}
+              <div className="flex gap-2 text-sm">
+                <div className="relative w-28 shrink-0">
+                  <select
+                    className={`w-full appearance-none rounded-xl pl-3 pr-7 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    value={searchType}
+                    onChange={(e) => setSearchType(e.target.value)}
+                  >
+                    <option value="거래처명">거래처명</option>
+                    <option value="기사명">기사명</option>
+                    <option value="차량번호">차량번호</option>
+                    <option value="상차지명">상차지명</option>
+                    <option value="상차지주소">상차지주소</option>
+                    <option value="하차지명">하차지명</option>
+                    <option value="하차지주소">하차지주소</option>
+                    <option value="메모">메모</option>
+                  </select>
+                  <IconChevronDown className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
+                </div>
+                <div className="relative flex-1">
+                  <IconSearch className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
+                  <input
+                    className={`w-full rounded-xl pl-8 pr-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    placeholder={
+                      searchType === "상차지주소" ? "상차지 주소 검색"
+                      : searchType === "하차지주소" ? "하차지 주소 검색"
+                      : "검색어 입력"
+                    }
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                  />
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* ── 조회 건수 + 선택 버튼 바 ── */}
