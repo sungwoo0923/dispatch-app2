@@ -7,6 +7,7 @@ import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
 import southKorea from "@svg-maps/south-korea";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   LineChart,
   Line,
@@ -761,9 +762,29 @@ function getTransportBadgeInfo(order) {
   return { label, blink, isPending, isHold, ...s };
 }
 
-function TransportStatusBadge({ order, className = "", onClick }) {
+// A스타일 카드 전용 뱃지 색상 (기존 flat 톤 유지)
+const TP_FLAT_CLASS = {
+  배차완료: "bg-blue-600 text-white border-blue-600",
+  배차요청: "bg-amber-100 text-amber-700 border-amber-300",
+  요청보류: "bg-red-100 text-red-700 border-red-300",
+  배차중: "bg-gray-100 text-gray-600 border-gray-300",
+};
+
+function TransportStatusBadge({ order, className = "", onClick, flat = false }) {
   const { label, blink, dot, text, ring, isPending, isHold } = getTransportBadgeInfo(order);
   const clickable = isPending || isHold;
+
+  if (flat) {
+    return (
+      <span
+        onClick={clickable ? onClick : undefined}
+        className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap ${blink ? "badge-dispatching" : ""} ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${TP_FLAT_CLASS[label]} ${className}`}
+      >
+        {label}
+      </span>
+    );
+  }
+
   return (
     <span
       onClick={clickable ? onClick : undefined}
@@ -787,7 +808,7 @@ function TransportStatusBadge({ order, className = "", onClick }) {
 // 배차요청 승인/거절 팝업 (배차요청 뱃지 클릭 시) / 요청보류 안내 팝업
 function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
   const isHold = order.배차거절 === true && order.화주사확인대기 !== true;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
       <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -814,7 +835,8 @@ function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1843,6 +1865,14 @@ useEffect(() => {
 
 
   const [selectedOrder, setSelectedOrder] = useState(null);
+  // 상세보기가 열려있는 동안 다른 경로(화주사 재요청/거절 등)로 문서가 바뀌어도
+  // selectedOrder는 진입 시점의 스냅샷이라 반영되지 않는다 — 실시간 orders와 동기화한다.
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const id = selectedOrder.id || selectedOrder._id;
+    const latest = orders.find((o) => (o.id || o._id) === id);
+    if (latest) setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
+  }, [orders]);
   const [openMemo, setOpenMemo] = useState(null);
   const [deleteConfirmMobile, setDeleteConfirmMobile] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
@@ -6690,7 +6720,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         onClick={onSelect}
       >
         {/* 상단 정보 바 */}
-        <div className={`px-3 py-1.5 flex items-center justify-between ${state === "배차완료" ? "bg-[#1B2B4B]/5" : "bg-gray-50/80"}`}>
+        <div className="px-3 py-1.5 flex items-center justify-between" style={{ background: "linear-gradient(90deg, rgba(30,58,95,0.06), rgba(30,58,95,0.01))" }}>
           <div className="flex items-center gap-1.5">
             <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
             {isCancelRequested && (
@@ -6703,7 +6733,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
             )}
             {isCold && (
-              <span className="text-[0.68em] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+              <span className="text-[0.68em] text-[#1B2B4B] font-bold bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 px-1.5 py-0.5 rounded">
                 {(() => {
                   const vt = String(order.차량종류 || order.차종 || "");
                   const hasCold = vt.includes("냉장") && vt.includes("냉동");
@@ -6712,7 +6742,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               </span>
             )}
             {isUrgentOrder(order) && (
-              <span className="text-[0.68em] font-bold text-red-500">긴급</span>
+              <span className="text-[0.68em] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">긴급</span>
             )}
             {String(order.운행유형 || "").trim() === "왕복" && (
               <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded">왕복</span>
@@ -6722,7 +6752,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             <button
               style={{ touchAction: "manipulation" }}
               onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-              className={`flex items-center gap-0.5 text-[0.68em] font-semibold ${
+              className={`flex items-center gap-0.5 text-[0.68em] font-semibold tabular-nums ${
                 order.attachCount > 0
                   ? (order.attachViewed ? "text-[#1B2B4B]" : "text-emerald-600")
                   : "text-gray-300"
@@ -6739,7 +6769,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 메모
               </button>
             )}
-            <span className="text-[0.68em] text-gray-400">{String(order.상차일 || "").slice(5)}</span>
+            <span className="text-[0.68em] text-gray-400 tabular-nums">{String(order.상차일 || "").slice(5)}</span>
           </div>
         </div>
 
@@ -6749,8 +6779,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           <div className="flex items-stretch gap-2">
             <div className="flex flex-col items-center shrink-0 py-0.5">
               <div className="w-2 h-2 rounded-full border-2 border-[#1B2B4B] bg-white mt-1.5" />
-              <div className="w-px flex-1 min-h-[20px] bg-gray-200 my-0.5" />
-              <div className="w-2 h-2 rounded-full bg-gray-300 mb-1.5" />
+              <div className="w-px flex-1 min-h-[20px] bg-[#1B2B4B]/15 my-0.5" />
+              <div className="w-2 h-2 rounded-full bg-[#1B2B4B]/40 mb-1.5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1.5">
@@ -6761,8 +6791,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[0.75em] text-gray-500">{pickupTime}</span>
-                  {pickupStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
+                  <span className="text-[0.75em] text-gray-500 tabular-nums">{pickupTime}</span>
+                  {pickupStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
                 </div>
               </div>
               {(() => {
@@ -6784,8 +6814,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[0.75em] text-gray-500">{dropTime}</span>
-                  {dropStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
+                  <span className="text-[0.75em] text-gray-500 tabular-nums">{dropTime}</span>
+                  {dropStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
                 </div>
               </div>
             </div>
@@ -6796,15 +6826,21 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             <span className="text-[0.72em] text-gray-500 truncate leading-relaxed">
               {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
             </span>
-            <div className="flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded-lg bg-gray-50 border border-gray-100">
+            <div
+              className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg"
+              style={{
+                background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
+              }}
+            >
               <span className="flex items-baseline gap-0.5">
-                <span className="text-[0.68em] text-gray-400 font-semibold">청구</span>
-                <span className="text-[0.82em] font-bold text-gray-700">{fmtMoney(claim)}</span>
+                <span className="text-[0.62em] text-white/50 font-semibold">청구</span>
+                <span className="text-[0.85em] font-bold text-white tabular-nums">{fmtMoney(claim)}</span>
               </span>
-              <span className="w-px h-2.5 bg-gray-200" />
+              <span className="w-px h-2.5 bg-white/20" />
               <span className="flex items-baseline gap-0.5">
-                <span className="text-[0.68em] text-gray-400 font-semibold">기사</span>
-                <span className="text-[0.82em] font-bold text-[#1B2B4B]">{fmtMoney(fee)}</span>
+                <span className="text-[0.62em] text-white/50 font-semibold">기사</span>
+                <span className="text-[0.85em] font-bold text-amber-300 tabular-nums">{fmtMoney(fee)}</span>
               </span>
             </div>
           </div>
@@ -6899,7 +6935,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     {(order.attachCount > 0) ? order.attachCount : "없음"}
   </button>
 
-  <TransportStatusBadge order={order} className="text-[11px]" onClick={openReqModal} />
+  <TransportStatusBadge order={order} className="text-[11px]" onClick={openReqModal} flat />
   {isCancelRequested && (
     <button onClick={approveCancelDelete}
       className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-orange-500 badge-dispatching">
@@ -7822,7 +7858,7 @@ const handleAssignClick = () => {
             <div className="flex items-start justify-between gap-2 mb-0.5">
               <div className="text-[13px] font-bold text-gray-900 flex-1 min-w-0">{order.상차지명 || "-"}</div>
               <div className="shrink-0 flex flex-col items-end gap-1">
-                <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} />
+                <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
                 {isCancelRequested && (
                   <button onClick={approveCancelDelete}
                     className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-orange-500 badge-dispatching">
