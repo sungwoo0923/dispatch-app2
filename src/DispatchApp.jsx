@@ -18362,6 +18362,12 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
                       />
                     )}
+                    {r.최종수정출처 === "shipper" && (Date.now() - (typeof r.최종수정일시 === "number" ? r.최종수정일시 : (r.최종수정일시?.seconds ? r.최종수정일시.seconds * 1000 : 0))) < 1000 * 60 * 60 * 48 && (
+                      <span
+                        title="화주사가 오더 정보를 수정했습니다"
+                        className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
+                      />
+                    )}
                   </div>
                   </td>
                   {/* 청구운임 */}
@@ -20176,7 +20182,7 @@ value={copyTarget?.화물수량 || ""}
               <label>거래처명</label>
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                disabled={editTarget?.source === "shipper"}
                 value={editTarget.거래처명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -20277,7 +20283,7 @@ value={copyTarget?.화물수량 || ""}
     <input
       type="date"
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+      disabled={editTarget?.source === "shipper"}
       value={editTarget.상차일 || ""}
       onChange={(e) =>
         setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
@@ -20293,11 +20299,11 @@ value={copyTarget?.화물수량 || ""}
         value={editTarget.상차시간 || ""}
         onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
         selectCls="border p-2 rounded flex-1 min-w-0"
-        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+        disabled={editTarget?.source === "shipper"}
       />
       <select
         className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
-        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+        disabled={editTarget?.source === "shipper"}
         value={editTarget.상차시간기준 || ""}
         onChange={(e) =>
           setEditTarget((p) => ({ ...p, 상차시간기준: e.target.value }))
@@ -20316,7 +20322,7 @@ value={copyTarget?.화물수량 || ""}
     <input
       type="date"
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+      disabled={editTarget?.source === "shipper"}
       value={editTarget.하차일 || ""}
       onChange={(e) =>
         setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
@@ -20332,11 +20338,11 @@ value={copyTarget?.화물수량 || ""}
         value={editTarget.하차시간 || ""}
         onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
         selectCls="border p-2 rounded flex-1 min-w-0"
-        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+        disabled={editTarget?.source === "shipper"}
       />
       <select
         className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
-        disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+        disabled={editTarget?.source === "shipper"}
         value={editTarget.하차시간기준 || ""}
         onChange={(e) =>
           setEditTarget((p) => ({ ...p, 하차시간기준: e.target.value }))
@@ -20358,7 +20364,7 @@ value={copyTarget?.화물수량 || ""}
               <label>상차지명</label>
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                disabled={editTarget?.source === "shipper"}
                 value={editTarget.상차지명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -20446,7 +20452,7 @@ value={copyTarget?.화물수량 || ""}
               <label>상차지주소</label>
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                disabled={editTarget?.source === "shipper"}
                 value={editTarget.상차지주소 || ""}
                 onChange={(e) =>
                   setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
@@ -20456,15 +20462,15 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">상차지 담당자</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper"} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차지 연락처</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper"} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
-                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
+                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper"} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
@@ -20505,7 +20511,7 @@ value={copyTarget?.화물수량 || ""}
 
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                disabled={editTarget?.source === "shipper"}
                 value={editTarget.하차지명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -20593,7 +20599,7 @@ value={copyTarget?.화물수량 || ""}
               <label>하차지주소</label>
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                disabled={editTarget?.source === "shipper"}
                 value={editTarget.하차지주소 || ""}
                 onChange={(e) =>
                   setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
@@ -20603,15 +20609,15 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">하차지 담당자</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper"} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차지 연락처</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
+                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper"} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
-                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper" && role !== "totalMaster"} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
+                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={editTarget?.source === "shipper"} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
@@ -20661,7 +20667,7 @@ value={copyTarget?.화물수량 || ""}
   {/* 입력 */}
   <input
     className="border p-2 rounded w-full pr-[110px] disabled:bg-gray-100 disabled:text-gray-400"
-    disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+    disabled={editTarget?.source === "shipper"}
     value={editTarget.화물수량 || ""}
     onChange={(e) => {
       const v = e.target.value;
@@ -20677,7 +20683,7 @@ value={copyTarget?.화물수량 || ""}
 
     <select
       className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
-      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+      disabled={editTarget?.source === "shipper"}
       value={editTarget.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -20709,7 +20715,7 @@ value={copyTarget?.화물수량 || ""}
     <label>차량종류</label>
     <select
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+      disabled={editTarget?.source === "shipper"}
       value={editTarget.차량종류 || ""}
       onChange={(e) =>
         setEditTarget((p) => ({
@@ -20744,7 +20750,7 @@ value={copyTarget?.화물수량 || ""}
     {/* 🔹 입력창 */}
     <input
       className="border p-2 rounded w-full pr-[70px] disabled:bg-gray-100 disabled:text-gray-400"
-      disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+      disabled={editTarget?.source === "shipper"}
       value={editTarget.톤수값 || ""}
       onChange={(e) => {
   const v = e.target.value;
@@ -20765,7 +20771,7 @@ value={copyTarget?.화물수량 || ""}
 
 <select
   className="h-full px-2 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
-  disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+  disabled={editTarget?.source === "shipper"}
         value={
           editTarget.차량톤수?.includes("kg")
             ? "kg"
@@ -21080,7 +21086,7 @@ value={copyTarget?.화물수량 || ""}
                 <label>배차방식</label>
                 <select
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                  disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                  disabled={editTarget?.source === "shipper"}
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
@@ -26548,7 +26554,7 @@ return (
   >
 
     {/* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */}
-    {key === "차량종류" && (row.source === "shipper" && role !== "totalMaster") ? (
+    {key === "차량종류" && (row.source === "shipper") ? (
       row.차량종류 || "-"
 
     ) : key === "차량종류" ? (
@@ -26578,7 +26584,7 @@ return (
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
 
-    ) : editMode && selected.has(id) && editableKeys.includes(key) && !(row.source === "shipper" && role !== "totalMaster") ? (
+    ) : editMode && selected.has(id) && editableKeys.includes(key) && !(row.source === "shipper") ? (
       <div className="relative w-full">
         <input
           className="border rounded px-1 py-0.5 w-full text-center"
@@ -26751,6 +26757,12 @@ return (
                         }}
                         className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                      />
+                    )}
+                    {row.최종수정출처 === "shipper" && (Date.now() - (typeof row.최종수정일시 === "number" ? row.최종수정일시 : (row.최종수정일시?.seconds ? row.최종수정일시.seconds * 1000 : 0))) < 1000 * 60 * 60 * 48 && (
+                      <span
+                        title="화주사가 오더 정보를 수정했습니다"
+                        className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
                       />
                     )}
                   </div>
@@ -26962,7 +26974,7 @@ return (
               <label>거래처명</label>
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                disabled={editTarget?.source === "shipper"}
                 value={editTarget.거래처명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -27823,7 +27835,7 @@ return (
                 <label>배차방식</label>
                 <select
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                  disabled={editTarget?.source === "shipper" && role !== "totalMaster"}
+                  disabled={editTarget?.source === "shipper"}
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))

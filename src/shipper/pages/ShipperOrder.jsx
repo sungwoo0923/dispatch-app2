@@ -11,6 +11,7 @@ import {
   query,
   where,
   limit,
+  arrayUnion,
 } from "firebase/firestore";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -43,6 +44,27 @@ const parseTonnage = (val = "") => {
   if (ton) return { num: ton[1].replace("톤", ""), unit: "톤" };
   return { num: val, unit: "없음" };
 };
+
+// 수정이력 추적 대상 필드 (운송사 앱(DispatchApp.jsx)의 history 배열과 동일 포맷을 공유한다)
+const HISTORY_TRACKED_FIELDS = [
+  "상차지명", "상차지주소", "상차담당자명", "상차담당자번호",
+  "하차지명", "하차지주소", "하차담당자명", "하차담당자번호",
+  "차량종류", "차량톤수", "화물내용",
+  "상차방법", "하차방법", "지급방식",
+  "상차일", "상차시간", "하차일", "하차시간",
+];
+function buildHistoryEntries(prev, next, userEmail) {
+  const entries = [];
+  HISTORY_TRACKED_FIELDS.forEach((f) => {
+    if (!(f in (next || {}))) return;
+    const before = prev?.[f] ?? "";
+    const after = next?.[f] ?? "";
+    if (String(before) !== String(after)) {
+      entries.push({ at: Date.now(), user: userEmail || "unknown", field: f, before, after });
+    }
+  });
+  return entries;
+}
 
 const getDate = (offset = 0) => {
   const d = new Date();
@@ -375,8 +397,10 @@ export default function ShipperOrder({ editData, onClose }) {
       파렛트사요약: buildPalletSummary(cargoRows),
     };
     if (editId || editData?.id) {
+      const historyEntries = buildHistoryEntries(editData, saveForm, user?.email);
       await updateDoc(doc(db, "orders", editId || editData.id), {
         ...saveForm,
+        ...(historyEntries.length > 0 ? { history: arrayUnion(...historyEntries) } : {}),
         updatedAt: serverTimestamp(),
         최종수정출처: "shipper",
         최종수정일시: serverTimestamp(),

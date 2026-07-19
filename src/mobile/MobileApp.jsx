@@ -34,6 +34,7 @@ import {
   where,
   setDoc,
   getDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -742,12 +743,34 @@ const getStatus = (o = {}) => {
   return car ? "배차완료" : "배차중";
 };
 
+// 수정이력 추적 대상 필드 (PC DispatchApp.jsx의 history 배열과 동일 포맷을 공유한다)
+const HISTORY_TRACKED_FIELDS = [
+  "상차지명", "상차지주소", "상차지담당자", "상차지담당자번호",
+  "하차지명", "하차지주소", "하차지담당자", "하차지담당자번호",
+  "차종", "차량종류", "톤수", "차량톤수", "화물내용",
+  "상차방법", "하차방법", "지급방식", "배차방식", "혼적여부",
+  "상차일", "상차시간", "하차일", "하차시간",
+  "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "산재보험료",
+];
+function buildHistoryEntries(prev, next, userEmail) {
+  const entries = [];
+  HISTORY_TRACKED_FIELDS.forEach((f) => {
+    if (!(f in (next || {}))) return;
+    const before = prev?.[f] ?? "";
+    const after = next?.[f] ?? "";
+    if (String(before) !== String(after)) {
+      entries.push({ at: Date.now(), user: userEmail || "unknown", field: f, before, after });
+    }
+  });
+  return entries;
+}
+
 // 운송사 앱 상태뱃지 색상 (화주사 앱과 동일한 네이비 디지털 톤)
 const TP_STATUS_DOT = {
-  배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)" },
-  배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)" },
-  요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
-  배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)" },
+  배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)", wash: "rgba(96,165,250,0.06)" },
+  배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)", wash: "rgba(251,191,36,0.08)" },
+  요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)", wash: "rgba(248,113,113,0.08)" },
+  배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)", wash: "rgba(52,211,153,0.06)" },
 };
 
 function getTransportBadgeInfo(order) {
@@ -834,6 +857,40 @@ function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
             </button>
           </div>
         )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// 수정이력 뷰어 (PC DispatchApp.jsx와 동일한 history 배열 포맷을 사용)
+function HistoryViewerModal({ history = [], onClose }) {
+  const items = [...history].filter(h => h && h.field).reverse();
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-t-3xl max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+        <div className="px-4 pb-2 flex items-center justify-between shrink-0">
+          <div className="font-bold text-[15px] text-gray-800">수정이력</div>
+          <button onClick={onClose} className="text-gray-400 text-lg">×</button>
+        </div>
+        <div className="px-4 pb-6 overflow-y-auto space-y-2">
+          {items.length === 0 && <div className="text-center text-gray-400 text-sm py-8">수정이력이 없습니다.</div>}
+          {items.map((h, i) => (
+            <div key={i} className="border-b border-gray-100 pb-2 last:border-b-0">
+              <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-0.5">
+                <span>{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                <span>{h.user}</span>
+              </div>
+              <div className="text-[13px] text-gray-700">
+                <span className="font-bold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음") || "없음"}</span> → <span className="font-bold text-[#1B2B4B]">{String(h.after ?? "없음") || "없음"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>,
     document.body
@@ -2416,10 +2473,10 @@ const groupedByDate = useMemo(() => {
       _lastModified: Date.now(),
     };
 
-    // 🔒 화주사가 등록한 오더는 PC와 동일하게 최고관리자 외에는 결제정보/기사배정 외 필드를 수정할 수 없다
+    // 🔒 화주사가 등록한 오더는 운송사에서 결제정보/기사배정 외 필드를 수정할 수 없다 (예외 없음)
     if (form._editId) {
       const isShipperOrder = selectedOrder?.source === "shipper" || selectedOrder?.source === "shipper_mobile";
-      if (isShipperOrder && role !== "totalMaster") {
+      if (isShipperOrder) {
         const editableKeys = ["청구운임", "기사운임", "수수료", "산재보험료", "차량번호", "기사명", "전화번호", "이름", "전화", "배차상태", "상태", "updatedAt", "_lastModified"];
         Object.keys(docData).forEach((k) => {
           if (!editableKeys.includes(k) && selectedOrder && selectedOrder[k] !== undefined) {
@@ -2431,6 +2488,11 @@ const groupedByDate = useMemo(() => {
       if (isShipperOrder) {
         docData.최종수정출처 = "transport";
         docData.최종수정일시 = serverTimestamp();
+      }
+      // 수정이력 기록 (PC와 동일 포맷: {at, user, field, before, after})
+      const historyEntries = buildHistoryEntries(selectedOrder, docData, auth.currentUser?.email);
+      if (historyEntries.length > 0) {
+        docData.history = arrayUnion(...historyEntries);
       }
     }
 
@@ -6654,7 +6716,8 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
-  const { isPending: isPendingShipperConfirm } = getTransportBadgeInfo(order);
+  const { isPending: isPendingShipperConfirm, dot: statusDot, wash: statusWash } = getTransportBadgeInfo(order);
+  const isRecentlyEditedByShipper = order.최종수정출처 === "shipper" && (Date.now() - toMillis(order.최종수정일시)) < 1000 * 60 * 60 * 48;
   const [showReqModal, setShowReqModal] = useState(false);
   const openReqModal = (e) => {
     e.stopPropagation();
@@ -6720,24 +6783,23 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     String(order.차량종류 || order.차종 || "").includes("냉동");
 
   if (cardVersionB) {
-    // ── B VERSION: Minimal, clean design ──
+    // ── B VERSION: 상태 액센트 + 디지털 포인트 디자인 ──
     return (
       <>
       <div
         className={
-          "relative bg-white rounded-xl border transition-colors overflow-hidden " +
+          "relative bg-white rounded-2xl border shadow-sm transition-colors overflow-hidden " +
           (selected
             ? "border-[#1B2B4B] shadow-[0_0_0_2px_rgba(27,43,75,0.12)]"
             : flash
               ? "border-blue-300 shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
-              : isToday
-                ? "border-l-4 border-l-[#1B2B4B] border-t-gray-200 border-r-gray-200 border-b-gray-200"
-                : "border-gray-200")
+              : "border-gray-100")
         }
+        style={{ borderLeft: `4px solid ${statusDot}` }}
         onClick={onSelect}
       >
         {/* 상단 정보 바 */}
-        <div className="px-3 py-1.5 flex items-center justify-between" style={{ background: "linear-gradient(90deg, rgba(30,58,95,0.06), rgba(30,58,95,0.01))" }}>
+        <div className="px-3 py-1.5 flex items-center justify-between" style={{ background: `linear-gradient(90deg, ${statusWash}, transparent)` }}>
           <div className="flex items-center gap-1.5">
             <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
             {isCancelRequested && (
@@ -6745,6 +6807,9 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 className="px-1.5 py-0.5 rounded-full text-[0.68em] font-bold text-white bg-orange-500 badge-dispatching">
                 취소승인
               </button>
+            )}
+            {isRecentlyEditedByShipper && (
+              <span className="text-[0.68em] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded">화주사 수정</span>
             )}
             {order.거래처명 && (
               <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
@@ -6795,9 +6860,9 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           {/* 상/하차 */}
           <div className="flex items-stretch gap-2">
             <div className="flex flex-col items-center shrink-0 py-0.5">
-              <div className="w-2 h-2 rounded-full border-2 border-[#1B2B4B] bg-white mt-1.5" />
-              <div className="w-px flex-1 min-h-[20px] bg-[#1B2B4B]/15 my-0.5" />
-              <div className="w-2 h-2 rounded-full bg-[#1B2B4B]/40 mb-1.5" />
+              <div className="w-2 h-2 rounded-full border-2 bg-white mt-1.5" style={{ borderColor: statusDot }} />
+              <div className="w-px flex-1 min-h-[20px] bg-gray-200 my-0.5" />
+              <div className="w-2 h-2 rounded-full mb-1.5" style={{ background: statusDot, opacity: 0.5 }} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1.5">
@@ -6958,6 +7023,9 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-orange-500 badge-dispatching">
       취소승인
     </button>
+  )}
+  {isRecentlyEditedByShipper && (
+    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-300">화주사 수정</span>
   )}
   </div>
 </div>
@@ -7248,6 +7316,7 @@ function MobileOrderDetail({
   const [confirmDeliver, setConfirmDeliver] = useState(false);
   const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
   const [expandMemo, setExpandMemo] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [smartMatched, setSmartMatched] = useState([]);
   const [driverConflictPopup, setDriverConflictPopup] = useState(null);
@@ -7862,6 +7931,18 @@ const handleAssignClick = () => {
             {order.전달사항}
           </div>
         </div>
+      )}
+      {Array.isArray(order.history) && order.history.length > 0 && (
+        <button
+          onClick={() => setShowHistory(true)}
+          className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 mt-2 text-[12px] font-bold text-gray-500"
+        >
+          <span>수정이력 ({order.history.length})</span>
+          <span className="text-gray-400">보기 &gt;</span>
+        </button>
+      )}
+      {showHistory && (
+        <HistoryViewerModal history={order.history} onClose={() => setShowHistory(false)} />
       )}
     </div>
 
@@ -9212,8 +9293,7 @@ function MobileOrderForm({
   role,
 }) {
     const isLockedShipperEdit = !!form._editId &&
-      (form.source === "shipper" || form.source === "shipper_mobile") &&
-      role !== "totalMaster";
+      (form.source === "shipper" || form.source === "shipper_mobile");
     const handleSwapPickupDrop = () => {
     setForm((prev) => ({
       ...prev,
