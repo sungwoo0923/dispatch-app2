@@ -397,14 +397,25 @@ export default function ShipperOrder({ editData, onClose }) {
       파렛트사요약: buildPalletSummary(cargoRows),
     };
     if (editId || editData?.id) {
-      const historyEntries = buildHistoryEntries(editData, saveForm, user?.email);
-      await updateDoc(doc(db, "orders", editId || editData.id), {
-        ...saveForm,
-        ...(historyEntries.length > 0 ? { history: arrayUnion(...historyEntries) } : {}),
-        updatedAt: serverTimestamp(),
-        최종수정출처: "shipper",
-        최종수정일시: serverTimestamp(),
-      });
+      const isDispatched = !!editData?.차량번호;
+      if (isDispatched) {
+        await updateDoc(doc(db, "orders", editId || editData.id), {
+          수정요청: true,
+          수정요청데이터: saveForm,
+          수정요청일시: serverTimestamp(),
+          수정요청자: user?.email || "",
+          수정거절: false,
+        });
+      } else {
+        const historyEntries = buildHistoryEntries(editData, saveForm, user?.email);
+        await updateDoc(doc(db, "orders", editId || editData.id), {
+          ...saveForm,
+          ...(historyEntries.length > 0 ? { history: arrayUnion(...historyEntries) } : {}),
+          updatedAt: serverTimestamp(),
+          최종수정출처: "shipper",
+          최종수정일시: serverTimestamp(),
+        });
+      }
     } else {
       await addDoc(collection(db, "orders"), {
         ...saveForm,
@@ -424,7 +435,7 @@ export default function ShipperOrder({ editData, onClose }) {
     }
 
     if (editId || editData) {
-      alert("수정 완료");
+      alert(editData?.차량번호 ? "수정요청을 전송했습니다. 운송사 승인 후 반영됩니다." : "수정 완료");
       onClose ? onClose() : navigate("/shipper/status");
     } else {
       try { localStorage.removeItem("shipperOrderDraft"); } catch {}

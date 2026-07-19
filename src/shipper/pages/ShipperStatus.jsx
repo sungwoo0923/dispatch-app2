@@ -113,6 +113,8 @@ export default function ShipperStatus() {
   const [dispatchNotif, setDispatchNotif] = useState(null);
   const prevEditStampRef = useRef({});
   const editStampFirstLoadRef = useRef(true);
+  const prevEditReqRef = useRef({});
+  const editReqFirstLoadRef = useRef(true);
   const [focusOrderId, setFocusOrderId] = useState(null);
   const [flashId, setFlashId] = useState(null);
   const rowRefs = useRef({});
@@ -281,12 +283,39 @@ export default function ShipperStatus() {
         });
       }
 
+      // 수정요청 승인/거절 감지 -> 알림
+      if (editReqFirstLoadRef.current) {
+        editReqFirstLoadRef.current = false;
+        docs.forEach((o) => { prevEditReqRef.current[o.id] = !!o.수정요청; });
+      } else {
+        docs.forEach((o) => {
+          const wasPending = prevEditReqRef.current[o.id];
+          if (wasPending && !o.수정요청) {
+            const text = o.수정거절
+              ? `${o.거래처명 || o.상차지명 || "오더"} 수정요청이 거절되었습니다.`
+              : `${o.거래처명 || o.상차지명 || "오더"} 수정요청이 승인되어 반영되었습니다.`;
+            setDispatchNotif({ id: o.id, text, order: o });
+            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+            pushToast({ type: "dispatch", order: o, title: o.수정거절 ? "수정요청 거절" : "수정요청 승인", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+          }
+          prevEditReqRef.current[o.id] = !!o.수정요청;
+        });
+      }
+
       setOrders(docs);
       setLoading(false);
     });
 
     return () => unsub();
   }, [user, userData]);
+
+  // 상세패널을 열어둔 채로 운송사가 승인/거절 등 원격 변경을 하는 경우를 대비해
+  // selectedOrder를 최신 orders 배열과 동기화한다.
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const latest = orders.find((o) => o.id === selectedOrder.id);
+    if (latest) setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
+  }, [orders]);
 
   // 운송사에서 전송받은 오더(originCol/originId 보유)는 첨부파일이 원본(운송사) 쪽 서브컬렉션에
   // 먼저 올라간 뒤 이 화면 쪽으로 미러링되는데, 예전 건들 중 미러링이 안 된 채로 남아있는
@@ -427,12 +456,17 @@ export default function ShipperStatus() {
     deleteOrders(targets, () => setSelectedIds([]));
   };
 
+  const openEditWithPending = (order) => {
+    const merged = order?.수정요청 && order?.수정요청데이터 ? { ...order, ...order.수정요청데이터 } : order;
+    setEditData(merged);
+    setEditOpen(true);
+  };
+
   const handleEditSelected = () => {
     if (selectedIds.length !== 1) { alert("1개만 선택하세요"); return; }
     const target = orders.find(o => o.id === selectedIds[0]);
     if (!target) { alert("데이터 못찾음"); return; }
-    setEditData(target);
-    setEditOpen(true);
+    openEditWithPending(target);
   };
 
   const handleExcelDownload = () => {
@@ -912,6 +946,12 @@ export default function ShipperStatus() {
                       {o.최종수정출처 === "transport" && (Date.now() - (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0)) < 1000 * 60 * 60 * 48 && (
                         <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-300">운송사 수정</span>
                       )}
+                      {o.수정요청 && (
+                        <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-sky-50 text-sky-700 border border-sky-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-500" style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
+                          수정승인대기
+                        </span>
+                      )}
                     </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
@@ -978,7 +1018,7 @@ export default function ShipperStatus() {
               <div className="flex gap-2">
                 <button
                   disabled={selectedOrder?.상태 === "취소"}
-                  onClick={() => { setEditData(selectedOrder); setEditOpen(true); }}
+                  onClick={() => openEditWithPending(selectedOrder)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-600 text-white hover:opacity-90"}`}
                 >수정</button>
                 <button
@@ -1070,6 +1110,21 @@ export default function ShipperStatus() {
             <Section title="운송내역">
               <Timeline order={selectedOrder} />
             </Section>
+            {selectedOrder?.수정요청 && selectedOrder?.수정요청데이터 && (
+              <Section title="수정요청 (운송사 승인 대기중)">
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {Object.entries(selectedOrder.수정요청데이터)
+                    .filter(([k, v]) => k !== "화물목록" && String(selectedOrder[k] ?? "") !== String(v ?? ""))
+                    .map(([k, v]) => (
+                      <div key={k} className="flex items-start gap-2 text-[13px] pb-2 border-b border-gray-50 last:border-b-0">
+                        <span className="text-gray-700">
+                          <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(selectedOrder[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </Section>
+            )}
             {Array.isArray(selectedOrder?.history) && selectedOrder.history.length > 0 && (
               <Section title={`수정이력 (${selectedOrder.history.length})`}>
                 <div className="max-h-60 overflow-y-auto space-y-2">
@@ -1186,7 +1241,7 @@ export default function ShipperStatus() {
           onClick={(e) => e.stopPropagation()}
         >
           <button
-            onClick={() => { setSelectedIds([ctxMenu.order.id]); setEditData(ctxMenu.order); setEditOpen(true); setCtxMenu(null); }}
+            onClick={() => { setSelectedIds([ctxMenu.order.id]); openEditWithPending(ctxMenu.order); setCtxMenu(null); }}
             className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
           >
             선택수정

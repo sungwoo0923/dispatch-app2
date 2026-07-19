@@ -178,6 +178,10 @@ function StatusBadge({ order, className = "" }) {
   );
 }
 
+// 수정요청이 대기중인 오더를 다시 수정폼에 불러올 때는 아직 승인되지 않은
+// 요청내용을 기준으로 편집을 이어가도록 병합한다.
+const withPendingEdit = (order) => (order?.수정요청 && order?.수정요청데이터 ? { ...order, ...order.수정요청데이터 } : order);
+
 // 오더 삭제 / 배차취소요청 (PC ShipperStatus.jsx의 deleteOrders와 동일한 규칙)
 // 배차 전(차량번호 없음) -> 즉시 삭제 / 배차완료 후 -> 취소요청 플래그만 설정, 운송사 승인 후 삭제
 async function shipperDeleteOrRequestCancel(order, user) {
@@ -331,6 +335,14 @@ export default function ShipperMobileApp() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
+  // 상세화면을 열어둔 채로 운송사가 승인/거절 등 원격 변경을 하는 경우를 대비해
+  // selectedOrder를 최신 orders 배열과 동기화한다.
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const latest = orders.find((o) => o.id === selectedOrder.id);
+    if (latest) setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
+  }, [orders]);
+
   const isMaster = userData?.permissions?.master === true || userData?.isMaster === true;
   const isSubMaster = userData?.permissions?.subMaster === true;
   const canViewSettlement = isMaster || isSubMaster || userData?.permissions?.settlement === true;
@@ -423,6 +435,30 @@ export default function ShipperMobileApp() {
         setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
       }
       prevEditStampRef.current[o.id] = cur;
+    });
+  }, [orders]);
+
+  // 화주사의 수정요청을 운송사가 승인/거절 -> 상단 알림 배너
+  const prevEditReqRef = useRef({});
+  const editReqFirstLoadRef = useRef(true);
+  useEffect(() => {
+    if (!orders.length) return;
+    if (editReqFirstLoadRef.current) {
+      editReqFirstLoadRef.current = false;
+      orders.forEach((o) => { prevEditReqRef.current[o.id] = !!o.수정요청; });
+      return;
+    }
+    orders.forEach((o) => {
+      const cur = !!o.수정요청;
+      const prev = prevEditReqRef.current[o.id];
+      if (prev === true && cur === false) {
+        const text = o.수정거절
+          ? `${o.거래처명 || o.상차지명 || "오더"} 수정요청을 운송사가 거절했습니다.`
+          : `${o.거래처명 || o.상차지명 || "오더"} 수정요청이 승인되어 반영되었습니다.`;
+        setDispatchNotif({ id: o.id, text });
+        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+      }
+      prevEditReqRef.current[o.id] = cur;
     });
   }, [orders]);
 
@@ -544,25 +580,25 @@ export default function ShipperMobileApp() {
           <ShipperHomeM kpi={kpi} orders={orders}
             onSelect={(o) => { setSelectedOrder(o); setPage("detail"); }}
             onGoOrder={() => setPage("order")}
-            onEdit={(o) => { setEditOrderData(o); setPage("order"); }}
+            onEdit={(o) => { setEditOrderData(withPendingEdit(o)); setPage("order"); }}
             user={user} />
         )}
         {page === "order" && (
           <ShipperOrderM user={user} userData={userData} orders={orders} showToast={showToast}
             editData={editOrderData}
-            onDone={() => { setEditOrderData(null); setPage("history"); showToast(editOrderData ? "수정 완료!" : "배차요청 완료!"); }}
+            onDone={(msg) => { setEditOrderData(null); setPage("history"); showToast(msg || (editOrderData ? "수정 완료!" : "배차요청 완료!")); }}
             onBack={() => { setEditOrderData(null); setPage(editOrderData ? "history" : "home"); }} />
         )}
         {page === "history" && (
           <ShipperHistoryM orders={orders}
             onSelect={(o) => { setSelectedOrder(o); setPage("detail"); }}
             onBack={() => setPage("home")}
-            onEdit={(o) => { setEditOrderData(o); setPage("order"); }}
+            onEdit={(o) => { setEditOrderData(withPendingEdit(o)); setPage("order"); }}
             user={user} />
         )}
         {page === "detail" && selectedOrder && (
           <ShipperDetailM order={selectedOrder} onBack={() => setPage("history")}
-            onEdit={(o) => { setEditOrderData(o); setPage("order"); }}
+            onEdit={(o) => { setEditOrderData(withPendingEdit(o)); setPage("order"); }}
             user={user} />
         )}
         {page === "mypage" && (
@@ -847,6 +883,19 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
       const 파렛트사요약 = buildPalletSummary(cargoRows);
       const { 톤수값, 톤수단위, ...formToSave } = form;
       if (isEdit) {
+        const isDispatched = !!editData?.차량번호;
+        if (isDispatched) {
+          const pendingData = { ...formToSave, 차량톤수, 화물내용, 화물목록: cargoRows, 파렛트사요약 };
+          await updateDoc(doc(db, "orders", editData.id), {
+            수정요청: true,
+            수정요청데이터: pendingData,
+            수정요청일시: serverTimestamp(),
+            수정요청자: user?.email || "",
+            수정거절: false,
+          });
+          onDone("수정요청을 전송했습니다. 운송사 승인 후 반영됩니다.");
+          return;
+        }
         const nextData = { ...formToSave, 차량톤수, 화물내용 };
         const historyEntries = buildHistoryEntries(editData, nextData, user?.email);
         const updatePayload = {
@@ -1408,6 +1457,12 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
         <StatusBadge order={order} className="ml-auto" />
       </div>
 
+      {order.수정요청 && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-[12px] text-sky-700 font-semibold leading-snug">
+          수정요청이 운송사 승인 대기중입니다. 승인되면 양쪽 화면에 동일하게 반영됩니다.
+        </div>
+      )}
+
       {!isCanceled && (
         <div className="flex gap-2">
           <button
@@ -1440,6 +1495,21 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
       )}
       {showHistory && (
         <HistoryViewerModal history={order.history} onClose={() => setShowHistory(false)} />
+      )}
+
+      {order.수정요청 && order.수정요청데이터 && (
+        <div className="bg-white rounded-xl border border-sky-200 overflow-hidden">
+          <div className="px-3 py-2 bg-sky-50 text-[12px] font-bold text-sky-700 border-b border-sky-200">수정요청 내용 (승인 대기중)</div>
+          <div className="px-3 py-2 space-y-1.5 max-h-52 overflow-y-auto">
+            {Object.entries(order.수정요청데이터)
+              .filter(([k, v]) => k !== "화물목록" && String(order[k] ?? "") !== String(v ?? ""))
+              .map(([k, v]) => (
+                <div key={k} className="text-[12px] text-gray-700">
+                  <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(order[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
+                </div>
+              ))}
+          </div>
+        </div>
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -2283,6 +2353,11 @@ function OrderCard({ order, onSelect, onEdit, user }) {
       {isRecentlyEditedByTransport && (
         <div className="mt-0.5">
           <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded">운송사 수정</span>
+        </div>
+      )}
+      {order.수정요청 && (
+        <div className="mt-0.5">
+          <span className="text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-300 px-1.5 py-0.5 rounded">수정승인대기</span>
         </div>
       )}
       {!order.차량번호 && order.배차거절 === true && (
