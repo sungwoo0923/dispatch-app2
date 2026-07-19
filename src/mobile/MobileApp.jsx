@@ -2551,7 +2551,7 @@ const groupedByDate = useMemo(() => {
     if (form._editId) {
       const isShipperOrder = selectedOrder?.source === "shipper" || selectedOrder?.source === "shipper_mobile";
       if (isShipperOrder) {
-        const editableKeys = ["청구운임", "기사운임", "수수료", "산재보험료", "차량번호", "기사명", "전화번호", "이름", "전화", "배차상태", "상태", "updatedAt", "_lastModified"];
+        const editableKeys = ["청구운임", "기사운임", "수수료", "산재보험료", "차량번호", "기사명", "전화번호", "이름", "전화", "배차상태", "상태", "배차방식", "updatedAt", "_lastModified"];
         Object.keys(docData).forEach((k) => {
           if (!editableKeys.includes(k) && selectedOrder && selectedOrder[k] !== undefined) {
             docData[k] = selectedOrder[k];
@@ -6564,6 +6564,7 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
 // 일부 수정 모달
 // ────────────────────────────────────────────────────────────────
 function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
+  const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
   const smartRef = useRef(null);
   const [smartMatched, setSmartMatched] = useState([]);
   const [carNo, setCarNo] = useState(order.차량번호 || "");
@@ -6632,7 +6633,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
       const patch = {
         청구운임: Number(String(claim).replace(/[^\d]/g, "")) || 0,
         기사운임: Number(String(fee).replace(/[^\d]/g, "")) || 0,
-        지급방식: payType,
+        ...(isShipperOrder ? {} : { 지급방식: payType }),
         배차방식: dispType,
         업체전달상태: deliverState,
         정보전달상태: deliverState,
@@ -6697,7 +6698,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className={labelCls}>지급방식</label>
-            <select className={inputCls} value={payType} onChange={e => setPayType(e.target.value)}>
+            <select className={`${inputCls} ${isShipperOrder ? "bg-gray-100 text-gray-400" : ""}`} value={payType} disabled={isShipperOrder} onChange={e => setPayType(e.target.value)}>
               <option value="">선택</option>
               {["계산서","착불","선불","손실","개인","취소"].map(v => <option key={v}>{v}</option>)}
             </select>
@@ -10727,25 +10728,30 @@ const pickDrop = (c) => {
         />
       </div>
 
+      </fieldset>
+
       {/* 지급/배차방식 + 혼적/독차 */}
+      {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
           label="지급/배차방식"
           input={
             <div className="flex flex-wrap gap-1.5">
-              <select
-                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
-                value={form.지급방식}
-                onChange={(e) => update("지급방식", e.target.value)}
-              >
-                <option value="">지급방식</option>
-                <option value="계산서">계산서</option>
-                <option value="착불">착불</option>
-                <option value="선불">선불</option>
-                <option value="손실">손실</option>
-                <option value="개인">개인</option>
-                <option value="취소">취소</option>
-              </select>
+              <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
+                <select
+                  className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
+                  value={form.지급방식}
+                  onChange={(e) => update("지급방식", e.target.value)}
+                >
+                  <option value="">지급방식</option>
+                  <option value="계산서">계산서</option>
+                  <option value="착불">착불</option>
+                  <option value="선불">선불</option>
+                  <option value="손실">손실</option>
+                  <option value="개인">개인</option>
+                  <option value="취소">취소</option>
+                </select>
+              </fieldset>
               <select
                 className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
                 value={form.배차방식}
@@ -10760,6 +10766,7 @@ const pickDrop = (c) => {
             </div>
           }
         />
+        <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
         <RowLabelInput
           label="혼적/독차"
           input={
@@ -10787,9 +10794,11 @@ const pickDrop = (c) => {
             </div>
           }
         />
+        </fieldset>
       </div>
 
       {/* ── 과거 운임 참고 버튼 ── */}
+      <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
       {(form.상차지주소 || form.하차지주소) && (
         <button
           type="button"
