@@ -57,51 +57,6 @@
       })();
     </script>
 
-    <!-- 임시 디버그용: 화면이 하얗게 뜨는 등 JS 오류가 나면 화면에 에러 내용을 표시 (원인 파악 후 제거 예정) -->
-    <script>
-      (function() {
-        var shown = false;
-        function showErrorOverlay(title, detail) {
-          if (shown) return; // 첫 번째 에러만 표시 (여러 개 뜨면 복잡해지므로)
-          shown = true;
-          var box = document.createElement('div');
-          box.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,0.92);color:#fff;padding:16px;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;';
-          var text = title + '\n\n' + detail;
-          box.innerHTML =
-            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-            '<b style="color:#f87171;font-size:14px;">⚠ 오류 발생 (디버그용 표시)</b>' +
-            '<span style="display:flex;gap:8px;">' +
-            '<button id="__errCopyBtn" style="padding:6px 10px;border-radius:6px;border:1px solid #fff;background:#1e3a5f;color:#fff;">복사</button>' +
-            '<button id="__errCloseBtn" style="padding:6px 10px;border-radius:6px;border:1px solid #fff;background:#333;color:#fff;">닫기</button>' +
-            '</span></div>' +
-            '<pre id="__errText" style="white-space:pre-wrap;word-break:break-all;"></pre>';
-          document.body.appendChild(box);
-          document.getElementById('__errText').textContent = text;
-          document.getElementById('__errCloseBtn').onclick = function() { box.remove(); shown = false; };
-          document.getElementById('__errCopyBtn').onclick = function() {
-            var ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            try { document.execCommand('copy'); } catch (e) {}
-            document.body.removeChild(ta);
-            var btn = document.getElementById('__errCopyBtn');
-            btn.textContent = '복사됨!';
-            setTimeout(function() { btn.textContent = '복사'; }, 1500);
-          };
-        }
-        window.addEventListener('error', function(e) {
-          var detail = (e.error && e.error.stack) ? e.error.stack : (e.message + '\n(' + e.filename + ':' + e.lineno + ':' + e.colno + ')');
-          showErrorOverlay('JS 오류: ' + (e.message || ''), detail);
-        });
-        window.addEventListener('unhandledrejection', function(e) {
-          var reason = e.reason;
-          var detail = (reason && reason.stack) ? reason.stack : String(reason);
-          showErrorOverlay('처리되지 않은 Promise 오류', detail);
-        });
-      })();
-    </script>
-
       <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
