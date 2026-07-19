@@ -4,7 +4,7 @@ import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredentia
 import { auth, db } from "../firebase";
 import {
   collection, query, where, onSnapshot,
-  doc, getDoc, addDoc, updateDoc, serverTimestamp, getDocs,
+  doc, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs,
   orderBy, limit,
 } from "firebase/firestore";
 import InternalMessenger from "../InternalMessenger";
@@ -128,6 +128,7 @@ const STATUS_DOT_STYLE = {
   취소: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
   배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)" },
   배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)" },
+  요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
   배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)" },
 };
 
@@ -136,6 +137,7 @@ const getStatusBadge = (o) => {
   let blink = false;
   if (["취소", "배차취소", "오더취소"].includes(o.상태)) label = "취소";
   else if (o.차량번호) label = "배차완료";
+  else if (o.배차거절) label = "요청보류";
   else if (o.화주사확인대기) { label = "배차요청"; blink = true; }
   else { label = "배차중"; blink = true; }
   const s = STATUS_DOT_STYLE[label];
@@ -164,6 +166,42 @@ function StatusBadge({ order, className = "" }) {
       />
       {label}
     </span>
+  );
+}
+
+// 운송사가 배차요청을 거절한 "요청보류" 오더에 대한 화주사측 조치 (재요청 / 삭제)
+function RequestHoldActions({ order, onDeleted }) {
+  const [busy, setBusy] = useState(false);
+  const reRequest = async (e) => {
+    e?.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateDoc(doc(db, "orders", order.id), { 화주사확인대기: true, 배차거절: false, 재요청일시: serverTimestamp() });
+    } catch {}
+    setBusy(false);
+  };
+  const removeOrder = async (e) => {
+    e?.stopPropagation();
+    if (busy) return;
+    if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return;
+    setBusy(true);
+    try {
+      await deleteDoc(doc(db, "orders", order.id));
+      onDeleted?.();
+    } catch {}
+    setBusy(false);
+  };
+  return (
+    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 flex items-center justify-between gap-2">
+      <div className="text-[12px] text-red-600 font-semibold leading-snug flex-1">
+        운송사가 배차요청을 거절했습니다.<br />재요청하거나 삭제해주세요.
+      </div>
+      <div className="flex gap-1.5 shrink-0">
+        <button disabled={busy} onClick={removeOrder} className="px-2.5 py-1.5 rounded-lg border border-red-300 text-red-500 text-[11px] font-bold">삭제</button>
+        <button disabled={busy} onClick={reRequest} className="px-2.5 py-1.5 rounded-lg text-white text-[11px] font-bold" style={{ background: "#1e3a5f" }}>재요청</button>
+      </div>
+    </div>
   );
 }
 
@@ -259,6 +297,27 @@ export default function ShipperMobileApp() {
         setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
       }
       prevVehicleRef.current[o.id] = cur;
+    });
+  }, [orders]);
+
+  // 운송사가 배차요청을 거절 -> "요청보류" 전환 감지 (상단 알림 배너)
+  const prevRejectRef = useRef({});
+  const rejectFirstLoadRef = useRef(true);
+  useEffect(() => {
+    if (!orders.length) return;
+    if (rejectFirstLoadRef.current) {
+      rejectFirstLoadRef.current = false;
+      orders.forEach((o) => { prevRejectRef.current[o.id] = o.배차거절 === true; });
+      return;
+    }
+    orders.forEach((o) => {
+      const cur = o.배차거절 === true;
+      const prev = prevRejectRef.current[o.id];
+      if (prev === false && cur === true) {
+        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차요청을 운송사가 거절했습니다. 재요청하거나 삭제해주세요.` });
+        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+      }
+      prevRejectRef.current[o.id] = cur;
     });
   }, [orders]);
 
@@ -1200,6 +1259,10 @@ function ShipperDetailM({ order, onBack }) {
         <StatusBadge order={order} className="ml-auto" />
       </div>
 
+      {!order.차량번호 && order.배차거절 === true && (
+        <RequestHoldActions order={order} onDeleted={onBack} />
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <DetailGroup label="기본정보">
           <MDetailRow label="거래처" value={order.거래처명 || "-"} />
@@ -1998,6 +2061,11 @@ function OrderCard({ order, onSelect }) {
       )}
       {(order.attachCount > 0) && (
         <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">사진 {order.attachCount}장</div>
+      )}
+      {!order.차량번호 && order.배차거절 === true && (
+        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+          <RequestHoldActions order={order} />
+        </div>
       )}
     </div>
   );

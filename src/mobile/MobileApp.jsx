@@ -62,6 +62,10 @@ if (typeof document !== "undefined" && !document.getElementById("__mobile-badge-
       from { opacity: 0; transform: translateY(16px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    @keyframes dotPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
   `;
   document.head.appendChild(s);
 }
@@ -736,6 +740,83 @@ const getStatus = (o = {}) => {
   const car = String(o.차량번호 || "").trim();
   return car ? "배차완료" : "배차중";
 };
+
+// 운송사 앱 상태뱃지 색상 (화주사 앱과 동일한 네이비 디지털 톤)
+const TP_STATUS_DOT = {
+  배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)" },
+  배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)" },
+  요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
+  배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)" },
+};
+
+function getTransportBadgeInfo(order) {
+  const state = getStatus(order);
+  const isPending = state !== "배차완료" && order.화주사확인대기 === true;
+  const isHold = state !== "배차완료" && order.배차거절 === true;
+  let label = state;
+  if (isHold) label = "요청보류";
+  else if (isPending) label = "배차요청";
+  const blink = isPending;
+  const s = TP_STATUS_DOT[label] || TP_STATUS_DOT.배차중;
+  return { label, blink, isPending, isHold, ...s };
+}
+
+function TransportStatusBadge({ order, className = "", onClick }) {
+  const { label, blink, dot, text, ring, isPending, isHold } = getTransportBadgeInfo(order);
+  const clickable = isPending || isHold;
+  return (
+    <span
+      onClick={clickable ? onClick : undefined}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide whitespace-nowrap ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${className}`}
+      style={{
+        background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
+        color: text,
+        border: `1px solid ${ring}`,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={{ background: dot, boxShadow: `0 0 4px ${dot}`, animation: blink ? "dotPulse 1.4s ease-in-out infinite" : "none" }}
+      />
+      {label}
+    </span>
+  );
+}
+
+// 배차요청 승인/거절 팝업 (배차요청 뱃지 클릭 시) / 요청보류 안내 팝업
+function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
+  const isHold = order.배차거절 === true && order.화주사확인대기 !== true;
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-[15px] font-bold text-gray-800 mb-1.5">
+          {isHold ? "요청 보류 상태" : "배차 요청 확인"}
+        </div>
+        <div className="text-[13px] text-gray-500 mb-4 leading-relaxed whitespace-pre-line">
+          {isHold
+            ? "이미 거절된 요청입니다.\n화주사의 재요청을 기다리고 있습니다."
+            : `${order.거래처명 || "화주사"}가 신규 배차를 요청했습니다.\n${order.상차지명 || "-"} → ${order.하차지명 || "-"}\n\n요청을 승인하시겠습니까?`}
+        </div>
+        {isHold ? (
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-white text-[14px] font-semibold" style={{ background: "#1B2B4B" }}>
+            확인
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={onReject} className="flex-1 py-2.5 rounded-xl border border-red-300 text-red-500 text-[14px] font-semibold">
+              거절
+            </button>
+            <button onClick={onApprove} className="flex-1 py-2.5 rounded-xl text-white text-[14px] font-semibold" style={{ background: "#1B2B4B" }}>
+              승인
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // PC(숫자 ms)와 모바일(Firestore Timestamp) 양쪽에서 기록되는 시각 필드를 모두 ms 숫자로 정규화
 const toMillis = (v) => {
@@ -6526,13 +6607,23 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
-  const isPendingShipperConfirm = state !== "배차완료" && order.화주사확인대기 === true;
-  const displayLabel = isPendingShipperConfirm ? "배차요청" : state;
-  const confirmShipperOrder = async (e) => {
+  const { isPending: isPendingShipperConfirm } = getTransportBadgeInfo(order);
+  const [showReqModal, setShowReqModal] = useState(false);
+  const openReqModal = (e) => {
     e.stopPropagation();
+    setShowReqModal(true);
+  };
+  const approveDispatchRequest = async () => {
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차중전환일시: Date.now() });
+      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차거절: false, 배차중전환일시: Date.now() });
     } catch {}
+    setShowReqModal(false);
+  };
+  const rejectDispatchRequest = async () => {
+    try {
+      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차거절: true, 배차거절일시: serverTimestamp() });
+    } catch {}
+    setShowReqModal(false);
   };
   const isCancelRequested = order.취소요청 === true && order.배차상태 !== "배차취소";
   const approveCancelDelete = async (e) => {
@@ -6553,13 +6644,6 @@ const isToday =
   navigator.vibrate?.([60]);
   sessionStorage.setItem(key, "1");
 }, [isToday, order.id]);
-
-  const stateBadgeClass =
-    state === "배차완료"
-      ? "bg-blue-600 text-white border-blue-600"
-      : isPendingShipperConfirm
-      ? "bg-amber-100 text-amber-700 border-amber-300"
-      : "bg-gray-100 text-gray-600 border-gray-300";
 
   const pickupName = order.상차지명 || "-";
   const dropName = order.하차지명 || "-";
@@ -6591,6 +6675,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   if (cardVersionB) {
     // ── B VERSION: Minimal, clean design ──
     return (
+      <>
       <div
         className={
           "relative bg-white rounded-xl border transition-colors overflow-hidden " +
@@ -6607,12 +6692,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         {/* 상단 정보 바 */}
         <div className={`px-3 py-1.5 flex items-center justify-between ${state === "배차완료" ? "bg-[#1B2B4B]/5" : "bg-gray-50/80"}`}>
           <div className="flex items-center gap-1.5">
-            {state === "배차완료" ? (
-              <span className="text-[0.72em] font-bold text-[#1B2B4B] border border-[#1B2B4B]/40 px-1.5 py-0.5 rounded">
-                배차완료
-              </span>
-            ) : (
-              <span className="badge-dispatching text-[0.72em] font-semibold text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">배차중</span>
+            <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
+            {isCancelRequested && (
+              <button onClick={approveCancelDelete}
+                className="px-1.5 py-0.5 rounded-full text-[0.68em] font-bold text-white bg-orange-500 badge-dispatching">
+                취소승인
+              </button>
             )}
             {order.거래처명 && (
               <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
@@ -6746,10 +6831,15 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           )}
         </div>
       </div>
+      {showReqModal && (
+        <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
+      )}
+      </>
     );
   }
 
   return (
+   <>
    <div
   className={
     "relative bg-white rounded-2xl shadow border px-3 py-3 transition-colors " +
@@ -6809,17 +6899,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     {(order.attachCount > 0) ? order.attachCount : "없음"}
   </button>
 
-  {state === "배차완료" ? (
-    <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{displayLabel}</span>
-  ) : (
-    <span className={"badge-dispatching px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{displayLabel}</span>
-  )}
-  {isPendingShipperConfirm && (
-    <button onClick={confirmShipperOrder}
-      className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-[#1B2B4B]">
-      배차승인
-    </button>
-  )}
+  <TransportStatusBadge order={order} className="text-[11px]" onClick={openReqModal} />
   {isCancelRequested && (
     <button onClick={approveCancelDelete}
       className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-orange-500 badge-dispatching">
@@ -6971,6 +7051,10 @@ const dt = new Date(y, m - 1, d, hh, mm);
   </div>
 )}
 </div>
+  {showReqModal && (
+    <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
+  )}
+  </>
   );
 });
 // ======================================================================
@@ -7382,15 +7466,25 @@ function MobileOrderDetail({
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
   const state = getStatus(order);
-  const isPendingShipperConfirm = state !== "배차완료" && order.화주사확인대기 === true;
-  const displayLabel = isPendingShipperConfirm ? "배차요청" : state;
-  const confirmShipperOrder = async () => {
-    const patch = { 화주사확인대기: false, 배차중전환일시: Date.now() };
+  const { isPending: isPendingShipperConfirm } = getTransportBadgeInfo(order);
+  const [showReqModal, setShowReqModal] = useState(false);
+  const approveDispatchRequest = async () => {
+    const patch = { 화주사확인대기: false, 배차거절: false, 배차중전환일시: Date.now() };
     try {
       await updateDoc(doc(db, order.__col || "orders", order.id), patch);
       setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : prev));
       onOrderUpdate?.(order.id, patch);
     } catch {}
+    setShowReqModal(false);
+  };
+  const rejectDispatchRequest = async () => {
+    const patch = { 화주사확인대기: false, 배차거절: true, 배차거절일시: serverTimestamp() };
+    try {
+      await updateDoc(doc(db, order.__col || "orders", order.id), patch);
+      setSelectedOrder((prev) => (prev ? { ...prev, ...patch, 배차거절: true } : prev));
+      onOrderUpdate?.(order.id, { ...patch, 배차거절: true });
+    } catch {}
+    setShowReqModal(false);
   };
   const isCancelRequested = order.취소요청 === true && order.배차상태 !== "배차취소";
   const approveCancelDelete = async () => {
@@ -7728,19 +7822,7 @@ const handleAssignClick = () => {
             <div className="flex items-start justify-between gap-2 mb-0.5">
               <div className="text-[13px] font-bold text-gray-900 flex-1 min-w-0">{order.상차지명 || "-"}</div>
               <div className="shrink-0 flex flex-col items-end gap-1">
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                  isPendingShipperConfirm
-                    ? "bg-amber-100 text-amber-700 border-amber-300 badge-dispatching"
-                    : cardVersionB
-                    ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-white")
-                    : (state === "배차완료" ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-600 border-blue-200")
-                }`}>{displayLabel}</span>
-                {isPendingShipperConfirm && (
-                  <button onClick={confirmShipperOrder}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-[#1B2B4B]">
-                    배차승인
-                  </button>
-                )}
+                <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} />
                 {isCancelRequested && (
                   <button onClick={approveCancelDelete}
                     className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-orange-500 badge-dispatching">
@@ -8733,6 +8815,9 @@ const handleAssignClick = () => {
             </div>
           )}
         </div>
+      )}
+      {showReqModal && (
+        <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
       )}
     </div>
   );
