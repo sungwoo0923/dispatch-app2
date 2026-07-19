@@ -169,6 +169,26 @@ function StatusBadge({ order, className = "" }) {
   );
 }
 
+// 오더 삭제 / 배차취소요청 (PC ShipperStatus.jsx의 deleteOrders와 동일한 규칙)
+// 배차 전(차량번호 없음) -> 즉시 삭제 / 배차완료 후 -> 취소요청 플래그만 설정, 운송사 승인 후 삭제
+async function shipperDeleteOrRequestCancel(order, user) {
+  const isDispatched = !!(order.차량번호 && String(order.차량번호).trim());
+  if (isDispatched) {
+    if (order.취소요청) {
+      alert("이미 배차취소를 요청했습니다.\n운송사의 승인을 기다리고 있습니다.");
+      return false;
+    }
+    if (!window.confirm("이미 배차완료된 오더입니다.\n배차취소를 요청하시겠습니까?\n(운송사 승인 후 삭제됩니다)")) return false;
+    await updateDoc(doc(db, "orders", order.id), {
+      취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "",
+    });
+    return true;
+  }
+  if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return false;
+  await deleteDoc(doc(db, "orders", order.id));
+  return true;
+}
+
 // 운송사가 배차요청을 거절한 "요청보류" 오더에 대한 화주사측 조치 (재요청 / 삭제)
 function RequestHoldActions({ order, onDeleted }) {
   const [busy, setBusy] = useState(false);
@@ -238,6 +258,7 @@ export default function ShipperMobileApp() {
   const [userData, setUserData] = useState(null);
   const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [editOrderData, setEditOrderData] = useState(null);
   const [toast, setToast] = useState("");
   const [showMenu, setShowMenu] = useState(false);
   const [menuTime, setMenuTime] = useState(nowKSTStr());
@@ -318,6 +339,27 @@ export default function ShipperMobileApp() {
         setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
       }
       prevRejectRef.current[o.id] = cur;
+    });
+  }, [orders]);
+
+  // 운송사가 배차정보(차량/기사/운임)를 수정 -> 상단 알림 배너
+  const prevEditStampRef = useRef({});
+  const editStampFirstLoadRef = useRef(true);
+  useEffect(() => {
+    if (!orders.length) return;
+    if (editStampFirstLoadRef.current) {
+      editStampFirstLoadRef.current = false;
+      orders.forEach((o) => { prevEditStampRef.current[o.id] = o.최종수정일시?.seconds || 0; });
+      return;
+    }
+    orders.forEach((o) => {
+      const cur = o.최종수정일시?.seconds || 0;
+      const prev = prevEditStampRef.current[o.id];
+      if (o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
+        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차정보를 운송사가 수정했습니다. (${o.상차지명 || "-"} → ${o.하차지명 || "-"})` });
+        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+      }
+      prevEditStampRef.current[o.id] = cur;
     });
   }, [orders]);
 
@@ -438,20 +480,27 @@ export default function ShipperMobileApp() {
         {page === "home" && (
           <ShipperHomeM kpi={kpi} orders={orders}
             onSelect={(o) => { setSelectedOrder(o); setPage("detail"); }}
-            onGoOrder={() => setPage("order")} />
+            onGoOrder={() => setPage("order")}
+            onEdit={(o) => { setEditOrderData(o); setPage("order"); }}
+            user={user} />
         )}
         {page === "order" && (
           <ShipperOrderM user={user} userData={userData} orders={orders} showToast={showToast}
-            onDone={() => { setPage("history"); showToast("배차요청 완료!"); }}
-            onBack={() => setPage("home")} />
+            editData={editOrderData}
+            onDone={() => { setEditOrderData(null); setPage("history"); showToast(editOrderData ? "수정 완료!" : "배차요청 완료!"); }}
+            onBack={() => { setEditOrderData(null); setPage(editOrderData ? "history" : "home"); }} />
         )}
         {page === "history" && (
           <ShipperHistoryM orders={orders}
             onSelect={(o) => { setSelectedOrder(o); setPage("detail"); }}
-            onBack={() => setPage("home")} />
+            onBack={() => setPage("home")}
+            onEdit={(o) => { setEditOrderData(o); setPage("order"); }}
+            user={user} />
         )}
         {page === "detail" && selectedOrder && (
-          <ShipperDetailM order={selectedOrder} onBack={() => setPage("history")} />
+          <ShipperDetailM order={selectedOrder} onBack={() => setPage("history")}
+            onEdit={(o) => { setEditOrderData(o); setPage("order"); }}
+            user={user} />
         )}
         {page === "mypage" && (
           <ShipperMyPageM user={user} userData={userData} onBack={() => setPage("home")} showToast={showToast} orders={orders} />
@@ -483,7 +532,7 @@ export default function ShipperMobileApp() {
 // ======================================================================
 // 홈
 // ======================================================================
-function ShipperHomeM({ kpi, orders, onSelect, onGoOrder }) {
+function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
   const [viewDate, setViewDate] = useState(todayStr());
   const [queriedDate, setQueriedDate] = useState(todayStr());
 
@@ -551,7 +600,7 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder }) {
           </div>
         ) : (
           <div className="space-y-2">
-            {viewOrders.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} />)}
+            {viewOrders.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} onEdit={onEdit} user={user} />)}
           </div>
         )}
       </div>
@@ -562,8 +611,16 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder }) {
 // ======================================================================
 // 배차요청 폼
 // ======================================================================
-function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack }) {
-  const [form, setForm] = useState(EMPTY_FORM());
+function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack, editData = null }) {
+  const isEdit = !!editData;
+  const [form, setForm] = useState(() => {
+    const base = EMPTY_FORM();
+    if (!editData) return base;
+    const { num, unit } = parseTonnage(editData.차량톤수 || "");
+    const picked = {};
+    Object.keys(base).forEach((k) => { if (editData[k] !== undefined) picked[k] = editData[k]; });
+    return { ...base, ...picked, 톤수값: num || "", 톤수단위: unit || "톤" };
+  });
   const [transportList, setTransportList] = useState([]);
   const [fixedTransport, setFixedTransport] = useState(null);
   const [transportSuggestions, setTransportSuggestions] = useState([]);
@@ -578,7 +635,11 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
   const [copySearch, setCopySearch] = useState("");
   const [copyType, setCopyType] = useState("통합");
   const [copyResults, setCopyResults] = useState(null);
-  const [cargoRows, setCargoRows] = useState([EMPTY_CARGO_ROW()]);
+  const [cargoRows, setCargoRows] = useState(() => (
+    editData && Array.isArray(editData.화물목록) && editData.화물목록.length
+      ? editData.화물목록
+      : [EMPTY_CARGO_ROW()]
+  ));
 
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -722,25 +783,37 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       const 화물내용 = buildCargoSummary(cargoRows);
       const 파렛트사요약 = buildPalletSummary(cargoRows);
       const { 톤수값, 톤수단위, ...formToSave } = form;
-      await addDoc(collection(db, "orders"), {
-        ...formToSave,
-        차량톤수,
-        화물내용,
-        화물목록: cargoRows,
-        파렛트사요약,
-        shipperUid: user.uid,
-        거래처명: userData.companyName,
-        shipperCompany: userData.companyName,
-        배차상태: "배차중",
-        화주사확인대기: true,
-        업체전달상태: "미전달",
-        source: "shipper_mobile",
-        createdAt: serverTimestamp(),
-      });
+      if (isEdit) {
+        await updateDoc(doc(db, "orders", editData.id), {
+          ...formToSave,
+          차량톤수,
+          화물내용,
+          화물목록: cargoRows,
+          파렛트사요약,
+          최종수정출처: "shipper",
+          최종수정일시: serverTimestamp(),
+        });
+      } else {
+        await addDoc(collection(db, "orders"), {
+          ...formToSave,
+          차량톤수,
+          화물내용,
+          화물목록: cargoRows,
+          파렛트사요약,
+          shipperUid: user.uid,
+          거래처명: userData.companyName,
+          shipperCompany: userData.companyName,
+          배차상태: "배차중",
+          화주사확인대기: true,
+          업체전달상태: "미전달",
+          source: "shipper_mobile",
+          createdAt: serverTimestamp(),
+        });
+      }
       onDone();
     } catch (e) {
       console.error(e);
-      alert("등록 실패");
+      alert(isEdit ? "수정 실패" : "등록 실패");
     } finally {
       setSubmitting(false);
     }
@@ -751,12 +824,14 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <button onClick={onBack} className="text-gray-500 text-lg">←</button>
-          <div className="font-bold text-base">배차요청</div>
+          <div className="font-bold text-base">{isEdit ? "오더 수정" : "배차요청"}</div>
         </div>
-        <button onClick={() => { setCopyOpen(true); doCopySearch(); }}
-          className="px-3 py-1.5 text-xs border rounded-lg font-semibold text-gray-600 hover:bg-gray-100">
-          오더 복사
-        </button>
+        {!isEdit && (
+          <button onClick={() => { setCopyOpen(true); doCopySearch(); }}
+            className="px-3 py-1.5 text-xs border rounded-lg font-semibold text-gray-600 hover:bg-gray-100">
+            오더 복사
+          </button>
+        )}
       </div>
 
       {/* 운송사 */}
@@ -980,7 +1055,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       <button onClick={submit} disabled={submitting}
         className="w-full py-4 text-white rounded-2xl font-bold text-base shadow mb-8 disabled:opacity-50"
         style={{ background: NAVY }}>
-        {submitting ? "등록중..." : "배차요청 등록"}
+        {submitting ? (isEdit ? "저장중..." : "등록중...") : (isEdit ? "수정 저장" : "배차요청 등록")}
       </button>
 
       {/* 오더 복사 모달 */}
@@ -1078,7 +1153,7 @@ function OdometerNumber({ value, suffix = "" }) {
 // ======================================================================
 // 운송내역
 // ======================================================================
-function ShipperHistoryM({ orders, onSelect, onBack }) {
+function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
   const nowY = new Date(Date.now() + 9 * 3600000).getFullYear();
   const parseMD = (dateStr) => {
     const [, m, d] = (dateStr || "").split("-");
@@ -1205,7 +1280,7 @@ function ShipperHistoryM({ orders, onSelect, onBack }) {
         <div className="text-center text-gray-400 text-sm py-10">조회된 내역이 없습니다.</div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} />)}
+          {filtered.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} onEdit={onEdit} user={user} />)}
         </div>
       )}
     </div>
@@ -1224,7 +1299,13 @@ function DetailGroup({ label, children, last = false }) {
   );
 }
 
-function ShipperDetailM({ order, onBack }) {
+function ShipperDetailM({ order, onBack, onEdit, user }) {
+  const isCanceled = ["취소", "배차취소", "오더취소"].includes(order.상태);
+  const isDispatched = !!(order.차량번호 && String(order.차량번호).trim());
+  const handleDelete = async () => {
+    const ok = await shipperDeleteOrRequestCancel(order, user);
+    if (ok && !isDispatched) onBack?.();
+  };
   const [attachments, setAttachments] = useState([]);
   const [loadingAttach, setLoadingAttach] = useState(false);
   const [viewImg, setViewImg] = useState(null);
@@ -1258,6 +1339,23 @@ function ShipperDetailM({ order, onBack }) {
         <div className="font-bold text-base">운송 상세</div>
         <StatusBadge order={order} className="ml-auto" />
       </div>
+
+      {!isCanceled && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => onEdit?.(order)}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold"
+          >
+            수정
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
+          >
+            {isDispatched ? "배차취소 요청" : "삭제"}
+          </button>
+        </div>
+      )}
 
       {!order.차량번호 && order.배차거절 === true && (
         <RequestHoldActions order={order} onDeleted={onBack} />
@@ -2040,10 +2138,48 @@ function ToggleRow({ checked, onChange, desc }) {
 // ======================================================================
 // 공통 컴포넌트
 // ======================================================================
-function OrderCard({ order, onSelect }) {
+function OrderCard({ order, onSelect, onEdit, user }) {
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const longPressTimer = useRef(null);
+  const longPressFired = useRef(false);
+  const isCanceled = ["취소", "배차취소", "오더취소"].includes(order.상태);
+
+  const startLongPress = () => {
+    if (isCanceled) return;
+    longPressFired.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      navigator.vibrate?.(15);
+      setShowActionSheet(true);
+    }, 480);
+  };
+  const cancelLongPress = () => {
+    clearTimeout(longPressTimer.current);
+  };
+  const handleClick = (e) => {
+    if (longPressFired.current) { e.preventDefault(); e.stopPropagation(); longPressFired.current = false; return; }
+    onSelect?.();
+  };
+
+  const handleEdit = () => {
+    setShowActionSheet(false);
+    onEdit?.(order);
+  };
+  const handleDelete = async () => {
+    setShowActionSheet(false);
+    await shipperDeleteOrRequestCancel(order, user);
+  };
+
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-3 py-3 active:scale-[0.99] transition"
-      onClick={onSelect}>
+    <div
+      className="relative bg-white rounded-2xl border border-gray-200 shadow-sm px-3 py-3 active:scale-[0.99] transition"
+      onClick={handleClick}
+      onTouchStart={startLongPress}
+      onTouchEnd={cancelLongPress}
+      onTouchMove={cancelLongPress}
+      onTouchCancel={cancelLongPress}
+      onContextMenu={(e) => { e.preventDefault(); if (!isCanceled) setShowActionSheet(true); }}
+    >
       <div className="flex justify-between items-start mb-1">
         <div className="text-sm font-semibold text-gray-800 truncate flex-1">
           {order.상차지명 || "-"} → {order.하차지명 || "-"}
@@ -2067,6 +2203,40 @@ function OrderCard({ order, onSelect }) {
           <RequestHoldActions order={order} />
         </div>
       )}
+      {showActionSheet && (
+        <OrderCardActionSheet
+          order={order}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onClose={() => setShowActionSheet(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function OrderCardActionSheet({ order, onEdit, onDelete, onClose }) {
+  const isDispatched = !!(order.차량번호 && String(order.차량번호).trim());
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-t-3xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+        <div className="px-4 pt-1 pb-2 text-[13px] text-gray-400 font-semibold truncate">
+          {order.상차지명 || "-"} → {order.하차지명 || "-"}
+        </div>
+        <button onClick={onEdit} className="w-full text-left px-4 py-3.5 text-[15px] font-semibold text-gray-800 border-t border-gray-100">
+          수정
+        </button>
+        <button onClick={onDelete} className="w-full text-left px-4 py-3.5 text-[15px] font-semibold text-red-500 border-t border-gray-100">
+          {isDispatched ? "배차취소 요청" : "삭제"}
+        </button>
+        <button onClick={onClose} className="w-full text-center px-4 py-3.5 text-[15px] font-semibold text-gray-400 border-t border-gray-100 mb-2">
+          닫기
+        </button>
+      </div>
     </div>
   );
 }
