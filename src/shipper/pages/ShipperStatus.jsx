@@ -909,6 +909,9 @@ export default function ShipperStatus() {
                         <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}
                           style={(getStatus(o) === "요청" || getStatus(o) === "배차중") ? { animation: "cancelReqBlink 1.6s ease-in-out infinite" } : {}}>{st.label}</span>
                       )}
+                      {o.최종수정출처 === "transport" && (Date.now() - (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0)) < 1000 * 60 * 60 * 48 && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-300">운송사 수정</span>
+                      )}
                     </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
@@ -1067,6 +1070,19 @@ export default function ShipperStatus() {
             <Section title="운송내역">
               <Timeline order={selectedOrder} />
             </Section>
+            {Array.isArray(selectedOrder?.history) && selectedOrder.history.length > 0 && (
+              <Section title={`수정이력 (${selectedOrder.history.length})`}>
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {selectedOrder.history.filter(h => h && h.field).slice().reverse().map((h, i) => (
+                    <div key={i} className="flex items-start gap-2 text-[13px] pb-2 border-b border-gray-50 last:border-b-0">
+                      <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-gray-500 shrink-0">{h.user}</span>
+                      <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음") || "없음"}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음") || "없음"}</span></span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
           </div>
         </div>
       )}

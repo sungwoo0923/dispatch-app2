@@ -5,7 +5,7 @@ import { auth, db } from "../firebase";
 import {
   collection, query, where, onSnapshot,
   doc, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs,
-  orderBy, limit,
+  orderBy, limit, arrayUnion,
 } from "firebase/firestore";
 import InternalMessenger from "../InternalMessenger";
 import html2canvas from "html2canvas";
@@ -86,6 +86,15 @@ const fmtDateTime = (ts) => {
   if (!d) return String(ts).slice(0, 10);
   const kst = new Date(d.getTime() + 9 * 3600000);
   return kst.toISOString().slice(0, 16).replace("T", " ");
+};
+
+// PC(숫자 ms)와 모바일(Firestore Timestamp) 양쪽에서 기록되는 시각 필드를 모두 ms 숫자로 정규화
+const toMillis = (v) => {
+  if (!v) return 0;
+  if (typeof v === "number") return v;
+  if (typeof v?.toMillis === "function") return v.toMillis();
+  if (typeof v?.seconds === "number") return v.seconds * 1000 + (v.nanoseconds || 0) / 1e6;
+  return 0;
 };
 
 const nowKSTStr = () => {
@@ -189,6 +198,39 @@ async function shipperDeleteOrRequestCancel(order, user) {
   return true;
 }
 
+// 수정이력 뷰어 (운송사 앱/PC와 동일한 history 배열 포맷을 사용)
+function HistoryViewerModal({ history = [], onClose }) {
+  const items = [...history].filter(h => h && h.field).reverse();
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-t-3xl max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+        <div className="px-4 pb-2 flex items-center justify-between shrink-0">
+          <div className="font-bold text-[15px] text-gray-800">수정이력</div>
+          <button onClick={onClose} className="text-gray-400 text-lg">×</button>
+        </div>
+        <div className="px-4 pb-6 overflow-y-auto space-y-2">
+          {items.length === 0 && <div className="text-center text-gray-400 text-sm py-8">수정이력이 없습니다.</div>}
+          {items.map((h, i) => (
+            <div key={i} className="border-b border-gray-100 pb-2 last:border-b-0">
+              <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-0.5">
+                <span>{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                <span>{h.user}</span>
+              </div>
+              <div className="text-[13px] text-gray-700">
+                <span className="font-bold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음") || "없음"}</span> → <span className="font-bold text-[#1e3a5f]">{String(h.after ?? "없음") || "없음"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 운송사가 배차요청을 거절한 "요청보류" 오더에 대한 화주사측 조치 (재요청 / 삭제)
 function RequestHoldActions({ order, onDeleted }) {
   const [busy, setBusy] = useState(false);
@@ -248,6 +290,27 @@ const EMPTY_FORM = () => ({
   상차방법: "", 하차방법: "", 지급방식: "",
 });
 const EMPTY_CARGO_ROW = () => ({ qty: "", unit: "파레트", palletCo: "" });
+
+// 수정이력 추적 대상 필드 (운송사 앱/PC와 동일 포맷의 history 배열을 공유한다)
+const HISTORY_TRACKED_FIELDS = [
+  "상차지명", "상차지주소", "상차지담당자", "상차지담당자번호",
+  "하차지명", "하차지주소", "하차지담당자", "하차지담당자번호",
+  "차량종류", "톤수", "차량톤수", "화물내용",
+  "상차방법", "하차방법", "지급방식", "배차방식",
+  "상차일", "상차시간", "하차일", "하차시간",
+];
+function buildHistoryEntries(prev, next, userEmail) {
+  const entries = [];
+  HISTORY_TRACKED_FIELDS.forEach((f) => {
+    if (!(f in (next || {}))) return;
+    const before = prev?.[f] ?? "";
+    const after = next?.[f] ?? "";
+    if (String(before) !== String(after)) {
+      entries.push({ at: Date.now(), user: userEmail || "unknown", field: f, before, after });
+    }
+  });
+  return entries;
+}
 
 // ======================================================================
 // 메인
@@ -784,7 +847,9 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
       const 파렛트사요약 = buildPalletSummary(cargoRows);
       const { 톤수값, 톤수단위, ...formToSave } = form;
       if (isEdit) {
-        await updateDoc(doc(db, "orders", editData.id), {
+        const nextData = { ...formToSave, 차량톤수, 화물내용 };
+        const historyEntries = buildHistoryEntries(editData, nextData, user?.email);
+        const updatePayload = {
           ...formToSave,
           차량톤수,
           화물내용,
@@ -792,7 +857,9 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
           파렛트사요약,
           최종수정출처: "shipper",
           최종수정일시: serverTimestamp(),
-        });
+        };
+        if (historyEntries.length > 0) updatePayload.history = arrayUnion(...historyEntries);
+        await updateDoc(doc(db, "orders", editData.id), updatePayload);
       } else {
         await addDoc(collection(db, "orders"), {
           ...formToSave,
@@ -1309,6 +1376,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
   const [attachments, setAttachments] = useState([]);
   const [loadingAttach, setLoadingAttach] = useState(false);
   const [viewImg, setViewImg] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     if (!order.id) return;
@@ -1359,6 +1427,19 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
 
       {!order.차량번호 && order.배차거절 === true && (
         <RequestHoldActions order={order} onDeleted={onBack} />
+      )}
+
+      {Array.isArray(order.history) && order.history.length > 0 && (
+        <button
+          onClick={() => setShowHistory(true)}
+          className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 text-[12px] font-bold text-gray-500"
+        >
+          <span>수정이력 ({order.history.length})</span>
+          <span className="text-gray-400">보기 &gt;</span>
+        </button>
+      )}
+      {showHistory && (
+        <HistoryViewerModal history={order.history} onClose={() => setShowHistory(false)} />
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -2143,6 +2224,7 @@ function OrderCard({ order, onSelect, onEdit, user }) {
   const longPressTimer = useRef(null);
   const longPressFired = useRef(false);
   const isCanceled = ["취소", "배차취소", "오더취소"].includes(order.상태);
+  const isRecentlyEditedByTransport = order.최종수정출처 === "transport" && (Date.now() - toMillis(order.최종수정일시)) < 1000 * 60 * 60 * 48;
 
   const startLongPress = () => {
     if (isCanceled) return;
@@ -2197,6 +2279,11 @@ function OrderCard({ order, onSelect, onEdit, user }) {
       )}
       {(order.attachCount > 0) && (
         <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">사진 {order.attachCount}장</div>
+      )}
+      {isRecentlyEditedByTransport && (
+        <div className="mt-0.5">
+          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded">운송사 수정</span>
+        </div>
       )}
       {!order.차량번호 && order.배차거절 === true && (
         <div className="mt-2" onClick={(e) => e.stopPropagation()}>
