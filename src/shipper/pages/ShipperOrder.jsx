@@ -375,7 +375,12 @@ export default function ShipperOrder({ editData, onClose }) {
       파렛트사요약: buildPalletSummary(cargoRows),
     };
     if (editId || editData?.id) {
-      await updateDoc(doc(db, "orders", editId || editData.id), { ...saveForm, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "orders", editId || editData.id), {
+        ...saveForm,
+        updatedAt: serverTimestamp(),
+        최종수정출처: "shipper",
+        최종수정일시: serverTimestamp(),
+      });
     } else {
       await addDoc(collection(db, "orders"), {
         ...saveForm,

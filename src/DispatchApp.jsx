@@ -349,6 +349,7 @@ const sixMonthsAgo = getSixMonthsAgo();
           ordersPrev.set(r._id, {
             car: (r.차량번호 || "").trim(),
             status: (r.배차상태 || "").trim(),
+            editStamp: r.최종수정일시?.seconds || 0,
           });
         });
         return;
@@ -392,6 +393,17 @@ const sixMonthsAgo = getSixMonthsAgo();
               { orderId: id }
             );
           }
+
+          // 화주사가 오더 정보(화물/상하차지 등)를 수정 -> 알림
+          const nextEditStamp = d.최종수정일시?.seconds || 0;
+          if ((d.source === "shipper" || d.source === "shipper_mobile") && d.최종수정출처 === "shipper"
+            && prev && nextEditStamp && nextEditStamp !== prev.editStamp) {
+            sflowToast(
+              `[화주사 수정] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "order",
+              { orderId: id, source: d.source }
+            );
+          }
         }
 
         if (ch.type === "removed") {
@@ -407,6 +419,7 @@ const sixMonthsAgo = getSixMonthsAgo();
           ordersPrev.set(id, {
             car: (d.차량번호 || "").trim(),
             status: (d.배차상태 || "").trim(),
+            editStamp: d.최종수정일시?.seconds || 0,
           });
         }
       });
@@ -722,6 +735,11 @@ const patchDispatch = async (_id, patch) => {
   };
   if (!cleanPatch.__system) {
     _updatePayload.updatedAt = Date.now();
+  }
+  // 화주사가 등록한 오더를 운송사가 수정하면, 화주사 앱에 "운송사가 수정했습니다" 알림을 띄울 수 있도록 기록
+  if (histories.length > 0 && (prev.source === "shipper" || prev.source === "shipper_mobile")) {
+    _updatePayload.최종수정출처 = "transport";
+    _updatePayload.최종수정일시 = serverTimestamp();
   }
   updateDoc(ref, _updatePayload).catch(e => console.error("patchDispatch 저장 오류:", e));
 };
