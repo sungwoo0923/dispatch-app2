@@ -111,6 +111,8 @@ export default function ShipperStatus() {
   const [attachViewer, setAttachViewer] = useState(null);
   const prevVehicleRef = useRef({});
   const [dispatchNotif, setDispatchNotif] = useState(null);
+  const prevEditStampRef = useRef({});
+  const editStampFirstLoadRef = useRef(true);
   const [focusOrderId, setFocusOrderId] = useState(null);
   const [flashId, setFlashId] = useState(null);
   const rowRefs = useRef({});
@@ -257,6 +259,27 @@ export default function ShipperStatus() {
         }
         prevVehicleRef.current[o.id] = curHasVehicle;
       });
+
+      // 운송사가 배차정보(차량/운임)를 수정 -> 알림
+      if (editStampFirstLoadRef.current) {
+        editStampFirstLoadRef.current = false;
+        docs.forEach((o) => { prevEditStampRef.current[o.id] = o.최종수정일시?.seconds || 0; });
+      } else {
+        docs.forEach((o) => {
+          const cur = o.최종수정일시?.seconds || 0;
+          const prev = prevEditStampRef.current[o.id];
+          if (o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
+            setDispatchNotif({
+              id: o.id,
+              text: `${o.거래처명 || o.상차지명 || "오더"} 배차정보를 운송사가 수정했습니다.`,
+              order: o,
+            });
+            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+            pushToast({ type: "dispatch", order: o, title: "배차정보 수정", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+          }
+          prevEditStampRef.current[o.id] = cur;
+        });
+      }
 
       setOrders(docs);
       setLoading(false);
@@ -960,6 +983,14 @@ export default function ShipperStatus() {
                   onClick={() => cancelOrder(selectedOrder.id)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
                 >오더취소</button>
+                {selectedOrder?.상태 !== "취소" && (
+                  <button
+                    onClick={() => deleteOrders([selectedOrder], () => setDetailOpen(false))}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold border border-red-300 text-red-600 hover:bg-red-50"
+                  >
+                    {selectedOrder?.차량번호 ? "배차취소 요청" : "삭제"}
+                  </button>
+                )}
                 <button
                   onClick={() => setAttachViewer(selectedOrder)}
                   className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90"
