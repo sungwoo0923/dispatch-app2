@@ -757,7 +757,7 @@ function getTransportBadgeInfo(order) {
   let label = state;
   if (isHold) label = "요청보류";
   else if (isPending) label = "배차요청";
-  const blink = isPending;
+  const blink = label === "배차중" || label === "배차요청";
   const s = TP_STATUS_DOT[label] || TP_STATUS_DOT.배차중;
   return { label, blink, isPending, isHold, ...s };
 }
@@ -5579,13 +5579,12 @@ const summary = useMemo(() => {
       </div>
 
       {/* 날짜/퀵범위/필터 */}
-      <div className="border-b px-4 pt-3 pb-3 space-y-2.5 overflow-hidden bg-white">
+      <div className={`border-b px-4 pt-3 pb-3 space-y-2.5 overflow-hidden ${cardVersionB ? "bg-gradient-to-b from-[#1B2B4B] to-[#0f1c33]" : "bg-white"}`}>
         {(() => {
-          // KPI 다이얼 패널만 A/B 테마를 따르고(하나는 다크 네이비, 하나는 라이트),
-          // 그 아래 필터 영역은 페이지 배경이 항상 흰색이므로 공통 라이트 스타일을 사용한다.
+          // B스타일은 카드/KPI패널과 통일감을 주기 위해 필터 영역도 다크 네이비 디지털 톤을 사용한다.
           const dt = cardVersionB
             ? {
-                panel: "bg-gradient-to-br from-[#16233d] to-[#1B2B4B] shadow-lg shadow-[#1B2B4B]/20",
+                panel: "bg-white/[0.06] shadow-lg shadow-black/20 border border-white/10",
                 label: "text-white/40",
                 value: "text-white",
                 divider: "border-white/10",
@@ -5598,12 +5597,14 @@ const summary = useMemo(() => {
                 divider: "border-gray-200",
                 glow: "none",
               };
-          const segTrack = "bg-gray-100";
+          const segTrack = cardVersionB ? "bg-white/10" : "bg-gray-100";
           const segActive = "bg-white text-[#1B2B4B] shadow";
-          const segInactive = "text-gray-500";
-          const field = "bg-gray-50 text-gray-800 border border-gray-200 focus:border-[#1B2B4B]/30 focus:ring-[#1B2B4B]/10";
-          const icon = "text-gray-400";
-          const rangeText = "text-gray-500";
+          const segInactive = cardVersionB ? "text-white/50" : "text-gray-500";
+          const field = cardVersionB
+            ? "bg-white/10 text-white border border-white/15 placeholder-white/40 focus:border-white/30 focus:ring-white/10"
+            : "bg-gray-50 text-gray-800 border border-gray-200 focus:border-[#1B2B4B]/30 focus:ring-[#1B2B4B]/10";
+          const icon = cardVersionB ? "text-white/50" : "text-gray-400";
+          const rangeText = cardVersionB ? "text-white/60" : "text-gray-500";
           return (
             <>
               {/* KPI 디지털 다이얼 */}
@@ -6703,24 +6704,25 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     String(order.차량종류 || order.차종 || "").includes("냉동");
 
   if (cardVersionB) {
-    // ── B VERSION: Minimal, clean design ──
+    // ── B VERSION: 다크 네이비 디지털 패널 디자인 ──
     return (
       <>
       <div
         className={
-          "relative bg-white rounded-xl border transition-colors overflow-hidden " +
+          "relative rounded-xl border transition-colors overflow-hidden " +
           (selected
-            ? "border-[#1B2B4B] shadow-[0_0_0_2px_rgba(27,43,75,0.12)]"
+            ? "border-cyan-300/60 shadow-[0_0_0_2px_rgba(103,232,249,0.25)]"
             : flash
-              ? "border-blue-300 shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
+              ? "border-blue-300 shadow-[0_0_0_3px_rgba(59,130,246,0.25)]"
               : isToday
-                ? "border-l-4 border-l-[#1B2B4B] border-t-gray-200 border-r-gray-200 border-b-gray-200"
-                : "border-gray-200")
+                ? "border-l-4 border-l-cyan-300 border-t-white/10 border-r-white/10 border-b-white/10"
+                : "border-white/10")
         }
+        style={{ background: "linear-gradient(160deg,#1B2B4B,#0f1c33)", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}
         onClick={onSelect}
       >
         {/* 상단 정보 바 */}
-        <div className="px-3 py-1.5 flex items-center justify-between" style={{ background: "linear-gradient(90deg, rgba(30,58,95,0.06), rgba(30,58,95,0.01))" }}>
+        <div className="px-3 py-1.5 flex items-center justify-between border-b border-white/10">
           <div className="flex items-center gap-1.5">
             <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
             {isCancelRequested && (
@@ -6730,10 +6732,10 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               </button>
             )}
             {order.거래처명 && (
-              <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
+              <span className="text-[0.72em] font-semibold text-white/60 truncate max-w-[90px]">{order.거래처명}</span>
             )}
             {isCold && (
-              <span className="text-[0.68em] text-[#1B2B4B] font-bold bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 px-1.5 py-0.5 rounded">
+              <span className="text-[0.68em] text-cyan-200 font-bold bg-white/10 border border-cyan-300/25 px-1.5 py-0.5 rounded">
                 {(() => {
                   const vt = String(order.차량종류 || order.차종 || "");
                   const hasCold = vt.includes("냉장") && vt.includes("냉동");
@@ -6742,10 +6744,10 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               </span>
             )}
             {isUrgentOrder(order) && (
-              <span className="text-[0.68em] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">긴급</span>
+              <span className="text-[0.68em] font-bold text-red-300 bg-red-500/15 border border-red-400/30 px-1.5 py-0.5 rounded">긴급</span>
             )}
             {String(order.운행유형 || "").trim() === "왕복" && (
-              <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded">왕복</span>
+              <span className="text-[0.68em] font-extrabold tracking-wide bg-amber-400 text-[#0f1c33] px-1.5 py-0.5 rounded">왕복</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -6754,8 +6756,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
               className={`flex items-center gap-0.5 text-[0.68em] font-semibold tabular-nums ${
                 order.attachCount > 0
-                  ? (order.attachViewed ? "text-[#1B2B4B]" : "text-emerald-600")
-                  : "text-gray-300"
+                  ? (order.attachViewed ? "text-cyan-200" : "text-emerald-300")
+                  : "text-white/25"
               }`}
             >
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -6764,12 +6766,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             {(order.메모 || order.적요) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-                className="text-[0.68em] text-gray-400 font-semibold"
+                className="text-[0.68em] text-white/40 font-semibold"
               >
                 메모
               </button>
             )}
-            <span className="text-[0.68em] text-gray-400 tabular-nums">{String(order.상차일 || "").slice(5)}</span>
+            <span className="text-[0.68em] text-white/40 tabular-nums">{String(order.상차일 || "").slice(5)}</span>
           </div>
         </div>
 
@@ -6778,20 +6780,20 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           {/* 상/하차 */}
           <div className="flex items-stretch gap-2">
             <div className="flex flex-col items-center shrink-0 py-0.5">
-              <div className="w-2 h-2 rounded-full border-2 border-[#1B2B4B] bg-white mt-1.5" />
-              <div className="w-px flex-1 min-h-[20px] bg-[#1B2B4B]/15 my-0.5" />
-              <div className="w-2 h-2 rounded-full bg-[#1B2B4B]/40 mb-1.5" />
+              <div className="w-2 h-2 rounded-full border-2 border-cyan-300 bg-transparent mt-1.5" />
+              <div className="w-px flex-1 min-h-[20px] bg-white/15 my-0.5" />
+              <div className="w-2 h-2 rounded-full bg-white/30 mb-1.5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex-1 min-w-0 truncate">
-                  <span className="text-[1em] font-bold text-gray-900">{pickupName}</span>
+                  <span className="text-[1em] font-bold text-white">{pickupName}</span>
                   {pickupAddrShort && (
-                    <span className="text-[0.75em] text-gray-400 ml-1">({pickupAddrShort})</span>
+                    <span className="text-[0.75em] text-white/35 ml-1">({pickupAddrShort})</span>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[0.75em] text-gray-500 tabular-nums">{pickupTime}</span>
+                  <span className="text-[0.75em] text-white/55 tabular-nums">{pickupTime}</span>
                   {pickupStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
                 </div>
               </div>
@@ -6801,20 +6803,20 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 const all = [...pStops, ...dStops];
                 if (!all.length) return null;
                 return (
-                  <div className="text-[0.68em] text-gray-400 mb-1.5 pl-0.5">
+                  <div className="text-[0.68em] text-white/35 mb-1.5 pl-0.5">
                     경유: {all.map(s => s.업체명 || "-").join(" → ")}
                   </div>
                 );
               })()}
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0 truncate">
-                  <span className="text-[1em] font-bold text-gray-900">{dropName}</span>
+                  <span className="text-[1em] font-bold text-white">{dropName}</span>
                   {dropAddrShort && (
-                    <span className="text-[0.75em] text-gray-400 ml-1">({dropAddrShort})</span>
+                    <span className="text-[0.75em] text-white/35 ml-1">({dropAddrShort})</span>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[0.75em] text-gray-500 tabular-nums">{dropTime}</span>
+                  <span className="text-[0.75em] text-white/55 tabular-nums">{dropTime}</span>
                   {dropStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
                 </div>
               </div>
@@ -6822,24 +6824,20 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           </div>
 
           {/* 하단 정보 */}
-          <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-gray-100">
-            <span className="text-[0.72em] text-gray-500 truncate leading-relaxed">
+          <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-white/10">
+            <span className="text-[0.72em] text-white/45 truncate leading-relaxed">
               {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
             </span>
             <div
-              className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg"
-              style={{
-                background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
-              }}
+              className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg bg-white/10 border border-white/10"
             >
               <span className="flex items-baseline gap-0.5">
-                <span className="text-[0.62em] text-white/50 font-semibold">청구</span>
+                <span className="text-[0.62em] text-white/45 font-semibold">청구</span>
                 <span className="text-[0.85em] font-bold text-white tabular-nums">{fmtMoney(claim)}</span>
               </span>
-              <span className="w-px h-2.5 bg-white/20" />
+              <span className="w-px h-2.5 bg-white/15" />
               <span className="flex items-baseline gap-0.5">
-                <span className="text-[0.62em] text-white/50 font-semibold">기사</span>
+                <span className="text-[0.62em] text-white/45 font-semibold">기사</span>
                 <span className="text-[0.85em] font-bold text-amber-300 tabular-nums">{fmtMoney(fee)}</span>
               </span>
             </div>
@@ -6847,19 +6845,19 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
 
           {/* 배차완료 시 기사 연락 */}
           {state === "배차완료" && (order.이름 || order.차량번호) && (
-            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
-              <span className="text-[0.75em] text-gray-400 truncate flex-1">
+            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-white/10">
+              <span className="text-[0.75em] text-white/40 truncate flex-1">
                 {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
               </span>
               {order.전화번호 && (
                 <div className="flex gap-1">
                   <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                    className="shrink-0 w-7 h-7 rounded-full bg-[#1B2B4B] flex items-center justify-center">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
+                    className="shrink-0 w-7 h-7 rounded-full bg-cyan-400 flex items-center justify-center">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0f1c33" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
                   </a>
                   <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                    className="shrink-0 w-7 h-7 rounded-full border border-[#1B2B4B] flex items-center justify-center">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    className="shrink-0 w-7 h-7 rounded-full border border-white/25 flex items-center justify-center">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                   </a>
                 </div>
               )}
