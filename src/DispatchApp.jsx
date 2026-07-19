@@ -222,7 +222,8 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  where
+  where,
+  deleteField
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -761,6 +762,42 @@ const removeDispatch = async (arg) => {
   }
 
   await deleteDoc(ref);
+};
+
+// 화주사의 "수정요청"(배차완료 오더 수정) 승인/거절 — 승인 시에만 실제 필드에 반영되고
+// history에 기록되며, 거절 시에는 요청 내용을 버리고 플래그만 정리한다.
+const approveEditRequestPC = async (order) => {
+  const pending = order.수정요청데이터 || {};
+  const histories = [];
+  Object.keys(pending).forEach((key) => {
+    if (IGNORE_HISTORY_FIELDS.has(key)) return;
+    const before = order[key] ?? null;
+    const after = pending[key] ?? null;
+    if (JSON.stringify(before ?? null) !== JSON.stringify(after ?? null)) {
+      histories.push(makeDispatchHistory({ userEmail: auth.currentUser?.email, field: key, before, after }));
+    }
+  });
+  const historyArr = Array.isArray(order.history) ? order.history : [];
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, {
+    ...pending,
+    history: [...historyArr, ...histories],
+    최종수정출처: "shipper",
+    최종수정일시: serverTimestamp(),
+    수정요청: false,
+    수정요청데이터: deleteField(),
+    수정거절: false,
+    updatedAt: Date.now(),
+  });
+};
+const rejectEditRequestPC = async (order) => {
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, {
+    수정요청: false,
+    수정요청데이터: deleteField(),
+    수정거절: true,
+    수정거절일시: serverTimestamp(),
+  });
 };
 
   const upsertDriver = async (driver) => {
@@ -2500,6 +2537,8 @@ React.useEffect(() => {
   const addDispatchSafe = isViewer ? _viewerBlock : addDispatch;
   const patchDispatchSafe = isViewer ? _viewerBlock : patchDispatch;
   const removeDispatchSafe = isViewer ? _viewerBlock : removeDispatch;
+  const approveEditRequestSafe = isViewer ? _viewerBlock : approveEditRequestPC;
+  const rejectEditRequestSafe = isViewer ? _viewerBlock : rejectEditRequestPC;
   const upsertDriverSafe = isViewer ? _viewerBlock : upsertDriver;
   const removeDriverSafe = isViewer ? _viewerBlock : removeDriver;
   const upsertClientSafe = isViewer ? _viewerBlock : upsertClient;
@@ -2906,6 +2945,8 @@ return (
                 addDispatch={addDispatchSafe}
                 patchDispatch={patchDispatchSafe}
                 removeDispatch={removeDispatchSafe}
+                approveEditRequest={approveEditRequestSafe}
+                rejectEditRequest={rejectEditRequestSafe}
                 upsertDriver={upsertDriver}
                 focusOrderId={focusOrderId}
                 clearFocusOrder={() => setFocusOrderId(null)}
@@ -18368,6 +18409,27 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                         className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
                       />
                     )}
+                    {r.수정요청 && (
+                      <button
+                        type="button"
+                        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const pending = r.수정요청데이터 || {};
+                          const diffLines = Object.entries(pending)
+                            .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(r[k] ?? "") !== String(v ?? ""))
+                            .map(([k, v]) => `${k}: ${r[k] ?? "없음"} → ${v ?? "없음"}`);
+                          const msg = `화주사가 수정을 요청했습니다.\n\n${diffLines.join("\n") || "(변경된 내용 없음)"}\n\n승인하시겠습니까? (취소를 누르면 거절됩니다)`;
+                          if (window.confirm(msg)) {
+                            await approveEditRequestPC(r);
+                          } else if (window.confirm("수정요청을 거절하시겠습니까?")) {
+                            await rejectEditRequestPC(r);
+                          }
+                        }}
+                        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
+                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                      />
+                    )}
                   </div>
                   </td>
                   {/* 청구운임 */}
@@ -21149,6 +21211,45 @@ value={copyTarget?.화물수량 || ""}
               </div>
             </div>
 
+            {/* 화주사 수정요청 승인/거절 */}
+            {editTarget.수정요청 && editTarget.수정요청데이터 && (
+              <div className="mt-4 border-t pt-3">
+                <div className="text-[12px] font-bold text-sky-700 mb-2">화주사 수정요청 (승인 대기중)</div>
+                <div className="max-h-40 overflow-y-auto space-y-1.5 bg-sky-50 border border-sky-200 rounded-lg p-2.5 mb-2">
+                  {Object.entries(editTarget.수정요청데이터)
+                    .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(editTarget[k] ?? "") !== String(v ?? ""))
+                    .map(([k, v]) => (
+                      <div key={k} className="text-[11px] text-gray-700">
+                        <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(editTarget[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
+                      </div>
+                    ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="px-3 py-1.5 rounded-lg border border-red-300 text-red-500 text-[12px] font-semibold hover:bg-red-50"
+                    onClick={async () => {
+                      if (!window.confirm("화주사의 수정요청을 거절하시겠습니까?")) return;
+                      await rejectEditRequestPC(editTarget);
+                      setEditPopupOpen(false);
+                    }}
+                  >
+                    거절
+                  </button>
+                  <button
+                    className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold"
+                    style={{ background: "#1B2B4B" }}
+                    onClick={async () => {
+                      if (!window.confirm("화주사의 수정요청을 승인하고 반영하시겠습니까?")) return;
+                      await approveEditRequestPC(editTarget);
+                      setEditPopupOpen(false);
+                    }}
+                  >
+                    승인
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* 수정이력 */}
             {Array.isArray(editTarget.history) &&
               editTarget.history.length > 0 && (
@@ -23283,6 +23384,8 @@ function DispatchStatus({
   addDispatch,
   patchDispatch,
   removeDispatch,
+  approveEditRequest,
+  rejectEditRequest,
   upsertDriver,
   isViewer = false,
   setCargoAddPopup = () => {},
@@ -26765,6 +26868,27 @@ return (
                         className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
                       />
                     )}
+                    {row.수정요청 && (
+                      <button
+                        type="button"
+                        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const pending = row.수정요청데이터 || {};
+                          const diffLines = Object.entries(pending)
+                            .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(row[k] ?? "") !== String(v ?? ""))
+                            .map(([k, v]) => `${k}: ${row[k] ?? "없음"} → ${v ?? "없음"}`);
+                          const msg = `화주사가 수정을 요청했습니다.\n\n${diffLines.join("\n") || "(변경된 내용 없음)"}\n\n승인하시겠습니까? (취소를 누르면 거절됩니다)`;
+                          if (window.confirm(msg)) {
+                            await approveEditRequest(row);
+                          } else if (window.confirm("수정요청을 거절하시겠습니까?")) {
+                            await rejectEditRequest(row);
+                          }
+                        }}
+                        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
+                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                      />
+                    )}
                   </div>
                   </td>
 
@@ -27900,6 +28024,45 @@ return (
                 />
               </div>
             </div>
+
+            {/* 화주사 수정요청 승인/거절 */}
+            {editTarget.수정요청 && editTarget.수정요청데이터 && (
+              <div className="mt-4 border-t pt-3">
+                <div className="text-[12px] font-bold text-sky-700 mb-2">화주사 수정요청 (승인 대기중)</div>
+                <div className="max-h-40 overflow-y-auto space-y-1.5 bg-sky-50 border border-sky-200 rounded-lg p-2.5 mb-2">
+                  {Object.entries(editTarget.수정요청데이터)
+                    .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(editTarget[k] ?? "") !== String(v ?? ""))
+                    .map(([k, v]) => (
+                      <div key={k} className="text-[11px] text-gray-700">
+                        <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(editTarget[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
+                      </div>
+                    ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="px-3 py-1.5 rounded-lg border border-red-300 text-red-500 text-[12px] font-semibold hover:bg-red-50"
+                    onClick={async () => {
+                      if (!window.confirm("화주사의 수정요청을 거절하시겠습니까?")) return;
+                      await rejectEditRequest(editTarget);
+                      setEditPopupOpen(false);
+                    }}
+                  >
+                    거절
+                  </button>
+                  <button
+                    className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold"
+                    style={{ background: "#1B2B4B" }}
+                    onClick={async () => {
+                      if (!window.confirm("화주사의 수정요청을 승인하고 반영하시겠습니까?")) return;
+                      await approveEditRequest(editTarget);
+                      setEditPopupOpen(false);
+                    }}
+                  >
+                    승인
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* 수정이력 */}
             {Array.isArray(editTarget.history) &&

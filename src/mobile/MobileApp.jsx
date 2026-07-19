@@ -35,6 +35,7 @@ import {
   setDoc,
   getDoc,
   arrayUnion,
+  deleteField,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -765,6 +766,31 @@ function buildHistoryEntries(prev, next, userEmail) {
   return entries;
 }
 
+// 화주사의 "수정요청"(배차완료 오더 수정) 승인/거절 — 승인 시에만 실제 필드에 반영되고
+// history에 기록되며, 거절 시에는 요청 내용을 버리고 플래그만 정리한다.
+async function approveEditRequest(order) {
+  const pending = order.수정요청데이터 || {};
+  const historyEntries = buildHistoryEntries(order, pending, auth.currentUser?.email);
+  const payload = {
+    ...pending,
+    최종수정출처: "shipper",
+    최종수정일시: serverTimestamp(),
+    수정요청: false,
+    수정요청데이터: deleteField(),
+    수정거절: false,
+  };
+  if (historyEntries.length > 0) payload.history = arrayUnion(...historyEntries);
+  await updateDoc(doc(db, order.__col || "orders", order.id), payload);
+}
+async function rejectEditRequest(order) {
+  await updateDoc(doc(db, order.__col || "orders", order.id), {
+    수정요청: false,
+    수정요청데이터: deleteField(),
+    수정거절: true,
+    수정거절일시: serverTimestamp(),
+  });
+}
+
 // 운송사 앱 상태뱃지 색상 (화주사 앱과 동일한 네이비 디지털 톤)
 const TP_STATUS_DOT = {
   배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)", wash: "rgba(96,165,250,0.06)" },
@@ -857,6 +883,42 @@ function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
             </button>
           </div>
         )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// 화주사 수정요청 승인/거절 팝업 (배차완료 오더를 화주사가 수정 요청했을 때)
+function EditRequestModal({ order, onApprove, onReject, onClose }) {
+  const pending = order.수정요청데이터 || {};
+  const diffs = Object.entries(pending).filter(
+    ([k, v]) => k !== "화물목록" && String(order[k] ?? "") !== String(v ?? "")
+  );
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-2xl w-full max-w-sm p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-[15px] font-bold text-gray-800 mb-1.5">화주사 수정요청</div>
+        <div className="text-[13px] text-gray-500 mb-3 leading-relaxed">
+          {order.거래처명 || "화주사"}가 오더 수정을 요청했습니다. 승인하면 아래 내용이 반영됩니다.
+        </div>
+        <div className="max-h-56 overflow-y-auto space-y-1.5 mb-4 bg-gray-50 rounded-xl p-3">
+          {diffs.length === 0 && <div className="text-[12px] text-gray-400 text-center py-2">변경된 내용이 없습니다.</div>}
+          {diffs.map(([k, v]) => (
+            <div key={k} className="text-[12px] text-gray-700">
+              <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(order[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-[#1B2B4B]">{String(v ?? "없음") || "없음"}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onReject} className="flex-1 py-2.5 rounded-xl border border-red-300 text-red-500 text-[14px] font-semibold">
+            거절
+          </button>
+          <button onClick={onApprove} className="flex-1 py-2.5 rounded-xl text-white text-[14px] font-semibold" style={{ background: "#1B2B4B" }}>
+            승인
+          </button>
+        </div>
       </div>
     </div>,
     document.body
@@ -1055,6 +1117,7 @@ const initialLoadDoneRef = useRef({});             // 🔔 최초로드 구분
 const dispatchPrevStatus = React.useRef({});       // 🔔 배차상태 추적
 const notifiedOrderIdsRef = useRef(new Set());     // 🔔 중복알림 방지
 const prevEditStampRef = useRef({});                // 🔔 화주사 수정 감지 (최종수정일시 추적)
+const prevEditReqRef = useRef({});                  // 🔔 화주사 수정요청(배차완료 오더) 감지
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
@@ -1358,6 +1421,7 @@ collections.forEach((name) => {
           notifiedOrderIdsRef.current.add(`배차완료_${item.id}`);
           notifiedOrderIdsRef.current.add(`취소_${item.id}`);
           prevEditStampRef.current[item.id] = item.최종수정일시?.seconds || 0;
+          prevEditReqRef.current[item.id] = !!item.수정요청;
         });
         return;
       }
@@ -1435,6 +1499,16 @@ collections.forEach((name) => {
               showTopOrderBanner(`${data.거래처명 || "화주사"}가 오더 정보를 수정했습니다. (${data.상차지명 || "-"} → ${data.하차지명 || "-"})`);
             }
             prevEditStampRef.current[change.doc.id] = editMs;
+          }
+
+          // 화주사 수정요청(배차완료 오더) 감지 -> 승인 필요 알림
+          if (data.source === "shipper" || data.source === "shipper_mobile") {
+            const curReq = !!data.수정요청;
+            const prevReq = prevEditReqRef.current[change.doc.id];
+            if (prevReq === false && curReq === true) {
+              showTopOrderBanner(`${data.거래처명 || "화주사"}가 수정요청을 보냈습니다. 승인이 필요합니다. (${data.상차지명 || "-"} → ${data.하차지명 || "-"})`);
+            }
+            prevEditReqRef.current[change.doc.id] = curReq;
           }
         }
 
@@ -6743,6 +6817,20 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
       await deleteDoc(doc(db, order.__col || "orders", order.id));
     } catch {}
   };
+  const isEditRequested = order.수정요청 === true;
+  const [showEditReqModal, setShowEditReqModal] = useState(false);
+  const openEditReqModal = (e) => {
+    e.stopPropagation();
+    setShowEditReqModal(true);
+  };
+  const approveEditReq = async () => {
+    try { await approveEditRequest(order); } catch {}
+    setShowEditReqModal(false);
+  };
+  const rejectEditReq = async () => {
+    try { await rejectEditRequest(order); } catch {}
+    setShowEditReqModal(false);
+  };
 const isToday =
   String(order.상차일 || "").slice(0, 10) === todayKST();
       useEffect(() => {
@@ -6806,6 +6894,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               <button onClick={approveCancelDelete}
                 className="px-1.5 py-0.5 rounded-full text-[0.68em] font-bold text-white bg-orange-500 badge-dispatching">
                 취소승인
+              </button>
+            )}
+            {isEditRequested && (
+              <button onClick={openEditReqModal}
+                className="px-1.5 py-0.5 rounded-full text-[0.68em] font-bold text-white bg-sky-500 badge-dispatching">
+                수정승인
               </button>
             )}
             {isRecentlyEditedByShipper && (
@@ -6952,6 +7046,9 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       {showReqModal && (
         <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
       )}
+      {showEditReqModal && (
+        <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowEditReqModal(false)} />
+      )}
       </>
     );
   }
@@ -7022,6 +7119,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     <button onClick={approveCancelDelete}
       className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-orange-500 badge-dispatching">
       취소승인
+    </button>
+  )}
+  {isEditRequested && (
+    <button onClick={openEditReqModal}
+      className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-sky-500 badge-dispatching">
+      수정승인
     </button>
   )}
   {isRecentlyEditedByShipper && (
@@ -7174,6 +7277,9 @@ const dt = new Date(y, m - 1, d, hh, mm);
 </div>
   {showReqModal && (
     <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
+  )}
+  {showEditReqModal && (
+    <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowEditReqModal(false)} />
   )}
   </>
   );
@@ -7616,6 +7722,23 @@ function MobileOrderDetail({
       setPage("list");
     } catch {}
   };
+  const isEditRequested = order.수정요청 === true;
+  const [showEditReqModal, setShowEditReqModal] = useState(false);
+  const approveEditReq = async () => {
+    try {
+      await approveEditRequest(order);
+      const pending = order.수정요청데이터 || {};
+      setSelectedOrder((prev) => (prev ? { ...prev, ...pending, 수정요청: false, 최종수정출처: "shipper" } : prev));
+    } catch {}
+    setShowEditReqModal(false);
+  };
+  const rejectEditReq = async () => {
+    try {
+      await rejectEditRequest(order);
+      setSelectedOrder((prev) => (prev ? { ...prev, 수정요청: false, 수정거절: true } : prev));
+    } catch {}
+    setShowEditReqModal(false);
+  };
 const [localDelivered, setLocalDelivered] = React.useState(
     order?.업체전달상태 === "전달완료" || order?.정보전달완료 === true
   );
@@ -7944,6 +8067,23 @@ const handleAssignClick = () => {
       {showHistory && (
         <HistoryViewerModal history={order.history} onClose={() => setShowHistory(false)} />
       )}
+      {isEditRequested && order.수정요청데이터 && (
+        <div className="bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 mt-2">
+          <div className="text-[11px] font-bold text-sky-700 mb-1">화주사 수정요청 (승인 대기중)</div>
+          <div className="space-y-1">
+            {Object.entries(order.수정요청데이터)
+              .filter(([k, v]) => k !== "화물목록" && String(order[k] ?? "") !== String(v ?? ""))
+              .map(([k, v]) => (
+                <div key={k} className="text-[12px] text-gray-700">
+                  <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(order[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+      {showEditReqModal && (
+        <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowEditReqModal(false)} />
+      )}
     </div>
 
     {/* 오더 정보 */}
@@ -7961,6 +8101,12 @@ const handleAssignClick = () => {
                   <button onClick={approveCancelDelete}
                     className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-orange-500 badge-dispatching">
                     취소승인
+                  </button>
+                )}
+                {isEditRequested && (
+                  <button onClick={() => setShowEditReqModal(true)}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-sky-500 badge-dispatching">
+                    수정승인
                   </button>
                 )}
                 {state === "배차완료" && order.배차완료일시?.seconds && (
