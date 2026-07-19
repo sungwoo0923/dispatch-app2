@@ -17509,6 +17509,8 @@ const handleCloseFileUpload = async (e) => {
     if (!shipperOrderIdSet.has(id)) return false;
     // 지급방식은 화주사만 변경 가능 — 최고관리자 예외 없이 운송사측 전체에서 잠금
     if (key === "지급방식") return true;
+    // 배차방식은 화주사 오더라도 운송사가 항상 수정 가능
+    if (key === "배차방식") return false;
     if (role === "totalMaster") return false;
     const settlementAllowed = ["청구운임", "기사운임", "수수료"];
     return !settlementAllowed.includes(key);
@@ -21148,7 +21150,6 @@ value={copyTarget?.화물수량 || ""}
                 <label>배차방식</label>
                 <select
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                  disabled={editTarget?.source === "shipper"}
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
@@ -27959,7 +27960,6 @@ return (
                 <label>배차방식</label>
                 <select
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
-                  disabled={editTarget?.source === "shipper"}
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
