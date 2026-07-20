@@ -122,6 +122,7 @@ export default function ShipperStatus() {
   const [keyword, setKeyword] = useState("");
   const scrollRef = useRef(null);
   const prevAttachRef = useRef({});
+  const attachPendingRef = useRef({}); // { [orderId]: { delta, order, timer } } — 여러 장을 연속 업로드해도 알림 1개로 묶기 위한 디바운스 누적
   const [attachNotif, setAttachNotif] = useState(null);
   const [attachViewer, setAttachViewer] = useState(null);
   const prevVehicleRef = useRef({});
@@ -249,17 +250,34 @@ export default function ShipperStatus() {
       const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
       // 첨부 증가 감지 -> 알림
+      // 기사가 여러 장을 연속으로 올리면 장수만큼 onSnapshot이 여러 번 발화해 알림도 그만큼
+      // 여러 개 뜨던 문제 — 짧은 시간 내 증가분을 하나로 누적했다가 한 번만 알림을 띄운다.
       docs.forEach((o) => {
         const cur = o.attachCount || 0;
         const prev = prevAttachRef.current[o.id] ?? null;
         if (prev !== null && cur > prev) {
-          setAttachNotif({
-            id: o.id,
-            text: `${o.거래처명 || o.상차지명 || "오더"}에 첨부파일이 추가되었습니다.`,
-            order: o,
-          });
-          setTimeout(() => setAttachNotif(null), 5000);
-          pushToast({ type: "attach", order: o, title: "첨부파일 추가", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+          const added = cur - prev;
+          const pending = attachPendingRef.current[o.id];
+          if (pending) {
+            clearTimeout(pending.timer);
+            pending.delta += added;
+            pending.order = o;
+          } else {
+            attachPendingRef.current[o.id] = { delta: added, order: o, timer: null };
+          }
+          const entry = attachPendingRef.current[o.id];
+          entry.timer = setTimeout(() => {
+            const { delta, order } = attachPendingRef.current[o.id] || {};
+            delete attachPendingRef.current[o.id];
+            if (!delta) return;
+            setAttachNotif({
+              id: order.id,
+              text: `${order.거래처명 || order.상차지명 || "오더"}에 첨부파일이 추가되었습니다. (${delta}장)`,
+              order,
+            });
+            setTimeout(() => setAttachNotif(null), 5000);
+            pushToast({ type: "attach", order, title: "첨부파일 추가", desc: `${order.상차지명 || "-"} → ${order.하차지명 || "-"} · ${delta}장` });
+          }, 1200);
         }
         prevAttachRef.current[o.id] = cur;
       });
@@ -439,6 +457,23 @@ export default function ShipperStatus() {
     if (o.화주사확인대기 === true) return "요청"; // 운송사가 아직 확인하지 않은 신규 요청
     return "배차중"; // 운송사가 확인했거나(false) 필드가 없는 레거시/전송 건은 이미 처리중으로 간주
   }, []);
+
+  // 수정현황 컬럼 — 상태(배차중/배차완료/배차취소/요청) 컬럼과 분리해, 화주사의 수정요청이
+  // 지금 어느 단계인지(요청/확인/승인/거절)를 별도로 보여준다.
+  const getEditStatus = (o) => {
+    if (o.수정요청) return o.수정확인 ? "수정확인" : "수정요청";
+    const ts = o.수정처리일시?.seconds ? o.수정처리일시.seconds * 1000 : (typeof o.수정처리일시 === "number" ? o.수정처리일시 : 0);
+    const recent = ts && (Date.now() - ts) < 1000 * 60 * 60 * 48;
+    if (recent && o.수정처리 === "승인") return "수정승인";
+    if (recent && o.수정처리 === "거절") return "수정거절";
+    return null;
+  };
+  const EDIT_STATUS_STYLE = {
+    수정요청: "bg-sky-100 text-sky-700",
+    수정확인: "bg-indigo-100 text-indigo-700",
+    수정승인: "bg-emerald-100 text-emerald-700",
+    수정거절: "bg-rose-100 text-rose-700",
+  };
 
   // "운송사 수정" 뱃지 클릭 시 — 가장 최근 수정 배치(같은 저장 시점에 함께 기록된 history 항목들)만
   // 골라 변경 전/후 값을 보여준다. patchDispatch가 한 번의 저장에서 만든 history 항목들은
@@ -891,6 +926,7 @@ export default function ShipperStatus() {
               <col style={{ width: 200 }} /><col style={{ width: 140 }} />
               <col style={{ width: 200 }} /><col style={{ width: 140 }} />
               <col style={{ width: 120 }} /><col style={{ width: 110 }} />
+              <col style={{ width: 100 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 120 }} /><col style={{ width: 120 }} />
               <col style={{ width: 120 }} /><col style={{ width: 110 }} />
@@ -904,7 +940,7 @@ export default function ShipperStatus() {
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
                   "순번","등록일","운송사","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
-                  "하차지","하차지주소","화물","파렛트사","상태","차량","톤수","차량번호","이름","전화번호",
+                  "하차지","하차지주소","화물","파렛트사","상태","수정현황","차량","톤수","차량번호","이름","전화번호",
                   "청구운임","지급방식","첨부"
                 ].map((h, idx) => (
                   <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 last:border-r-0 whitespace-nowrap">
@@ -1005,30 +1041,39 @@ export default function ShipperStatus() {
                       })()}
                     </td>
                     <td className={tdCls}>
-                      {o.취소요청 && getStatus(o) !== "배차취소" ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap bg-orange-100 text-orange-700">
-                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
-                          취소요청중
-                        </span>
-                      ) : (
-                        <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${st.cls}`}
-                          style={(getStatus(o) === "요청" || getStatus(o) === "배차중") ? { animation: "cancelReqBlink 1.6s ease-in-out infinite" } : {}}>{st.label}</span>
-                      )}
-                      {o.최종수정출처 === "transport" && (Date.now() - (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0)) < 1000 * 60 * 60 * 48 && (
-                        <button type="button"
-                          onClick={(e) => { e.stopPropagation(); openTransportEditPopup(o); }}
-                          className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-300 cursor-pointer hover:bg-amber-100"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
-                          운송사 수정
-                        </button>
-                      )}
-                      {o.수정요청 && (
-                        <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-sky-50 text-sky-700 border border-sky-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-sky-500" style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
-                          수정승인대기
-                        </span>
-                      )}
+                      <div className="relative inline-block">
+                        {o.취소요청 && getStatus(o) !== "배차취소" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap bg-orange-100 text-orange-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500" style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
+                            취소요청중
+                          </span>
+                        ) : (
+                          <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${st.cls}`}
+                            style={(getStatus(o) === "요청" || getStatus(o) === "배차중") ? { animation: "cancelReqBlink 1.6s ease-in-out infinite" } : {}}>{st.label}</span>
+                        )}
+                        {o.최종수정출처 === "transport" && (Date.now() - (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0)) < 1000 * 60 * 60 * 48 && (
+                          <button type="button"
+                            title="운송사가 오더 정보를 수정했습니다 — 클릭하여 확인"
+                            onClick={(e) => { e.stopPropagation(); openTransportEditPopup(o); }}
+                            className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-amber-500 border-2 border-white cursor-pointer p-0"
+                            style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }}
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td className={tdCls}>
+                      {(() => {
+                        const es = getEditStatus(o);
+                        if (!es) return "-";
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold whitespace-nowrap ${EDIT_STATUS_STYLE[es]}`}>
+                            {(es === "수정요청" || es === "수정확인") && (
+                              <span className={`w-1.5 h-1.5 rounded-full ${es === "수정요청" ? "bg-sky-500" : "bg-indigo-500"}`} style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
+                            )}
+                            {es}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className={tdCls}>{o.차량종류 || "-"}</td>
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
@@ -1070,7 +1115,7 @@ export default function ShipperStatus() {
                 );
               })}
               {pagedRows.length === 0 && (
-                <tr><td colSpan={24} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
+                <tr><td colSpan={25} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
               )}
             </tbody>
           </table>

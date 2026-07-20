@@ -15,6 +15,17 @@ import {
 } from "firebase/firestore";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+// 운송사 프로그램(DispatchApp.jsx)의 등록일 컬럼은 별도 문자열 필드 "등록일"(YYYY-MM-DD)을
+// 참조하는데, 화주사 등록 시 createdAt(serverTimestamp)만 기록하고 이 필드를 채우지 않아
+// 운송사 화면에 등록일이 "-"로만 나오던 버그 — 등록 시 오늘 날짜를 함께 기록한다.
+const todayStr = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 // 경유지 목록은 정상적으로는 배열이지만, 다른 경로(전송하기/구버전 데이터 등)로
 // 저장된 문서는 숫자키 맵 형태 등으로 들어올 수 있어 .filter() 호출 전 항상 배열로 정규화한다.
 const safeStops = (v) => {
@@ -449,6 +460,7 @@ export default function ShipperOrder({ editData, onClose }) {
         업체전달상태: "미전달",
         화주사확인대기: true,
         createdAt: serverTimestamp(),
+        등록일: todayStr(),
         role: "shipper",
         source: "shipper",
         company: form.운송사명 || "",
