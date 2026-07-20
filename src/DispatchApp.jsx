@@ -36286,7 +36286,15 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     return list.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
   }, [dispatchData, client, start, end, searched, searchType]);
 
-  const mapped = rowsInvoice.map((r, i) => ({
+  // ★ 조회결과 중 명세서에 포함할 오더만 선택 (기본값: 전체 선택)
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(new Set());
+  useEffect(() => {
+    setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)));
+  }, [rowsInvoice]);
+
+  const selectedRowsInvoice = rowsInvoice.filter(r => selectedInvoiceIds.has(r._id));
+
+  const mapped = selectedRowsInvoice.map((r, i) => ({
     idx: i + 1,
     상차일: r.상차일 || "",
     상차지: r.상차지명 || r.상차지 || "",
@@ -37747,13 +37755,92 @@ const handleBatchSettle = async (targetStatus) => {
             {/* 조회 결과 요약 */}
             {searched && (
               <div className="flex gap-4 mt-3 text-[13px] font-semibold">
-                <span className="text-[#1B2B4B]">총 <b>{mapped.length}건</b></span>
+                <span className="text-[#1B2B4B]">조회 {rowsInvoice.length}건 중 <b>{mapped.length}건 선택</b></span>
                 <span className="text-blue-600">공급가액 합계 <b>{won(합계공급가)}원</b></span>
                 <span className="text-emerald-600">세액 합계 <b>{won(합계세액)}원</b></span>
                 <span className="text-orange-600">청구 합계 <b>{won(합계공급가 + 합계세액)}원</b></span>
               </div>
             )}
           </div>
+
+          {/* ★ 조회결과 중 명세서에 포함할 오더 선택 (특정 오더만 골라서 명세서 발급) */}
+          {searched && rowsInvoice.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[13px] font-bold text-gray-600">
+                  명세서에 포함할 오더 선택
+                  <span className="text-[12px] text-gray-400 font-normal ml-1">(체크 해제하면 아래 명세서에서 빠집니다)</span>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
+                    className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
+                  >
+                    전체선택
+                  </button>
+                  <button
+                    onClick={() => setSelectedInvoiceIds(new Set())}
+                    className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
+                  >
+                    전체해제
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-gray-50 sticky top-0">
+                      <th className="px-2 py-2 w-8"></th>
+                      <th className="px-2 py-2 text-center">날짜</th>
+                      <th className="px-2 py-2 text-center">상차지</th>
+                      <th className="px-2 py-2 text-center">하차지</th>
+                      <th className="px-2 py-2 text-center">화물명</th>
+                      <th className="px-2 py-2 text-center">차량번호</th>
+                      <th className="px-2 py-2 text-right">청구운임</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rowsInvoice.map((r) => {
+                      const checked = selectedInvoiceIds.has(r._id);
+                      return (
+                        <tr
+                          key={r._id}
+                          className={`border-t border-gray-50 cursor-pointer ${checked ? "" : "opacity-40"}`}
+                          onClick={() => {
+                            setSelectedInvoiceIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(r._id)) next.delete(r._id); else next.add(r._id);
+                              return next;
+                            });
+                          }}
+                        >
+                          <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setSelectedInvoiceIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(r._id)) next.delete(r._id); else next.add(r._id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.상차일 || ""}</td>
+                          <td className="px-2 py-1.5 text-center">{r.상차지명 || ""}</td>
+                          <td className="px-2 py-1.5 text-center">{r.하차지명 || ""}</td>
+                          <td className="px-2 py-1.5 text-center">{r.화물내용 || ""}</td>
+                          <td className="px-2 py-1.5 text-center text-[11px]">{r.차량번호 || ""}</td>
+                          <td className="px-2 py-1.5 text-right font-semibold">{won(toInt(r.청구운임))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* 미조회 상태 */}
           {!searched && (
@@ -37908,7 +37995,7 @@ const handleBatchSettle = async (targetStatus) => {
                           key={m.idx}
                           className={`${i%2===0?"bg-white":"bg-gray-50/60"} hover:bg-blue-50 cursor-pointer transition`}
                           onClick={() => {
-                            const order = rowsInvoice[i];
+                            const order = selectedRowsInvoice[i];
                             setOrderPopup(order);
                             setOrderPopupEdit({
                               상차지명: order.상차지명 || "",
