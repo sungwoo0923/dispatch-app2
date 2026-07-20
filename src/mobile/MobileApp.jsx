@@ -6896,6 +6896,19 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     // ── B VERSION: 상태 액센트 + 디지털 포인트 디자인 ──
     return (
       <>
+      <div className="relative">
+        {isCancelRequested && (
+          <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
+            className="absolute -top-2.5 left-3 z-10 px-2.5 py-1 rounded-full text-[0.66em] font-bold text-white bg-orange-500 shadow-md badge-dispatching">
+            기사취소
+          </button>
+        )}
+        {isEditRequested && (
+          <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+            className="absolute -top-2.5 right-3 z-10 px-2.5 py-1 rounded-full text-[0.66em] font-bold text-white bg-sky-500 shadow-md badge-dispatching">
+            수정요청
+          </button>
+        )}
       <div
         className={
           "relative bg-white rounded-2xl border shadow-sm transition-colors overflow-hidden " +
@@ -6914,16 +6927,6 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           <div className="flex items-center gap-1.5">
             <div className="relative inline-block shrink-0">
               <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
-              {isCancelRequested && (
-                <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-                  className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
-                  style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
-              )}
-              {isEditRequested && (
-                <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-                  className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
-                  style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
-              )}
               {isRecentlyEditedByShipper && !isEditRequested && (
                 <span title="화주사가 오더 정보를 수정했습니다"
                   className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
@@ -7068,6 +7071,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           )}
         </div>
       </div>
+      </div>
       {showReqModal && (
         <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
       )}
@@ -7093,6 +7097,18 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   style={{ "--glow-c": statusRing }}
   onClick={onSelect}
 >
+      {isCancelRequested && (
+        <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
+          className="absolute -top-2.5 left-3 z-10 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-orange-500 shadow-md badge-dispatching">
+          기사취소
+        </button>
+      )}
+      {isEditRequested && (
+        <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+          className="absolute -top-2.5 right-3 z-10 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-sky-500 shadow-md badge-dispatching">
+          수정요청
+        </button>
+      )}
       {/* ▶ 거래처명 + 메모 + 상태 + 배지들 */}
 <div className="flex justify-between items-center gap-1 mb-0.5">
   <div className="flex items-center gap-1 min-w-0 flex-1">
@@ -7143,16 +7159,6 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
 
   <div className="relative inline-block shrink-0">
     <TransportStatusBadge order={order} className="text-[11px]" onClick={openReqModal} flat />
-    {isCancelRequested && (
-      <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
-        style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
-    )}
-    {isEditRequested && (
-      <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-        className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
-        style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
-    )}
     {isRecentlyEditedByShipper && !isEditRequested && (
       <span title="화주사가 오더 정보를 수정했습니다"
         className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />

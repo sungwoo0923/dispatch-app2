@@ -260,6 +260,7 @@ export default function ShipperOrder({ editData, onClose }) {
     차량종류: "", 차량톤수: "", 차량톤수단위: "톤", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
     운송사명: "", 운송사코드: "",
     경유상차목록: [], 경유하차목록: [],
+    독차: true, 혼적: false, 긴급: false,
   });
 
   const onChange = (k, v) => {
@@ -306,6 +307,7 @@ export default function ShipperOrder({ editData, onClose }) {
       차량종류: "", 차량톤수: "", 차량톤수단위: "톤", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
       운송사명: "", 운송사코드: "",
       경유상차목록: [], 경유하차목록: [],
+      독차: true, 혼적: false, 긴급: false,
     });
     setCargoRows([{ qty: "", unit: "파레트", palletCo: "" }]);
     setSuggestions([]); setShowDropdown(null); setActiveIndex(-1);
@@ -942,6 +944,31 @@ export default function ShipperOrder({ editData, onClose }) {
                 <div className="mt-2 text-xs text-[#1B2B4B] font-semibold">{buildCargoSummary(cargoRows)}</div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* 배차옵션 */}
+        <div>
+          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
+            배차옵션
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 flex gap-2">
+            <button type="button"
+              onClick={() => setForm(p => ({ ...p, 독차: true, 혼적: false }))}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${form.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              독차
+            </button>
+            <button type="button"
+              onClick={() => setForm(p => ({ ...p, 혼적: true, 독차: false }))}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${form.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              혼적
+            </button>
+            <button type="button"
+              onClick={() => onChange("긴급", !form.긴급)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              긴급
+            </button>
           </div>
         </div>
 
