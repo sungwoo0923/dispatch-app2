@@ -2672,6 +2672,19 @@ React.useEffect(() => {
   const [_cargoEditValue, _setCargoEditValue] = React.useState("");
   // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
   const [editReqPopup, setEditReqPopup] = React.useState(null);
+  // T164 — 삭제 시 페이드아웃(스르륵 사라짐) + 수정으로 정렬순서가 바뀔 때 칸칸이 올라오는 하이라이트
+  const [fadingIds, setFadingIds] = React.useState(() => new Set());
+  const [justMovedIds, setJustMovedIds] = React.useState(() => new Set());
+  const fadeOutThenDelete = (id, deleteFn) => {
+    setFadingIds(prev => new Set(prev).add(id));
+    setTimeout(() => { deleteFn(); }, 280);
+  };
+  const flashMoved = (id) => {
+    setJustMovedIds(prev => new Set(prev).add(id));
+    setTimeout(() => {
+      setJustMovedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+    }, 650);
+  };
   React.useEffect(() => { if (cargoAddPopup) _setCargoEditValue(cargoAddPopup.initialValue || ""); }, [cargoAddPopup]);
 
   if (!user) {
@@ -18303,7 +18316,9 @@ onDoubleClick={(e) => {
 
 
     className={`
-cursor-pointer transition-colors duration-100
+cursor-pointer transition-all duration-300
+${fadingIds.has(r._id) ? "opacity-0" : "opacity-100"}
+${justMovedIds.has(r._id) ? "row-highlight" : ""}
 ${
   r.긴급 === true &&
   r.배차상태 === "배차중" &&
@@ -18519,11 +18534,13 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       <button
                         type="button"
                         title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
                           if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
-                          await removeDispatch(r._id);
-                          setRows(prev => prev.filter(row => row._id !== r._id));
+                          fadeOutThenDelete(r._id, async () => {
+                            await removeDispatch(r._id);
+                            setRows(prev => prev.filter(row => row._id !== r._id));
+                          });
                         }}
                         className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
@@ -22599,6 +22616,7 @@ if (confirmChange.key === "지급방식") {
   }
 }
 await patchDispatch(confirmChange.rowId, patch);
+flashMoved(confirmChange.rowId);
 setConfirmChange(null);
                   }}
                 >
@@ -24357,6 +24375,21 @@ const [panelContactActive5, setPanelContactActive5] = React.useState(0);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
   // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
   const [editReqPopup, setEditReqPopup] = React.useState(null);
+  // T164 — 삭제 시 스르륵 사라지는 페이드아웃, 수정으로 정렬순서가 바뀔 때 칸칸이 올라오는 느낌의
+  // 하이라이트. focusOrderId 하이라이트(row-highlight)는 scrollIntoView까지 같이 하기 때문에
+  // 일반 편집마다 화면이 스크롤되면 오히려 거슬려서, 스크롤 없는 별도의 justMovedIds로 처리한다.
+  const [fadingIds, setFadingIds] = React.useState(() => new Set());
+  const [justMovedIds, setJustMovedIds] = React.useState(() => new Set());
+  const fadeOutThenDelete = (id, deleteFn) => {
+    setFadingIds(prev => new Set(prev).add(id));
+    setTimeout(() => { deleteFn(); }, 280);
+  };
+  const flashMoved = (id) => {
+    setJustMovedIds(prev => new Set(prev).add(id));
+    setTimeout(() => {
+      setJustMovedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+    }, 650);
+  };
   /*
   {
     id,
@@ -26735,7 +26768,7 @@ return (
   setCopyPanelOpen(true);
 }}
 
-      className={`cursor-pointer transition-colors duration-100 ${
+      className={`cursor-pointer transition-all duration-300 ${fadingIds.has(id) ? "opacity-0" : "opacity-100"} ${justMovedIds.has(id) ? "row-highlight" : ""} ${
         selected.has(id)
           ? "bg-blue-50 hover:bg-blue-100"
           : r.긴급 === true && row.배차상태 === "배차중"
@@ -26973,11 +27006,13 @@ return (
                       <button
                         type="button"
                         title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
                           if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
-                          await removeDispatch(row._id);
-                          setDispatchData(prev => prev.filter(r => r._id !== row._id));
+                          fadeOutThenDelete(row._id, async () => {
+                            await removeDispatch(row._id);
+                            setDispatchData(prev => prev.filter(r => r._id !== row._id));
+                          });
                         }}
                         className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
