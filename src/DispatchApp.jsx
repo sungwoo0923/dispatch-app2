@@ -18501,6 +18501,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                             ? "bg-red-600 text-white"
                             : "bg-amber-500 text-white"
                         }`}
+                        style={(r.수정요청 || r.취소요청) ? { animation: "cancelSlowBlink 2.4s ease-in-out infinite" } : undefined}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (r.배차상태 === "배차완료") {
@@ -26096,7 +26097,7 @@ const filtered = React.useMemo(() => {
   }, [filtered]);
 
 
-  const StatusBadge = ({ s, urgent }) => {
+  const StatusBadge = ({ s, urgent, pending }) => {
     const color =
       urgent && s !== "배차완료"
         ? "bg-red-500 text-white"
@@ -26108,7 +26109,8 @@ const filtered = React.useMemo(() => {
         ? "bg-red-600 text-white"
         : "hidden";
     return (
-      <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}>
+      <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}
+        style={pending ? { animation: "cancelSlowBlink 2.4s ease-in-out infinite" } : undefined}>
         {s}
       </span>
     );
@@ -26965,7 +26967,7 @@ return (
                         배차취소
                       </button>
                     ) : (
-                      <StatusBadge s={row.배차상태} urgent={row.긴급} />
+                      <StatusBadge s={row.배차상태} urgent={row.긴급} pending={row.수정요청 || row.취소요청} />
                     )}
                     {row.취소요청 && row.배차상태 !== "배차취소" && (
                       <button
@@ -35521,7 +35523,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             배차요청
                           </button>
                         ) : (
-                          <StatusBadge s={r.배차상태} />
+                          <StatusBadge s={r.배차상태} pending={r.수정요청 || r.취소요청} />
                         )}
                       </td>
                       <td className={`${cellBase} max-w-[260px] text-left`}>
