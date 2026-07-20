@@ -24,6 +24,20 @@ const STATUS = {
   배차취소: { label: "취소", cls: "bg-rose-100 text-rose-800" },
 };
 
+// 운송사 수정 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
+const TRANSPORT_EDIT_FIELD_LABELS = {
+  청구운임: "금액", 기사운임: "기사운임", 수수료: "수수료",
+  차량번호: "차량정보", 이름: "기사명", 전화번호: "기사연락처",
+  상차일: "상차일자", 하차일: "하차일자", 상차시간: "상차시간", 하차시간: "하차시간",
+  차량종류: "차량종류", 차량톤수: "차량톤수", 화물내용: "화물내용",
+  지급방식: "지급방식", 배차방식: "배차방식", 파렛트사: "파렛트사",
+  상차지명: "상차지", 하차지명: "하차지",
+  상차지주소: "상차지 주소", 하차지주소: "하차지 주소",
+  상차지담당자: "상차지 담당자", 하차지담당자: "하차지 담당자",
+  상차지담당자번호: "상차지 담당자 연락처", 하차지담당자번호: "하차지 담당자 연락처",
+  전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
+};
+
 const getTodayKST = () => {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -156,6 +170,7 @@ export default function ShipperStatus() {
   const [addrPopup, setAddrPopup] = useState(null);
   const [viaPopup, setViaPopup] = useState(null); // { label, list }
   const [palletPopup, setPalletPopup] = useState(null); // { text }
+  const [transportEditPopup, setTransportEditPopup] = useState(null); // { order, entries }
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, order }
   const [driverInfoPopup, setDriverInfoPopup] = useState(null); // order
   const [copyToast, setCopyToast] = useState(false);
@@ -298,6 +313,7 @@ export default function ShipperStatus() {
               id: o.id,
               text: `${o.거래처명 || o.상차지명 || "오더"} 배차정보를 운송사가 수정했습니다.`,
               order: o,
+              kind: "transportEdit",
             });
             setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
             pushToast({ type: "dispatch", order: o, title: "배차정보 수정", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
@@ -422,6 +438,17 @@ export default function ShipperStatus() {
     if (o.화주사확인대기 === true) return "요청"; // 운송사가 아직 확인하지 않은 신규 요청
     return "배차중"; // 운송사가 확인했거나(false) 필드가 없는 레거시/전송 건은 이미 처리중으로 간주
   }, []);
+
+  // "운송사 수정" 뱃지 클릭 시 — 가장 최근 수정 배치(같은 저장 시점에 함께 기록된 history 항목들)만
+  // 골라 변경 전/후 값을 보여준다. patchDispatch가 한 번의 저장에서 만든 history 항목들은
+  // 같은 Date.now() 값(at)을 공유하므로, 가장 최근 at 근처(오차 5초 이내) 항목만 추린다.
+  const openTransportEditPopup = (o) => {
+    const hist = Array.isArray(o.history) ? o.history.filter(h => h && h.field) : [];
+    if (hist.length === 0) { setTransportEditPopup({ order: o, entries: [] }); return; }
+    const maxAt = Math.max(...hist.map(h => h.at || 0));
+    const entries = hist.filter(h => Math.abs((h.at || 0) - maxAt) < 5000);
+    setTransportEditPopup({ order: o, entries });
+  };
 
   const activeOrders = orders.filter(o => o.상태 !== "취소");
   const kpi = useMemo(() => ({
@@ -677,7 +704,14 @@ export default function ShipperStatus() {
             boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
             animation: "bannerDown 0.4s ease-out forwards",
           }}
-          onClick={() => { focusOnOrder(dispatchNotif.order); setDispatchNotif(null); }}
+          onClick={() => {
+            if (dispatchNotif.kind === "transportEdit") {
+              openTransportEditPopup(dispatchNotif.order);
+            } else {
+              focusOnOrder(dispatchNotif.order);
+            }
+            setDispatchNotif(null);
+          }}
           className="cursor-pointer"
         >
           <style>{`@keyframes bannerDown { from { opacity:0; transform:translateY(-100%); } to { opacity:1; transform:translateY(0); } }`}</style>
@@ -980,7 +1014,13 @@ export default function ShipperStatus() {
                           style={(getStatus(o) === "요청" || getStatus(o) === "배차중") ? { animation: "cancelReqBlink 1.6s ease-in-out infinite" } : {}}>{st.label}</span>
                       )}
                       {o.최종수정출처 === "transport" && (Date.now() - (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0)) < 1000 * 60 * 60 * 48 && (
-                        <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-300">운송사 수정</span>
+                        <button type="button"
+                          onClick={(e) => { e.stopPropagation(); openTransportEditPopup(o); }}
+                          className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-300 cursor-pointer hover:bg-amber-100"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }} />
+                          운송사 수정
+                        </button>
                       )}
                       {o.수정요청 && (
                         <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap bg-sky-50 text-sky-700 border border-sky-300">
@@ -1227,6 +1267,38 @@ export default function ShipperStatus() {
             </div>
             <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
               <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 운송사 수정 내역 팝업 */}
+      {transportEditPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setTransportEditPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">운송사 수정 내역</h3>
+            </div>
+            <div className="px-6 py-5 max-h-[360px] overflow-y-auto">
+              {transportEditPopup.entries.length === 0 ? (
+                <p className="text-[14px] text-gray-500">변경 내역을 확인할 수 없습니다.</p>
+              ) : (
+                <div className="space-y-3">
+                  {transportEditPopup.entries.map((h, i) => (
+                    <div key={i} className="text-[14px] text-gray-800 leading-relaxed pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
+                      <span className="font-bold text-[#1B2B4B]">{transportEditPopup.order?.운송사명 || "운송사"}</span>에서{" "}
+                      <span className="font-bold">{TRANSPORT_EDIT_FIELD_LABELS[h.field] || h.field}</span>을(를) 변경했습니다.
+                      <div className="mt-1 text-[13px] text-gray-500">
+                        {String(h.before ?? "없음") || "없음"} <span className="mx-1 text-gray-300">→</span>{" "}
+                        <span className="font-semibold text-emerald-700">{String(h.after ?? "없음") || "없음"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setTransportEditPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
             </div>
           </div>
         </div>
