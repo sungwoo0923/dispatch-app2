@@ -192,6 +192,23 @@ function normalizeClients(arr) {
       메모: c.메모 || ""
     }));
 }
+// 화주사 수정요청 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
+const EDIT_REQUEST_FIELD_LABELS = {
+  청구운임: "금액", 상차일: "상차일자", 하차일: "하차일자",
+  상차시간: "상차시간", 하차시간: "하차시간", 차량종류: "차량종류", 차량톤수: "차량톤수",
+  화물내용: "화물내용", 지급방식: "지급방식", 배차방식: "배차방식", 파렛트사: "파렛트사",
+  상차지명: "상차지", 하차지명: "하차지", 상차지주소: "상차지 주소", 하차지주소: "하차지 주소",
+  상차지담당자: "상차지 담당자", 하차지담당자: "하차지 담당자",
+  상차지담당자번호: "상차지 담당자 연락처", 하차지담당자번호: "하차지 담당자 연락처",
+  전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
+};
+const getEditRequestDiff = (order) => {
+  const pending = order?.수정요청데이터 || {};
+  return Object.entries(pending)
+    .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(order[k] ?? "") !== String(v ?? ""))
+    .map(([k, v]) => ({ field: k, label: EDIT_REQUEST_FIELD_LABELS[k] || k, before: order[k], after: v }));
+};
+
 /* -------------------------------------------------
    배차 수정 이력 생성 함수 (⭐ 반드시 필요)
 --------------------------------------------------*/
@@ -831,6 +848,9 @@ const approveEditRequestPC = async (order) => {
     수정요청: false,
     수정요청데이터: deleteField(),
     수정거절: false,
+    수정확인: deleteField(),
+    수정처리: "승인",
+    수정처리일시: serverTimestamp(),
     updatedAt: Date.now(),
   });
 };
@@ -841,7 +861,17 @@ const rejectEditRequestPC = async (order) => {
     수정요청데이터: deleteField(),
     수정거절: true,
     수정거절일시: serverTimestamp(),
+    수정확인: deleteField(),
+    수정처리: "거절",
+    수정처리일시: serverTimestamp(),
   });
+};
+// 운송사가 수정요청 팝업을 열람하면(승인/거절 결정 전) 화주사 쪽 "수정현황"에
+// 요청중 → 확인함 전환이 보이도록 표시만 남긴다. 이미 확인된 경우 중복 쓰기는 생략.
+const markEditRequestSeen = async (order) => {
+  if (order.수정확인) return;
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, { 수정확인: true }).catch(() => {});
 };
 
   const upsertDriver = async (driver) => {
@@ -903,6 +933,7 @@ const rejectEditRequestPC = async (order) => {
     removeDispatch,
     approveEditRequestPC,
     rejectEditRequestPC,
+    markEditRequestSeen,
     upsertDriver,
     removeDriver,
     upsertClient,
@@ -2318,6 +2349,7 @@ useEffect(() => {
     removeDispatch,
     approveEditRequestPC,
     rejectEditRequestPC,
+    markEditRequestSeen,
     upsertDriver,
     removeDriver,
     upsertClient,
@@ -2638,6 +2670,8 @@ React.useEffect(() => {
   const [_cargoAddQty, _setCargoAddQty] = React.useState("");
   const [_cargoAddType, _setCargoAddType] = React.useState("");
   const [_cargoEditValue, _setCargoEditValue] = React.useState("");
+  // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
+  const [editReqPopup, setEditReqPopup] = React.useState(null);
   React.useEffect(() => { if (cargoAddPopup) _setCargoEditValue(cargoAddPopup.initialValue || ""); }, [cargoAddPopup]);
 
   if (!user) {
@@ -2998,6 +3032,7 @@ return (
                 removeDispatch={removeDispatchSafe}
                 approveEditRequest={approveEditRequestSafe}
                 rejectEditRequest={rejectEditRequestSafe}
+                markEditRequestSeen={markEditRequestSeen}
                 upsertDriver={upsertDriver}
                 focusOrderId={focusOrderId}
                 clearFocusOrder={() => setFocusOrderId(null)}
@@ -3475,6 +3510,49 @@ return (
           </button>
           {calcOpen && <FloatingCalculator onClose={() => setCalcOpen(false)} />}
         </>
+
+{/* ── 화주사 수정요청 승인/거절 팝업 (T161) ── */}
+{editReqPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
+        <h3 className="text-white font-bold text-[15px]">화주사 수정요청</h3>
+        {editReqPopup.수정요청일시 && (
+          <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
+        )}
+      </div>
+      <div className="px-6 py-5 overflow-y-auto flex-1">
+        {(() => {
+          const diff = getEditRequestDiff(editReqPopup);
+          if (diff.length === 0) return <p className="text-[14px] text-gray-500">변경된 내용이 없습니다.</p>;
+          return (
+            <div className="space-y-3">
+              {diff.map((d, i) => (
+                <div key={i} className="text-[14px] text-gray-800 leading-relaxed pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
+                  <span className="font-bold">{d.label}</span>
+                  <div className="mt-1 text-[13px] text-gray-500">
+                    {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-300">→</span>{" "}
+                    <span className="font-semibold text-emerald-700">{String(d.after ?? "없음") || "없음"}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+      <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2 shrink-0">
+        <button
+          onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequestPC(o); }}
+          className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
+        >거절</button>
+        <button
+          onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequestPC(o); }}
+          className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+        >승인</button>
+      </div>
+    </div>
+  </div>
+)}
 
 {/* ── 화물내용 +추가 팝업 ── */}
 {cargoAddPopup && (
@@ -18460,18 +18538,10 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       <button
                         type="button"
                         title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          const pending = r.수정요청데이터 || {};
-                          const diffLines = Object.entries(pending)
-                            .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(r[k] ?? "") !== String(v ?? ""))
-                            .map(([k, v]) => `${k}: ${r[k] ?? "없음"} → ${v ?? "없음"}`);
-                          const msg = `화주사가 수정을 요청했습니다.\n\n${diffLines.join("\n") || "(변경된 내용 없음)"}\n\n승인하시겠습니까? (취소를 누르면 거절됩니다)`;
-                          if (window.confirm(msg)) {
-                            await approveEditRequestPC(r);
-                          } else if (window.confirm("수정요청을 거절하시겠습니까?")) {
-                            await rejectEditRequestPC(r);
-                          }
+                          markEditRequestSeen(r);
+                          setEditReqPopup(r);
                         }}
                         className="absolute -bottom-1.5 -right-1.5 w-3 h-3 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
@@ -23440,6 +23510,7 @@ function DispatchStatus({
   removeDispatch,
   approveEditRequest,
   rejectEditRequest,
+  markEditRequestSeen = () => {},
   upsertDriver,
   isViewer = false,
   setCargoAddPopup = () => {},
@@ -24283,6 +24354,8 @@ const [panelContactActive5, setPanelContactActive5] = React.useState(0);
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
+  // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
+  const [editReqPopup, setEditReqPopup] = React.useState(null);
   /*
   {
     id,
@@ -26918,18 +26991,10 @@ return (
                       <button
                         type="button"
                         title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          const pending = row.수정요청데이터 || {};
-                          const diffLines = Object.entries(pending)
-                            .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(row[k] ?? "") !== String(v ?? ""))
-                            .map(([k, v]) => `${k}: ${row[k] ?? "없음"} → ${v ?? "없음"}`);
-                          const msg = `화주사가 수정을 요청했습니다.\n\n${diffLines.join("\n") || "(변경된 내용 없음)"}\n\n승인하시겠습니까? (취소를 누르면 거절됩니다)`;
-                          if (window.confirm(msg)) {
-                            await approveEditRequest(row);
-                          } else if (window.confirm("수정요청을 거절하시겠습니까?")) {
-                            await rejectEditRequest(row);
-                          }
+                          markEditRequestSeen(row);
+                          setEditReqPopup(row);
                         }}
                         className="absolute -bottom-1.5 -right-1.5 w-3 h-3 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
                         style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
@@ -30097,6 +30162,47 @@ setCopyPlaceOptions(list);
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-medium"
                 >문자 보내기</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {editReqPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
+              <h3 className="text-white font-bold text-[15px]">화주사 수정요청</h3>
+              {editReqPopup.수정요청일시 && (
+                <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
+              )}
+            </div>
+            <div className="px-6 py-5 overflow-y-auto flex-1">
+              {(() => {
+                const diff = getEditRequestDiff(editReqPopup);
+                if (diff.length === 0) return <p className="text-[14px] text-gray-500">변경된 내용이 없습니다.</p>;
+                return (
+                  <div className="space-y-3">
+                    {diff.map((d, i) => (
+                      <div key={i} className="text-[14px] text-gray-800 leading-relaxed pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
+                        <span className="font-bold">{d.label}</span>
+                        <div className="mt-1 text-[13px] text-gray-500">
+                          {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-300">→</span>{" "}
+                          <span className="font-semibold text-emerald-700">{String(d.after ?? "없음") || "없음"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
+                className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
+              >거절</button>
+              <button
+                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
+                className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+              >승인</button>
             </div>
           </div>
         </div>
