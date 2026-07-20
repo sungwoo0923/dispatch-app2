@@ -160,12 +160,18 @@ const STATUS_DOT_STYLE = {
   배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)" },
   요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
   배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)" },
+  취소요청: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
+  재배차요청: { dot: "#fb923c", text: "#fed7aa", ring: "rgba(251,146,60,0.4)" },
 };
 
+// 배차완료 이후 화주사가 걸어둔 요청(오더취소/기사변경)이 아직 운송사 승인 대기중일 때는
+// "배차완료"가 아니라 요청 상태를 실시간으로 뱃지에 그대로 보여준다.
 const getStatusBadge = (o) => {
   let label = "배차중";
   let blink = false;
   if (["취소", "배차취소", "오더취소"].includes(o.상태)) label = "취소";
+  else if (o.취소요청 === true) { label = "취소요청"; blink = true; }
+  else if (o.기사취소요청 === true) { label = "재배차요청"; blink = true; }
   else if (o.차량번호) label = "배차완료";
   else if (o.배차거절) label = "요청보류";
   else if (o.화주사확인대기) { label = "배차요청"; blink = true; }
@@ -174,9 +180,9 @@ const getStatusBadge = (o) => {
   return { label, blink, ...s };
 };
 
-// 목록 정렬 우선순위: 배차요청(+요청보류) -> 배차중 -> 배차완료 -> 취소.
+// 목록 정렬 우선순위: 배차요청(+요청보류) -> 배차중 -> 배차완료(+취소/기사변경요청중) -> 취소.
 // 운송사 프로그램의 배차현황과 동일하게, 상태 단계별로 먼저 묶고 그 안에서 날짜순 정렬한다.
-const ORDER_SORT_TIER = { 배차요청: 0, 요청보류: 0, 배차중: 1, 배차완료: 2, 취소: 3 };
+const ORDER_SORT_TIER = { 배차요청: 0, 요청보류: 0, 배차중: 1, 배차완료: 2, 취소요청: 2, 재배차요청: 2, 취소: 3 };
 const getOrderSortTier = (o) => ORDER_SORT_TIER[getStatusBadge(o).label] ?? 1;
 // 배차완료 단계에서는 "방금 배차완료된" 오더가 가장 위로 오도록 배차완료일시 기준으로 정렬한다
 // (없으면 상차일로 대체 — 과거 데이터 호환).
@@ -384,13 +390,22 @@ export default function ShipperMobileApp() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [orderCancelledNotice, setOrderCancelledNotice] = useState(false);
+
   // 상세화면을 열어둔 채로 운송사가 승인/거절 등 원격 변경을 하는 경우를 대비해
-  // selectedOrder를 최신 orders 배열과 동기화한다.
+  // selectedOrder를 최신 orders 배열과 동기화한다. 운송사가 오더취소요청을
+  // 승인해 오더 자체가 삭제된 경우(=orders에서 사라짐)에는 실시간으로 팝업을
+  // 띄우고 확인 시 목록으로 돌려보낸다.
   useEffect(() => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || !ordersLoaded) return;
     const latest = orders.find((o) => o.id === selectedOrder.id);
-    if (latest) setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
-  }, [orders]);
+    if (latest) {
+      setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
+    } else if (page === "detail") {
+      setOrderCancelledNotice(true);
+    }
+  }, [orders, ordersLoaded, page]);
 
   const isMaster = userData?.permissions?.master === true || userData?.isMaster === true;
   const isSubMaster = userData?.permissions?.subMaster === true;
@@ -416,6 +431,7 @@ export default function ShipperMobileApp() {
     const q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName));
     const unsub = onSnapshot(q, (snap) => {
       setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setOrdersLoaded(true);
     });
     return () => unsub();
   }, [user, userData]);
@@ -562,6 +578,24 @@ export default function ShipperMobileApp() {
       {toast && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm">
           {toast}
+        </div>
+      )}
+
+      {orderCancelledNotice && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 px-6">
+          <div className="bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl text-center">
+            <div className="text-[15px] font-bold text-gray-800 mb-2">오더 취소</div>
+            <div className="text-[13px] text-gray-500 mb-4 leading-relaxed">
+              운송사가 오더취소 요청을 승인하여<br />오더가 취소되었습니다.
+            </div>
+            <button
+              onClick={() => { setOrderCancelledNotice(false); setSelectedOrder(null); setPage("history"); }}
+              className="w-full py-2.5 rounded-xl text-white text-[14px] font-semibold"
+              style={{ background: NAVY }}
+            >
+              확인
+            </button>
+          </div>
         </div>
       )}
 
@@ -1415,9 +1449,11 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
       .sort((a, b) => {
         const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
         if (tierDiff !== 0) return tierDiff;
-        const timeDiff = getOrderSortTime(b) - getOrderSortTime(a);
-        if (timeDiff !== 0) return timeDiff;
-        return String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
+        // 같은 상태 안에서는 상차일(날짜)로 먼저 묶고, 같은 날짜 안에서만
+        // 배차완료 시각 등 세부 시각으로 정렬한다 (날짜가 섞여 보이지 않도록).
+        const dateDiff = String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
+        if (dateDiff !== 0) return dateDiff;
+        return getOrderSortTime(b) - getOrderSortTime(a);
       });
   }, [orders, startDate, endDate, keyword, searchType, statusFilter]);
 
@@ -2109,9 +2145,9 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
       list.sort((a, b) => {
         const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
         if (tierDiff !== 0) return tierDiff;
-        const timeDiff = getOrderSortTime(b) - getOrderSortTime(a);
-        if (timeDiff !== 0) return timeDiff;
-        return String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
+        const dateDiff = String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
+        if (dateDiff !== 0) return dateDiff;
+        return getOrderSortTime(b) - getOrderSortTime(a);
       });
     }
     return list;
@@ -2150,13 +2186,16 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
       const content = invoicePreviewContentRef.current;
       if (!wrap || !content) return;
       const w = wrap.clientWidth;
-      setInvoiceScale(w > 0 ? Math.min(1, w / 720) : 1);
-      setInvoiceContentH(content.scrollHeight);
+      if (w > 0) setInvoiceScale(Math.min(1, w / 720));
+      if (content.scrollHeight > 0) setInvoiceContentH(content.scrollHeight);
     };
     measure();
-    const t = setTimeout(measure, 60);
+    // 모달이 열리는 애니메이션/레이아웃이 끝나기 전에는 폭이 0으로 잡힐 수 있어
+    // ResizeObserver로 실제 크기가 잡힐 때마다 다시 계산한다 (1회성 setTimeout보다 안전).
+    const ro = new ResizeObserver(measure);
+    if (invoicePreviewWrapRef.current) ro.observe(invoicePreviewWrapRef.current);
     window.addEventListener("resize", measure);
-    return () => { window.removeEventListener("resize", measure); clearTimeout(t); };
+    return () => { window.removeEventListener("resize", measure); ro.disconnect(); };
   }, [showInvoice, invoiceRows.length, invoiceTransport]);
 
   const renderInvoiceDoc = (id) => (
@@ -2318,10 +2357,11 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
                 {invoiceTransportOptions.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 bg-gray-100">
-              {/* 화면 미리보기: 폭에 맞춰 축소 표시(좌우 스크롤 없이 한번에 보이도록) */}
+            <div className="flex-1 overflow-auto p-3 bg-gray-100">
+              {/* 화면 폭에 맞춰 축소 표시하되, 혹시 축소 계산이 늦거나 빗나가도
+                  내용이 잘리지 않고 좌우로 스크롤해서 볼 수 있도록 한다. */}
               <div ref={invoicePreviewWrapRef}>
-                <div style={{ height: invoiceContentH ? invoiceContentH * invoiceScale : undefined, overflow: "hidden" }}>
+                <div style={{ height: invoiceContentH ? invoiceContentH * invoiceScale : undefined }}>
                   <div ref={invoicePreviewContentRef} style={{ transform: `scale(${invoiceScale})`, transformOrigin: "top left", width: 720 }}>
                     {renderInvoiceDoc()}
                   </div>
