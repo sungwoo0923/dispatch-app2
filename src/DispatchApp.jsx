@@ -2675,19 +2675,6 @@ React.useEffect(() => {
   const [_cargoEditValue, _setCargoEditValue] = React.useState("");
   // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
   const [editReqPopup, setEditReqPopup] = React.useState(null);
-  // T164 — 삭제 시 페이드아웃(스르륵 사라짐) + 수정으로 정렬순서가 바뀔 때 칸칸이 올라오는 하이라이트
-  const [fadingIds, setFadingIds] = React.useState(() => new Set());
-  const [justMovedIds, setJustMovedIds] = React.useState(() => new Set());
-  const fadeOutThenDelete = (id, deleteFn) => {
-    setFadingIds(prev => new Set(prev).add(id));
-    setTimeout(() => { deleteFn(); }, 280);
-  };
-  const flashMoved = (id) => {
-    setJustMovedIds(prev => new Set(prev).add(id));
-    setTimeout(() => {
-      setJustMovedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
-    }, 650);
-  };
   React.useEffect(() => { if (cargoAddPopup) _setCargoEditValue(cargoAddPopup.initialValue || ""); }, [cargoAddPopup]);
 
   if (!user) {
@@ -2994,6 +2981,9 @@ return (
             showAlert={showAlert}
             userCompany={userCompany || localStorage.getItem("userCompany") || ""}
             setCargoAddPopup={setCargoAddPopup}
+            approveEditRequest={approveEditRequestSafe}
+            rejectEditRequest={rejectEditRequestSafe}
+            markEditRequestSeen={markEditRequestSeen}
           />
         </div>
 
@@ -3014,6 +3004,9 @@ return (
             darkMode={darkMode}
             isViewer={isViewer}
             setCargoAddPopup={setCargoAddPopup}
+            approveEditRequest={approveEditRequestSafe}
+            rejectEditRequest={rejectEditRequestSafe}
+            markEditRequestSeen={markEditRequestSeen}
             key={menu}
           />
         )}
@@ -3820,6 +3813,9 @@ return (
     showAlert = (msg) => showAlert(msg),  // ★ 추가 (폴백 포함)
     userCompany = "",
     setCargoAddPopup = () => {},
+    approveEditRequest = () => {},
+    rejectEditRequest = () => {},
+    markEditRequestSeen = () => {},
   }) {
 
       const [useNewForm, setUseNewForm] = React.useState(false);
@@ -12620,6 +12616,9 @@ setConfirmChange(null);
       PAY_TYPES={PAY_TYPES}
       isEmbedded={true}
       setCargoAddPopup={setCargoAddPopup}
+      approveEditRequest={approveEditRequest}
+      rejectEditRequest={rejectEditRequest}
+      markEditRequestSeen={markEditRequestSeen}
     />
   </div>
 )}
@@ -14313,6 +14312,9 @@ function RealtimeStatus({
   isEmbedded = false,
   isViewer = false,
   setCargoAddPopup = () => {},
+  approveEditRequest = () => {},
+  rejectEditRequest = () => {},
+  markEditRequestSeen = () => {},
 }) {
 const rtTableWrapRef = React.useRef(null);
 const mergedClients = React.useMemo(() => {
@@ -15781,6 +15783,14 @@ React.useEffect(() => {
       setTimeout(() => el.classList.remove('row-highlight'), 2500);
     });
   }, []);
+
+  // 삭제 시 스르륵 사라지는 페이드아웃 + 화주사 수정요청 승인/거절 팝업
+  const [fadingIds, setFadingIds] = React.useState(() => new Set());
+  const fadeOutThenDelete = (id, deleteFn) => {
+    setFadingIds(prev => new Set(prev).add(id));
+    setTimeout(() => { deleteFn(); }, 280);
+  };
+  const [editReqPopup, setEditReqPopup] = React.useState(null);
 
   // 신규기사 등록 중복 방지
   const [isRegistering, setIsRegistering] = React.useState(false);
@@ -18321,7 +18331,6 @@ onDoubleClick={(e) => {
     className={`
 cursor-pointer transition-all duration-300
 ${fadingIds.has(r._id) ? "opacity-0" : "opacity-100"}
-${justMovedIds.has(r._id) ? "row-highlight" : ""}
 ${
   r.긴급 === true &&
   r.배차상태 === "배차중" &&
@@ -21365,7 +21374,7 @@ value={copyTarget?.화물수량 || ""}
                     className="px-3 py-1.5 rounded-lg border border-red-300 text-red-500 text-[12px] font-semibold hover:bg-red-50"
                     onClick={async () => {
                       if (!window.confirm("화주사의 수정요청을 거절하시겠습니까?")) return;
-                      await rejectEditRequestPC(editTarget);
+                      await rejectEditRequest(editTarget);
                       setEditPopupOpen(false);
                     }}
                   >
@@ -21376,7 +21385,7 @@ value={copyTarget?.화물수량 || ""}
                     style={{ background: "#1B2B4B" }}
                     onClick={async () => {
                       if (!window.confirm("화주사의 수정요청을 승인하고 반영하시겠습니까?")) return;
-                      await approveEditRequestPC(editTarget);
+                      await approveEditRequest(editTarget);
                       setEditPopupOpen(false);
                     }}
                   >
@@ -22619,13 +22628,54 @@ if (confirmChange.key === "지급방식") {
   }
 }
 await patchDispatch(confirmChange.rowId, patch);
-flashMoved(confirmChange.rowId);
+flashRow(confirmChange.rowId);
 setConfirmChange(null);
                   }}
                 >
                   변경
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {editReqPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
+              <h3 className="text-white font-bold text-[15px]">화주사 수정요청</h3>
+              {editReqPopup.수정요청일시 && (
+                <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
+              )}
+            </div>
+            <div className="px-6 py-5 overflow-y-auto flex-1">
+              {(() => {
+                const diff = getEditRequestDiff(editReqPopup);
+                if (diff.length === 0) return <p className="text-[14px] text-gray-500">변경된 내용이 없습니다.</p>;
+                return (
+                  <div className="space-y-3">
+                    {diff.map((d, i) => (
+                      <div key={i} className="text-[14px] text-gray-800 leading-relaxed pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
+                        <span className="font-bold">{d.label}</span>
+                        <div className="mt-1 text-[13px] text-gray-500">
+                          {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-300">→</span>{" "}
+                          <span className="font-semibold text-emerald-700">{String(d.after ?? "없음") || "없음"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
+                className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
+              >거절</button>
+              <button
+                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
+                className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+              >승인</button>
             </div>
           </div>
         </div>
