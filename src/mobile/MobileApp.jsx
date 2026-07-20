@@ -7077,19 +7077,19 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
           </div>
 
-          {/* 하단 정보 */}
-          <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-gray-100">
-            <span className="text-[0.72em] text-gray-500 truncate leading-relaxed">
+          {/* 하단 정보 — 톤수/차종/화물부터 청구·기사운임까지 한 판으로 묶어 디지털 톤 배경 적용 */}
+          <div
+            className="flex items-center justify-between gap-2 mt-2.5 px-2.5 py-1.5 rounded-xl"
+            style={{
+              background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
+              border: `1px solid ${statusRing}`,
+              boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
+            }}
+          >
+            <span className="text-[0.72em] text-white/60 truncate leading-relaxed">
               {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
             </span>
-            <div
-              className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-full"
-              style={{
-                background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
-                border: `1px solid ${statusRing}`,
-                boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
-              }}
-            >
+            <div className="flex items-center gap-1.5 shrink-0">
               <span className="flex items-baseline gap-0.5">
                 <span className="text-[0.62em] text-white/50 font-semibold">청구</span>
                 <span className="text-[0.85em] font-bold text-white tabular-nums">{fmtMoney(claim)}</span>

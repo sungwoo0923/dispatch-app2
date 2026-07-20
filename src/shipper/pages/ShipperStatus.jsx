@@ -648,7 +648,10 @@ export default function ShipperStatus() {
           return mb - ma;
         }
         if (st === "배차완료") {
-          // 가장 최근에 배차완료된 건이 상단
+          // 상차일(날짜)로 먼저 묶고, 같은 날짜 안에서만 가장 최근에
+          // 배차완료된 건이 상단에 오도록 정렬한다 (날짜가 섞여 보이지 않도록).
+          const da2 = toYMD(a.상차일), db2 = toYMD(b.상차일);
+          if (da2 !== db2) return db2.localeCompare(da2);
           const ma = toMs(a.배차완료일시 || a.dispatchedAt) || toMs(a.createdAt);
           const mb = toMs(b.배차완료일시 || b.dispatchedAt) || toMs(b.createdAt);
           return mb - ma;
