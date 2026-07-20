@@ -202,6 +202,12 @@ const IGNORE_HISTORY_FIELDS = new Set([
   "배차상태",
   "이름",
   "전화번호",
+  // 화주사확인대기/배차중전환일시는 배차요청 승인이라는 "상태 전환"일 뿐,
+  // 실제 오더 내용 수정이 아니므로 수정이력/"운송사 수정" 표시 대상에서 제외한다.
+  "화주사확인대기",
+  "배차거절",
+  "배차거절일시",
+  "배차중전환일시",
 ]);
 
 /* -------------------------------------------------
@@ -18367,11 +18373,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     ) : (
                       <button
                         type="button"
-                        title={
-                          r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경"
-                          : r.배차상태 === "배차중" && r.source === "shipper" ? "클릭 시 배차요청으로 되돌리기"
-                          : ""
-                        }
+                        title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
                         className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
                           r.긴급 && r.배차상태 !== "배차완료"
                             ? "bg-red-500 text-white"
@@ -18387,9 +18389,8 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                             setConfirmChange({ rowId: r._id, key: "배차상태", before: "배차완료", after: "배차중" });
                             return;
                           }
-                          if (r.배차상태 === "배차중" && r.source === "shipper") {
-                            patchDispatch(r._id, { 화주사확인대기: true, __col: r.__col });
-                          }
+                          // 화주사 오더가 배차중인 경우 — 승인 전(화주사확인대기)이 아니라면
+                          // (예: 승인 후 기사취소로 배차중이 된 경우) 배차요청으로 되돌릴 수 없다.
                         }}
                       >
                         {r.배차상태}
@@ -26843,15 +26844,7 @@ return (
                         배차취소
                       </button>
                     ) : (
-                      row.배차상태 === "배차중" && row.source === "shipper" ? (
-                        <button type="button" title="클릭 시 배차요청으로 되돌리기"
-                          onClick={(e) => { e.stopPropagation(); patchDispatch(row._id, { 화주사확인대기: true, __col: row.__col }); }}
-                          className="cursor-pointer">
-                          <StatusBadge s={row.배차상태} urgent={row.긴급} />
-                        </button>
-                      ) : (
-                        <StatusBadge s={row.배차상태} urgent={row.긴급} />
-                      )
+                      <StatusBadge s={row.배차상태} urgent={row.긴급} />
                     )}
                     {row.취소요청 && row.배차상태 !== "배차취소" && (
                       <button
@@ -35373,12 +35366,6 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             }}
                           >
                             배차요청
-                          </button>
-                        ) : r.배차상태 === "배차중" && r.source === "shipper" ? (
-                          <button type="button" title="클릭 시 배차요청으로 되돌리기"
-                            onClick={(e) => { e.stopPropagation(); patchDispatch(r._id, { 화주사확인대기: true, __col: r.__col }); }}
-                            className="cursor-pointer">
-                            <StatusBadge s={r.배차상태} />
                           </button>
                         ) : (
                           <StatusBadge s={r.배차상태} />

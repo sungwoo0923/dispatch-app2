@@ -115,6 +115,8 @@ export default function ShipperStatus() {
   const editStampFirstLoadRef = useRef(true);
   const prevEditReqRef = useRef({});
   const editReqFirstLoadRef = useRef(true);
+  const prevPendingRef = useRef({});
+  const pendingFirstLoadRef = useRef(true);
   const [focusOrderId, setFocusOrderId] = useState(null);
   const [flashId, setFlashId] = useState(null);
   const rowRefs = useRef({});
@@ -261,6 +263,27 @@ export default function ShipperStatus() {
         }
         prevVehicleRef.current[o.id] = curHasVehicle;
       });
+
+      // 배차요청 승인 감지 (화주사확인대기 true -> false, 거절 아님) -> 알림
+      if (pendingFirstLoadRef.current) {
+        pendingFirstLoadRef.current = false;
+        docs.forEach((o) => { prevPendingRef.current[o.id] = !!o.화주사확인대기; });
+      } else {
+        docs.forEach((o) => {
+          const cur = !!o.화주사확인대기;
+          const prev = prevPendingRef.current[o.id];
+          if (prev === true && cur === false && !o.배차거절) {
+            setDispatchNotif({
+              id: o.id,
+              text: `${o.거래처명 || o.상차지명 || "오더"} 배차요청을 운송사가 승인했습니다. (배차중)`,
+              order: o,
+            });
+            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+            pushToast({ type: "dispatch", order: o, title: "배차요청 승인", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+          }
+          prevPendingRef.current[o.id] = cur;
+        });
+      }
 
       // 운송사가 배차정보(차량/운임)를 수정 -> 알림
       if (editStampFirstLoadRef.current) {
@@ -422,8 +445,9 @@ export default function ShipperStatus() {
 
   const deleteOrders = (targets, onDone) => {
     if (targets.length === 0) { alert("선택된 항목 없음"); return; }
-    const locked = targets.filter(o => o.차량번호 && o.차량번호.trim() && !o.취소요청);
-    const deletable = targets.filter(o => !(o.차량번호 && o.차량번호.trim()));
+    // 이미 취소(오더취소) 처리된 건은 차량번호가 남아있어도 운송사 승인 없이 바로 삭제 가능
+    const locked = targets.filter(o => o.상태 !== "취소" && o.차량번호 && o.차량번호.trim() && !o.취소요청);
+    const deletable = targets.filter(o => o.상태 === "취소" || !(o.차량번호 && o.차량번호.trim()));
 
     const requestCancelForLocked = async () => {
       for (const o of locked) {
@@ -616,6 +640,18 @@ export default function ShipperStatus() {
   };
 
   const cancelOrder = (id) => {
+    const target = orders.find(o => o.id === id) || selectedOrder;
+    const isDispatched = !!(target?.차량번호 && String(target.차량번호).trim());
+    if (isDispatched) {
+      if (target?.취소요청) { alert("이미 배차취소를 요청했습니다.\n운송사의 승인을 기다리고 있습니다."); return; }
+      openConfirm("이미 배차완료된 오더입니다.\n배차취소를 요청하시겠습니까?\n(운송사 승인 후 취소됩니다)", async () => {
+        await updateDoc(doc(db, "orders", id), {
+          취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "",
+        });
+        setConfirmOpen(false);
+      });
+      return;
+    }
     openConfirm("오더를 취소하시겠습니까?", async () => {
       // 운송사 배차현황에도 즉시 반영되도록 배차상태까지 함께 취소 처리
       await updateDoc(doc(db, "orders", id), { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true });
@@ -1031,7 +1067,7 @@ export default function ShipperStatus() {
                     onClick={() => deleteOrders([selectedOrder], () => setDetailOpen(false))}
                     className="px-4 py-2 rounded-lg text-sm font-semibold border border-red-300 text-red-600 hover:bg-red-50"
                   >
-                    {selectedOrder?.차량번호 ? "배차취소 요청" : "삭제"}
+                    {selectedOrder?.차량번호 ? "기사취소요청" : "삭제"}
                   </button>
                 )}
                 <button
