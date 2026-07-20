@@ -966,6 +966,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
           업체전달상태: "미전달",
           source: "shipper_mobile",
           createdAt: serverTimestamp(),
+          등록일: todayStr(),
         });
       }
       onDone();

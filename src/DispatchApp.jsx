@@ -132,6 +132,20 @@ const tomorrowStr = () => {
   return `${y}-${m}-${day}`;
 };
 
+// 화주사(PC/모바일) 등록 오더 중 "등록일" 필드가 없던(과거 등록분) 경우를 위한 폴백 —
+// createdAt(serverTimestamp)에서 날짜만 뽑아 대신 보여준다.
+const displayRegDate = (row) => {
+  if (row?.등록일) return row.등록일;
+  const ts = row?.createdAt;
+  const ms = ts?.seconds ? ts.seconds * 1000 : (typeof ts === "number" ? ts : 0);
+  if (!ms) return "";
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 /* -------------------------------------------------
    안전 로컬 저장
 --------------------------------------------------*/
@@ -199,6 +213,7 @@ const IGNORE_HISTORY_FIELDS = new Set([
   "createdAt",
   "lastUpdated",
   "__system",
+  "__col", // Firestore에 실제 저장되는 필드가 아니라 클라이언트가 붙이는 컬렉션 라우팅용 태그일 뿐이므로 이력 대상 아님
   "배차상태",
   "이름",
   "전화번호",
@@ -726,16 +741,28 @@ const patchDispatch = async (_id, patch) => {
     return na === nb;
   };
 
+  // 경유지 필드는 cleanPatch 쪽에서 "경유지_상차 없으면 경유상차목록으로" 식의 폴백을 거쳐 만들어지는데,
+  // 비교 기준(before)이 그 폴백 없이 prev[key] 원본 그대로면, 실제로는 아무 것도 안 건드렸어도
+  // (레거시로 한쪽 필드명에만 값이 있던 경우) 두 필드명을 서로 동기화하는 것 자체가 "변경"으로 오탐된다.
+  // before 값도 cleanPatch와 동일한 폴백 규칙으로 정규화해서 비교해야 진짜 편집만 잡힌다.
+  const WAYPOINT_FALLBACK = {
+    경유지_상차: () => safeStops(prev.경유지_상차 || prev.경유상차목록),
+    경유지_하차: () => safeStops(prev.경유지_하차 || prev.경유하차목록),
+    경유상차목록: () => safeStops(prev.경유상차목록 || prev.경유지_상차),
+    경유하차목록: () => safeStops(prev.경유하차목록 || prev.경유지_하차),
+  };
+
   const histories = [];
   Object.keys(cleanPatch).forEach((key) => {
     if (IGNORE_HISTORY_FIELDS.has(key)) return;
     if (cleanPatch.__system === true) return;
     if (key === "업체전달상태") return;
     if (key === "업체전달일시") return;
-    if (!historyValuesEqual(prev[key], cleanPatch[key])) {
+    const prevValue = WAYPOINT_FALLBACK[key] ? WAYPOINT_FALLBACK[key]() : prev[key];
+    if (!historyValuesEqual(prevValue, cleanPatch[key])) {
       histories.push(makeDispatchHistory({
         userEmail: auth.currentUser?.email,
-        field: key, before: prev[key] ?? null, after: cleanPatch[key] ?? null,
+        field: key, before: prevValue ?? null, after: cleanPatch[key] ?? null,
       }));
     }
   });
@@ -18229,7 +18256,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
   <td className={`${cell} overflow-visible`}>
   <div className="relative inline-block group">
     <span className="underline decoration-dotted underline-offset-2 cursor-default">
-      {r.등록일 || "-"}
+      {displayRegDate(r) || "-"}
     </span>
 
     <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
@@ -25690,7 +25717,7 @@ if (first) {
     const rows = filtered.map((r, i) => {
       const row = {
         순번: page * pageSize + i + 1,
-        등록일: r.등록일 || "",
+        등록일: displayRegDate(r),
         상차일: r.상차일 || "",
         상차시간: r.상차시간 || "",
         하차일: r.하차일 || "",
@@ -26659,7 +26686,7 @@ return (
       <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap overflow-visible">
   <div className="relative inline-block group">
     <span className="underline decoration-dotted underline-offset-2 cursor-default">
-      {row.등록일 || "-"}
+      {displayRegDate(row) || "-"}
     </span>
     <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
       <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
@@ -35317,7 +35344,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </td>
                       )}
                       <td className={cellBase}>{i + 1}</td>
-                      <td className={cellBase}>{r.등록일 || ""}</td>
+                      <td className={cellBase}>{displayRegDate(r)}</td>
                       <td className={cellBase}>
                         {r.등록일 ? (() => {
                           const d = Math.floor((Date.now() - new Date(r.등록일).getTime()) / 86400000);
