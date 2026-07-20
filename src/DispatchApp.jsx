@@ -256,6 +256,15 @@ function useRealtimeCollections(user, userCompany, role) {
   const [clients, setClients] = useState([]);
   let ordersCache = [];
 let dispatchCache = [];
+  // ⚡ localStorage 저장은 오프라인 캐시 용도일 뿐 화면 표시와 무관하므로,
+  //    쓰기 한 번마다 전체 목록을 동기적으로 JSON.stringify + localStorage.setItem 하면
+  //    (특히 orders 컬렉션이 커질수록) 저장 직후 메인스레드가 블로킹되어 "끊김"의 주 원인이 된다.
+  //    디바운스로 묶어서 렌더링/입력에 영향 없는 시점으로 미룬다.
+  let dispatchSaveTimer = null;
+  const scheduleDispatchSave = (v) => {
+    if (dispatchSaveTimer) clearTimeout(dispatchSaveTimer);
+    dispatchSaveTimer = setTimeout(() => safeSave("dispatchData", v), 800);
+  };
   // ===================== 하차지(places) Firestore 실시간 구독 =====================
 const [places, setPlaces] = useState([]);
 
@@ -346,8 +355,10 @@ const sixMonthsAgo = getSixMonthsAgo();
       const filteredArr = arr.filter(row => row.source !== "transport_transmit");
 
       ordersCache = filteredArr;
-      setDispatchData([...ordersCache, ...dispatchCache]);
-      safeSave("dispatchData", filteredArr);
+      React.startTransition(() => {
+        setDispatchData([...ordersCache, ...dispatchCache]);
+      });
+      scheduleDispatchSave(filteredArr);
 
       // 🔔 최초 로드: prevMap 구축만
       if (ordersFirstLoad) {
@@ -466,7 +477,7 @@ const sixMonthsAgo = getSixMonthsAgo();
       React.startTransition(() => {
         setDispatchData([...ordersCache, ...dispatchCache]);
       });
-      safeSave("dispatchData", arr2);
+      scheduleDispatchSave(arr2);
 
       // 🔔 최초 로드: prevMap 구축만
       if (dispatchFirstLoad) {
@@ -2610,7 +2621,10 @@ React.useEffect(() => {
     );
   }
   // ---------------- 화주사 배차요청 대기 건수 (헤더 상시 알림용) ----------------
-  const pendingShipperRequests = (dispatchData || []).filter(r => r.화주사확인대기 === true);
+  const pendingShipperRequests = React.useMemo(
+    () => (dispatchData || []).filter(r => r.화주사확인대기 === true),
+    [dispatchData]
+  );
 
   // ---------------- 화주사 푸시 알림 (상차 임박 시 화주사가 보낸 푸시 — 확인 전까지 중앙 팝업 유지) ----------------
   const pendingNudges = (dispatchData || []).filter(r => r.재촉대기 === true);
