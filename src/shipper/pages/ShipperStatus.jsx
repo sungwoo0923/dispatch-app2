@@ -1057,11 +1057,16 @@ export default function ShipperStatus() {
                   onClick={() => openEditWithPending(selectedOrder)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-600 text-white hover:opacity-90"}`}
                 >수정</button>
-                <button
-                  disabled={selectedOrder?.상태 === "취소"}
-                  onClick={() => cancelOrder(selectedOrder.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
-                >오더취소</button>
+                {/* 배차완료(차량번호 있음) 상태에서는 "오더취소"와 "기사취소요청"이 결국 동일하게
+                    운송사 승인이 필요한 취소요청 플로우로 귀결되므로, 혼란을 막기 위해
+                    배차 전(차량번호 없음)에만 "오더취소" 버튼을 별도로 노출한다. */}
+                {!selectedOrder?.차량번호 && (
+                  <button
+                    disabled={selectedOrder?.상태 === "취소"}
+                    onClick={() => cancelOrder(selectedOrder.id)}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
+                  >오더취소</button>
+                )}
                 {selectedOrder?.상태 !== "취소" && (
                   <button
                     onClick={() => deleteOrders([selectedOrder], () => setDetailOpen(false))}
