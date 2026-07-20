@@ -17,11 +17,12 @@ import {
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
+// 운송사 프로그램(DispatchApp.jsx StatusBadge)과 동일한 배지 디자인 — 단색 배경 + 흰 글씨 + rounded-lg
 const STATUS = {
-  요청: { label: "요청", cls: "bg-slate-100 text-slate-700" },
-  배차중: { label: "배차중", cls: "bg-amber-100 text-amber-800" },
-  배차완료: { label: "배차완료", cls: "bg-emerald-100 text-emerald-800" },
-  배차취소: { label: "취소", cls: "bg-rose-100 text-rose-800" },
+  요청: { label: "요청", cls: "bg-amber-500 text-white" },
+  배차중: { label: "배차중", cls: "bg-amber-500 text-white" },
+  배차완료: { label: "배차완료", cls: "bg-[#1B2B4B] text-white" },
+  배차취소: { label: "취소", cls: "bg-red-600 text-white" },
 };
 
 // 운송사 수정 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
@@ -1010,7 +1011,7 @@ export default function ShipperStatus() {
                           취소요청중
                         </span>
                       ) : (
-                        <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}
+                        <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${st.cls}`}
                           style={(getStatus(o) === "요청" || getStatus(o) === "배차중") ? { animation: "cancelReqBlink 1.6s ease-in-out infinite" } : {}}>{st.label}</span>
                       )}
                       {o.최종수정출처 === "transport" && (Date.now() - (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0)) < 1000 * 60 * 60 * 48 && (
