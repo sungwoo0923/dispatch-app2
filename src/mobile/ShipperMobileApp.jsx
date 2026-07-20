@@ -174,6 +174,11 @@ const getStatusBadge = (o) => {
   return { label, blink, ...s };
 };
 
+// 목록 정렬 우선순위: 배차요청(+요청보류) -> 배차중 -> 배차완료 -> 취소.
+// 운송사 프로그램의 배차현황과 동일하게, 상태 단계별로 먼저 묶고 그 안에서 날짜순 정렬한다.
+const ORDER_SORT_TIER = { 배차요청: 0, 요청보류: 0, 배차중: 1, 배차완료: 2, 취소: 3 };
+const getOrderSortTier = (o) => ORDER_SORT_TIER[getStatusBadge(o).label] ?? 1;
+
 function StatusBadge({ order, className = "" }) {
   const { label, blink, dot, text, ring } = getStatusBadge(order);
   return (
@@ -1381,7 +1386,11 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
         }
         return true;
       })
-      .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
+      .sort((a, b) => {
+        const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
+        if (tierDiff !== 0) return tierDiff;
+        return String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
+      });
   }, [orders, startDate, endDate, keyword, searchType, statusFilter]);
 
   const totalAmount = useMemo(() => filtered.reduce((sum, o) => sum + Number(o.청구운임 || 0), 0), [filtered]);

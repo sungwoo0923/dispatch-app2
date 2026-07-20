@@ -202,7 +202,7 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
   }, [disabled, doClose]);
 
   return (
-    <div ref={containerRef} className="relative overflow-hidden" style={{ borderRadius: "inherit", transform: "translateZ(0)" }}>
+    <div ref={containerRef} className="relative overflow-x-hidden" style={{ borderRadius: "inherit", transform: "translateZ(0)" }}>
       {/* 액션 버튼 (카드 뒤에 숨어있다가 스와이프로 노출) */}
       <div className="absolute right-0 top-0 bottom-0 flex" style={{ width: BUTTON_W }}>
         <button
@@ -5952,7 +5952,7 @@ const summary = useMemo(() => {
           const list = groupedByDate.get(dateKey) || [];
           return (
             <div key={dateKey}>
-            <div className={`flex items-center justify-between mb-2 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
+            <div className={`flex items-center justify-between mb-3 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
 
   {/* 날짜 */}
   <div className={`font-bold ${cardVersionB ? "text-[13px] text-[#1B2B4B] tracking-tight" : "text-sm text-gray-700"}`}>
@@ -15613,7 +15613,7 @@ return (
         return (
           <div key={dateStr} className="mb-5">
             {/* 날짜 헤더 */}
-            <div className={`flex items-center gap-2 mb-2 px-1 ${cardVersionB ? "" : ""}`}>
+            <div className={`flex items-center gap-2 mb-3 px-1 ${cardVersionB ? "" : ""}`}>
               <span className={`text-[12px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-600"}`}>
                 {formatDateHeader(dateStr)}
               </span>
