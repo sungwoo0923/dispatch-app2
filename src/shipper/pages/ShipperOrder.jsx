@@ -15,6 +15,20 @@ import {
 } from "firebase/firestore";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+// 경유지 목록은 정상적으로는 배열이지만, 다른 경로(전송하기/구버전 데이터 등)로
+// 저장된 문서는 숫자키 맵 형태 등으로 들어올 수 있어 .filter() 호출 전 항상 배열로 정규화한다.
+const safeStops = (v) => {
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === "object") {
+    const keys = Object.keys(v);
+    if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+      return keys.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+    }
+    if (v.업체명) return [v];
+  }
+  return [];
+};
+
 /* 시간 옵션 (오전/오후 형식) */
 const timeOptions = Array.from({ length: 48 }, (_, i) => {
   const hour24 = Math.floor(i / 2);
@@ -248,7 +262,11 @@ export default function ShipperOrder({ editData, onClose }) {
       if (snap.exists()) {
         const data = snap.data();
         const { num, unit } = parseTonnage(data.차량톤수 || "");
-        setForm(p => ({ ...p, ...data, 차량톤수: num, 차량톤수단위: unit }));
+        setForm(p => ({
+          ...p, ...data, 차량톤수: num, 차량톤수단위: unit,
+          경유상차목록: safeStops(data.경유상차목록),
+          경유하차목록: safeStops(data.경유하차목록),
+        }));
         setCargoRows(cargoRowsFromOrder(data));
       }
       setLoading(false);
@@ -258,7 +276,11 @@ export default function ShipperOrder({ editData, onClose }) {
   useEffect(() => {
     if (!editData) return;
     const { num, unit } = parseTonnage(editData.차량톤수 || "");
-    setForm(p => ({ ...p, ...editData, 차량톤수: num, 차량톤수단위: unit }));
+    setForm(p => ({
+      ...p, ...editData, 차량톤수: num, 차량톤수단위: unit,
+      경유상차목록: safeStops(editData.경유상차목록),
+      경유하차목록: safeStops(editData.경유하차목록),
+    }));
     setCargoRows(cargoRowsFromOrder(editData));
     setLoading(false);
   }, [editData]);

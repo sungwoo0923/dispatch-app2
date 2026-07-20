@@ -417,6 +417,27 @@ export default function ShipperMobileApp() {
     });
   }, [orders]);
 
+  // 운송사가 배차요청을 승인 -> "배차중" 전환 감지 (상단 알림 배너)
+  const prevPendingRef = useRef({});
+  const pendingFirstLoadRef = useRef(true);
+  useEffect(() => {
+    if (!orders.length) return;
+    if (pendingFirstLoadRef.current) {
+      pendingFirstLoadRef.current = false;
+      orders.forEach((o) => { prevPendingRef.current[o.id] = o.화주사확인대기 === true; });
+      return;
+    }
+    orders.forEach((o) => {
+      const cur = o.화주사확인대기 === true;
+      const prev = prevPendingRef.current[o.id];
+      if (prev === true && cur === false && !o.배차거절) {
+        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차요청을 운송사가 승인했습니다. (배차중)` });
+        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+      }
+      prevPendingRef.current[o.id] = cur;
+    });
+  }, [orders]);
+
   // 운송사가 배차정보(차량/기사/운임)를 수정 -> 상단 알림 배너
   const prevEditStampRef = useRef({});
   const editStampFirstLoadRef = useRef(true);
@@ -1475,7 +1496,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
             onClick={handleDelete}
             className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
           >
-            {isDispatched ? "배차취소 요청" : "삭제"}
+            {isDispatched ? "기사취소요청" : "삭제"}
           </button>
         </div>
       )}
@@ -2393,7 +2414,7 @@ function OrderCardActionSheet({ order, onEdit, onDelete, onClose }) {
           수정
         </button>
         <button onClick={onDelete} className="w-full text-left px-4 py-3.5 text-[15px] font-semibold text-red-500 border-t border-gray-100">
-          {isDispatched ? "배차취소 요청" : "삭제"}
+          {isDispatched ? "기사취소요청" : "삭제"}
         </button>
         <button onClick={onClose} className="w-full text-center px-4 py-3.5 text-[15px] font-semibold text-gray-400 border-t border-gray-100 mb-2">
           닫기
