@@ -313,6 +313,7 @@ const EMPTY_FORM = () => ({
   하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
   차량종류: "", 톤수값: "", 톤수단위: "톤",
   상차방법: "", 하차방법: "", 지급방식: "",
+  독차: true, 혼적: false, 긴급: false,
 });
 const EMPTY_CARGO_ROW = () => ({ qty: "", unit: "파레트", palletCo: "" });
 
@@ -1194,6 +1195,27 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
 
       {/* 작업방식/결제 */}
       <MSection title="작업방식 / 결제">
+        <MRow label="배차옵션">
+          <div className="flex gap-2">
+            <button type="button"
+              onClick={() => setForm(p => ({ ...p, 독차: true, 혼적: false }))}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+              style={form.독차 ? { background: NAVY, color: "#fff", borderColor: NAVY } : { background: "#fff", color: "#4b5563", borderColor: "#d1d5db" }}>
+              독차
+            </button>
+            <button type="button"
+              onClick={() => setForm(p => ({ ...p, 혼적: true, 독차: false }))}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+              style={form.혼적 ? { background: NAVY, color: "#fff", borderColor: NAVY } : { background: "#fff", color: "#4b5563", borderColor: "#d1d5db" }}>
+              혼적
+            </button>
+            <button type="button"
+              onClick={() => update("긴급", !form.긴급)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300"}`}>
+              긴급
+            </button>
+          </div>
+        </MRow>
         <MRow label="상차방법">
           <select className="input-m" value={form.상차방법} onChange={(e) => update("상차방법", e.target.value)}>
             <option value="">선택</option><option>지게차</option><option>수작업</option><option>수도움</option><option>크레인</option>
@@ -1318,8 +1340,8 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
     const [, m, d] = (dateStr || "").split("-");
     return { month: Number(m) || 1, day: Number(d) || 1 };
   };
-  const defaultStart = getDate(-30);
-  const defaultEnd = getDate(0);
+  const defaultStart = getMonthStart(0);
+  const defaultEnd = getMonthEnd(0);
 
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
@@ -1518,7 +1540,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
             onClick={handleDelete}
             className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
           >
-            {isDispatched ? "기사취소요청" : "삭제"}
+            {isDispatched ? "기사취소요청" : "오더취소"}
           </button>
         </div>
       )}
@@ -2477,7 +2499,7 @@ function OrderCardActionSheet({ order, onEdit, onDelete, onClose }) {
           수정
         </button>
         <button onClick={onDelete} className="w-full text-left px-4 py-3.5 text-[15px] font-semibold text-red-500 border-t border-gray-100">
-          {isDispatched ? "기사취소요청" : "삭제"}
+          {isDispatched ? "기사취소요청" : "오더취소"}
         </button>
         <button onClick={onClose} className="w-full text-center px-4 py-3.5 text-[15px] font-semibold text-gray-400 border-t border-gray-100 mb-2">
           닫기
