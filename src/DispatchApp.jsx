@@ -283,9 +283,12 @@ const getCollectionName = (role) =>
 const _urgentDismissed = new Set();
 
 function useRealtimeCollections(user, userCompany, role) {
-  const [dispatchData, setDispatchData] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [clients, setClients] = useState([]);
+  // ⚡ T165 — 매번 빈 배열로 시작해 Firestore 최초 응답을 기다리는 동안 화면이 비어 보이던 문제.
+  //    직전 세션에서 safeSave로 남겨둔 로컬 캐시를 초기값으로 먼저 그려주고,
+  //    실시간 리스너가 응답하는 즉시 최신 데이터로 교체한다(정확성에는 영향 없음, 최초 페인트만 개선).
+  const [dispatchData, setDispatchData] = useState(() => safeLoad("dispatchData", []));
+  const [drivers, setDrivers] = useState(() => safeLoad("drivers", []));
+  const [clients, setClients] = useState(() => safeLoad("clients", []));
   let ordersCache = [];
 let dispatchCache = [];
   // ⚡ localStorage 저장은 오프라인 캐시 용도일 뿐 화면 표시와 무관하므로,
