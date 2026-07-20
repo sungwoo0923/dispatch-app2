@@ -935,6 +935,39 @@ function EditRequestModal({ order, onApprove, onReject, onClose }) {
   );
 }
 
+// 화주사 배차취소요청("오더취소") / 기사취소요청("기사 변경") 승인·거절 팝업
+function CancelOrSwapRequestModal({ type, order, onApprove, onReject, onClose }) {
+  const isCancel = type === "cancel";
+  const title = isCancel ? "화주사 배차취소 요청" : "화주사 기사변경 요청";
+  const desc = isCancel
+    ? "화주사가 이 오더의 배차취소를 요청했습니다. 승인하면 오더가 삭제됩니다."
+    : "화주사가 배정된 기사를 취소하고 다시 배차해달라고 요청했습니다. 승인하면 기사 배정 정보만 초기화되고 오더는 그대로 유지됩니다.";
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-2xl w-full max-w-sm p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-1.5">
+          <div className="text-[15px] font-bold text-gray-800">{title}</div>
+          <button onClick={onClose} className="text-gray-400 text-lg leading-none px-1 -mt-1 -mr-1">✕</button>
+        </div>
+        <div className="text-[13px] text-gray-500 mb-4 leading-relaxed">
+          {order.거래처명 || "화주사"}가 {isCancel ? "오더 취소" : "기사 변경"}를 요청했습니다.<br />
+          {desc}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onReject} className="flex-1 py-2.5 rounded-xl border border-red-300 text-red-500 text-[14px] font-semibold">
+            거절
+          </button>
+          <button onClick={onApprove} className="flex-1 py-2.5 rounded-xl text-white text-[14px] font-semibold" style={{ background: "#1B2B4B" }}>
+            승인
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // 수정이력 뷰어 (PC DispatchApp.jsx와 동일한 history 배열 포맷을 사용)
 function HistoryViewerModal({ history = [], onClose }) {
   const items = [...history].filter(h => h && h.field).reverse();
@@ -6831,27 +6864,48 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
     } catch {}
     setShowReqModal(false);
   };
+  // 화주사 요청 3종 (배차취소/기사변경/수정) — 카드에는 첨부 왼쪽의 "요청" 글자 하나로만
+  // 노출하고, 클릭하면 종류에 맞는 팝업으로 상세내용을 확인 후 승인/거절한다.
   const isCancelRequested = order.취소요청 === true && order.배차상태 !== "배차취소";
-  const approveCancelDelete = async (e) => {
+  const isSwapRequested = order.기사취소요청 === true;
+  const isEditRequested = order.수정요청 === true;
+  const activeRequestType = isCancelRequested ? "cancel" : isSwapRequested ? "swap" : isEditRequested ? "edit" : null;
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const openRequestModal = (e) => {
     e.stopPropagation();
+    setShowRequestModal(true);
+  };
+  const approveCancelDelete = async () => {
     if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
     try {
       await deleteDoc(doc(db, order.__col || "orders", order.id));
     } catch {}
+    setShowRequestModal(false);
   };
-  const isEditRequested = order.수정요청 === true;
-  const [showEditReqModal, setShowEditReqModal] = useState(false);
-  const openEditReqModal = (e) => {
-    e.stopPropagation();
-    setShowEditReqModal(true);
+  const rejectCancelRequest = async () => {
+    try { await updateDoc(doc(db, order.__col || "orders", order.id), { 취소요청: false }); } catch {}
+    setShowRequestModal(false);
+  };
+  const approveDriverSwap = async () => {
+    try {
+      await updateDoc(doc(db, order.__col || "orders", order.id), {
+        차량번호: "", 이름: "", 전화번호: "",
+        기사취소요청: false, 기사취소요청일시: deleteField(),
+      });
+    } catch {}
+    setShowRequestModal(false);
+  };
+  const rejectDriverSwap = async () => {
+    try { await updateDoc(doc(db, order.__col || "orders", order.id), { 기사취소요청: false }); } catch {}
+    setShowRequestModal(false);
   };
   const approveEditReq = async () => {
     try { await approveEditRequest(order); } catch {}
-    setShowEditReqModal(false);
+    setShowRequestModal(false);
   };
   const rejectEditReq = async () => {
     try { await rejectEditRequest(order); } catch {}
-    setShowEditReqModal(false);
+    setShowRequestModal(false);
   };
 const isToday =
   String(order.상차일 || "").slice(0, 10) === todayKST();
@@ -6896,19 +6950,6 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     // ── B VERSION: 상태 액센트 + 디지털 포인트 디자인 ──
     return (
       <>
-      <div className="relative">
-        {isCancelRequested && (
-          <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-            className="absolute -top-2.5 left-3 z-10 px-2.5 py-1 rounded-full text-[0.66em] font-bold text-white bg-orange-500 shadow-md badge-dispatching">
-            기사취소
-          </button>
-        )}
-        {isEditRequested && (
-          <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-            className="absolute -top-2.5 right-3 z-10 px-2.5 py-1 rounded-full text-[0.66em] font-bold text-white bg-sky-500 shadow-md badge-dispatching">
-            수정요청
-          </button>
-        )}
       <div
         className={
           "relative bg-white rounded-2xl border shadow-sm transition-colors overflow-hidden " +
@@ -6952,6 +6993,18 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             )}
           </div>
           <div className="flex items-center gap-2">
+            {activeRequestType && (
+              <button
+                onClick={openRequestModal}
+                className="text-[0.7em] font-extrabold"
+                style={{
+                  color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
+                  animation: "dispatchingPulse 1.8s ease-in-out infinite",
+                }}
+              >
+                요청
+              </button>
+            )}
             <button
               style={{ touchAction: "manipulation" }}
               onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
@@ -7071,12 +7124,20 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           )}
         </div>
       </div>
-      </div>
       {showReqModal && (
         <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
       )}
-      {showEditReqModal && (
-        <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowEditReqModal(false)} />
+      {showRequestModal && activeRequestType === "edit" && (
+        <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowRequestModal(false)} />
+      )}
+      {showRequestModal && (activeRequestType === "cancel" || activeRequestType === "swap") && (
+        <CancelOrSwapRequestModal
+          type={activeRequestType}
+          order={order}
+          onApprove={activeRequestType === "cancel" ? approveCancelDelete : approveDriverSwap}
+          onReject={activeRequestType === "cancel" ? rejectCancelRequest : rejectDriverSwap}
+          onClose={() => setShowRequestModal(false)}
+        />
       )}
       </>
     );
@@ -7097,18 +7158,6 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   style={{ "--glow-c": statusRing }}
   onClick={onSelect}
 >
-      {isCancelRequested && (
-        <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-          className="absolute -top-2.5 left-3 z-10 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-orange-500 shadow-md badge-dispatching">
-          기사취소
-        </button>
-      )}
-      {isEditRequested && (
-        <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-          className="absolute -top-2.5 right-3 z-10 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-sky-500 shadow-md badge-dispatching">
-          수정요청
-        </button>
-      )}
       {/* ▶ 거래처명 + 메모 + 상태 + 배지들 */}
 <div className="flex justify-between items-center gap-1 mb-0.5">
   <div className="flex items-center gap-1 min-w-0 flex-1">
@@ -7140,6 +7189,19 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     <span className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-wide">
       왕복
     </span>
+  )}
+
+  {activeRequestType && (
+    <button
+      onClick={openRequestModal}
+      className="text-[11px] font-extrabold"
+      style={{
+        color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
+        animation: "dispatchingPulse 1.8s ease-in-out infinite",
+      }}
+    >
+      요청
+    </button>
   )}
 
   <button
@@ -7312,8 +7374,17 @@ const dt = new Date(y, m - 1, d, hh, mm);
   {showReqModal && (
     <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
   )}
-  {showEditReqModal && (
-    <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowEditReqModal(false)} />
+  {showRequestModal && activeRequestType === "edit" && (
+    <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowRequestModal(false)} />
+  )}
+  {showRequestModal && (activeRequestType === "cancel" || activeRequestType === "swap") && (
+    <CancelOrSwapRequestModal
+      type={activeRequestType}
+      order={order}
+      onApprove={activeRequestType === "cancel" ? approveCancelDelete : approveDriverSwap}
+      onReject={activeRequestType === "cancel" ? rejectCancelRequest : rejectDriverSwap}
+      onClose={() => setShowRequestModal(false)}
+    />
   )}
   </>
   );
@@ -7749,29 +7820,54 @@ function MobileOrderDetail({
     setShowReqModal(false);
   };
   const isCancelRequested = order.취소요청 === true && order.배차상태 !== "배차취소";
+  const isSwapRequested = order.기사취소요청 === true;
+  const isEditRequested = order.수정요청 === true;
+  const activeRequestType = isCancelRequested ? "cancel" : isSwapRequested ? "swap" : isEditRequested ? "edit" : null;
+  const [showRequestModal, setShowRequestModal] = useState(false);
   const approveCancelDelete = async () => {
     if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
     try {
       await deleteDoc(doc(db, order.__col || "orders", order.id));
       setPage("list");
     } catch {}
+    setShowRequestModal(false);
   };
-  const isEditRequested = order.수정요청 === true;
-  const [showEditReqModal, setShowEditReqModal] = useState(false);
+  const rejectCancelRequest = async () => {
+    try {
+      await updateDoc(doc(db, order.__col || "orders", order.id), { 취소요청: false });
+      setSelectedOrder((prev) => (prev ? { ...prev, 취소요청: false } : prev));
+    } catch {}
+    setShowRequestModal(false);
+  };
+  const approveDriverSwap = async () => {
+    try {
+      const patch = { 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 기사취소요청일시: deleteField() };
+      await updateDoc(doc(db, order.__col || "orders", order.id), patch);
+      setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false } : prev));
+    } catch {}
+    setShowRequestModal(false);
+  };
+  const rejectDriverSwap = async () => {
+    try {
+      await updateDoc(doc(db, order.__col || "orders", order.id), { 기사취소요청: false });
+      setSelectedOrder((prev) => (prev ? { ...prev, 기사취소요청: false } : prev));
+    } catch {}
+    setShowRequestModal(false);
+  };
   const approveEditReq = async () => {
     try {
       await approveEditRequest(order);
       const pending = order.수정요청데이터 || {};
       setSelectedOrder((prev) => (prev ? { ...prev, ...pending, 수정요청: false, 최종수정출처: "shipper" } : prev));
     } catch {}
-    setShowEditReqModal(false);
+    setShowRequestModal(false);
   };
   const rejectEditReq = async () => {
     try {
       await rejectEditRequest(order);
       setSelectedOrder((prev) => (prev ? { ...prev, 수정요청: false, 수정거절: true } : prev));
     } catch {}
-    setShowEditReqModal(false);
+    setShowRequestModal(false);
   };
 const [localDelivered, setLocalDelivered] = React.useState(
     order?.업체전달상태 === "전달완료" || order?.정보전달완료 === true
@@ -8101,22 +8197,17 @@ const handleAssignClick = () => {
       {showHistory && (
         <HistoryViewerModal history={order.history} onClose={() => setShowHistory(false)} />
       )}
-      {isEditRequested && order.수정요청데이터 && (
-        <div className="bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 mt-2">
-          <div className="text-[11px] font-bold text-sky-700 mb-1">화주사 수정요청 (승인 대기중)</div>
-          <div className="space-y-1">
-            {Object.entries(order.수정요청데이터)
-              .filter(([k, v]) => k !== "화물목록" && String(order[k] ?? "") !== String(v ?? ""))
-              .map(([k, v]) => (
-                <div key={k} className="text-[12px] text-gray-700">
-                  <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(order[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
-                </div>
-              ))}
-          </div>
-        </div>
+      {showRequestModal && activeRequestType === "edit" && (
+        <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowRequestModal(false)} />
       )}
-      {showEditReqModal && (
-        <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowEditReqModal(false)} />
+      {showRequestModal && (activeRequestType === "cancel" || activeRequestType === "swap") && (
+        <CancelOrSwapRequestModal
+          type={activeRequestType}
+          order={order}
+          onApprove={activeRequestType === "cancel" ? approveCancelDelete : approveDriverSwap}
+          onReject={activeRequestType === "cancel" ? rejectCancelRequest : rejectDriverSwap}
+          onClose={() => setShowRequestModal(false)}
+        />
       )}
     </div>
 
@@ -8130,18 +8221,20 @@ const handleAssignClick = () => {
             <div className="flex items-start justify-between gap-2 mb-0.5">
               <div className="text-[13px] font-bold text-gray-900 flex-1 min-w-0">{order.상차지명 || "-"}</div>
               <div className="shrink-0 flex flex-col items-end gap-1">
-                <div className="relative inline-block">
+                <div className="flex items-center gap-1.5">
+                  {activeRequestType && (
+                    <button
+                      onClick={() => setShowRequestModal(true)}
+                      className="text-[11px] font-extrabold"
+                      style={{
+                        color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
+                        animation: "dispatchingPulse 1.8s ease-in-out infinite",
+                      }}
+                    >
+                      요청
+                    </button>
+                  )}
                   <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
-                  {isCancelRequested && (
-                    <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-                      className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
-                      style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
-                  )}
-                  {isEditRequested && (
-                    <button onClick={() => setShowEditReqModal(true)} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-                      className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
-                      style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
-                  )}
                 </div>
                 {state === "배차완료" && order.배차완료일시?.seconds && (
                   <span className="text-[9px] text-gray-400 mt-0.5">

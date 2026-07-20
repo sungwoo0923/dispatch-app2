@@ -178,6 +178,14 @@ const getStatusBadge = (o) => {
 // 운송사 프로그램의 배차현황과 동일하게, 상태 단계별로 먼저 묶고 그 안에서 날짜순 정렬한다.
 const ORDER_SORT_TIER = { 배차요청: 0, 요청보류: 0, 배차중: 1, 배차완료: 2, 취소: 3 };
 const getOrderSortTier = (o) => ORDER_SORT_TIER[getStatusBadge(o).label] ?? 1;
+// 배차완료 단계에서는 "방금 배차완료된" 오더가 가장 위로 오도록 배차완료일시 기준으로 정렬한다
+// (없으면 상차일로 대체 — 과거 데이터 호환).
+const getOrderSortTime = (o) => {
+  if (getOrderSortTier(o) === 2) {
+    return toMillis(o.배차완료일시) || toMillis(o.updatedAt) || 0;
+  }
+  return 0;
+};
 
 function StatusBadge({ order, className = "" }) {
   const { label, blink, dot, text, ring } = getStatusBadge(order);
@@ -225,6 +233,20 @@ async function shipperDeleteOrRequestCancel(order, user) {
   }
   if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return false;
   await deleteDoc(doc(db, "orders", order.id));
+  return true;
+}
+
+// 기사변경(재배차) 요청 — 오더 자체는 유지한 채 배정된 기사만 취소해달라고 요청한다.
+// 배차취소요청(오더 자체 취소)과 달리 운송사가 승인하면 기사 정보만 초기화되고 오더는 남는다.
+async function shipperRequestDriverSwap(order, user) {
+  if (order.기사취소요청) {
+    alert("이미 기사변경을 요청했습니다.\n운송사의 승인을 기다리고 있습니다.");
+    return false;
+  }
+  if (!window.confirm(`배정된 기사(${order.이름 || order.차량번호 || "-"})를 취소하고 다시 배차해달라고 요청하시겠습니까?`)) return false;
+  await updateDoc(doc(db, "orders", order.id), {
+    기사취소요청: true, 기사취소요청일시: serverTimestamp(), 기사취소요청자: user?.email || "",
+  });
   return true;
 }
 
@@ -1389,6 +1411,8 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
       .sort((a, b) => {
         const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
         if (tierDiff !== 0) return tierDiff;
+        const timeDiff = getOrderSortTime(b) - getOrderSortTime(a);
+        if (timeDiff !== 0) return timeDiff;
         return String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
       });
   }, [orders, startDate, endDate, keyword, searchType, statusFilter]);
@@ -1496,6 +1520,9 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
     const ok = await shipperDeleteOrRequestCancel(order, user);
     if (ok && !isDispatched) onBack?.();
   };
+  const handleSwapDriver = async () => {
+    await shipperRequestDriverSwap(order, user);
+  };
   const [attachments, setAttachments] = useState([]);
   const [loadingAttach, setLoadingAttach] = useState(false);
   const [viewImg, setViewImg] = useState(null);
@@ -1545,11 +1572,19 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
           >
             수정
           </button>
+          {isDispatched && (
+            <button
+              onClick={handleSwapDriver}
+              className="flex-1 py-2.5 rounded-xl border border-orange-200 text-orange-500 text-sm font-semibold"
+            >
+              기사변경요청
+            </button>
+          )}
           <button
             onClick={handleDelete}
             className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
           >
-            {isDispatched ? "기사취소요청" : "오더취소"}
+            오더취소
           </button>
         </div>
       )}
@@ -2038,6 +2073,13 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceTransport, setInvoiceTransport] = useState("");
   const [invoiceSaving, setInvoiceSaving] = useState(false);
+  // 정산 내역서는 표(720px 고정폭)로 만들어야 이미지 저장 시 깔끔하지만, 화면에는 폭에 맞게
+  // 축소해서 보여줘야 좌우 스크롤 없이 한눈에 들어온다. 화면 미리보기는 CSS scale로 축소해
+  // 보여주고, 이미지 저장은 화면 밖에 항상 원본 크기로 떠 있는 별도 사본에서 캡처한다.
+  const invoicePreviewWrapRef = useRef(null);
+  const invoicePreviewContentRef = useRef(null);
+  const [invoiceScale, setInvoiceScale] = useState(1);
+  const [invoiceContentH, setInvoiceContentH] = useState(0);
 
   const filtered = useMemo(() => {
     return orders.filter(o => {
@@ -2051,10 +2093,23 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
 
   const sorted = useMemo(() => {
     const list = [...filtered];
-    if (sortKey === "date_asc") list.sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")));
-    else if (sortKey === "amount_desc") list.sort((a, b) => (Number(b.청구운임) || 0) - (Number(a.청구운임) || 0));
+    if (sortKey === "date_asc") {
+      list.sort((a, b) => {
+        const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
+        if (tierDiff !== 0) return tierDiff;
+        return String(a.상차일 || "").localeCompare(String(b.상차일 || ""));
+      });
+    } else if (sortKey === "amount_desc") list.sort((a, b) => (Number(b.청구운임) || 0) - (Number(a.청구운임) || 0));
     else if (sortKey === "amount_asc") list.sort((a, b) => (Number(a.청구운임) || 0) - (Number(b.청구운임) || 0));
-    else list.sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
+    else {
+      list.sort((a, b) => {
+        const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
+        if (tierDiff !== 0) return tierDiff;
+        const timeDiff = getOrderSortTime(b) - getOrderSortTime(a);
+        if (timeDiff !== 0) return timeDiff;
+        return String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
+      });
+    }
     return list;
   }, [filtered, sortKey]);
 
@@ -2083,6 +2138,85 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
   const invoiceSupply = invoiceRows.reduce((s, r) => s + r.공급가액, 0);
   const invoiceTax = invoiceRows.reduce((s, r) => s + r.세액, 0);
   const invoiceTotal = invoiceSupply + invoiceTax;
+
+  useEffect(() => {
+    if (!showInvoice) return;
+    const measure = () => {
+      const wrap = invoicePreviewWrapRef.current;
+      const content = invoicePreviewContentRef.current;
+      if (!wrap || !content) return;
+      const w = wrap.clientWidth;
+      setInvoiceScale(w > 0 ? Math.min(1, w / 720) : 1);
+      setInvoiceContentH(content.scrollHeight);
+    };
+    measure();
+    const t = setTimeout(measure, 60);
+    window.addEventListener("resize", measure);
+    return () => { window.removeEventListener("resize", measure); clearTimeout(t); };
+  }, [showInvoice, invoiceRows.length, invoiceTransport]);
+
+  const renderInvoiceDoc = (id) => (
+    <div id={id} style={{ fontFamily: "'Malgun Gothic','Apple SD Gothic Neo',sans-serif", background: "#fff", width: 720, border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ background: NAVY, padding: "16px 20px" }}>
+        <div style={{ fontSize: 17, fontWeight: 900, color: "#fff" }}>정산 내역서</div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 3 }}>거래기간 : {startDate} ~ {endDate}</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #e5e7eb" }}>
+        <div style={{ padding: 14, borderRight: "1px solid #e5e7eb" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 6, letterSpacing: "0.06em" }}>화주사 정보</div>
+          <InvoiceInfoRowM label="상호" value={userData?.companyName} />
+          <InvoiceInfoRowM label="담당자" value={userData?.name} />
+          <InvoiceInfoRowM label="연락처" value={userData?.phone} last />
+        </div>
+        <div style={{ padding: 14 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 6, letterSpacing: "0.06em" }}>운송사 정보</div>
+          <InvoiceInfoRowM label="상호" value={invoiceTransport || `전체(${invoiceTransportOptions.length}개사)`} />
+          <InvoiceInfoRowM label="건수" value={`${invoiceRows.length}건`} last />
+        </div>
+      </div>
+      <div style={{ padding: "10px 16px", background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280" }}>합계금액 (공급가액+부가세)</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: NAVY, marginTop: 2 }}>
+          일금 {numberToKorean(invoiceTotal)} 원정 <span style={{ fontSize: 11, fontWeight: 400, color: "#6b7280" }}>(W {invoiceTotal.toLocaleString()})</span>
+        </div>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ background: NAVY }}>
+            {["No", "날짜", "상차지", "하차지", "화물", "차량번호", "공급가액", "세액", "합계"].map(h => (
+              <th key={h} style={{ padding: "7px 6px", fontSize: 10, color: "#fff", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {invoiceRows.map((r, i) => (
+            <tr key={i} style={{ borderBottom: "1px solid #f3f4f6", background: i % 2 === 0 ? "#fff" : "#f9fafb" }}>
+              <td style={{ padding: "6px", textAlign: "center", fontSize: 10, color: "#9ca3af" }}>{r.idx}</td>
+              <td style={{ padding: "6px", fontSize: 10, color: "#374151", whiteSpace: "nowrap" }}>{r.상차일}</td>
+              <td style={{ padding: "6px", fontSize: 10, color: "#374151" }}>{r.상차지}</td>
+              <td style={{ padding: "6px", fontSize: 10, color: "#374151" }}>{r.하차지}</td>
+              <td style={{ padding: "6px", fontSize: 10, color: "#374151" }}>{r.화물}</td>
+              <td style={{ padding: "6px", fontSize: 10, color: "#374151", whiteSpace: "nowrap" }}>{r.차량번호}</td>
+              <td style={{ padding: "6px", textAlign: "right", fontSize: 10, color: "#374151" }}>{r.공급가액.toLocaleString()}</td>
+              <td style={{ padding: "6px", textAlign: "right", fontSize: 10, color: "#374151" }}>{r.세액.toLocaleString()}</td>
+              <td style={{ padding: "6px", textAlign: "right", fontSize: 10, fontWeight: 600, color: NAVY }}>{(r.공급가액 + r.세액).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: NAVY }}>
+            <td colSpan={6} style={{ padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#fff", textAlign: "center" }}>소 계</td>
+            <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#fff" }}>{invoiceSupply.toLocaleString()}</td>
+            <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#93c5fd" }}>{invoiceTax.toLocaleString()}</td>
+            <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#fde68a" }}>{invoiceTotal.toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+      {invoiceRows.length === 0 && (
+        <div style={{ padding: 30, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>선택한 조건에 해당하는 오더가 없습니다.</div>
+      )}
+    </div>
+  );
 
   const openInvoice = () => {
     if (filtered.length === 0) { alert("조회된 오더가 없습니다."); return; }
@@ -2180,67 +2314,19 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
                 {invoiceTransportOptions.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div className="flex-1 overflow-auto p-3 bg-gray-100">
-              <div id="shipperInvoiceAreaM" style={{ fontFamily: "'Malgun Gothic','Apple SD Gothic Neo',sans-serif", background: "#fff", width: 720, border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-                <div style={{ background: NAVY, padding: "16px 20px" }}>
-                  <div style={{ fontSize: 17, fontWeight: 900, color: "#fff" }}>정산 내역서</div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 3 }}>거래기간 : {startDate} ~ {endDate}</div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #e5e7eb" }}>
-                  <div style={{ padding: 14, borderRight: "1px solid #e5e7eb" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 6, letterSpacing: "0.06em" }}>화주사 정보</div>
-                    <InvoiceInfoRowM label="상호" value={userData?.companyName} />
-                    <InvoiceInfoRowM label="담당자" value={userData?.name} />
-                    <InvoiceInfoRowM label="연락처" value={userData?.phone} last />
-                  </div>
-                  <div style={{ padding: 14 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 6, letterSpacing: "0.06em" }}>운송사 정보</div>
-                    <InvoiceInfoRowM label="상호" value={invoiceTransport || `전체(${invoiceTransportOptions.length}개사)`} />
-                    <InvoiceInfoRowM label="건수" value={`${invoiceRows.length}건`} last />
+            <div className="flex-1 overflow-y-auto p-3 bg-gray-100">
+              {/* 화면 미리보기: 폭에 맞춰 축소 표시(좌우 스크롤 없이 한번에 보이도록) */}
+              <div ref={invoicePreviewWrapRef}>
+                <div style={{ height: invoiceContentH ? invoiceContentH * invoiceScale : undefined, overflow: "hidden" }}>
+                  <div ref={invoicePreviewContentRef} style={{ transform: `scale(${invoiceScale})`, transformOrigin: "top left", width: 720 }}>
+                    {renderInvoiceDoc()}
                   </div>
                 </div>
-                <div style={{ padding: "10px 16px", background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280" }}>합계금액 (공급가액+부가세)</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: NAVY, marginTop: 2 }}>
-                    일금 {numberToKorean(invoiceTotal)} 원정 <span style={{ fontSize: 11, fontWeight: 400, color: "#6b7280" }}>(W {invoiceTotal.toLocaleString()})</span>
-                  </div>
-                </div>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: NAVY }}>
-                      {["No", "날짜", "상차지", "하차지", "화물", "차량번호", "공급가액", "세액", "합계"].map(h => (
-                        <th key={h} style={{ padding: "7px 6px", fontSize: 10, color: "#fff", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoiceRows.map((r, i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid #f3f4f6", background: i % 2 === 0 ? "#fff" : "#f9fafb" }}>
-                        <td style={{ padding: "6px", textAlign: "center", fontSize: 10, color: "#9ca3af" }}>{r.idx}</td>
-                        <td style={{ padding: "6px", fontSize: 10, color: "#374151", whiteSpace: "nowrap" }}>{r.상차일}</td>
-                        <td style={{ padding: "6px", fontSize: 10, color: "#374151" }}>{r.상차지}</td>
-                        <td style={{ padding: "6px", fontSize: 10, color: "#374151" }}>{r.하차지}</td>
-                        <td style={{ padding: "6px", fontSize: 10, color: "#374151" }}>{r.화물}</td>
-                        <td style={{ padding: "6px", fontSize: 10, color: "#374151", whiteSpace: "nowrap" }}>{r.차량번호}</td>
-                        <td style={{ padding: "6px", textAlign: "right", fontSize: 10, color: "#374151" }}>{r.공급가액.toLocaleString()}</td>
-                        <td style={{ padding: "6px", textAlign: "right", fontSize: 10, color: "#374151" }}>{r.세액.toLocaleString()}</td>
-                        <td style={{ padding: "6px", textAlign: "right", fontSize: 10, fontWeight: 600, color: NAVY }}>{(r.공급가액 + r.세액).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: NAVY }}>
-                      <td colSpan={6} style={{ padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#fff", textAlign: "center" }}>소 계</td>
-                      <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#fff" }}>{invoiceSupply.toLocaleString()}</td>
-                      <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#93c5fd" }}>{invoiceTax.toLocaleString()}</td>
-                      <td style={{ padding: "8px 6px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#fde68a" }}>{invoiceTotal.toLocaleString()}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-                {invoiceRows.length === 0 && (
-                  <div style={{ padding: 30, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>선택한 조건에 해당하는 오더가 없습니다.</div>
-                )}
               </div>
+            </div>
+            {/* 이미지 저장 전용 원본 크기 사본(화면에는 보이지 않음, 항상 720px 그대로 유지) */}
+            <div style={{ position: "fixed", left: -10000, top: 0, pointerEvents: "none" }} aria-hidden="true">
+              {renderInvoiceDoc("shipperInvoiceAreaM")}
             </div>
             <div className="px-4 py-3 border-t border-gray-100 shrink-0" style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}>
               <button onClick={saveInvoiceImage} disabled={invoiceSaving}
@@ -2396,6 +2482,10 @@ function OrderCard({ order, onSelect, onEdit, user }) {
     setShowActionSheet(false);
     await shipperDeleteOrRequestCancel(order, user);
   };
+  const handleSwapDriver = async () => {
+    setShowActionSheet(false);
+    await shipperRequestDriverSwap(order, user);
+  };
 
   return (
     <div
@@ -2485,6 +2575,7 @@ function OrderCard({ order, onSelect, onEdit, user }) {
           order={order}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onSwapDriver={handleSwapDriver}
           onClose={() => setShowActionSheet(false)}
         />
       )}
@@ -2492,7 +2583,7 @@ function OrderCard({ order, onSelect, onEdit, user }) {
   );
 }
 
-function OrderCardActionSheet({ order, onEdit, onDelete, onClose }) {
+function OrderCardActionSheet({ order, onEdit, onDelete, onSwapDriver, onClose }) {
   const isDispatched = !!(order.차량번호 && String(order.차량번호).trim());
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={(e) => { e.stopPropagation(); onClose(); }}>
@@ -2507,8 +2598,13 @@ function OrderCardActionSheet({ order, onEdit, onDelete, onClose }) {
         <button onClick={onEdit} className="w-full text-left px-4 py-3.5 text-[15px] font-semibold text-gray-800 border-t border-gray-100">
           수정
         </button>
+        {isDispatched && (
+          <button onClick={onSwapDriver} className="w-full text-left px-4 py-3.5 text-[15px] font-semibold text-orange-500 border-t border-gray-100">
+            기사변경요청
+          </button>
+        )}
         <button onClick={onDelete} className="w-full text-left px-4 py-3.5 text-[15px] font-semibold text-red-500 border-t border-gray-100">
-          {isDispatched ? "기사취소요청" : "오더취소"}
+          오더취소
         </button>
         <button onClick={onClose} className="w-full text-center px-4 py-3.5 text-[15px] font-semibold text-gray-400 border-t border-gray-100 mb-2">
           닫기
