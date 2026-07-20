@@ -22471,6 +22471,15 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
                       patch.차량번호 = "";
                       patch.이름 = "";
                       patch.전화번호 = "";
+                      // 기사취소로 배차중 복귀 — 화주사가 걸어둔 취소요청(기사취소요청)이 있었다면
+                      // 목적이 이미 달성된 것이므로 함께 해제해, 화주사 화면이 "취소요청중"에
+                      // 계속 멈춰있지 않도록 한다.
+                      const row = dispatchData.find(r => r._id === confirmChange.rowId);
+                      if (row?.취소요청) {
+                        patch.취소요청 = false;
+                        patch.취소요청일시 = null;
+                        patch.취소요청자 = null;
+                      }
                     }
 
                     if (confirmChange.key === "업체전달상태") {
