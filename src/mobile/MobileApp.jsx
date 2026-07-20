@@ -69,6 +69,13 @@ if (typeof document !== "undefined" && !document.getElementById("__mobile-badge-
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.5; transform: scale(0.8); }
     }
+    @keyframes cardStatusGlow {
+      0%, 100% { box-shadow: 0 0 0 1px var(--glow-c, rgba(96,165,250,0.35)), 0 0 0 rgba(0,0,0,0); }
+      50% { box-shadow: 0 0 0 3px var(--glow-c, rgba(96,165,250,0.45)), 0 0 10px var(--glow-c, rgba(96,165,250,0.35)); }
+    }
+    .card-status-blink {
+      animation: cardStatusGlow 1.8s ease-in-out infinite;
+    }
   `;
   document.head.appendChild(s);
 }
@@ -899,7 +906,10 @@ function EditRequestModal({ order, onApprove, onReject, onClose }) {
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
       <div className="relative bg-white rounded-2xl w-full max-w-sm p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="text-[15px] font-bold text-gray-800 mb-1.5">화주사 수정요청</div>
+        <div className="flex items-start justify-between mb-1.5">
+          <div className="text-[15px] font-bold text-gray-800">화주사 수정요청</div>
+          <button onClick={onClose} className="text-gray-400 text-lg leading-none px-1 -mt-1 -mr-1">✕</button>
+        </div>
         <div className="text-[13px] text-gray-500 mb-3 leading-relaxed">
           {order.거래처명 || "화주사"}가 오더 수정을 요청했습니다. 승인하면 아래 내용이 반영됩니다.
         </div>
@@ -968,16 +978,35 @@ const toMillis = (v) => {
   return 0;
 };
 
-// 등록내역 정렬 기준 시각: 배차완료 건은 "배차완료된 시각", 배차중 건은 "등록된 시각".
+// 등록내역 정렬 우선순위: 배차요청(+요청보류) 0단계 → 배차중 1단계 → 배차완료 2단계.
+// 배차요청이 배차완료 사이에 끼어 보이지 않도록, 차량번호 유무가 아니라 실제
+// 화면에 노출되는 상태 뱃지 라벨을 기준으로 그룹을 나눈다.
+const ORDER_SORT_TIER = { 배차요청: 0, 요청보류: 0, 배차중: 1, 배차완료: 2 };
+const getOrderSortTier = (o = {}) => {
+  const { label } = getTransportBadgeInfo(o);
+  return ORDER_SORT_TIER[label] ?? 1;
+};
+// 등록내역 정렬 기준 시각: 배차완료 건은 "배차완료된 시각", 배차중 건은 "배차중으로
+// 전환된 시각"(없으면 등록시각), 배차요청 건은 "등록된 시각".
 // 이렇게 이벤트 발생 시각을 기준으로 삼아야, 이후 다른 항목을 수정해도(=updatedAt만 바뀜)
 // 목록 순서가 뒤섞이지 않는다.
 const getOrderSortTime = (o = {}) => {
-  if (getStatus(o) === "배차완료") {
+  const tier = getOrderSortTier(o);
+  if (tier === 2) {
     return (
       toMillis(o.배차완료일시) ||
       toMillis(o.updatedAt) ||
       o._lastModified ||
       toMillis(o.createdAt) ||
+      0
+    );
+  }
+  if (tier === 1) {
+    return (
+      toMillis(o.배차중전환일시) ||
+      toMillis(o.createdAt) ||
+      o._lastModified ||
+      toMillis(o.updatedAt) ||
       0
     );
   }
@@ -2219,21 +2248,13 @@ if (searchType === "메모")
 
 
     // 7) 정렬
-    // 🟢 After
-if (statusTab === "전체") {
-  // 전체 = 배차중 그룹 먼저(등록순), 배차완료 그룹 나중(배차완료된 순)
-  base.sort((a, b) => {
-    const aEmpty = !String(a.차량번호 || "").trim();
-    const bEmpty = !String(b.차량번호 || "").trim();
-    if (aEmpty && !bEmpty) return -1;
-    if (!aEmpty && bEmpty) return 1;
-    // 같은 그룹 내: 배차중=등록시각, 배차완료=배차완료시각 기준 최신순
-    return getOrderSortTime(b) - getOrderSortTime(a);
-  });
-} else {
-  // 배차중 탭: 등록순(최신 등록 상단) / 배차완료 탭: 배차완료된 순(최근 완료 상단)
-  base.sort((a, b) => getOrderSortTime(b) - getOrderSortTime(a));
-}
+    // 배차요청(+요청보류) → 배차중 → 배차완료 순, 같은 단계 내에서는 해당 단계로
+    // 전환된 시각 기준 최신순 (getOrderSortTier/getOrderSortTime 참고)
+    base.sort((a, b) => {
+      const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
+      if (tierDiff !== 0) return tierDiff;
+      return getOrderSortTime(b) - getOrderSortTime(a);
+    });
 
     return base;
   }, [
@@ -6791,7 +6812,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
-  const { isPending: isPendingShipperConfirm, dot: statusDot, wash: statusWash } = getTransportBadgeInfo(order);
+  const { isPending: isPendingShipperConfirm, dot: statusDot, wash: statusWash, ring: statusRing, blink: statusBlink } = getTransportBadgeInfo(order);
   const isRecentlyEditedByShipper = order.최종수정출처 === "shipper" && (Date.now() - toMillis(order.최종수정일시)) < 1000 * 60 * 60 * 48;
   const [showReqModal, setShowReqModal] = useState(false);
   const openReqModal = (e) => {
@@ -6882,30 +6903,32 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             ? "border-[#1B2B4B] shadow-[0_0_0_2px_rgba(27,43,75,0.12)]"
             : flash
               ? "border-blue-300 shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
-              : "border-gray-100")
+              : "border-gray-100") +
+          (statusBlink && !selected ? " card-status-blink" : "")
         }
-        style={{ borderLeft: `4px solid ${statusDot}` }}
+        style={{ borderLeft: `4px solid ${statusDot}`, "--glow-c": statusRing }}
         onClick={onSelect}
       >
         {/* 상단 정보 바 */}
         <div className="px-3 py-1.5 flex items-center justify-between" style={{ background: `linear-gradient(90deg, ${statusWash}, transparent)` }}>
           <div className="flex items-center gap-1.5">
-            <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
-            {isCancelRequested && (
-              <button onClick={approveCancelDelete}
-                className="px-1.5 py-0.5 rounded-full text-[0.68em] font-bold text-white bg-orange-500 badge-dispatching">
-                취소승인
-              </button>
-            )}
-            {isEditRequested && (
-              <button onClick={openEditReqModal}
-                className="px-1.5 py-0.5 rounded-full text-[0.68em] font-bold text-white bg-sky-500 badge-dispatching">
-                수정승인
-              </button>
-            )}
-            {isRecentlyEditedByShipper && (
-              <span className="text-[0.68em] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded">화주사 수정</span>
-            )}
+            <div className="relative inline-block shrink-0">
+              <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
+              {isCancelRequested && (
+                <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
+                  className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
+                  style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
+              )}
+              {isEditRequested && (
+                <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+                  className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
+                  style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
+              )}
+              {isRecentlyEditedByShipper && !isEditRequested && (
+                <span title="화주사가 오더 정보를 수정했습니다"
+                  className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
+              )}
+            </div>
             {order.거래처명 && (
               <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
             )}
@@ -7004,9 +7027,10 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
             </span>
             <div
-              className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg"
+              className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-full"
               style={{
                 background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
+                border: `1px solid ${statusRing}`,
                 boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
               }}
             >
@@ -7063,8 +7087,10 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       ? "border-[#1B2B4B] bg-[#1B2B4B]/[0.03] shadow-[0_0_0_2px_rgba(27,43,75,0.15)]"
       : flash
         ? "border-blue-400 order-flash-blue shadow-[0_0_0_4px_rgba(59,130,246,0.18),0_0_18px_rgba(59,130,246,0.35)]"
-        : "border-gray-200")
+        : "border-gray-200") +
+    (statusBlink && !selected ? " card-status-blink" : "")
   }
+  style={{ "--glow-c": statusRing }}
   onClick={onSelect}
 >
       {/* ▶ 거래처명 + 메모 + 상태 + 배지들 */}
@@ -7115,22 +7141,23 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     {(order.attachCount > 0) ? order.attachCount : "없음"}
   </button>
 
-  <TransportStatusBadge order={order} className="text-[11px]" onClick={openReqModal} flat />
-  {isCancelRequested && (
-    <button onClick={approveCancelDelete}
-      className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-orange-500 badge-dispatching">
-      취소승인
-    </button>
-  )}
-  {isEditRequested && (
-    <button onClick={openEditReqModal}
-      className="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-sky-500 badge-dispatching">
-      수정승인
-    </button>
-  )}
-  {isRecentlyEditedByShipper && (
-    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-300">화주사 수정</span>
-  )}
+  <div className="relative inline-block shrink-0">
+    <TransportStatusBadge order={order} className="text-[11px]" onClick={openReqModal} flat />
+    {isCancelRequested && (
+      <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
+        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
+        style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
+    )}
+    {isEditRequested && (
+      <button onClick={openEditReqModal} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+        className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
+        style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
+    )}
+    {isRecentlyEditedByShipper && !isEditRequested && (
+      <span title="화주사가 오더 정보를 수정했습니다"
+        className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
+    )}
+  </div>
   </div>
 </div>
 
@@ -8097,19 +8124,19 @@ const handleAssignClick = () => {
             <div className="flex items-start justify-between gap-2 mb-0.5">
               <div className="text-[13px] font-bold text-gray-900 flex-1 min-w-0">{order.상차지명 || "-"}</div>
               <div className="shrink-0 flex flex-col items-end gap-1">
-                <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
-                {isCancelRequested && (
-                  <button onClick={approveCancelDelete}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-orange-500 badge-dispatching">
-                    취소승인
-                  </button>
-                )}
-                {isEditRequested && (
-                  <button onClick={() => setShowEditReqModal(true)}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-sky-500 badge-dispatching">
-                    수정승인
-                  </button>
-                )}
+                <div className="relative inline-block">
+                  <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
+                  {isCancelRequested && (
+                    <button onClick={approveCancelDelete} title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
+                      className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
+                      style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
+                  )}
+                  {isEditRequested && (
+                    <button onClick={() => setShowEditReqModal(true)} title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+                      className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
+                      style={{ animation: "dispatchingPulse 2.2s ease-in-out infinite" }} />
+                  )}
+                </div>
                 {state === "배차완료" && order.배차완료일시?.seconds && (
                   <span className="text-[9px] text-gray-400 mt-0.5">
                     {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
