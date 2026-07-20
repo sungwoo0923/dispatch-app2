@@ -707,7 +707,11 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
 
   const viewOrders = orders
     .filter((o) => String(o.상차일 || "").slice(0, 10) === queriedDate && o.상태 !== "취소")
-    .sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || "")));
+    .sort((a, b) => {
+      const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
+      if (tierDiff !== 0) return tierDiff;
+      return String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""));
+    });
 
   const monthAmount = useMemo(() => {
     const start = getMonthStart(0), end = getMonthEnd(0);
