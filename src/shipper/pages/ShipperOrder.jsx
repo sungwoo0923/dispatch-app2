@@ -92,6 +92,17 @@ function buildHistoryEntries(prev, next, userEmail) {
   return entries;
 }
 
+// 배차상태는 저장된 값이 아니라 항상 실제 오더 데이터(차량번호/화주사확인대기/상태)로부터
+// 계산한다 — ShipperStatus.jsx의 getStatus와 동일한 규칙 (배차완료 오더인데 폼에 저장된
+// 값이 없어 "요청"으로 고정 표시되던 버그 수정).
+const getDisplayStatus = (o) => {
+  if (!o) return "요청";
+  if (["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태)) return "배차취소";
+  if (o.차량번호 && String(o.차량번호).trim()) return "배차완료";
+  if (o.화주사확인대기 === true) return "요청";
+  return "배차중";
+};
+
 const getDate = (offset = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -287,7 +298,6 @@ export default function ShipperOrder({ editData, onClose }) {
   }, [user]);
 
   const [form, setForm] = useState({
-    status: "요청",
     청구운임: "",
     상차지명: "", 상차지주소: "", 상차담당자명: "", 상차담당자번호: "", 상차메모: "",
     하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
@@ -335,7 +345,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
   const resetForm = () => {
     setForm({
-      status: "요청", 청구운임: "",
+      청구운임: "",
       상차지명: "", 상차지주소: "", 상차담당자명: "", 상차담당자번호: "", 상차메모: "",
       하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
       상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
@@ -751,7 +761,7 @@ export default function ShipperOrder({ editData, onClose }) {
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
                   <label className={labelCls}>배차상태</label>
-                  <div className="p-2.5 bg-white border rounded-lg font-semibold text-gray-800 text-sm">{form.status || "요청"}</div>
+                  <div className="p-2.5 bg-white border rounded-lg font-semibold text-gray-800 text-sm">{getDisplayStatus(editData)}</div>
                 </div>
                 <div>
                   <label className={labelCls}>청구운임</label>
