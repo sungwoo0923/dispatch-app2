@@ -232,7 +232,7 @@ export default function ShipperOrder({ editData, onClose }) {
   };
   initMap();
   return () => { cancelled = true; };
-  }, [previewOpen, coords, form?.상차지주소, form?.하차지주소, form?.경유상차목록, form?.경유하차목록]);
+  }, [previewOpen, coords]);
 
   // 배차요청 확인 팝업: Enter=배차요청 전송, ESC=닫기
   useEffect(() => {
