@@ -1041,8 +1041,30 @@ const patchDispatch = async (_id, patch) => {
     }
     if (Object.keys(mirrorPatch).length > 0) {
       mirrorPatch.updatedAt = Date.now();
-      updateDoc(doc(db, "orders", prev._transmittedOrderId), mirrorPatch)
-        .catch(e => console.error("화주사 전송사본 동기화 오류:", e));
+      const mirrorRef = doc(db, "orders", prev._transmittedOrderId);
+      updateDoc(mirrorRef, mirrorPatch).catch(async (e) => {
+        console.error("화주사 전송사본 동기화 오류:", e);
+        // _transmittedOrderId가 가리키는 문서가 이미 없어졌거나(삭제/재전송 등으로
+        // 포인터가 끊어진 경우) updateDoc이 조용히 실패하면, 화주사 화면은 영영
+        // 예전 값에 멈춰 있게 된다. originCol/originId 역참조로 실제 사본을 다시
+        // 찾아 갱신하고, 끊어진 포인터도 함께 복구한다.
+        try {
+          const q = query(
+            collection(db, "orders"),
+            where("originCol", "==", prev.__col || "dispatch"),
+            where("originId", "==", _id),
+            limit(1)
+          );
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const realMirrorId = snap.docs[0].id;
+            await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
+            await updateDoc(ref, { _transmittedOrderId: realMirrorId }).catch(() => {});
+          }
+        } catch (e2) {
+          console.error("화주사 전송사본 재탐색 동기화 오류:", e2);
+        }
+      });
     }
   }
 };
