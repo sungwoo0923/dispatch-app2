@@ -274,7 +274,7 @@ const getEditRequestDiff = (order) => {
 //  useRealtimeCollections 안에 두면 그 훅을 호출하는 컴포넌트에서만 접근 가능해 ReferenceError가 난다.)
 const approveCancelRequestPC = async (order) => {
   const ref = doc(db, order.__col || "orders", order._id || order.id);
-  await updateDoc(ref, {
+  const patch = {
     상태: "취소",
     배차상태: "배차취소",
     취소요청: false,
@@ -283,17 +283,31 @@ const approveCancelRequestPC = async (order) => {
     취소처리: "승인",
     취소처리일시: serverTimestamp(),
     updatedAt: Date.now(),
-  });
+  };
+  await updateDoc(ref, patch);
+  // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 승인 결과를
+  // 화주사 화면에도 즉시 반영한다.
+  if (order._transmittedOrderId) {
+    updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch((e) =>
+      console.error("화주사 전송사본 취소승인 동기화 오류:", e)
+    );
+  }
 };
 const rejectCancelRequestPC = async (order) => {
   const ref = doc(db, order.__col || "orders", order._id || order.id);
-  await updateDoc(ref, {
+  const patch = {
     취소요청: false,
     취소거절: true,
     취소거절일시: serverTimestamp(),
     취소처리: "거절",
     취소처리일시: serverTimestamp(),
-  });
+  };
+  await updateDoc(ref, patch);
+  if (order._transmittedOrderId) {
+    updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch((e) =>
+      console.error("화주사 전송사본 취소거절 동기화 오류:", e)
+    );
+  }
 };
 
 // AdminMenu.jsx의 mapOrderForShipper와 동일한 규칙 — 톤수 문자열에 이미 단위가 있으면
@@ -1021,6 +1035,9 @@ const patchDispatch = async (_id, patch) => {
     if ("차량번호" in cleanPatch || "배차완료일시" in cleanPatch) {
       const mirrorPlate = String(cleanPatch.차량번호 ?? prev.차량번호 ?? "").trim();
       mirrorPatch.배차상태 = mirrorPlate ? "배차완료" : "배차중";
+      // 배차완료일시가 미러에 반영되지 않으면 화주사 쪽 정렬(같은 날짜 안에서
+      // 최근 완료건이 상단에 오도록)이 등록일 기준으로 밀려 엉뚱한 위치에 표시된다.
+      if ("배차완료일시" in cleanPatch) mirrorPatch.배차완료일시 = cleanPatch.배차완료일시;
     }
     if (Object.keys(mirrorPatch).length > 0) {
       mirrorPatch.updatedAt = Date.now();
@@ -1046,7 +1063,16 @@ const removeDispatch = async (arg) => {
     return;
   }
 
+  const data = snap.data();
   await deleteDoc(ref);
+
+  // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 삭제할 때
+  // 화주사 화면의 사본도 함께 삭제되도록 한다.
+  if (data?._transmittedOrderId) {
+    deleteDoc(doc(db, "orders", data._transmittedOrderId)).catch((e) =>
+      console.error("화주사 전송사본 삭제 동기화 오류:", e)
+    );
+  }
 };
 
 // 화주사의 "수정요청"(배차완료 오더 수정) 승인/거절 — 승인 시에만 실제 필드에 반영되고

@@ -554,6 +554,20 @@ export default function ShipperStatus() {
   // "오더취소" 버튼과 동일한 규칙으로 통일: 배차 전(차량번호 없음)이면 즉시 취소(배차취소 필터로 이동),
   // 배차완료(차량번호 있음)면 사유를 입력받아 운송사 승인을 요청한다.
   // permanent=true(배차취소 필터의 "선택삭제")일 때만 실제 Firestore 문서를 영구 삭제한다.
+  // 운송사에서 연동 승인된 거래처명으로 등록/전송한 오더는 화주사 화면의 문서가
+  // 원본(운송사)의 "사본(mirror)"이다 — originCol/originId가 그 원본 문서를 가리킨다.
+  // 화주사 쪽에서 취소/삭제하면 운송사 목록에도 똑같이 반영되도록 원본에도 함께 써준다.
+  const propagateToOrigin = async (order, patch) => {
+    if (!order?.originCol || !order?.originId) return;
+    try { await updateDoc(doc(db, order.originCol, order.originId), patch); }
+    catch (e) { console.error("원본 오더 동기화 실패:", e); }
+  };
+  const propagateDeleteToOrigin = async (order) => {
+    if (!order?.originCol || !order?.originId) return;
+    try { await deleteDoc(doc(db, order.originCol, order.originId)); }
+    catch (e) { console.error("원본 오더 삭제 동기화 실패:", e); }
+  };
+
   const deleteOrders = (targets, onDone, { permanent = false } = {}) => {
     if (targets.length === 0) { alert("선택된 항목 없음"); return; }
 
@@ -561,7 +575,10 @@ export default function ShipperStatus() {
       openConfirm(
         `선택하신 ${targets.length}건을 영구 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`,
         async () => {
-          for (const o of targets) await deleteDoc(doc(db, "orders", o.id));
+          for (const o of targets) {
+            await deleteDoc(doc(db, "orders", o.id));
+            await propagateDeleteToOrigin(o);
+          }
           onDone?.(); setConfirmOpen(false);
         }
       );
@@ -573,7 +590,9 @@ export default function ShipperStatus() {
 
     const cancelImmediately = async () => {
       for (const o of cancelable) {
-        await updateDoc(doc(db, "orders", o.id), { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true });
+        const patch = { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true };
+        await updateDoc(doc(db, "orders", o.id), patch);
+        await propagateToOrigin(o, patch);
       }
     };
 
@@ -777,7 +796,9 @@ export default function ShipperStatus() {
     }
     openConfirm("오더를 취소하시겠습니까?", async () => {
       // 운송사 배차현황에도 즉시 반영되도록 배차상태까지 함께 취소 처리
-      await updateDoc(doc(db, "orders", id), { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true });
+      const patch = { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true };
+      await updateDoc(doc(db, "orders", id), patch);
+      await propagateToOrigin(target, patch);
       setSelectedOrder(prev => prev?.id === id ? { ...prev, 상태: "취소", 배차상태: "배차취소" } : prev);
       setConfirmOpen(false);
     });
@@ -788,12 +809,15 @@ export default function ShipperStatus() {
     const popup = cancelReasonPopup;
     if (!popup) return;
     for (const id of popup.ids) {
-      await updateDoc(doc(db, "orders", id), {
+      const target = orders.find(o => o.id === id);
+      const patch = {
         취소요청: true,
         취소요청일시: serverTimestamp(),
         취소요청자: user?.email || "",
         취소요청사유: reason || "",
-      });
+      };
+      await updateDoc(doc(db, "orders", id), patch);
+      if (target) await propagateToOrigin(target, patch);
     }
     setCancelReasonPopup(null);
     popup.onDone?.();

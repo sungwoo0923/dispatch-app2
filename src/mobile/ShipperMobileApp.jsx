@@ -222,6 +222,20 @@ function StatusBadge({ order, className = "" }) {
 // 요청내용을 기준으로 편집을 이어가도록 병합한다.
 const withPendingEdit = (order) => (order?.수정요청 && order?.수정요청데이터 ? { ...order, ...order.수정요청데이터 } : order);
 
+// 운송사가 연동 승인된 거래처명으로 등록/전송한 오더는 화주사가 보는 문서가 원본(운송사)의
+// "사본(mirror)"이다 — originCol/originId가 그 원본 문서를 가리킨다. 화주사 쪽에서
+// 취소/삭제하면 운송사 목록에도 똑같이 반영되도록 원본에도 함께 써준다.
+async function propagateToOrigin(order, patch) {
+  if (!order?.originCol || !order?.originId) return;
+  try { await updateDoc(doc(db, order.originCol, order.originId), patch); }
+  catch (e) { console.error("원본 오더 동기화 실패:", e); }
+}
+async function propagateDeleteToOrigin(order) {
+  if (!order?.originCol || !order?.originId) return;
+  try { await deleteDoc(doc(db, order.originCol, order.originId)); }
+  catch (e) { console.error("원본 오더 삭제 동기화 실패:", e); }
+}
+
 // 오더 삭제 / 배차취소요청 (PC ShipperStatus.jsx의 deleteOrders와 동일한 규칙)
 // 배차 전(차량번호 없음) -> 즉시 삭제 / 배차완료 후 -> 취소요청 플래그만 설정, 운송사 승인 후 삭제
 async function shipperDeleteOrRequestCancel(order, user) {
@@ -232,13 +246,14 @@ async function shipperDeleteOrRequestCancel(order, user) {
       return false;
     }
     if (!window.confirm("이미 배차완료된 오더입니다.\n배차취소를 요청하시겠습니까?\n(운송사 승인 후 삭제됩니다)")) return false;
-    await updateDoc(doc(db, "orders", order.id), {
-      취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "",
-    });
+    const patch = { 취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "" };
+    await updateDoc(doc(db, "orders", order.id), patch);
+    await propagateToOrigin(order, patch);
     return true;
   }
   if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return false;
   await deleteDoc(doc(db, "orders", order.id));
+  await propagateDeleteToOrigin(order);
   return true;
 }
 

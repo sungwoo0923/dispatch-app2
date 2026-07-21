@@ -1458,12 +1458,14 @@ collections.forEach((name) => {
       // "화주사 전송"으로 생성된 사본(orders 컬렉션, source: "transport_transmit")은
       // 화주사 화면 전용 문서라 운송사 자체 배차 화면(dispatch 컬렉션 원본)과 중복으로
       // 표시되면 안 된다 — PC(DispatchApp.jsx)와 동일한 기준으로 제외한다.
+      // 화주사가 취소(소프트 삭제)한 오더도 PC와 동일하게 배차중처럼 보이지 않도록 제외한다
+      // (getStatus가 차량번호 유무만으로 상태를 판정해 취소건이 "배차중"으로 잘못 표시되던 버그).
       const list = snap.docs.map((d) => ({
         _id: d.id,
         id: d.id,
         __col: name,
         ...d.data(),
-      })).filter((o) => o.source !== "transport_transmit");
+      })).filter((o) => o.source !== "transport_transmit" && !["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태));
       setOrdersLoaded(true);
       setOrders((prev) => {
         const filtered = prev.filter((o) => o.__col !== name);
