@@ -155,6 +155,51 @@ export default function UploadPage() {
     })();
   }, []);
 
+  // ── 실시간 위치 공유 (무료 GPS 기반 — 이 페이지가 화면에 켜져 있는 동안만 동작) ──
+  // 브라우저 Geolocation API로 좌표를 받아 오더 문서(+화주사 전송사본)에 기록한다.
+  // 화면이 꺼지거나 다른 앱으로 전환되면(특히 iOS Safari) 위치 전송이 멈추는
+  // 플랫폼 제약이 있어, "이 화면을 보고 있는 동안의 대략적인 위치"용 기능이다.
+  const [sharingLoc, setSharingLoc] = useState(false);
+  const [locError, setLocError] = useState(null);
+  const [lastLoc, setLastLoc] = useState(null);
+  const watchIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!sharingLoc || !order || isManual) return;
+    if (!navigator.geolocation) {
+      setLocError("이 브라우저는 위치 공유를 지원하지 않습니다.");
+      setSharingLoc(false);
+      return;
+    }
+    const mirrorTarget = order._transmittedOrderId
+      ? { col: "orders", id: order._transmittedOrderId }
+      : (order.originCol && order.originId ? { col: order.originCol, id: order.originId } : null);
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLastLoc({ lat, lng, at: Date.now() });
+        setLocError(null);
+        const payload = { 위치: { lat, lng }, 위치갱신일시: serverTimestamp() };
+        updateDoc(doc(db, order._col, orderId), payload).catch(() => {});
+        if (mirrorTarget) {
+          updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), payload).catch(() => {});
+        }
+      },
+      (err) => {
+        setLocError(err.code === 1 ? "위치 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요." : "위치를 가져올 수 없습니다.");
+        setSharingLoc(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+
+    return () => {
+      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    };
+  }, [sharingLoc, order, isManual, orderId]);
+
   // ── 파일 선택 처리 ───────────────────────────────────────
   // 같은 사진(내용이 동일한 파일)을 중복으로 추가하려 하면 막고 안내한다
   const handleFiles = useCallback((newFiles) => {
@@ -482,6 +527,32 @@ export default function UploadPage() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
                   </div>
                 </div>
+
+                {/* 실시간 위치 공유 토글 */}
+                <div style={{ marginTop: 10, background: sharingLoc ? "#ecfdf5" : "#f8fafc", border: sharingLoc ? "1px solid #6ee7b7" : "1px solid transparent", borderRadius: 8, padding: "10px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 }}>
+                        {sharingLoc && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", display: "inline-block", animation: "uploadLocPulse 1.4s ease-in-out infinite" }} />}
+                        실시간 위치 공유
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>
+                        {sharingLoc ? "운송사·화주사가 현재 위치를 볼 수 있어요. 이 화면을 켜둔 상태로 유지해주세요." : "켜두면 배송 중 위치를 운송사/화주사가 확인할 수 있어요."}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSharingLoc(v => !v)}
+                      style={{
+                        padding: "8px 14px", borderRadius: 20, border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        background: sharingLoc ? "#1B2B4B" : "#e2e8f0", color: sharingLoc ? "#fff" : "#475569",
+                      }}
+                    >
+                      {sharingLoc ? "끄기" : "켜기"}
+                    </button>
+                  </div>
+                  {locError && <div style={{ fontSize: 10.5, color: "#ef4444", marginTop: 6 }}>{locError}</div>}
+                </div>
+                <style>{`@keyframes uploadLocPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
               </div>
             )}
 

@@ -13535,6 +13535,80 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     </div>
   );
 }
+
+// 기사 실시간 위치 팝업 — UploadPage.jsx(기사 업로드 링크)에서 "실시간 위치 공유"를
+// 켠 동안 오더 문서에 기록되는 위치/위치갱신일시 필드를 지도(Tmap)에 마커로 표시한다.
+// index.html에 전역 로드된 window.Tmapv2를 그대로 사용 — 별도 API 키/스크립트 불필요.
+function LiveLocationPopup({ row, onClose }) {
+  const [loc, setLoc] = React.useState(row?.위치 || null);
+  const [updatedAt, setUpdatedAt] = React.useState(row?.위치갱신일시 || null);
+  const mapObjRef = React.useRef(null);
+  const markerObjRef = React.useRef(null);
+  const mapElId = "dispatch-live-loc-map";
+
+  React.useEffect(() => {
+    if (!row?._id) return;
+    const unsub = onSnapshot(doc(db, row.__col || "orders", row._id), (snap) => {
+      const d = snap.data();
+      if (d?.위치) { setLoc(d.위치); setUpdatedAt(d.위치갱신일시 || null); }
+    });
+    return () => unsub();
+  }, [row?._id, row?.__col]);
+
+  React.useEffect(() => {
+    if (!loc) return;
+    const draw = () => {
+      if (!window.Tmapv2) { setTimeout(draw, 200); return; }
+      const pos = new window.Tmapv2.LatLng(loc.lat, loc.lng);
+      if (!mapObjRef.current) {
+        mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "340px", zoom: 15 });
+      } else {
+        mapObjRef.current.setCenter(pos);
+      }
+      if (markerObjRef.current) markerObjRef.current.setMap(null);
+      markerObjRef.current = new window.Tmapv2.Marker({
+        position: pos,
+        map: mapObjRef.current,
+        iconHTML: '<div style="width:16px;height:16px;border-radius:50%;background:#10b981;border:3px solid white;box-shadow:0 0 0 2px #10b981,0 2px 6px rgba(0,0,0,0.35)"></div>',
+      });
+    };
+    draw();
+  }, [loc]);
+
+  const updatedLabel = (() => {
+    const ms = updatedAt?.seconds ? updatedAt.seconds * 1000 : (typeof updatedAt === "number" ? updatedAt : null);
+    if (!ms) return null;
+    return new Date(ms).toLocaleString("ko-KR", { hour12: false });
+  })();
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-bold text-[15px]">실시간 기사 위치</h3>
+            <p className="text-white/70 text-[12px] mt-0.5">{row?.이름 || "-"} · {row?.차량번호 || "-"}</p>
+          </div>
+          <button className="text-white/60 hover:text-white text-xl leading-none" onClick={onClose}>×</button>
+        </div>
+        {loc ? (
+          <>
+            <div id={mapElId} style={{ width: "100%", height: 340 }} />
+            <div className="px-5 py-3 text-[12px] text-gray-500 border-t border-gray-100">
+              {updatedLabel ? `${updatedLabel} 기준 위치` : "위치 정보 수신 중"}
+            </div>
+          </>
+        ) : (
+          <div className="px-5 py-16 text-center text-[13px] text-gray-400">
+            아직 위치 공유 정보가 없습니다.<br />
+            기사님이 업로드 링크 화면에서 "실시간 위치 공유"를 켜면 여기 표시됩니다.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // 왕복 오더 표시 — 행 배경 강조와는 별도로, 한눈에 띄는 진한 배지
 const RoundTripBadge = () => (
   <span
@@ -16264,6 +16338,7 @@ React.useEffect(() => {
   // 첨부파일 개수
 const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
+  const [liveLocViewer, setLiveLocViewer] = React.useState(null); // 실시간 위치 팝업이 열린 행
   const [orderInfoRow4, setOrderInfoRow4] = React.useState(null);
   // ------------------------
 // Firestore → rows 반영
@@ -18359,6 +18434,7 @@ const head = isDark
     isViewer={isViewer}
   />
 )}
+{liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
 {orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} />}
 {addrPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
@@ -19082,6 +19158,20 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                         </span>
                       )}
                     </button>
+                    {r.차량번호 && (
+                      <button
+                        onClick={() => setLiveLocViewer(r)}
+                        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                        title="실시간 위치 보기"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                          stroke={r.위치 ? "#10b981" : "#cbd5e1"}
+                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                          <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                      </button>
+                    )}
                   </td>
                   {/* 전달상태 */}
                   <td className={cell}>
@@ -24187,6 +24277,7 @@ const renderTimeText = (time, cond) => {
   };
 const [alertMsg, setAlertMsg] = React.useState(null);
 const [attachViewer, setAttachViewer] = React.useState(null);
+const [liveLocViewer, setLiveLocViewer] = React.useState(null);
 const [orderInfoRow5, setOrderInfoRow5] = React.useState(null);
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
@@ -26908,6 +26999,7 @@ return (
     isViewer={isViewer}
   />
 )}
+{liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
 {orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} />}
 {attachStatusDSOpen && (
   <AttachStatusPanel
@@ -27609,6 +27701,20 @@ return (
                         </span>
                       )}
                     </button>
+                    {row.차량번호 && (
+                      <button
+                        onClick={() => setLiveLocViewer(row)}
+                        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                        title="실시간 위치 보기"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                          stroke={row.위치 ? "#10b981" : "#cbd5e1"}
+                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                          <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                      </button>
+                    )}
                   </td>
                   {/* 전달상태 (슬라이드 토글) */}
                   <td className="border text-center whitespace-nowrap px-2">

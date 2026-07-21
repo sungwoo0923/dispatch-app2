@@ -138,6 +138,7 @@ export default function ShipperStatus() {
   const attachPendingRef = useRef({}); // { [orderId]: { delta, order, timer } } — 여러 장을 연속 업로드해도 알림 1개로 묶기 위한 디바운스 누적
   const [attachNotif, setAttachNotif] = useState(null);
   const [attachViewer, setAttachViewer] = useState(null);
+  const [liveLocViewer, setLiveLocViewer] = useState(null);
   const prevVehicleRef = useRef({}); // 차량번호 "문자열" 값 저장 (배차완료/재배차완료 구분용)
   const prevWatchedFieldsRef = useRef({}); // 차량배정과 무관한 "진짜 수정" 필드 값 저장
   const [dispatchNotif, setDispatchNotif] = useState(null);
@@ -1291,6 +1292,14 @@ export default function ShipperStatus() {
                 >
                   첨부 {selectedOrder.attachCount > 0 ? `(${selectedOrder.attachCount})` : ""}
                 </button>
+                {selectedOrder?.차량번호 && (
+                  <button
+                    onClick={() => setLiveLocViewer(selectedOrder)}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:opacity-90"
+                  >
+                    실시간 위치
+                  </button>
+                )}
                 {selectedOrder?.상태 === "취소" && (
                   <button onClick={() => restoreOrder(selectedOrder)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">재등록</button>
                 )}
@@ -1432,6 +1441,10 @@ export default function ShipperStatus() {
           order={attachViewer}
           onClose={() => setAttachViewer(null)}
         />
+      )}
+
+      {liveLocViewer && (
+        <ShipperLiveLocationPopup order={liveLocViewer} onClose={() => setLiveLocViewer(null)} />
       )}
 
       {/* 주소 전체보기 팝업 */}
@@ -1606,6 +1619,79 @@ export default function ShipperStatus() {
           오더내용이 복사되었습니다
         </div>
       )}
+    </div>
+  );
+}
+
+/* 기사 실시간 위치 팝업 — 운송사 UploadPage.jsx(기사 업로드 링크)에서 위치 공유를 켠
+   동안 오더 문서에 기록되는 위치/위치갱신일시 필드를 지도(Tmap)에 마커로 표시한다.
+   index.html에 전역 로드된 window.Tmapv2를 그대로 사용 — 별도 API 키/스크립트 불필요. */
+function ShipperLiveLocationPopup({ order, onClose }) {
+  const [loc, setLoc] = useState(order?.위치 || null);
+  const [updatedAt, setUpdatedAt] = useState(order?.위치갱신일시 || null);
+  const mapObjRef = useRef(null);
+  const markerObjRef = useRef(null);
+  const mapElId = "shipper-live-loc-map";
+
+  useEffect(() => {
+    if (!order?.id) return;
+    const unsub = onSnapshot(doc(db, "orders", order.id), (snap) => {
+      const d = snap.data();
+      if (d?.위치) { setLoc(d.위치); setUpdatedAt(d.위치갱신일시 || null); }
+    });
+    return () => unsub();
+  }, [order?.id]);
+
+  useEffect(() => {
+    if (!loc) return;
+    const draw = () => {
+      if (!window.Tmapv2) { setTimeout(draw, 200); return; }
+      const pos = new window.Tmapv2.LatLng(loc.lat, loc.lng);
+      if (!mapObjRef.current) {
+        mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "340px", zoom: 15 });
+      } else {
+        mapObjRef.current.setCenter(pos);
+      }
+      if (markerObjRef.current) markerObjRef.current.setMap(null);
+      markerObjRef.current = new window.Tmapv2.Marker({
+        position: pos,
+        map: mapObjRef.current,
+        iconHTML: '<div style="width:16px;height:16px;border-radius:50%;background:#10b981;border:3px solid white;box-shadow:0 0 0 2px #10b981,0 2px 6px rgba(0,0,0,0.35)"></div>',
+      });
+    };
+    draw();
+  }, [loc]);
+
+  const updatedLabel = (() => {
+    const ms = updatedAt?.seconds ? updatedAt.seconds * 1000 : (typeof updatedAt === "number" ? updatedAt : null);
+    if (!ms) return null;
+    return new Date(ms).toLocaleString("ko-KR", { hour12: false });
+  })();
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-bold text-[15px]">실시간 기사 위치</h3>
+            <p className="text-white/70 text-[12px] mt-0.5">{order?.이름 || "-"} · {order?.차량번호 || "-"}</p>
+          </div>
+          <button className="text-white/60 hover:text-white text-xl leading-none" onClick={onClose}>×</button>
+        </div>
+        {loc ? (
+          <>
+            <div id={mapElId} style={{ width: "100%", height: 340 }} />
+            <div className="px-5 py-3 text-[12px] text-gray-500 border-t border-gray-100">
+              {updatedLabel ? `${updatedLabel} 기준 위치` : "위치 정보 수신 중"}
+            </div>
+          </>
+        ) : (
+          <div className="px-5 py-16 text-center text-[13px] text-gray-400">
+            아직 위치 공유 정보가 없습니다.<br />
+            기사님이 배차 확인 화면에서 위치 공유를 켜면 여기 표시됩니다.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

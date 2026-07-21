@@ -15,6 +15,14 @@ const getMonthStart = () => {
   return kst.toISOString().slice(0, 7) + "-01";
 };
 
+const formatPhoneDisplay = (v) => {
+  const d = String(v || "").replace(/[^0-9]/g, "");
+  if (!d) return "-";
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return v;
+};
+
 export default function ShipperHome() {
   const [orders, setOrders] = useState([]);
   const [userData, setUserData] = useState(null);
@@ -79,10 +87,12 @@ export default function ShipperHome() {
     });
   }, [todayOrders]);
 
+  // 운송목록(ShipperStatus.jsx)과 동일한 상태 판정/색상 규칙을 그대로 따른다.
   const getStatus = (o) => {
-    if (["취소", "배차취소", "오더취소"].includes(o.상태)) return { label: "취소", cls: "bg-rose-100 text-rose-800" };
-    if (o.차량번호) return { label: "배차완료", cls: "bg-emerald-100 text-emerald-800" };
-    return { label: "요청", cls: "bg-slate-100 text-slate-700" };
+    if (["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태)) return { label: "취소", cls: "bg-red-600 text-white" };
+    if (o.차량번호 && o.차량번호.trim()) return { label: "배차완료", cls: "bg-[#1B2B4B] text-white" };
+    if (o.화주사확인대기 === true) return { label: "요청", cls: "bg-amber-500 text-white" };
+    return { label: "배차중", cls: "bg-amber-500 text-white" };
   };
 
   // 이번 달 요일별 건수
@@ -212,15 +222,18 @@ export default function ShipperHome() {
           {recent.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-gray-400 text-sm">등록된 오더가 없습니다</div>
           ) : (
-            <table className="w-full text-[13px]">
+            <table className="w-full text-[12px]">
               <thead>
-                <tr className="bg-slate-50 text-gray-400 text-[11px] font-bold uppercase tracking-wide">
-                  <th className="px-5 py-2.5 text-left">상차일</th>
-                  <th className="px-5 py-2.5 text-left">거래처</th>
-                  <th className="px-5 py-2.5 text-left">상차지</th>
-                  <th className="px-5 py-2.5 text-left">하차지</th>
-                  <th className="px-5 py-2.5 text-right">청구운임</th>
-                  <th className="px-5 py-2.5 text-center">상태</th>
+                <tr className="bg-slate-50 text-gray-400 text-[10px] font-bold uppercase tracking-wide">
+                  <th className="px-3 py-2 text-center">상차일</th>
+                  <th className="px-3 py-2 text-center">거래처</th>
+                  <th className="px-3 py-2 text-center">상차지</th>
+                  <th className="px-3 py-2 text-center">하차지</th>
+                  <th className="px-3 py-2 text-center">차량번호</th>
+                  <th className="px-3 py-2 text-center">기사명</th>
+                  <th className="px-3 py-2 text-center">연락처</th>
+                  <th className="px-3 py-2 text-center">청구운임</th>
+                  <th className="px-3 py-2 text-center">상태</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,15 +241,18 @@ export default function ShipperHome() {
                   const st = getStatus(o);
                   return (
                     <tr key={o.id} className="border-t border-gray-50 hover:bg-slate-50/70 transition">
-                      <td className="px-5 py-2.5 text-gray-500 whitespace-nowrap">{o.상차일 || "-"}</td>
-                      <td className="px-5 py-2.5 font-semibold text-gray-800 truncate max-w-[100px]">{o.거래처명 || "-"}</td>
-                      <td className="px-5 py-2.5 text-gray-600 truncate max-w-[100px]">{o.상차지명 || "-"}</td>
-                      <td className="px-5 py-2.5 text-gray-600 truncate max-w-[100px]">{o.하차지명 || "-"}</td>
-                      <td className="px-5 py-2.5 text-[#1B2B4B] font-bold whitespace-nowrap text-right">
+                      <td className="px-3 py-1.5 text-center text-gray-500 whitespace-nowrap">{o.상차일 || "-"}</td>
+                      <td className="px-3 py-1.5 text-center font-semibold text-gray-800 truncate max-w-[90px]">{o.거래처명 || "-"}</td>
+                      <td className="px-3 py-1.5 text-center text-gray-600 truncate max-w-[90px]">{o.상차지명 || "-"}</td>
+                      <td className="px-3 py-1.5 text-center text-gray-600 truncate max-w-[90px]">{o.하차지명 || "-"}</td>
+                      <td className="px-3 py-1.5 text-center text-gray-700 font-semibold whitespace-nowrap">{o.차량번호 || "-"}</td>
+                      <td className="px-3 py-1.5 text-center text-gray-600 whitespace-nowrap">{o.이름 || "-"}</td>
+                      <td className="px-3 py-1.5 text-center text-gray-500 whitespace-nowrap">{formatPhoneDisplay(o.전화번호)}</td>
+                      <td className="px-3 py-1.5 text-center text-[#1B2B4B] font-bold whitespace-nowrap">
                         {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
                       </td>
-                      <td className="px-5 py-2.5 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${st.cls}`}>{st.label}</span>
+                      <td className="px-3 py-1.5 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${st.cls}`}>{st.label}</span>
                       </td>
                     </tr>
                   );
