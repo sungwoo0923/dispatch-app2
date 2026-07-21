@@ -1308,6 +1308,56 @@ const StatusBadge = ({ s }) => (
     }`}>{s || ""}</span>
 );
 
+// 실시간배차현황(DispatchStatus)에서 쓰는 상태뱃지 — 예전에는 컴포넌트 본문 안에 함수로
+// 선언되어 있어 매 렌더마다 새 함수 정체성을 가져, React가 매번 모든 행의 배지를
+// 통째로 unmount+remount 했다(수정요청/취소요청 도착 시 전체 화면이 버벅이던 원인 중 하나).
+// 모듈 스코프로 옮겨 정체성을 고정한다.
+const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditClick }) => {
+  if (cancelReq) {
+    return (
+      <button type="button" onClick={onCancelClick}
+        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+        className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
+        style={{
+          background: "linear-gradient(135deg,#f87171,#b91c1c)",
+          boxShadow: "0 2px 6px rgba(185,28,28,0.5), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 3px rgba(0,0,0,0.25)",
+          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+        }}>
+        취소요청
+      </button>
+    );
+  }
+  if (editReq) {
+    return (
+      <button type="button" onClick={onEditClick}
+        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+        className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
+        style={{
+          background: "linear-gradient(135deg,#3b5998,#0f2151)",
+          boxShadow: "0 2px 6px rgba(15,33,81,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.3)",
+          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+        }}>
+        수정
+      </button>
+    );
+  }
+  const color =
+    urgent && s !== "배차완료"
+      ? "bg-red-500 text-white"
+      : s === "배차완료"
+      ? "bg-[#1B2B4B] text-white"
+      : s === "배차중"
+      ? "bg-amber-500 text-white"
+      : s === "배차취소"
+      ? "bg-red-600 text-white"
+      : "hidden";
+  return (
+    <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}>
+      {s}
+    </span>
+  );
+};
+
 export const toInt = (v) => {
   const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
   return isNaN(n) ? 0 : n;
@@ -16085,6 +16135,10 @@ React.useEffect(() => {
   React.startTransition(() => {
     setRows((prev) => {
       const map = new Map(base.map((r) => [r._id, r]));
+      // prev.some(...) 안에 있던 O(n·m) 선형 탐색을 Set 조회(O(1))로 교체 —
+      // 오더 수가 많을 때 화주사 수정요청/취소요청 같은 잦은 쓰기마다 매번
+      // 전체 목록을 다시 스캔하며 버벅이던 원인 중 하나였다.
+      const prevIds = new Set(prev.map((p) => p._id));
 
       const kept = prev
         .filter((r) => map.has(r._id))
@@ -16093,9 +16147,7 @@ React.useEffect(() => {
           ...map.get(r._id),
         }));
 
-      const newOnes = base.filter(
-        (r) => !prev.some((p) => p._id === r._id)
-      );
+      const newOnes = base.filter((r) => !prevIds.has(r._id));
 
       const merged = [...kept, ...newOnes];
 
@@ -26466,51 +26518,6 @@ const filtered = React.useMemo(() => {
   }, [filtered]);
 
 
-  const StatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditClick }) => {
-    if (cancelReq) {
-      return (
-        <button type="button" onClick={onCancelClick}
-          title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
-          className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
-          style={{
-            background: "linear-gradient(135deg,#f87171,#b91c1c)",
-            boxShadow: "0 2px 6px rgba(185,28,28,0.5), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 3px rgba(0,0,0,0.25)",
-            animation: "statusUrgentBlink 0.9s ease-in-out infinite",
-          }}>
-          취소요청
-        </button>
-      );
-    }
-    if (editReq) {
-      return (
-        <button type="button" onClick={onEditClick}
-          title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-          className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
-          style={{
-            background: "linear-gradient(135deg,#3b5998,#0f2151)",
-            boxShadow: "0 2px 6px rgba(15,33,81,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.3)",
-            animation: "statusUrgentBlink 0.9s ease-in-out infinite",
-          }}>
-          수정
-        </button>
-      );
-    }
-    const color =
-      urgent && s !== "배차완료"
-        ? "bg-red-500 text-white"
-        : s === "배차완료"
-        ? "bg-[#1B2B4B] text-white"
-        : s === "배차중"
-        ? "bg-amber-500 text-white"
-        : s === "배차취소"
-        ? "bg-red-600 text-white"
-        : "hidden";
-    return (
-      <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}>
-        {s}
-      </span>
-    );
-  };
   // ⭐ 상태 변경될 때마다 localStorage 저장
  React.useEffect(() => {
 const save = {
@@ -27351,7 +27358,7 @@ return (
                         배차요청
                       </button>
                     ) : (
-                      <StatusBadge
+                      <RichStatusBadge
                         s={row.배차상태}
                         urgent={row.긴급}
                         cancelReq={row.취소요청 && row.배차상태 !== "배차취소"}
