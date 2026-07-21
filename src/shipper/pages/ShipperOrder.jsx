@@ -175,6 +175,18 @@ export default function ShipperOrder({ editData, onClose }) {
     }
     return document.getElementById("shipper-map");
   };
+  // 운송사 프로그램과 동일한 마커 아이콘(출발/도착 핀) — 디자인 일관성 유지
+  const makePinIcon = (label, color) => {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="60" height="80" viewBox="0 0 60 80">
+        <rect x="2" y="2" width="56" height="26" rx="13" ry="13" fill="${color}" stroke="white" stroke-width="2"/>
+        <text x="30" y="20" text-anchor="middle" font-size="13" font-weight="bold" font-family="sans-serif" fill="white">${label}</text>
+        <polygon points="25,26 35,26 30,36" fill="${color}"/>
+        <circle cx="30" cy="60" r="9" fill="${color}" stroke="white" stroke-width="3"/>
+        <line x1="30" y1="36" x2="30" y2="51" stroke="${color}" stroke-width="3"/>
+      </svg>`;
+    return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+  };
   const initMap = async () => {
     if (!window.Tmapv2) { setTimeout(initMap, 200); return; }
     const mapDiv = await waitMapDiv();
@@ -184,32 +196,54 @@ export default function ShipperOrder({ editData, onClose }) {
       center: new window.Tmapv2.LatLng(coords.start.lat, coords.start.lon),
       width: "100%", height: "100%", zoom: 10,
     });
-    fetch("https://apis.openapi.sk.com/tmap/routes?version=1&format=json", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer" },
-      body: new URLSearchParams({
-        startX: String(coords.start.lon), startY: String(coords.start.lat),
-        endX: String(coords.end.lon), endY: String(coords.end.lat),
-        startName: form.상차지명 || "출발지", endName: form.하차지명 || "도착지",
-        reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO", searchOption: "0",
-      }),
-    }).then(r => r.json()).then(data => {
-      if (!data.features) return;
-      let totalDistance = 0, totalTime = 0;
-      const lineArr = [];
-      data.features.forEach(item => {
-        if (item.geometry?.type === "LineString") {
-          item.geometry.coordinates.forEach(c => lineArr.push(new window.Tmapv2.LatLng(c[1], c[0])));
-        }
-        if (item.properties) { totalDistance = item.properties.totalDistance; totalTime = item.properties.totalTime; }
+    try {
+      // 운송사 프로그램과 동일하게 서버 프록시(/api/route)를 통해 경로를 조회한다.
+      // (Tmap API를 브라우저에서 직접 호출하면 CORS로 막혀 지도에 경로/마커가 전혀
+      //  그려지지 않던 문제 — 운송사 화면은 이미 이 방식으로 정상 동작 중이었다.)
+      const API_BASE = import.meta.env.VITE_API_BASE || "";
+      const viaAddrs = [
+        ...(form.경유상차목록 || []).filter(s => s.주소?.trim()).map(s => s.주소),
+        ...(form.경유하차목록 || []).filter(s => s.주소?.trim()).map(s => s.주소),
+      ];
+      const res = await fetch(`${API_BASE}/api/route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromAddr: form.상차지주소, toAddr: form.하차지주소, viaPoints: viaAddrs }),
       });
-      new window.Tmapv2.Polyline({ path: lineArr, strokeColor: "#2563eb", strokeWeight: 5, map });
-      setRouteInfo({ distance: (totalDistance / 1000).toFixed(1), time: Math.round(totalTime / 60) });
-    });
+      const data = await res.json();
+      if (cancelled || !data?.path?.length) return;
+      const linePath = data.path.map(([lng, lat]) => new window.Tmapv2.LatLng(lat, lng));
+      new window.Tmapv2.Polyline({ path: linePath, strokeColor: "#2563eb", strokeWeight: 5, map });
+      setRouteInfo({ distance: Number(data.distanceKm || 0).toFixed(1), time: Math.round(Number(data.durationMin || 0)) });
+
+      const bounds = new window.Tmapv2.LatLngBounds();
+      linePath.forEach((p) => { if (p) bounds.extend(p); });
+      if (!bounds.isEmpty()) map.fitBounds(bounds);
+
+      const markerStart = linePath[0];
+      const markerEnd = linePath[linePath.length - 1];
+      if (markerStart && markerEnd) {
+        new window.Tmapv2.Marker({ position: markerStart, map, icon: makePinIcon("출발", "#2563eb"), iconSize: new window.Tmapv2.Size(60, 80), iconAnchor: new window.Tmapv2.Point(30, 80) });
+        new window.Tmapv2.Marker({ position: markerEnd, map, icon: makePinIcon("도착", "#dc2626"), iconSize: new window.Tmapv2.Size(60, 80), iconAnchor: new window.Tmapv2.Point(30, 80) });
+      }
+    } catch (e) {
+      console.error("경로 지도 실패:", e);
+    }
   };
   initMap();
   return () => { cancelled = true; };
-  }, [previewOpen, coords]);
+  }, [previewOpen, coords, form?.상차지주소, form?.하차지주소, form?.경유상차목록, form?.경유하차목록]);
+
+  // 배차요청 확인 팝업: Enter=배차요청 전송, ESC=닫기
+  useEffect(() => {
+    if (!previewOpen) return;
+    const handler = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); submit().then(() => setPreviewOpen(false)); }
+      if (e.key === "Escape") setPreviewOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [previewOpen]);
 
   useEffect(() => {
     const saved = localStorage.getItem("fixedTransport");
