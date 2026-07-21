@@ -159,6 +159,7 @@ export default function ShipperOrder({ editData, onClose }) {
   const [searchType, setSearchType] = useState("통합");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [loadedNotice, setLoadedNotice] = useState(false);
 
   const listRefTop = useRef(null);
   const listRefBottom = useRef(null);
@@ -543,6 +544,8 @@ export default function ShipperOrder({ editData, onClose }) {
       경유하차목록: Array.isArray(item.경유하차목록) ? item.경유하차목록 : [],
     }));
     setCargoRows([{ qty: "", unit: "파레트", palletCo: "" }]);
+    setLoadedNotice(true);
+    setTimeout(() => setLoadedNotice(false), 1800);
   };
 
   /* 주소록 자동완성 */
@@ -1193,6 +1196,25 @@ export default function ShipperOrder({ editData, onClose }) {
           onSave={(newList) => onChange(viaModal.type === "상차" ? "경유상차목록" : "경유하차목록", newList)}
           onClose={() => setViaModal(null)}
         />
+      )}
+
+      {/* 오더 불러오기 완료 안내 팝업 */}
+      {loadedNotice && (
+        <div className="fixed inset-0 bg-black/30 z-[999999] flex items-center justify-center" onClick={() => setLoadedNotice(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[300px] overflow-hidden text-center" onClick={e => e.stopPropagation()}>
+            <div className="pt-6 pb-4 px-5">
+              <div className="w-11 h-11 rounded-full bg-[#eef1f7] flex items-center justify-center mx-auto mb-3">
+                <span className="text-[#1B2B4B] text-xl font-bold">✓</span>
+              </div>
+              <div className="font-bold text-gray-900 text-[15px]">오더를 불러왔습니다</div>
+              <div className="text-gray-500 text-[12px] mt-1">선택한 오더 내용이 입력되었습니다</div>
+            </div>
+            <button onClick={() => setLoadedNotice(false)}
+              className="w-full py-3 border-t border-gray-100 text-[#1B2B4B] font-semibold text-sm hover:bg-[#eef1f7]">
+              확인
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

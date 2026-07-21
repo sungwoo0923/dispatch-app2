@@ -807,6 +807,35 @@ const patchDispatch = async (_id, patch) => {
     _updatePayload.최종수정일시 = serverTimestamp();
   }
   updateDoc(ref, _updatePayload).catch(e => console.error("patchDispatch 저장 오류:", e));
+
+  // 운송사가 직접 등록해 "화주사 전송"으로 사본을 만든 오더는, 전송 이후 원본을 수정해도
+  // 사본(화주사 화면이 실제로 구독하는 문서)에는 반영되지 않고 전송 시점 값으로 멈춰있던 버그가 있었다.
+  // 기사배정/차량정보/금액 등 화주사에게 노출되는 필드만 화이트리스트로 골라 사본에도 함께 반영한다.
+  // (기사운임은 화주사에게 노출하지 않는 필드라 의도적으로 제외)
+  if (prev._transmittedOrderId) {
+    const SHIPPER_MIRROR_FIELDS = [
+      "상차지명", "상차지주소", "상차담당자명", "상차담당자번호",
+      "하차지명", "하차지주소", "하차담당자명", "하차담당자번호",
+      "상차일", "상차시간", "상차시간구분", "하차일", "하차시간", "하차시간구분",
+      "차량종류", "차량톤수", "상차방법", "하차방법", "지급방식",
+      "화물내용", "화물단위", "청구운임",
+      "차량번호", "이름", "전화번호",
+      "경유상차목록", "경유하차목록",
+    ];
+    const mirrorPatch = {};
+    SHIPPER_MIRROR_FIELDS.forEach((key) => {
+      if (key in cleanPatch) mirrorPatch[key] = cleanPatch[key];
+    });
+    if ("차량번호" in cleanPatch || "배차완료일시" in cleanPatch) {
+      const mirrorPlate = String(cleanPatch.차량번호 ?? prev.차량번호 ?? "").trim();
+      mirrorPatch.배차상태 = mirrorPlate ? "배차완료" : "배차중";
+    }
+    if (Object.keys(mirrorPatch).length > 0) {
+      mirrorPatch.updatedAt = Date.now();
+      updateDoc(doc(db, "orders", prev._transmittedOrderId), mirrorPatch)
+        .catch(e => console.error("화주사 전송사본 동기화 오류:", e));
+    }
+  }
 };
 const removeDispatch = async (arg) => {
   const id = typeof arg === "string" ? arg : arg?._id;
@@ -875,6 +904,31 @@ const markEditRequestSeen = async (order) => {
   if (order.수정확인) return;
   const ref = doc(db, order.__col || "orders", order._id || order.id);
   await updateDoc(ref, { 수정확인: true }).catch(() => {});
+};
+// 화주사의 "배차취소 요청" 승인/거절 — 승인 시 즉시 삭제하지 않고 소프트 취소(상태: "취소")로
+// 전환해 화주사/운송사 양쪽의 "배차취소" 목록에 남아 재등록할 수 있게 한다.
+const approveCancelRequestPC = async (order) => {
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, {
+    상태: "취소",
+    배차상태: "배차취소",
+    취소요청: false,
+    취소요청사유: deleteField(),
+    취소거절: false,
+    취소처리: "승인",
+    취소처리일시: serverTimestamp(),
+    updatedAt: Date.now(),
+  });
+};
+const rejectCancelRequestPC = async (order) => {
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, {
+    취소요청: false,
+    취소거절: true,
+    취소거절일시: serverTimestamp(),
+    취소처리: "거절",
+    취소처리일시: serverTimestamp(),
+  });
 };
 
   const upsertDriver = async (driver) => {
@@ -1474,6 +1528,11 @@ function ToastProvider({ children }) {
         /* 화주사 배차요청/취소 배지 깜빡임 — 행마다 <style> 태그를 반복 삽입하지 않도록 전역에서 한 번만 정의 */
         @keyframes shipperReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
         @keyframes cancelSlowBlink { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+        /* 화주사 수정요청/취소요청 상태뱃지 — 입체감 있는 빠른 깜빡임 */
+        @keyframes statusUrgentBlink {
+          0%, 100% { opacity: 1; transform: translateY(0) scale(1); filter: brightness(1); }
+          50% { opacity: 0.82; transform: translateY(-0.5px) scale(1.035); filter: brightness(1.18); }
+        }
         .toast-enter {
           animation: toastSlideDown 0.35s ease-out forwards;
         }
@@ -15791,6 +15850,7 @@ React.useEffect(() => {
     setTimeout(() => { deleteFn(); }, 280);
   };
   const [editReqPopup, setEditReqPopup] = React.useState(null);
+  const [cancelReqPopup, setCancelReqPopup] = React.useState(null);
 
   // 신규기사 등록 중복 방지
   const [isRegistering, setIsRegistering] = React.useState(false);
@@ -18515,6 +18575,34 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       >
                         배차취소
                       </button>
+                    ) : r.취소요청 && r.배차상태 !== "배차취소" ? (
+                      <button
+                        type="button"
+                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
+                        style={{
+                          background: "linear-gradient(135deg,#f87171,#b91c1c)",
+                          boxShadow: "0 2px 5px rgba(185,28,28,0.5), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 3px rgba(0,0,0,0.25)",
+                          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+                        }}
+                        onClick={(e) => { e.stopPropagation(); setCancelReqPopup(r); }}
+                      >
+                        취소요청
+                      </button>
+                    ) : r.수정요청 ? (
+                      <button
+                        type="button"
+                        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
+                        style={{
+                          background: "linear-gradient(135deg,#3b5998,#0f2151)",
+                          boxShadow: "0 2px 5px rgba(15,33,81,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.3)",
+                          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+                        }}
+                        onClick={(e) => { e.stopPropagation(); markEditRequestSeen(r); setEditReqPopup(r); }}
+                      >
+                        수정
+                      </button>
                     ) : (
                       <button
                         type="button"
@@ -18528,7 +18616,6 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                             ? "bg-red-600 text-white"
                             : "bg-amber-500 text-white"
                         }`}
-                        style={(r.수정요청 || r.취소요청) ? { animation: "cancelSlowBlink 2.4s ease-in-out infinite" } : undefined}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (r.배차상태 === "배차완료") {
@@ -18542,39 +18629,10 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                         {r.배차상태}
                       </button>
                     )}
-                    {r.취소요청 && r.배차상태 !== "배차취소" && (
-                      <button
-                        type="button"
-                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
-                          fadeOutThenDelete(r._id, async () => {
-                            await removeDispatch(r._id);
-                            setRows(prev => prev.filter(row => row._id !== r._id));
-                          });
-                        }}
-                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
-                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
-                      />
-                    )}
                     {r.최종수정출처 === "shipper" && (Date.now() - (typeof r.최종수정일시 === "number" ? r.최종수정일시 : (r.최종수정일시?.seconds ? r.최종수정일시.seconds * 1000 : 0))) < 1000 * 60 * 60 * 48 && (
                       <span
                         title="화주사가 오더 정보를 수정했습니다"
                         className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
-                      />
-                    )}
-                    {r.수정요청 && (
-                      <button
-                        type="button"
-                        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          markEditRequestSeen(r);
-                          setEditReqPopup(r);
-                        }}
-                        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
-                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
                       />
                     )}
                   </div>
@@ -22680,6 +22738,48 @@ setConfirmChange(null);
           </div>
         </div>
       )}
+      {cancelReqPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setCancelReqPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-br from-red-500 to-red-800 px-6 py-4 shrink-0">
+              <h3 className="text-white font-bold text-[15px]">화주사 배차취소 요청</h3>
+              {cancelReqPopup.취소요청일시 && (
+                <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(cancelReqPopup.취소요청일시)} 요청</p>
+              )}
+            </div>
+            <div className="px-6 py-5">
+              <div className="text-[13px] text-gray-500 mb-1">거래처 / 구간</div>
+              <div className="text-[14px] font-bold text-gray-900 mb-4">
+                {cancelReqPopup.거래처명 || "-"} · {cancelReqPopup.상차지명 || "-"} → {cancelReqPopup.하차지명 || "-"}
+              </div>
+              <div className="text-[13px] text-gray-500 mb-1">취소 사유</div>
+              <div className="text-[14px] text-gray-800 bg-gray-50 rounded-lg p-3 leading-relaxed whitespace-pre-wrap">
+                {cancelReqPopup.취소요청사유 || "사유가 입력되지 않았습니다."}
+              </div>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={() => setCancelReqPopup(null)}
+                className="px-4 py-2 rounded-lg text-gray-500 text-[13px] font-bold hover:bg-gray-100 transition"
+              >닫기</button>
+              <button
+                onClick={async () => {
+                  if (isViewer) return showAlert("조회전용 권한으로는 처리할 수 없습니다.");
+                  const o = cancelReqPopup; setCancelReqPopup(null); await rejectCancelRequestPC(o);
+                }}
+                className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
+              >거절</button>
+              <button
+                onClick={async () => {
+                  if (isViewer) return showAlert("조회전용 권한으로는 처리할 수 없습니다.");
+                  const o = cancelReqPopup; setCancelReqPopup(null); await approveCancelRequestPC(o);
+                }}
+                className="px-4 py-2 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition"
+              >승인</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ===================== 📤 업체 전달 상태 변경 팝업 ===================== */}
       {/* SMS 전송 확인 팝업 (기사전달용) Part 4 */}
       {smsConfirm4 && (
@@ -24428,6 +24528,7 @@ const [panelContactActive5, setPanelContactActive5] = React.useState(0);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
   // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
   const [editReqPopup, setEditReqPopup] = React.useState(null);
+  const [cancelReqPopup, setCancelReqPopup] = React.useState(null);
   // T164 — 삭제 시 스르륵 사라지는 페이드아웃, 수정으로 정렬순서가 바뀔 때 칸칸이 올라오는 느낌의
   // 하이라이트. focusOrderId 하이라이트(row-highlight)는 scrollIntoView까지 같이 하기 때문에
   // 일반 편집마다 화면이 스크롤되면 오히려 거슬려서, 스크롤 없는 별도의 justMovedIds로 처리한다.
@@ -26183,7 +26284,35 @@ const filtered = React.useMemo(() => {
   }, [filtered]);
 
 
-  const StatusBadge = ({ s, urgent, pending }) => {
+  const StatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditClick }) => {
+    if (cancelReq) {
+      return (
+        <button type="button" onClick={onCancelClick}
+          title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+          className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
+          style={{
+            background: "linear-gradient(135deg,#f87171,#b91c1c)",
+            boxShadow: "0 2px 6px rgba(185,28,28,0.5), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 3px rgba(0,0,0,0.25)",
+            animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+          }}>
+          취소요청
+        </button>
+      );
+    }
+    if (editReq) {
+      return (
+        <button type="button" onClick={onEditClick}
+          title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+          className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
+          style={{
+            background: "linear-gradient(135deg,#3b5998,#0f2151)",
+            boxShadow: "0 2px 6px rgba(15,33,81,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.3)",
+            animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+          }}>
+          수정
+        </button>
+      );
+    }
     const color =
       urgent && s !== "배차완료"
         ? "bg-red-500 text-white"
@@ -26195,8 +26324,7 @@ const filtered = React.useMemo(() => {
         ? "bg-red-600 text-white"
         : "hidden";
     return (
-      <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}
-        style={pending ? { animation: "cancelSlowBlink 2.4s ease-in-out infinite" } : undefined}>
+      <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}>
         {s}
       </span>
     );
@@ -27053,41 +27181,19 @@ return (
                         배차취소
                       </button>
                     ) : (
-                      <StatusBadge s={row.배차상태} urgent={row.긴급} pending={row.수정요청 || row.취소요청} />
-                    )}
-                    {row.취소요청 && row.배차상태 !== "배차취소" && (
-                      <button
-                        type="button"
-                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 승인 후 삭제"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
-                          fadeOutThenDelete(row._id, async () => {
-                            await removeDispatch(row._id);
-                            setDispatchData(prev => prev.filter(r => r._id !== row._id));
-                          });
-                        }}
-                        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-orange-500 border-2 border-white cursor-pointer p-0"
-                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
+                      <StatusBadge
+                        s={row.배차상태}
+                        urgent={row.긴급}
+                        cancelReq={row.취소요청 && row.배차상태 !== "배차취소"}
+                        editReq={row.수정요청}
+                        onCancelClick={(e) => { e.stopPropagation(); setCancelReqPopup(row); }}
+                        onEditClick={(e) => { e.stopPropagation(); markEditRequestSeen(row); setEditReqPopup(row); }}
                       />
                     )}
                     {row.최종수정출처 === "shipper" && (Date.now() - (typeof row.최종수정일시 === "number" ? row.최종수정일시 : (row.최종수정일시?.seconds ? row.최종수정일시.seconds * 1000 : 0))) < 1000 * 60 * 60 * 48 && (
                       <span
                         title="화주사가 오더 정보를 수정했습니다"
                         className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
-                      />
-                    )}
-                    {row.수정요청 && (
-                      <button
-                        type="button"
-                        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          markEditRequestSeen(row);
-                          setEditReqPopup(row);
-                        }}
-                        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 rounded-full bg-sky-500 border-2 border-white cursor-pointer p-0"
-                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
                       />
                     )}
                   </div>
@@ -30292,6 +30398,48 @@ setCopyPlaceOptions(list);
               <button
                 onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
                 className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+              >승인</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {cancelReqPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setCancelReqPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-br from-red-500 to-red-800 px-6 py-4 shrink-0">
+              <h3 className="text-white font-bold text-[15px]">화주사 배차취소 요청</h3>
+              {cancelReqPopup.취소요청일시 && (
+                <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(cancelReqPopup.취소요청일시)} 요청</p>
+              )}
+            </div>
+            <div className="px-6 py-5">
+              <div className="text-[13px] text-gray-500 mb-1">거래처 / 구간</div>
+              <div className="text-[14px] font-bold text-gray-900 mb-4">
+                {cancelReqPopup.거래처명 || "-"} · {cancelReqPopup.상차지명 || "-"} → {cancelReqPopup.하차지명 || "-"}
+              </div>
+              <div className="text-[13px] text-gray-500 mb-1">취소 사유</div>
+              <div className="text-[14px] text-gray-800 bg-gray-50 rounded-lg p-3 leading-relaxed whitespace-pre-wrap">
+                {cancelReqPopup.취소요청사유 || "사유가 입력되지 않았습니다."}
+              </div>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={() => setCancelReqPopup(null)}
+                className="px-4 py-2 rounded-lg text-gray-500 text-[13px] font-bold hover:bg-gray-100 transition"
+              >닫기</button>
+              <button
+                onClick={async () => {
+                  if (isViewer) return;
+                  const o = cancelReqPopup; setCancelReqPopup(null); await rejectCancelRequestPC(o);
+                }}
+                className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
+              >거절</button>
+              <button
+                onClick={async () => {
+                  if (isViewer) return;
+                  const o = cancelReqPopup; setCancelReqPopup(null); await approveCancelRequestPC(o);
+                }}
+                className="px-4 py-2 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition"
               >승인</button>
             </div>
           </div>
