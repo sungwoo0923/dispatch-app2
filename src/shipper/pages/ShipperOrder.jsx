@@ -527,7 +527,10 @@ export default function ShipperOrder({ editData, onClose }) {
         limit(200)
       );
       const snap = await getDocs(q);
+      // 지급방식이 "손실"인 오더는 화주사에게 청구하지 않는 건이라 화주사 화면에서는
+      // 완전히 보이지 않아야 하므로, 오더 불러오기 검색결과에서도 제외한다.
       let list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .filter(item => item.지급방식 !== "손실")
         .sort((a, b) => (b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0));
 
       if (searchKeyword.trim()) {
