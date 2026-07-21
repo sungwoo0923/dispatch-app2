@@ -1,5 +1,5 @@
 // src/shipper/ShipperSignup.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { auth, db } from "../firebase";
@@ -158,6 +158,8 @@ function SignupForm({ signupType, onBack }) {
   const [hireDate, setHireDate] = useState("");
   const [address, setAddress] = useState("");
   const [addressDetail, setAddressDetail] = useState("");
+  const [addressPopupOpen, setAddressPopupOpen] = useState(false);
+  const addressBoxRef = useRef(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
@@ -256,6 +258,10 @@ function SignupForm({ signupType, onBack }) {
     setHasTransportSearched(false);
   };
 
+  // 모바일 브라우저/웹뷰에서는 daum Postcode의 .open()이 새 팝업창을 띄우지 못하고
+  // 현재 탭 자체를 이동시켜버려, 주소 선택 후 앱이 처음부터 다시 로드되며
+  // 로고 화면 → 가입선택 화면으로 튕기는 문제가 있었다. 새 창을 띄우지 않는
+  // embed 방식으로 현재 화면 안에 오버레이 레이어로 띄운다.
   const searchAddress = () => {
     const load = () =>
       new Promise((resolve) => {
@@ -265,10 +271,21 @@ function SignupForm({ signupType, onBack }) {
         s.onload = resolve;
         document.head.appendChild(s);
       });
-    load().then(() => {
-      new window.daum.Postcode({ oncomplete: (d) => setAddress(d.address) }).open();
-    });
+    load().then(() => setAddressPopupOpen(true));
   };
+
+  useEffect(() => {
+    if (!addressPopupOpen || !addressBoxRef.current || !window.daum?.Postcode) return;
+    addressBoxRef.current.innerHTML = "";
+    new window.daum.Postcode({
+      oncomplete: (d) => {
+        setAddress(d.address);
+        setAddressPopupOpen(false);
+      },
+      width: "100%",
+      height: "100%",
+    }).embed(addressBoxRef.current);
+  }, [addressPopupOpen]);
 
   const checkEmailDuplicate = async () => {
     const trimmed = email.trim();
@@ -420,6 +437,7 @@ function SignupForm({ signupType, onBack }) {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-[#f4f6fa] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-lg overflow-hidden">
         {/* 헤더 */}
@@ -736,6 +754,30 @@ function SignupForm({ signupType, onBack }) {
         </form>
       </div>
     </div>
+    {addressPopupOpen && (
+      <div
+        className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center px-4"
+        onClick={() => setAddressPopupOpen(false)}
+      >
+        <div
+          className="w-full max-w-md h-[70vh] bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <span className="text-[14px] font-bold text-[#1B2B4B]">주소 검색</span>
+            <button
+              type="button"
+              onClick={() => setAddressPopupOpen(false)}
+              className="text-gray-400 hover:text-gray-600 text-[16px] leading-none"
+            >
+              ✕
+            </button>
+          </div>
+          <div ref={addressBoxRef} className="flex-1" />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 

@@ -158,10 +158,24 @@ export default function ShipperOrder({ editData, onClose }) {
     });
     return Object.entries(totals).map(([label, n]) => `${label} ${n}장`).join("+");
   };
+  // 화물목록(배열) 없이 화물내용(문자열, 예: "1파레트")만 있는 오더 — 운송사에서 등록/전송된
+  // 오더나 예전 방식으로 저장된 오더가 여기 해당한다. 문자열 전체를 그대로 qty에 넣으면
+  // 수량 뒤에 단위가 그대로 붙어 있어, 다시 저장할 때 buildCargoSummary가 단위를 한 번 더
+  // 붙여 "1파레트파레트"처럼 중복되는 원인이었다 — 알려진 단위 접미사를 분리해서 파싱한다.
+  const CARGO_UNIT_SUFFIXES = ["파레트", "박스", "개"];
+  const parseCargoSegment = (seg, fallbackUnit) => {
+    const s = String(seg || "").trim();
+    for (const u of CARGO_UNIT_SUFFIXES) {
+      if (s.endsWith(u) && s.length > u.length) return { qty: s.slice(0, -u.length).trim(), unit: u, palletCo: "" };
+    }
+    return { qty: s, unit: fallbackUnit || "파레트", palletCo: "" };
+  };
   const cargoRowsFromOrder = (item) =>
     Array.isArray(item?.화물목록) && item.화물목록.length
       ? item.화물목록.map(r => ({ qty: r.qty || "", unit: r.unit || "파레트", palletCo: r.palletCo || "" }))
-      : [{ qty: item?.화물내용 || "", unit: item?.화물단위 || "파레트", palletCo: "" }];
+      : item?.화물내용
+        ? String(item.화물내용).split("+").map(seg => parseCargoSegment(seg, item?.화물단위))
+        : [{ qty: "", unit: item?.화물단위 || "파레트", palletCo: "" }];
 
   const [viaModal, setViaModal] = useState(null); // { type: "상차" | "하차" }
   const emptyViaStop = () => ({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 화물내용: "", 차량톤수: "", 상차시간: "", 하차시간: "", 방법: "" });

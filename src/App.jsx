@@ -11,7 +11,7 @@ import {
 import ShipperApp from "./shipper/ShipperApp";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "./firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 import DispatchApp from "./DispatchApp";
 import MobileApp from "./mobile/MobileApp";
@@ -327,10 +327,23 @@ export default function App() {
 
   // 업데이트 이벤트 - UpdateBanner.jsx가 처리하므로 App에서는 제거
 
+  // 최고관리자용 접속이력(sessionLogs) 기록 — 로그인/로그아웃 시점을 남긴다.
+  // (탭을 그냥 닫는 경우는 onAuthStateChanged가 발화하지 않아 로그아웃 기록이 남지 않는
+  //  일반적인 한계가 있음 — 명시적 로그아웃/세션 종료 시에만 기록된다.)
+  const sessionLogRef = useRef({ uid: null, info: null });
+
   // 인증 + 역할
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (!u) {
+        if (sessionLogRef.current.uid && sessionLogRef.current.info) {
+          addDoc(collection(db, "sessionLogs"), {
+            ...sessionLogRef.current.info,
+            event: "logout",
+            at: serverTimestamp(),
+          }).catch(() => {});
+        }
+        sessionLogRef.current = { uid: null, info: null };
         setUser(null);
         setRole(null);
         setLoading(false);
@@ -350,6 +363,25 @@ export default function App() {
           }
           const dataRole = data.role || "user";
           setRole(dataRole);
+          // 스냅샷은 프로필이 바뀔 때마다 재발화될 수 있어, 이 uid로 로그인 기록을 아직
+          // 남기지 않았을 때만(세션당 1회) 기록한다.
+          if (sessionLogRef.current.uid !== u.uid) {
+            const loginInfo = {
+              uid: u.uid,
+              email: u.email || "",
+              name: data.name || data.이름 || data.담당자명 || "",
+              role: dataRole,
+              companyName: dataRole === "totalMaster"
+                ? (localStorage.getItem("loginCompany") || "")
+                : (data.companyName || ""),
+            };
+            sessionLogRef.current = { uid: u.uid, info: loginInfo };
+            addDoc(collection(db, "sessionLogs"), {
+              ...loginInfo,
+              event: "login",
+              at: serverTimestamp(),
+            }).catch(() => {});
+          }
           // approved !== false allows old accounts (undefined) and explicitly true
           // only blocks accounts explicitly set to false (new unapproved signups)
           setApproved(data.approved !== false);
