@@ -202,11 +202,90 @@ const EDIT_REQUEST_FIELD_LABELS = {
   상차지담당자번호: "상차지 담당자 연락처", 하차지담당자번호: "하차지 담당자 연락처",
   전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
 };
+// 경유지 필드는 "경유상차목록"/"경유지_상차"/"경유지상차"처럼 여러 동의어 필드명으로 저장되고
+// 문자열(JSON)/배열 형태가 뒤섞여 있어, 단순 String() 비교로는 실제로 안 바뀐 경우도
+// "[object Object]" 같은 값으로 오탐되어 표시된다. 두 방향(상차/하차)을 하나로 묶어
+// 사람이 읽을 수 있는 요약 문자열로 정규화한 뒤에만 비교한다.
+const PICKUP_VIA_KEYS = ["경유상차목록", "경유지_상차", "경유지상차"];
+const DROP_VIA_KEYS = ["경유하차목록", "경유지_하차", "경유지하차"];
+const normalizeViaList = (v) => {
+  let arr = v;
+  if (typeof arr === "string" && arr.trim().startsWith("[")) {
+    try { arr = JSON.parse(arr); } catch { arr = []; }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((s) => s && String(s.업체명 || "").trim());
+};
+const getViaFromObj = (obj, keys) => {
+  for (const k of keys) {
+    const norm = normalizeViaList(obj?.[k]);
+    if (norm.length) return norm;
+  }
+  return [];
+};
+const viaSummary = (list) => list.map((s) => s.업체명).filter(Boolean).join(", ");
+
+// 화주사가 배차완료 전 오더를 직접 수정하면(승인 불필요, 즉시반영) history에 기록되고
+// 최종수정출처="shipper"가 찍힌다 — 이 최근(48시간 이내) 직접수정 여부를 판단한다.
+const isRecentShipperEdit = (o) => {
+  if (o?.최종수정출처 !== "shipper") return false;
+  const ts = typeof o.최종수정일시 === "number" ? o.최종수정일시 : (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0);
+  return !!ts && (Date.now() - ts) < 1000 * 60 * 60 * 48;
+};
+// 화주사의 직접수정(승인요청이 아닌 즉시반영건) 최근 변경내용을 history에서 추출 — 같은 저장
+// 시점(at)에 함께 기록된 항목들만 하나의 변경묶음으로 간주한다.
+const getRecentHistoryDiff = (order) => {
+  const hist = Array.isArray(order?.history) ? order.history.filter((h) => h && h.field) : [];
+  if (hist.length === 0) return [];
+  const maxAt = Math.max(...hist.map((h) => h.at || 0));
+  return hist
+    .filter((h) => Math.abs((h.at || 0) - maxAt) < 5000)
+    .map((h) => ({ field: h.field, label: EDIT_REQUEST_FIELD_LABELS[h.field] || h.field, before: h.before, after: h.after }));
+};
+
 const getEditRequestDiff = (order) => {
   const pending = order?.수정요청데이터 || {};
-  return Object.entries(pending)
-    .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(order[k] ?? "") !== String(v ?? ""))
+  const viaKeySet = new Set([...PICKUP_VIA_KEYS, ...DROP_VIA_KEYS]);
+  const diffs = Object.entries(pending)
+    .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && !viaKeySet.has(k) && String(order[k] ?? "") !== String(v ?? ""))
     .map(([k, v]) => ({ field: k, label: EDIT_REQUEST_FIELD_LABELS[k] || k, before: order[k], after: v }));
+
+  [{ keys: PICKUP_VIA_KEYS, label: "경유지(상차)" }, { keys: DROP_VIA_KEYS, label: "경유지(하차)" }].forEach(({ keys, label }) => {
+    const beforeStr = viaSummary(getViaFromObj(order, keys));
+    const afterStr = viaSummary(getViaFromObj(pending, keys));
+    if (beforeStr !== afterStr) {
+      diffs.push({ field: keys[0], label, before: beforeStr || "없음", after: afterStr || "없음" });
+    }
+  });
+
+  return diffs;
+};
+// 화주사의 "배차취소 요청" 승인/거절 — 승인 시 즉시 삭제하지 않고 소프트 취소(상태: "취소")로
+// 전환해 화주사/운송사 양쪽의 "배차취소" 목록에 남아 재등록할 수 있게 한다.
+// (모듈 최상위 스코프에 둬야 여러 하위 컴포넌트에서 prop 없이 바로 호출할 수 있다 —
+//  useRealtimeCollections 안에 두면 그 훅을 호출하는 컴포넌트에서만 접근 가능해 ReferenceError가 난다.)
+const approveCancelRequestPC = async (order) => {
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, {
+    상태: "취소",
+    배차상태: "배차취소",
+    취소요청: false,
+    취소요청사유: deleteField(),
+    취소거절: false,
+    취소처리: "승인",
+    취소처리일시: serverTimestamp(),
+    updatedAt: Date.now(),
+  });
+};
+const rejectCancelRequestPC = async (order) => {
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, {
+    취소요청: false,
+    취소거절: true,
+    취소거절일시: serverTimestamp(),
+    취소처리: "거절",
+    취소처리일시: serverTimestamp(),
+  });
 };
 
 /* -------------------------------------------------
@@ -905,32 +984,6 @@ const markEditRequestSeen = async (order) => {
   const ref = doc(db, order.__col || "orders", order._id || order.id);
   await updateDoc(ref, { 수정확인: true }).catch(() => {});
 };
-// 화주사의 "배차취소 요청" 승인/거절 — 승인 시 즉시 삭제하지 않고 소프트 취소(상태: "취소")로
-// 전환해 화주사/운송사 양쪽의 "배차취소" 목록에 남아 재등록할 수 있게 한다.
-const approveCancelRequestPC = async (order) => {
-  const ref = doc(db, order.__col || "orders", order._id || order.id);
-  await updateDoc(ref, {
-    상태: "취소",
-    배차상태: "배차취소",
-    취소요청: false,
-    취소요청사유: deleteField(),
-    취소거절: false,
-    취소처리: "승인",
-    취소처리일시: serverTimestamp(),
-    updatedAt: Date.now(),
-  });
-};
-const rejectCancelRequestPC = async (order) => {
-  const ref = doc(db, order.__col || "orders", order._id || order.id);
-  await updateDoc(ref, {
-    취소요청: false,
-    취소거절: true,
-    취소거절일시: serverTimestamp(),
-    취소처리: "거절",
-    취소처리일시: serverTimestamp(),
-  });
-};
-
   const upsertDriver = async (driver) => {
   const viewCompany = role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
@@ -18562,19 +18615,6 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       >
                         배차요청
                       </button>
-                    ) : r.배차상태 === "배차취소" && r.취소알림대기 ? (
-                      <button
-                        type="button"
-                        title="클릭하여 배차취소 확인"
-                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-red-600 text-white hover:bg-red-700 transition"
-                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          patchDispatch(r._id, { 취소알림대기: false, __col: r.__col });
-                        }}
-                      >
-                        배차취소
-                      </button>
                     ) : r.취소요청 && r.배차상태 !== "배차취소" ? (
                       <button
                         type="button"
@@ -18589,17 +18629,17 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       >
                         취소요청
                       </button>
-                    ) : r.수정요청 ? (
+                    ) : (r.수정요청 || isRecentShipperEdit(r)) ? (
                       <button
                         type="button"
-                        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+                        title={r.수정요청 ? "화주사가 수정을 요청했습니다 — 클릭하여 승인/거절" : "화주사가 오더를 직접 수정했습니다 — 클릭하여 확인"}
                         className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
                         style={{
                           background: "linear-gradient(135deg,#3b5998,#0f2151)",
                           boxShadow: "0 2px 5px rgba(15,33,81,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.3)",
                           animation: "statusUrgentBlink 0.9s ease-in-out infinite",
                         }}
-                        onClick={(e) => { e.stopPropagation(); markEditRequestSeen(r); setEditReqPopup(r); }}
+                        onClick={(e) => { e.stopPropagation(); if (r.수정요청) markEditRequestSeen(r); setEditReqPopup(r); }}
                       >
                         수정
                       </button>
@@ -18628,12 +18668,6 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       >
                         {r.배차상태}
                       </button>
-                    )}
-                    {r.최종수정출처 === "shipper" && (Date.now() - (typeof r.최종수정일시 === "number" ? r.최종수정일시 : (r.최종수정일시?.seconds ? r.최종수정일시.seconds * 1000 : 0))) < 1000 * 60 * 60 * 48 && (
-                      <span
-                        title="화주사가 오더 정보를 수정했습니다"
-                        className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
-                      />
                     )}
                   </div>
                   </td>
@@ -22701,14 +22735,14 @@ setConfirmChange(null);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
-              <h3 className="text-white font-bold text-[15px]">화주사 수정요청</h3>
-              {editReqPopup.수정요청일시 && (
+              <h3 className="text-white font-bold text-[15px]">{editReqPopup.수정요청 ? "화주사 수정요청" : "화주사 수정 내역"}</h3>
+              {editReqPopup.수정요청 && editReqPopup.수정요청일시 && (
                 <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
               )}
             </div>
             <div className="px-6 py-5 overflow-y-auto flex-1">
               {(() => {
-                const diff = getEditRequestDiff(editReqPopup);
+                const diff = editReqPopup.수정요청 ? getEditRequestDiff(editReqPopup) : getRecentHistoryDiff(editReqPopup);
                 if (diff.length === 0) return <p className="text-[14px] text-gray-500">변경된 내용이 없습니다.</p>;
                 return (
                   <div className="space-y-3">
@@ -22726,14 +22760,23 @@ setConfirmChange(null);
               })()}
             </div>
             <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2 shrink-0">
-              <button
-                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
-                className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
-              >거절</button>
-              <button
-                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
-                className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
-              >승인</button>
+              {editReqPopup.수정요청 ? (
+                <>
+                  <button
+                    onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
+                    className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
+                  >거절</button>
+                  <button
+                    onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
+                    className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+                  >승인</button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditReqPopup(null)}
+                  className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+                >확인</button>
+              )}
             </div>
           </div>
         </div>
@@ -27168,32 +27211,14 @@ return (
                       >
                         배차요청
                       </button>
-                    ) : row.배차상태 === "배차취소" && row.취소알림대기 ? (
-                      <button
-                        onClick={() => {
-                          if (isViewer) return;
-                          patchDispatch(row._id, { 취소알림대기: false, __col: row.__col });
-                        }}
-                        title="클릭하여 배차취소 확인"
-                        className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap bg-red-600 text-white hover:bg-red-700 transition"
-                        style={{ animation: "cancelSlowBlink 2.4s ease-in-out infinite" }}
-                      >
-                        배차취소
-                      </button>
                     ) : (
                       <StatusBadge
                         s={row.배차상태}
                         urgent={row.긴급}
                         cancelReq={row.취소요청 && row.배차상태 !== "배차취소"}
-                        editReq={row.수정요청}
+                        editReq={row.수정요청 || isRecentShipperEdit(row)}
                         onCancelClick={(e) => { e.stopPropagation(); setCancelReqPopup(row); }}
-                        onEditClick={(e) => { e.stopPropagation(); markEditRequestSeen(row); setEditReqPopup(row); }}
-                      />
-                    )}
-                    {row.최종수정출처 === "shipper" && (Date.now() - (typeof row.최종수정일시 === "number" ? row.최종수정일시 : (row.최종수정일시?.seconds ? row.최종수정일시.seconds * 1000 : 0))) < 1000 * 60 * 60 * 48 && (
-                      <span
-                        title="화주사가 오더 정보를 수정했습니다"
-                        className="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-white"
+                        onEditClick={(e) => { e.stopPropagation(); if (row.수정요청) markEditRequestSeen(row); setEditReqPopup(row); }}
                       />
                     )}
                   </div>
@@ -30366,14 +30391,14 @@ setCopyPlaceOptions(list);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
-              <h3 className="text-white font-bold text-[15px]">화주사 수정요청</h3>
-              {editReqPopup.수정요청일시 && (
+              <h3 className="text-white font-bold text-[15px]">{editReqPopup.수정요청 ? "화주사 수정요청" : "화주사 수정 내역"}</h3>
+              {editReqPopup.수정요청 && editReqPopup.수정요청일시 && (
                 <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
               )}
             </div>
             <div className="px-6 py-5 overflow-y-auto flex-1">
               {(() => {
-                const diff = getEditRequestDiff(editReqPopup);
+                const diff = editReqPopup.수정요청 ? getEditRequestDiff(editReqPopup) : getRecentHistoryDiff(editReqPopup);
                 if (diff.length === 0) return <p className="text-[14px] text-gray-500">변경된 내용이 없습니다.</p>;
                 return (
                   <div className="space-y-3">
@@ -30391,14 +30416,23 @@ setCopyPlaceOptions(list);
               })()}
             </div>
             <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2 shrink-0">
-              <button
-                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
-                className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
-              >거절</button>
-              <button
-                onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
-                className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
-              >승인</button>
+              {editReqPopup.수정요청 ? (
+                <>
+                  <button
+                    onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
+                    className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
+                  >거절</button>
+                  <button
+                    onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
+                    className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+                  >승인</button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditReqPopup(null)}
+                  className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
+                >확인</button>
+              )}
             </div>
           </div>
         </div>

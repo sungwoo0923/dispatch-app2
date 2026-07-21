@@ -693,28 +693,28 @@ export default function ShipperStatus() {
         const sa = STATUS_SORT_ORDER[getStatus(a)] ?? 9;
         const sb = STATUS_SORT_ORDER[getStatus(b)] ?? 9;
         if (sa !== sb) return sa - sb;
+        // 상태(tier)가 같으면 어떤 상태든 먼저 상차일(날짜) 내림차순으로 묶고,
+        // 같은 날짜 안에서만 상태별 세부 기준으로 정렬한다 (날짜가 섞여 보이지 않도록).
+        const da = toYMD(a.상차일), db = toYMD(b.상차일);
+        if (da !== db) return db.localeCompare(da);
         const st = getStatus(a);
         if (st === "요청") {
-          // 요청은 입력한 순서대로(오래된 요청이 먼저)
+          // 같은 날짜 안에서는 입력한 순서대로(오래된 요청이 먼저)
           return toMs(a.createdAt) - toMs(b.createdAt);
         }
         if (st === "배차중") {
-          // 요청에서 배차중으로 전환된 순(최근 전환건이 상단)
+          // 같은 날짜 안에서는 요청에서 배차중으로 전환된 순(최근 전환건이 상단)
           const ma = toMs(a.배차중전환일시) || toMs(a.createdAt);
           const mb = toMs(b.배차중전환일시) || toMs(b.createdAt);
           return mb - ma;
         }
         if (st === "배차완료") {
-          // 상차일(날짜)로 먼저 묶고, 같은 날짜 안에서만 가장 최근에
-          // 배차완료된 건이 상단에 오도록 정렬한다 (날짜가 섞여 보이지 않도록).
-          const da2 = toYMD(a.상차일), db2 = toYMD(b.상차일);
-          if (da2 !== db2) return db2.localeCompare(da2);
+          // 같은 날짜 안에서는 가장 최근에 배차완료된 건이 상단에 오도록 정렬한다.
           const ma = toMs(a.배차완료일시 || a.dispatchedAt) || toMs(a.createdAt);
           const mb = toMs(b.배차완료일시 || b.dispatchedAt) || toMs(b.createdAt);
           return mb - ma;
         }
-        const da = toYMD(a.상차일), db = toYMD(b.상차일);
-        return db.localeCompare(da);
+        return 0;
       });
     }
     return filtered;
