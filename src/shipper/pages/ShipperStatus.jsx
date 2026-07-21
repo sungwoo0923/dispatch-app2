@@ -52,6 +52,19 @@ const get3MonthsAgo = () => {
   return kst.toISOString().slice(0, 10);
 };
 
+// 이번 달 1일 ~ 말일 (KST 기준) — 운송목록 진입 시 기본 조회 구간
+const getMonthStartKST = () => {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-01`;
+};
+const getMonthEndKST = () => {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const lastDay = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + 1, 0));
+  return lastDay.toISOString().slice(0, 10);
+};
+
 const fmt12 = (t) => {
   if (!t) return "-";
   const [h, m] = t.split(":").map(Number);
@@ -133,6 +146,8 @@ export default function ShipperStatus() {
   const editReqFirstLoadRef = useRef(true);
   const prevPendingRef = useRef({});
   const pendingFirstLoadRef = useRef(true);
+  const prevCancelReqRef = useRef({});
+  const cancelReqFirstLoadRef = useRef(true);
   const [focusOrderId, setFocusOrderId] = useState(null);
   const [flashId, setFlashId] = useState(null);
   const rowRefs = useRef({});
@@ -155,8 +170,8 @@ export default function ShipperStatus() {
     return () => el.removeEventListener("wheel", handleWheel);
   }, []);
 
-  const [startDate, setStartDate] = useState(get3MonthsAgo());
-  const [endDate, setEndDate] = useState(getTodayKST());
+  const [startDate, setStartDate] = useState(getMonthStartKST());
+  const [endDate, setEndDate] = useState(getMonthEndKST());
   const [searchType, setSearchType] = useState("통합");
   const [transportFilter, setTransportFilter] = useState("전체");
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -164,7 +179,6 @@ export default function ShipperStatus() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
   const [editData, setEditData] = useState(null);
-  const [hideCanceled, setHideCanceled] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 100;
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -176,6 +190,7 @@ export default function ShipperStatus() {
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, order }
   const [driverInfoPopup, setDriverInfoPopup] = useState(null); // order
   const [copyToast, setCopyToast] = useState(false);
+  const [cancelReasonPopup, setCancelReasonPopup] = useState(null); // { ids: [] }
 
   const openConfirm = (message, onConfirm) => {
     setConfirmConfig({ message, onConfirm });
@@ -299,6 +314,10 @@ export default function ShipperStatus() {
       });
 
       // 배차요청 승인 감지 (화주사확인대기 true -> false, 거절 아님) -> 알림
+      // 이 패스에서 승인이 감지된 오더 id는 아래 "운송사가 수정" 감지에서 제외한다.
+      // (기사배정으로 승인 처리하는 단일 쓰기에 차량번호 등 필드가 함께 실려 최종수정일시가
+      //  같이 갱신되는데, 이는 "수정"이 아니라 "최초 승인"이므로 수정 알림이 중복으로 뜨면 안 된다.)
+      const approvedThisPass = new Set();
       if (pendingFirstLoadRef.current) {
         pendingFirstLoadRef.current = false;
         docs.forEach((o) => { prevPendingRef.current[o.id] = !!o.화주사확인대기; });
@@ -307,6 +326,7 @@ export default function ShipperStatus() {
           const cur = !!o.화주사확인대기;
           const prev = prevPendingRef.current[o.id];
           if (prev === true && cur === false && !o.배차거절) {
+            approvedThisPass.add(o.id);
             setDispatchNotif({
               id: o.id,
               text: `${o.거래처명 || o.상차지명 || "오더"} 배차요청을 운송사가 승인했습니다. (배차중)`,
@@ -327,7 +347,7 @@ export default function ShipperStatus() {
         docs.forEach((o) => {
           const cur = o.최종수정일시?.seconds || 0;
           const prev = prevEditStampRef.current[o.id];
-          if (o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
+          if (!approvedThisPass.has(o.id) && o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
             setDispatchNotif({
               id: o.id,
               text: `${o.거래처명 || o.상차지명 || "오더"} 배차정보를 운송사가 수정했습니다.`,
@@ -357,6 +377,26 @@ export default function ShipperStatus() {
             pushToast({ type: "dispatch", order: o, title: o.수정거절 ? "수정요청 거절" : "수정요청 승인", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
           }
           prevEditReqRef.current[o.id] = !!o.수정요청;
+        });
+      }
+
+      // 배차취소 요청 승인/거절 감지 -> 알림 (승인 시에도 문서를 즉시 삭제하지 않고
+      // 상태만 "취소"로 바꾸므로, 수정요청과 동일하게 같은 문서에서 취소요청 플래그 해제를 감지한다)
+      if (cancelReqFirstLoadRef.current) {
+        cancelReqFirstLoadRef.current = false;
+        docs.forEach((o) => { prevCancelReqRef.current[o.id] = !!o.취소요청; });
+      } else {
+        docs.forEach((o) => {
+          const wasPending = prevCancelReqRef.current[o.id];
+          if (wasPending && !o.취소요청) {
+            const text = o.취소거절
+              ? `${o.거래처명 || o.상차지명 || "오더"} 배차취소 요청이 거절되었습니다.`
+              : `${o.거래처명 || o.상차지명 || "오더"} 배차취소 요청이 승인되어 취소되었습니다.`;
+            setDispatchNotif({ id: o.id, text, order: o });
+            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+            pushToast({ type: "dispatch", order: o, title: o.취소거절 ? "배차취소 거절" : "배차취소 승인", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+          }
+          prevCancelReqRef.current[o.id] = !!o.취소요청;
         });
       }
 
@@ -506,41 +546,57 @@ export default function ShipperStatus() {
     setSelectedIds(prev => checked ? [...prev, id] : prev.filter(v => v !== id));
   };
 
-  const deleteOrders = (targets, onDone) => {
+  // "오더취소" 버튼과 동일한 규칙으로 통일: 배차 전(차량번호 없음)이면 즉시 취소(배차취소 필터로 이동),
+  // 배차완료(차량번호 있음)면 사유를 입력받아 운송사 승인을 요청한다.
+  // permanent=true(배차취소 필터의 "선택삭제")일 때만 실제 Firestore 문서를 영구 삭제한다.
+  const deleteOrders = (targets, onDone, { permanent = false } = {}) => {
     if (targets.length === 0) { alert("선택된 항목 없음"); return; }
-    // 이미 취소(오더취소) 처리된 건은 차량번호가 남아있어도 운송사 승인 없이 바로 삭제 가능
-    const locked = targets.filter(o => o.상태 !== "취소" && o.차량번호 && o.차량번호.trim() && !o.취소요청);
-    const deletable = targets.filter(o => o.상태 === "취소" || !(o.차량번호 && o.차량번호.trim()));
 
-    const requestCancelForLocked = async () => {
-      for (const o of locked) {
-        await updateDoc(doc(db, "orders", o.id), {
-          취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "",
-        });
+    if (permanent) {
+      openConfirm(
+        `선택하신 ${targets.length}건을 영구 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`,
+        async () => {
+          for (const o of targets) await deleteDoc(doc(db, "orders", o.id));
+          onDone?.(); setConfirmOpen(false);
+        }
+      );
+      return;
+    }
+
+    const locked = targets.filter(o => o.상태 !== "취소" && o.차량번호 && o.차량번호.trim() && !o.취소요청);
+    const cancelable = targets.filter(o => o.상태 !== "취소" && !(o.차량번호 && o.차량번호.trim()));
+
+    const cancelImmediately = async () => {
+      for (const o of cancelable) {
+        await updateDoc(doc(db, "orders", o.id), { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true });
       }
     };
-    const deleteDeletable = async () => {
-      for (const o of deletable) await deleteDoc(doc(db, "orders", o.id));
-    };
 
-    if (locked.length > 0 && deletable.length === 0) {
-      openConfirm(
-        `선택하신 ${locked.length}건은 이미 배차완료되어 직접 삭제할 수 없습니다. 운송사에 배차취소를 요청하시겠습니까?`,
-        async () => { await requestCancelForLocked(); onDone?.(); setConfirmOpen(false); }
-      );
+    if (locked.length > 0 && cancelable.length === 0) {
+      setCancelReasonPopup({ ids: locked.map(o => o.id), onDone });
     } else if (locked.length > 0) {
       openConfirm(
-        `선택하신 항목 중 ${locked.length}건은 배차완료되어 삭제할 수 없습니다. 나머지 ${deletable.length}건만 삭제하고, 배차완료건은 운송사에 배차취소를 요청하시겠습니까?`,
-        async () => { await requestCancelForLocked(); await deleteDeletable(); onDone?.(); setConfirmOpen(false); }
+        `선택하신 항목 중 ${locked.length}건은 배차완료되어 즉시 취소할 수 없습니다. 나머지 ${cancelable.length}건은 바로 취소하고, 배차완료건은 사유를 입력해 운송사에 취소를 요청하시겠습니까?`,
+        async () => {
+          await cancelImmediately();
+          setConfirmOpen(false);
+          setCancelReasonPopup({ ids: locked.map(o => o.id), onDone });
+        }
       );
+    } else if (cancelable.length > 0) {
+      openConfirm(`선택하신 ${cancelable.length}건을 취소하시겠습니까?`, async () => {
+        await cancelImmediately();
+        onDone?.();
+        setConfirmOpen(false);
+      });
     } else {
-      openConfirm("정말 삭제하시겠습니까?", async () => { await deleteDeletable(); onDone?.(); setConfirmOpen(false); });
+      onDone?.();
     }
   };
 
   const handleDeleteSelected = () => {
     const targets = orders.filter(o => selectedIds.includes(o.id));
-    deleteOrders(targets, () => setSelectedIds([]));
+    deleteOrders(targets, () => setSelectedIds([]), { permanent: filter === "배차취소" });
   };
 
   const openEditWithPending = (order) => {
@@ -596,7 +652,8 @@ export default function ShipperStatus() {
 
   const rows = useMemo(() => {
     const filtered = orders.filter((o) => {
-      if (hideCanceled && filter !== "배차취소" && o.상태 === "취소") return false;
+      // 배차취소(취소) 오더는 "배차취소" 필터에서만 보이고, 다른 모든 필터(전체 포함)에서는 완전히 제외한다.
+      if (filter !== "배차취소" && o.상태 === "취소") return false;
       const currentStatus = getStatus(o);
       if (filter !== "전체" && currentStatus !== filter) return false;
       if (transportFilter !== "전체" && (o.운송사명 || "") !== transportFilter) return false;
@@ -661,7 +718,7 @@ export default function ShipperStatus() {
       });
     }
     return filtered;
-  }, [orders, filter, keyword, startDate, endDate, searchType, hideCanceled, getStatus, transportFilter]);
+  }, [orders, filter, keyword, startDate, endDate, searchType, getStatus, transportFilter]);
 
   // 알림 클릭으로 포커스 이동 -> 해당 오더가 있는 페이지로 이동 후 스크롤 + 하이라이트
   useEffect(() => {
@@ -710,12 +767,7 @@ export default function ShipperStatus() {
     const isDispatched = !!(target?.차량번호 && String(target.차량번호).trim());
     if (isDispatched) {
       if (target?.취소요청) { alert("이미 배차취소를 요청했습니다.\n운송사의 승인을 기다리고 있습니다."); return; }
-      openConfirm("이미 배차완료된 오더입니다.\n배차취소를 요청하시겠습니까?\n(운송사 승인 후 취소됩니다)", async () => {
-        await updateDoc(doc(db, "orders", id), {
-          취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "",
-        });
-        setConfirmOpen(false);
-      });
+      setCancelReasonPopup({ ids: [id] });
       return;
     }
     openConfirm("오더를 취소하시겠습니까?", async () => {
@@ -724,6 +776,22 @@ export default function ShipperStatus() {
       setSelectedOrder(prev => prev?.id === id ? { ...prev, 상태: "취소", 배차상태: "배차취소" } : prev);
       setConfirmOpen(false);
     });
+  };
+
+  // 배차완료된 오더의 취소 요청 — 사유를 입력받아 운송사 승인 대기 상태로 전환한다.
+  const submitCancelRequest = async (reason) => {
+    const popup = cancelReasonPopup;
+    if (!popup) return;
+    for (const id of popup.ids) {
+      await updateDoc(doc(db, "orders", id), {
+        취소요청: true,
+        취소요청일시: serverTimestamp(),
+        취소요청자: user?.email || "",
+        취소요청사유: reason || "",
+      });
+    }
+    setCancelReasonPopup(null);
+    popup.onDone?.();
   };
 
   if (loading) {
@@ -838,10 +906,6 @@ export default function ShipperStatus() {
                   {s}
                 </button>
               ))}
-              <label className="flex items-center gap-2 text-sm ml-4">
-                <input type="checkbox" checked={hideCanceled} onChange={(e) => setHideCanceled(e.target.checked)} />
-                취소 오더 숨기기
-              </label>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#eef1f7] text-[13px] font-bold text-[#1B2B4B]">
               <span>조회결과 {rows.length.toLocaleString()}건</span>
@@ -872,6 +936,11 @@ export default function ShipperStatus() {
                 }}
                 className="px-3 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
               >내일</button>
+
+              <button
+                onClick={() => { setStartDate(getMonthStartKST()); setEndDate(getMonthEndKST()); }}
+                className="px-3 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
+              >이번달</button>
 
               <button
                 onClick={() => { setStartDate(get3MonthsAgo()); setEndDate(getTodayKST()); }}
@@ -911,7 +980,7 @@ export default function ShipperStatus() {
             <div className="flex gap-2">
               <button onClick={() => navigate("/shipper/order")} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold">+ 배차등록</button>
               <button onClick={handleEditSelected} className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-semibold">선택수정</button>
-              <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold">선택삭제</button>
+              <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold">{filter === "배차취소" ? "선택삭제" : "오더삭제"}</button>
               <button onClick={handleExcelDownload} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold">엑셀다운</button>
             </div>
           </div>
@@ -1146,23 +1215,13 @@ export default function ShipperStatus() {
                   onClick={() => openEditWithPending(selectedOrder)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-600 text-white hover:opacity-90"}`}
                 >수정</button>
-                {/* 배차완료(차량번호 있음) 상태에서는 "오더취소"와 "기사취소요청"이 결국 동일하게
-                    운송사 승인이 필요한 취소요청 플로우로 귀결되므로, 혼란을 막기 위해
-                    배차 전(차량번호 없음)에만 "오더취소" 버튼을 별도로 노출한다. */}
-                {!selectedOrder?.차량번호 && (
-                  <button
-                    disabled={selectedOrder?.상태 === "취소"}
-                    onClick={() => cancelOrder(selectedOrder.id)}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedOrder?.상태 === "취소" ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-red-600 text-white hover:opacity-90"}`}
-                  >오더취소</button>
-                )}
+                {/* 배차 전이면 즉시 취소, 배차완료 후면 사유를 입력받아 운송사 승인을 요청하는
+                    단일 "오더취소" 버튼으로 통일한다(cancelOrder가 두 경우를 모두 처리). */}
                 {selectedOrder?.상태 !== "취소" && (
                   <button
-                    onClick={() => deleteOrders([selectedOrder], () => setDetailOpen(false))}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold border border-red-300 text-red-600 hover:bg-red-50"
-                  >
-                    {selectedOrder?.차량번호 ? "기사취소요청" : "삭제"}
-                  </button>
+                    onClick={() => cancelOrder(selectedOrder.id)}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:opacity-90"
+                  >오더취소</button>
                 )}
                 <button
                   onClick={() => setAttachViewer(selectedOrder)}
@@ -1296,6 +1355,15 @@ export default function ShipperStatus() {
         />
       )}
 
+      {/* 배차완료 오더 취소요청 사유 입력 팝업 */}
+      {cancelReasonPopup && (
+        <CancelReasonModal
+          count={cancelReasonPopup.ids.length}
+          onSubmit={submitCancelRequest}
+          onClose={() => setCancelReasonPopup(null)}
+        />
+      )}
+
       {/* 첨부파일 뷰어 */}
       {attachViewer && (
         <ShipperAttachmentViewer
@@ -1402,17 +1470,26 @@ export default function ShipperStatus() {
           style={{ top: ctxMenu.y, left: ctxMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
+          {ctxMenu.order.상태 === "취소" ? (
+            <button
+              onClick={() => { restoreOrder(ctxMenu.order); setCtxMenu(null); }}
+              className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+            >
+              재등록
+            </button>
+          ) : (
+            <button
+              onClick={() => { setSelectedIds([ctxMenu.order.id]); openEditWithPending(ctxMenu.order); setCtxMenu(null); }}
+              className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
+            >
+              선택수정
+            </button>
+          )}
           <button
-            onClick={() => { setSelectedIds([ctxMenu.order.id]); openEditWithPending(ctxMenu.order); setCtxMenu(null); }}
-            className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
-          >
-            선택수정
-          </button>
-          <button
-            onClick={() => { deleteOrders([ctxMenu.order]); setCtxMenu(null); }}
+            onClick={() => { deleteOrders([ctxMenu.order], null, { permanent: ctxMenu.order.상태 === "취소" }); setCtxMenu(null); }}
             className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-red-50 hover:text-red-600 transition"
           >
-            선택삭제
+            {ctxMenu.order.상태 === "취소" ? "선택삭제" : "오더삭제"}
           </button>
           <button
             onClick={() => { setSelectedOrder(ctxMenu.order); setDetailOpen(true); setCtxMenu(null); }}
@@ -1875,6 +1952,38 @@ function ConfirmModal({ message, onConfirm, onClose }) {
         <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-[13px] font-semibold">취소 (ESC)</button>
           <button onClick={onConfirm} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold">확인 (ENTER)</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CancelReasonModal({ count, onSubmit, onClose }) {
+  const [reason, setReason] = useState("");
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center" onClick={onClose}>
+      <div className="bg-white w-[420px] rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-red-600 px-6 py-4">
+          <h3 className="text-white font-bold text-[15px]">배차취소 요청</h3>
+          <p className="text-white/70 text-[12px] mt-0.5">
+            {count > 1 ? `${count}건의 배차완료 오더를 취소요청합니다.` : "배차완료된 오더를 취소요청합니다."}
+            {" "}운송사 승인 후 취소됩니다.
+          </p>
+        </div>
+        <div className="px-6 py-5">
+          <label className="text-[13px] font-semibold text-gray-600 mb-1.5 block">취소 사유</label>
+          <textarea
+            autoFocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="취소 사유를 입력해주세요 (선택 입력)"
+            rows={4}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-[#1B2B4B]"
+          />
+        </div>
+        <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-[13px] font-semibold">취소</button>
+          <button onClick={() => onSubmit(reason)} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold">취소요청 보내기</button>
         </div>
       </div>
     </div>
