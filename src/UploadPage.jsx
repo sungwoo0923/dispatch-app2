@@ -911,6 +911,13 @@ export default function UploadPage() {
                 style={{ width: "100%", height: 120, border: "1.5px solid #cbd5e1", borderRadius: 10, background: "#f8fafc", touchAction: "none", display: "block", pointerEvents: signed ? "none" : "auto" }}
                 onPointerDown={(e) => {
                   if (signed) return;
+                  // 서명칸에 touchAction:"none"이 걸려 있는데, 포인터를 이 캔버스에
+                  // 명시적으로 캡처해두지 않으면 손가락이 캔버스 경계를 살짝 벗어나는
+                  // 순간 브라우저가 "스크롤해야 하나 그려야 하나" 판단을 못 해 그 제스처
+                  // 전체가 멈춰버리는 기종이 있었다(일부 안드로이드/윈도우 터치 기기).
+                  // 캡처해두면 손가락이 캔버스 밖으로 나가도 이벤트가 계속 이 캔버스로만
+                  // 온다 — 서명 중 화면이 안 넘어가고 버벅이던 현상의 원인.
+                  try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
                   setSigDrawing(true);
                   const rect = sigRef.current.getBoundingClientRect();
                   const ctx = sigRef.current.getContext("2d");
@@ -931,13 +938,17 @@ export default function UploadPage() {
                   ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
                   ctx.stroke();
                 }}
-                onPointerUp={() => {
+                onPointerUp={(e) => {
+                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
                   setSigDrawing(prevDrawing => {
                     if (prevDrawing) setSigned(true);
                     return false;
                   });
                 }}
-                onPointerLeave={() => {
+                onPointerLeave={(e) => {
+                  // 포인터를 캡처한 상태라 대부분은 여기 도달하지 않고 onPointerUp으로
+                  // 끝나지만, 캡처를 지원하지 않는 기종을 위한 안전장치로 남겨둔다.
+                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
                   setSigDrawing(prevDrawing => {
                     if (prevDrawing) setSigned(true);
                     return false;
