@@ -229,8 +229,16 @@ const viaSummary = (list) => list.map((s) => s.업체명).filter(Boolean).join("
 // 최종수정출처="shipper"가 찍힌다 — 이 최근(48시간 이내) 직접수정 여부를 판단한다.
 const isRecentShipperEdit = (o) => {
   if (o?.최종수정출처 !== "shipper") return false;
+  if (o?.최종수정확인) return false; // 운송사가 이미 "확인"을 눌러 처리한 수정건
   const ts = typeof o.최종수정일시 === "number" ? o.최종수정일시 : (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0);
   return !!ts && (Date.now() - ts) < 1000 * 60 * 60 * 48;
+};
+// 배차완료 전 화주사 직접수정 안내 팝업에서 "확인"을 누르면, 이 건에 대해
+// 다시 "수정" 배지가 뜨지 않도록 확인 처리한다(수정요청처럼 승인/거절이 필요한 건 아니므로
+// 필드는 그대로 두고 확인 여부만 기록한다).
+const acknowledgeShipperEditPC = async (order) => {
+  const ref = doc(db, order.__col || "orders", order._id || order.id);
+  await updateDoc(ref, { 최종수정확인: true }).catch(() => {});
 };
 // 화주사의 직접수정(승인요청이 아닌 즉시반영건) 최근 변경내용을 history에서 추출 — 같은 저장
 // 시점(at)에 함께 기록된 항목들만 하나의 변경묶음으로 간주한다.
@@ -285,6 +293,82 @@ const rejectCancelRequestPC = async (order) => {
     취소거절일시: serverTimestamp(),
     취소처리: "거절",
     취소처리일시: serverTimestamp(),
+  });
+};
+
+// AdminMenu.jsx의 mapOrderForShipper와 동일한 규칙 — 톤수 문자열에 이미 단위가 있으면
+// 그대로, 없으면 톤수타입(기본 "톤")을 붙인다.
+const combineTonStringDA = (r) => {
+  const ton = (r.차량톤수 || "").toString().trim();
+  if (!ton) return "";
+  if (/톤|kg|킬로/.test(ton)) return ton;
+  const unit = (r.톤수타입 || "톤").trim();
+  return `${ton}${unit}`;
+};
+
+// 운송사가 연동 승인된 화주사의 거래처명으로 오더를 등록하면, AdminMenu.jsx의 수동
+// "화주사 전송"과 동일한 매핑으로 화주사가 볼 수 있는 사본을 즉시 생성한다.
+// (모듈 최상위 스코프 — useRealtimeCollections 안의 addDispatch에서 호출된다)
+const autoTransmitToShipper = async (savedRecord, shipperApp) => {
+  let myCompanyCode = "";
+  try {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      const meSnap = await getDoc(doc(db, "users", uid));
+      myCompanyCode = meSnap.exists() ? (meSnap.data().companyCode || "") : "";
+    }
+  } catch {}
+
+  const effectiveCompanyName = savedRecord.companyName || "";
+  const payload = {
+    거래처명: shipperApp.companyName,
+    shipperCompany: shipperApp.companyName,
+    company: effectiveCompanyName,
+    companyCode: myCompanyCode,
+    운송사명: effectiveCompanyName,
+    운송사코드: myCompanyCode,
+    작성자: auth.currentUser?.email || "",
+    상차지명: savedRecord.상차지명 || "",
+    상차지주소: savedRecord.상차지주소 || "",
+    상차담당자명: savedRecord.상차지담당자 || "",
+    상차담당자번호: savedRecord.상차지담당자번호 || "",
+    하차지명: savedRecord.하차지명 || "",
+    하차지주소: savedRecord.하차지주소 || "",
+    하차담당자명: savedRecord.하차지담당자 || "",
+    하차담당자번호: savedRecord.하차지담당자번호 || "",
+    등록일: savedRecord.등록일 || savedRecord.상차일 || "",
+    상차일: savedRecord.상차일 || "",
+    상차시간: savedRecord.상차시간 || "",
+    상차시간구분: savedRecord.상차시간기준 || "정각",
+    하차일: savedRecord.하차일 || "",
+    하차시간: savedRecord.하차시간 || "",
+    하차시간구분: savedRecord.하차시간기준 || "정각",
+    차량종류: savedRecord.차량종류 || "",
+    차량톤수: combineTonStringDA(savedRecord),
+    상차방법: savedRecord.상차방법 || "",
+    하차방법: savedRecord.하차방법 || "",
+    지급방식: savedRecord.지급방식 || "",
+    화물내용: savedRecord.화물내용 || "",
+    화물단위: savedRecord.화물타입 || "",
+    청구운임: Number(savedRecord.청구운임) || 0,
+    차량번호: savedRecord.차량번호 || "",
+    이름: savedRecord.이름 || "",
+    전화번호: savedRecord.전화번호 || "",
+    배차상태: savedRecord.차량번호 ? "배차완료" : "배차중",
+    경유상차목록: Array.isArray(savedRecord.경유상차목록) ? savedRecord.경유상차목록 : (Array.isArray(savedRecord.경유지_상차) ? savedRecord.경유지_상차 : []),
+    경유하차목록: Array.isArray(savedRecord.경유하차목록) ? savedRecord.경유하차목록 : (Array.isArray(savedRecord.경유지_하차) ? savedRecord.경유지_하차 : []),
+    source: "transport_transmit",
+    originCol: savedRecord.__col || "dispatch",
+    originId: savedRecord._id,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const newDocRef = await addDoc(collection(db, "orders"), payload);
+  await updateDoc(doc(db, savedRecord.__col || "dispatch", savedRecord._id), {
+    _transmittedToShipper: shipperApp.companyName,
+    _transmittedOrderId: newDocRef.id,
+    _transmittedAt: Date.now(),
   });
 };
 
@@ -394,6 +478,23 @@ useEffect(() => {
     setPlaces(arr);
   });
 
+  return () => unsub();
+}, [userCompany, role]);
+
+// ===================== 연동 승인된 화주사 목록(자동 전송용) =====================
+// 운송사가 오더 등록 시 거래처명이 여기 목록의 화주사 회사명과 일치하면,
+// AdminMenu의 수동 "화주사 전송"과 동일한 방식으로 즉시 화주사 화면에도 사본을 생성한다.
+const [approvedShippers, setApprovedShippers] = useState([]);
+useEffect(() => {
+  const viewCompany = role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+  const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
+    const list = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((a) => a.linkedTransportCompany?.companyName === viewCompany && a.transportApprovalStatus === "approved");
+    setApprovedShippers(list);
+  });
   return () => unsub();
 }, [userCompany, role]);
 
@@ -689,6 +790,18 @@ const addDispatch = async (record) => {
     doc(db, COLL.dispatch, _id),
     cleanRecord
   );
+
+  // 거래처명이 연동 승인된 화주사 회사명과 일치하면, 별도의 수동 "화주사 전송" 없이
+  // 등록과 동시에 화주사 화면에도 자동으로 사본을 생성한다. 이후 기사배정/금액 등
+  // 수정은 patchDispatch의 _transmittedOrderId 미러 동기화가 그대로 이어받는다.
+  const matchedShipper = approvedShippers.find(
+    (a) => (a.companyName || "").trim() === String(cleanRecord.거래처명 || "").trim()
+  );
+  if (matchedShipper) {
+    autoTransmitToShipper({ ...cleanRecord, _id, __col: COLL.dispatch }, matchedShipper).catch((e) =>
+      console.error("자동 화주사 전송 실패:", e)
+    );
+  }
 
   return _id;
 };
@@ -22773,7 +22886,7 @@ setConfirmChange(null);
                 </>
               ) : (
                 <button
-                  onClick={() => setEditReqPopup(null)}
+                  onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await acknowledgeShipperEditPC(o); }}
                   className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
                 >확인</button>
               )}
@@ -30429,7 +30542,7 @@ setCopyPlaceOptions(list);
                 </>
               ) : (
                 <button
-                  onClick={() => setEditReqPopup(null)}
+                  onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await acknowledgeShipperEditPC(o); }}
                   className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
                 >확인</button>
               )}

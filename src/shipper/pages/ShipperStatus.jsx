@@ -297,7 +297,7 @@ export default function ShipperStatus() {
             });
             setTimeout(() => setAttachNotif(null), 5000);
             pushToast({ type: "attach", order, title: "첨부파일 추가", desc: `${order.상차지명 || "-"} → ${order.하차지명 || "-"} · ${delta}장` });
-          }, 1200);
+          }, 4000);
         }
         prevAttachRef.current[o.id] = cur;
       });
