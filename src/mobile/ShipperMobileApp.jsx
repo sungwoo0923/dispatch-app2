@@ -5,7 +5,7 @@ import { auth, db } from "../firebase";
 import {
   collection, query, where, onSnapshot,
   doc, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs,
-  orderBy, limit, arrayUnion,
+  orderBy, limit, arrayUnion, deleteField,
 } from "firebase/firestore";
 import InternalMessenger from "../InternalMessenger";
 import html2canvas from "html2canvas";
@@ -1019,6 +1019,8 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
           파렛트사요약,
           최종수정출처: "shipper",
           최종수정일시: serverTimestamp(),
+          // 새로 수정할 때마다 운송사의 이전 확인 여부를 초기화한다.
+          최종수정확인: deleteField(),
         };
         if (historyEntries.length > 0) updatePayload.history = arrayUnion(...historyEntries);
         await updateDoc(doc(db, "orders", editData.id), updatePayload);

@@ -12,6 +12,7 @@ import {
   where,
   limit,
   arrayUnion,
+  deleteField,
 } from "firebase/firestore";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -484,6 +485,9 @@ export default function ShipperOrder({ editData, onClose }) {
           updatedAt: serverTimestamp(),
           최종수정출처: "shipper",
           최종수정일시: serverTimestamp(),
+          // 새로 수정할 때마다 운송사의 이전 확인 여부를 초기화해, 운송사 화면의
+          // "수정" 배지가 이번 수정 건에 대해 다시 뜨도록 한다.
+          최종수정확인: deleteField(),
         });
       }
     } else {
