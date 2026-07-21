@@ -14,6 +14,8 @@ import {
   where,
   updateDoc,
   serverTimestamp,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 
 import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
@@ -60,6 +62,8 @@ const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
 
 export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false, dispatchData = [], places = [] }) {
   const [adminTab, setAdminTab] = useState("members");
+  const [sessionLogs, setSessionLogs] = useState([]);
+  const [sessionLogEventFilter, setSessionLogEventFilter] = useState("all");
   const [users, setUsers] = useState([]);
   const [allShipperApps, setAllShipperApps] = useState([]);
   const [search, setSearch] = useState("");
@@ -128,6 +132,16 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     });
     return () => unsub();
   }, []);
+
+  // 최고관리자 전용 접속이력(로그인/로그아웃) — 탭을 열었을 때만 구독한다.
+  useEffect(() => {
+    if (!isTotalMaster || adminTab !== "sessionLogs") return;
+    const q = query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(300));
+    const unsub = onSnapshot(q, (snap) => {
+      setSessionLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [isTotalMaster, adminTab]);
 
   // 화주 신청 구독 (연동운송사 탭용)
   useEffect(() => {
@@ -667,6 +681,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             </span>
           )}
         </button>
+        {isTotalMaster && (
+          <button
+            onClick={() => setAdminTab("sessionLogs")}
+            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "sessionLogs" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+          >
+            접속이력
+          </button>
+        )}
       </div>
 
       <div className="flex gap-6">
@@ -1104,6 +1126,58 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${q.status === "답변완료" ? "bg-emerald-100 text-emerald-700" : "bg-amber-50 text-amber-600"}`}>
                             {q.status || "접수중"}
                           </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}
+          {adminTab === "sessionLogs" && isTotalMaster && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+                <span className="text-[13px] font-semibold text-gray-600">최근 300건</span>
+                <select
+                  value={sessionLogEventFilter}
+                  onChange={e => setSessionLogEventFilter(e.target.value)}
+                  className="ml-auto h-[32px] px-2.5 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none"
+                >
+                  <option value="all">전체</option>
+                  <option value="login">로그인만</option>
+                  <option value="logout">로그아웃만</option>
+                </select>
+              </div>
+              {sessionLogs.filter(l => sessionLogEventFilter === "all" || l.event === sessionLogEventFilter).length === 0 ? (
+                <div className="text-[13px] text-gray-400 text-center py-16">접속 이력이 없습니다.</div>
+              ) : (
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#1B2B4B] text-white">
+                      <th className="px-4 py-2.5 text-left font-semibold">구분</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">회사명</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">이름</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">이메일</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">권한</th>
+                      <th className="px-4 py-2.5 text-center font-semibold">시각</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sessionLogs.filter(l => sessionLogEventFilter === "all" || l.event === sessionLogEventFilter).map(l => (
+                      <tr key={l.id} className="hover:bg-gray-50 transition">
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${l.event === "login" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"}`}>
+                            {l.event === "login" ? "로그인" : "로그아웃"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{l.companyName || "-"}</td>
+                        <td className="px-4 py-3 text-gray-700">{l.name || "-"}</td>
+                        <td className="px-4 py-3 text-gray-500">{l.email || "-"}</td>
+                        <td className="px-4 py-3 text-gray-500">{ROLE_LABELS[l.role] || l.role || "-"}</td>
+                        <td className="px-4 py-3 text-center text-gray-400 whitespace-nowrap">
+                          {l.at?.seconds ? new Date(l.at.seconds * 1000).toLocaleString("ko-KR") : "-"}
                         </td>
                       </tr>
                     ))}

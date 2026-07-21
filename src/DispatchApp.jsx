@@ -597,6 +597,8 @@ const sixMonthsAgo = getSixMonthsAgo();
             car: (r.차량번호 || "").trim(),
             status: (r.배차상태 || "").trim(),
             editStamp: r.최종수정일시?.seconds || 0,
+            editReq: r.수정요청 === true,
+            cancelReq: r.취소요청 === true,
           });
         });
         return;
@@ -651,6 +653,23 @@ const sixMonthsAgo = getSixMonthsAgo();
               { orderId: id, source: d.source }
             );
           }
+
+          // 배차완료 오더에 대한 화주사의 정식 "수정요청"/"기사취소요청" -> 우하단 배너 알림
+          // (badge는 이미 떠 있지만, 별도 알림이 없어 놓치기 쉬웠다)
+          if (prev && !prev.editReq && d.수정요청 === true) {
+            sflowToast(
+              `[화주사 수정요청] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "editRequest",
+              { orderId: id }
+            );
+          }
+          if (prev && !prev.cancelReq && d.취소요청 === true) {
+            sflowToast(
+              `[화주사 취소요청] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "cancelRequest",
+              { orderId: id }
+            );
+          }
         }
 
         if (ch.type === "removed") {
@@ -667,6 +686,8 @@ const sixMonthsAgo = getSixMonthsAgo();
             car: (d.차량번호 || "").trim(),
             status: (d.배차상태 || "").trim(),
             editStamp: d.최종수정일시?.seconds || 0,
+            editReq: d.수정요청 === true,
+            cancelReq: d.취소요청 === true,
           });
         }
       });
@@ -1737,10 +1758,11 @@ function ToastProvider({ children }) {
     const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, message, type, meta, createdAt: Date.now() }]);
 
-    // 3초 후 자동 제거
+    // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
+    const duration = (type === "editRequest" || type === "cancelRequest") ? 8000 : 3000;
     setTimeout(() => {
       setToasts((prev) => prev.filter(t => t.id !== id));
-    }, 3000);
+    }, duration);
   };
 
   const removeToast = (id) => {
@@ -1816,7 +1838,7 @@ function ToastProvider({ children }) {
 
       {/* 상단 중앙 알림 배너 */}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] space-y-2 pointer-events-none" style={{ width: "420px", maxWidth: "90vw" }}>
-        {toasts.map(t => (
+        {toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest").map(t => (
           <div
             key={t.id}
             className="toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
@@ -1868,6 +1890,43 @@ function ToastProvider({ children }) {
                   e.stopPropagation();
                   removeToast(t.id);
                 }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 우하단 알림 배너 — 화주사 수정요청/기사취소요청 전용 (상단 알림과 별도로 항상 눈에 띄게) */}
+      <div className="fixed bottom-5 right-5 z-[99999] space-y-2 pointer-events-none" style={{ width: "360px", maxWidth: "90vw" }}>
+        {toasts.filter(t => t.type === "editRequest" || t.type === "cancelRequest").map(t => (
+          <div
+            key={t.id}
+            className="toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
+            style={{
+              background: t.type === "editRequest"
+                ? "linear-gradient(135deg,#3b5998,#0f2151)"
+                : "linear-gradient(135deg,#f87171,#b91c1c)",
+            }}
+            onClick={() => handleToastClick(t)}
+          >
+            <div className="flex items-start gap-3 px-4 py-3">
+              <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[16px]">{t.type === "editRequest" ? "✏️" : "🚫"}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-[13px] font-bold leading-snug">
+                  {t.type === "editRequest" ? "화주사 수정요청" : "화주사 기사취소요청"}
+                </div>
+                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed truncate">
+                  {t.message}
+                </div>
+                <div className="text-white/50 text-[10px] mt-1">클릭하면 해당 오더로 이동합니다</div>
+              </div>
+              <button
+                className="text-white/40 hover:text-white text-[18px] leading-none shrink-0 mt-0.5 px-1"
+                onClick={(e) => { e.stopPropagation(); removeToast(t.id); }}
               >
                 ✕
               </button>
@@ -3023,6 +3082,20 @@ React.useEffect(() => {
       })[0]
     : null;
 
+  // ---------------- 화주사 수정요청/기사취소요청 중앙 팝업 (재촉 알림과 동일 패턴) ----------------
+  // "확인" 버튼은 승인/거절이 아니라 알림 자체만 닫는다 — 실제 승인/거절은 기존 뱃지 클릭 팝업에서 처리한다.
+  const pendingReqAlerts = (dispatchData || []).filter(
+    r => (r.수정요청 === true && !r.수정요청알림확인) || (r.취소요청 === true && r.배차상태 !== "배차취소" && !r.취소요청알림확인)
+  );
+  const activeReqAlert = pendingReqAlerts.length > 0
+    ? [...pendingReqAlerts].sort((a, b) => {
+        const ma = typeof a.수정요청일시?.seconds === "number" ? a.수정요청일시.seconds * 1000 : (typeof a.취소요청일시?.seconds === "number" ? a.취소요청일시.seconds * 1000 : 0);
+        const mb = typeof b.수정요청일시?.seconds === "number" ? b.수정요청일시.seconds * 1000 : (typeof b.취소요청일시?.seconds === "number" ? b.취소요청일시.seconds * 1000 : 0);
+        return ma - mb;
+      })[0]
+    : null;
+  const activeReqAlertIsEdit = !!activeReqAlert?.수정요청;
+
   // ---------------- 메뉴 UI ----------------
 return (
     <ToastProvider>
@@ -3258,6 +3331,53 @@ return (
                 onClick={() => {
                   patchDispatch(activeNudge._id, { 재촉대기: false, 재촉확인일시: Date.now(), __col: activeNudge.__col });
                   const el = document.getElementById(`row-${activeNudge._id}`);
+                  if (el) setTimeout(() => { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("toast-flash-border"); setTimeout(() => el.classList.remove("toast-flash-border"), 2000); }, 300);
+                }}
+                className="w-full py-3 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-xl font-bold text-[14px] transition"
+              >
+                확인했습니다
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 화주사 수정요청/기사취소요청 중앙 팝업 — 확인은 알림만 닫고, 실제 승인/거절은 목록의 뱃지 클릭으로 처리 */}
+      {activeReqAlert && (
+        <div className="fixed inset-0 z-[9999999] bg-black/55 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[440px] overflow-hidden" style={{ animation: "nudgePopIn 0.25s ease-out" }}>
+            <div
+              className="px-6 py-4 flex items-center gap-2"
+              style={{
+                background: activeReqAlertIsEdit ? "linear-gradient(135deg,#3b5998,#0f2151)" : "linear-gradient(135deg,#f87171,#b91c1c)",
+                animation: "nudgeHeaderBlink 1.2s ease-in-out infinite",
+              }}
+            >
+              <h3 className="text-white font-black text-[17px]">{activeReqAlertIsEdit ? "화주사 수정요청" : "화주사 기사취소요청"}</h3>
+              {pendingReqAlerts.length > 1 && (
+                <span className="ml-auto bg-white/20 text-white text-[12px] font-bold px-2 py-0.5 rounded-full">
+                  외 {pendingReqAlerts.length - 1}건 대기
+                </span>
+              )}
+            </div>
+            <div className="px-6 py-5 space-y-2 text-[14px]">
+              <div className="font-black text-[17px] text-[#1B2B4B]">{activeReqAlert.거래처명 || "-"}</div>
+              <div className="text-gray-700 font-semibold">{activeReqAlert.상차지명 || "-"} → {activeReqAlert.하차지명 || "-"}</div>
+              <div className="text-gray-500 text-[13px]">
+                {_fmtKst(activeReqAlertIsEdit ? activeReqAlert.수정요청일시 : activeReqAlert.취소요청일시)} 요청
+              </div>
+              <div className={`rounded-lg px-3 py-2.5 text-[13px] font-semibold mt-1 ${activeReqAlertIsEdit ? "bg-sky-50 text-sky-700" : "bg-red-50 text-red-700"}`}>
+                {activeReqAlertIsEdit
+                  ? "화주사가 오더 수정을 요청했습니다. 목록에서 확인 후 승인/거절해주세요."
+                  : (activeReqAlert.취소요청사유 || "화주사가 기사취소(배차취소)를 요청했습니다. 목록에서 확인 후 승인/거절해주세요.")}
+              </div>
+            </div>
+            <div className="px-6 pb-6">
+              <button
+                onClick={() => {
+                  const field = activeReqAlertIsEdit ? "수정요청알림확인" : "취소요청알림확인";
+                  patchDispatch(activeReqAlert._id, { [field]: true, __col: activeReqAlert.__col, __system: true });
+                  const el = document.getElementById(`row-${activeReqAlert._id}`);
                   if (el) setTimeout(() => { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("toast-flash-border"); setTimeout(() => el.classList.remove("toast-flash-border"), 2000); }, 300);
                 }}
                 className="w-full py-3 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-xl font-bold text-[14px] transition"
@@ -18826,7 +18946,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                           patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
                         }}
                       >
-                        배차요청
+                        {isRecentShipperEdit(r) ? "수정" : "배차요청"}
                       </button>
                     ) : r.취소요청 && r.배차상태 !== "배차취소" ? (
                       <button
@@ -22952,6 +23072,9 @@ setConfirmChange(null);
               {editReqPopup.수정요청 && editReqPopup.수정요청일시 && (
                 <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
               )}
+              {!editReqPopup.수정요청 && editReqPopup.최종수정일시 && (
+                <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.최종수정일시)} 수정</p>
+              )}
             </div>
             <div className="px-6 py-5 overflow-y-auto flex-1">
               {(() => {
@@ -23550,7 +23673,7 @@ setConfirmChange(null);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </select>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -27377,7 +27500,7 @@ return (
                         className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
                         style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
                       >
-                        배차요청
+                        {isRecentShipperEdit(row) ? "수정" : "배차요청"}
                       </button>
                     ) : (
                       <RichStatusBadge
@@ -30563,6 +30686,9 @@ setCopyPlaceOptions(list);
               {editReqPopup.수정요청 && editReqPopup.수정요청일시 && (
                 <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
               )}
+              {!editReqPopup.수정요청 && editReqPopup.최종수정일시 && (
+                <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.최종수정일시)} 수정</p>
+              )}
             </div>
             <div className="px-6 py-5 overflow-y-auto flex-1">
               {(() => {
@@ -30748,7 +30874,7 @@ setCopyPlaceOptions(list);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </select>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -35958,7 +36084,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                               patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
                             }}
                           >
-                            배차요청
+                            {isRecentShipperEdit(r) ? "수정" : "배차요청"}
                           </button>
                         ) : (
                           <StatusBadge s={r.배차상태} pending={r.수정요청 || r.취소요청} />
