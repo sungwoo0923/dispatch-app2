@@ -138,7 +138,8 @@ export default function ShipperStatus() {
   const attachPendingRef = useRef({}); // { [orderId]: { delta, order, timer } } — 여러 장을 연속 업로드해도 알림 1개로 묶기 위한 디바운스 누적
   const [attachNotif, setAttachNotif] = useState(null);
   const [attachViewer, setAttachViewer] = useState(null);
-  const prevVehicleRef = useRef({});
+  const prevVehicleRef = useRef({}); // 차량번호 "문자열" 값 저장 (배차완료/재배차완료 구분용)
+  const prevWatchedFieldsRef = useRef({}); // 차량배정과 무관한 "진짜 수정" 필드 값 저장
   const [dispatchNotif, setDispatchNotif] = useState(null);
   const prevEditStampRef = useRef({});
   const editStampFirstLoadRef = useRef(true);
@@ -302,20 +303,48 @@ export default function ShipperStatus() {
         prevAttachRef.current[o.id] = cur;
       });
 
-      // 배차완료 전환 감지 -> 알림
+      // 배차완료/재배차완료 전환 감지 -> 알림
+      // (차량번호 값 자체를 저장해 최초 배정(빈값→배정)과 재배차(다른 차량으로 교체)를 구분한다.
+      //  이 패스에서 감지된 오더 id는 vehicleChangedThisPass에 모아, 차량배정 자체가 유일한
+      //  변경사항일 때는 아래 "운송사가 수정" 알림과 중복으로 뜨지 않도록 한다.)
+      const vehicleChangedThisPass = new Set();
       docs.forEach((o) => {
-        const curHasVehicle = !!(o.차량번호 && o.차량번호.trim());
-        const prev = prevVehicleRef.current[o.id];
-        if (prev === false && curHasVehicle) {
-          setDispatchNotif({
-            id: o.id,
-            text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호} · ${o.이름 || ""})`,
-            order: o,
-          });
-          setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
-          pushToast({ type: "dispatch", order: o, title: "배차완료", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+        const curPlate = String(o.차량번호 || "").trim();
+        const prevPlate = prevVehicleRef.current[o.id];
+        if (prevPlate !== undefined) {
+          if (!prevPlate && curPlate) {
+            vehicleChangedThisPass.add(o.id);
+            setDispatchNotif({
+              id: o.id,
+              text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호} · ${o.이름 || ""})`,
+              order: o,
+            });
+            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+            pushToast({ type: "dispatch", order: o, title: "배차완료", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+          } else if (prevPlate && curPlate && prevPlate !== curPlate) {
+            vehicleChangedThisPass.add(o.id);
+            setDispatchNotif({
+              id: o.id,
+              text: `${o.거래처명 || o.상차지명 || "오더"} 재배차완료 되었습니다. (${o.차량번호} · ${o.이름 || ""})`,
+              order: o,
+            });
+            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
+            pushToast({ type: "dispatch", order: o, title: "재배차완료", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+          }
         }
-        prevVehicleRef.current[o.id] = curHasVehicle;
+        prevVehicleRef.current[o.id] = curPlate;
+      });
+
+      // 차량배정과 무관한 실제 내용(운임/지급방식/화물/일정/상하차지 등) 변경 여부 감지 —
+      // 차량배정과 동시에 이런 필드도 같이 바뀌었다면 "수정" 알림도 함께 떠야 한다.
+      const WATCHED_EDIT_FIELDS = ["청구운임", "지급방식", "화물내용", "차량종류", "차량톤수", "상차일", "상차시간", "하차일", "하차시간", "상차방법", "하차방법", "상차지명", "상차지주소", "하차지명", "하차지주소"];
+      const otherFieldChangedThisPass = new Set();
+      docs.forEach((o) => {
+        const prevFields = prevWatchedFieldsRef.current[o.id];
+        if (prevFields && WATCHED_EDIT_FIELDS.some((f) => String(prevFields[f] ?? "") !== String(o[f] ?? ""))) {
+          otherFieldChangedThisPass.add(o.id);
+        }
+        prevWatchedFieldsRef.current[o.id] = Object.fromEntries(WATCHED_EDIT_FIELDS.map((f) => [f, o[f]]));
       });
 
       // 배차요청 승인 감지 (화주사확인대기 true -> false, 거절 아님) -> 알림
@@ -352,7 +381,8 @@ export default function ShipperStatus() {
         docs.forEach((o) => {
           const cur = o.최종수정일시?.seconds || 0;
           const prev = prevEditStampRef.current[o.id];
-          if (!approvedThisPass.has(o.id) && o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
+          const vehicleOnlyChange = vehicleChangedThisPass.has(o.id) && !otherFieldChangedThisPass.has(o.id);
+          if (!approvedThisPass.has(o.id) && !vehicleOnlyChange && o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
             setDispatchNotif({
               id: o.id,
               text: `${o.거래처명 || o.상차지명 || "오더"} 배차정보를 운송사가 수정했습니다.`,
@@ -1235,7 +1265,10 @@ export default function ShipperStatus() {
         <div className="fixed top-0 right-0 h-full w-[720px] bg-white shadow-2xl z-50 overflow-y-auto">
           <div className="flex items-center justify-between px-5 py-4 border-b">
             <div className={`text-[18px] font-bold ${selectedOrder?.상태 === "취소" ? "text-rose-700" : "text-[#1B2B4B]"}`}>
-              {selectedOrder?.상태 === "취소" ? "배차취소 되었습니다." : selectedOrder?.차량번호 ? "배차완료 되었습니다." : "배차 요청중입니다."}
+              {selectedOrder?.상태 === "취소" ? "배차취소 되었습니다."
+                : selectedOrder?.차량번호 ? "배차완료 되었습니다."
+                : selectedOrder?.화주사확인대기 ? "배차 요청중입니다."
+                : "배차중입니다."}
             </div>
             <div className="flex items-center gap-3 ml-auto">
               <div className="flex gap-2">
