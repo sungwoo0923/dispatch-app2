@@ -430,7 +430,12 @@ export default function ShipperMobileApp() {
     if (!user || !userData) return;
     const q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName));
     const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // 지급방식이 "손실"인 오더는 운송사가 화주사에게 청구하지 않고 자진 부담하는
+      // 건이라 화주사 화면에는 아예 없었던 것처럼 제외한다 (운송사 화면엔 그대로 유지).
+      const docs = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((o) => o.지급방식 !== "손실");
+      setOrders(docs);
       setOrdersLoaded(true);
     });
     return () => unsub();

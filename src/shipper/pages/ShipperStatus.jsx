@@ -262,7 +262,12 @@ export default function ShipperStatus() {
     }
 
     const unsub = onSnapshot(q, (snap) => {
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // 지급방식이 "손실"인 오더는 운송사가 화주사에게 청구하지 않고 자진 부담하기로
+      // 한 건이라, 화주사 화면에는 처음부터 존재하지 않았던 것처럼 전부 제외한다
+      // (운송사 자신의 화면에는 그대로 남아있어야 하므로 여기 화주사 쪽에서만 필터링).
+      const docs = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((o) => o.지급방식 !== "손실");
 
       // 첨부 증가 감지 -> 알림
       // 기사가 여러 장을 연속으로 올리면 장수만큼 onSnapshot이 여러 번 발화해 알림도 그만큼
