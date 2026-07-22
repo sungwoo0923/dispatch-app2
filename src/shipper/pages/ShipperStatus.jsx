@@ -2070,52 +2070,90 @@ function Timeline({ order }) {
   if (isCanceled) currentIndex = 1;
 
   return (
-    <div className="relative pl-16">
-      {/* 연결선: 지난 구간은 네이비, 남은 구간은 회색 */}
-      {steps.slice(0, -1).map((_, i) => {
-        const segDone = i < currentIndex && !isCanceled;
-        return (
-          <div key={`seg-${i}`}
-            className="absolute w-[3px]"
-            style={{
-              left: 20, top: `${i * 108 + 20}px`, height: "88px",
-              background: segDone ? "#1B2B4B" : "#e5e7eb",
-              transition: "background 0.3s",
-            }}
-          />
-        );
-      })}
+    <div className="relative">
       {steps.map((step, i) => {
-        const isPrev = i < currentIndex;
+        const isPrev = i < currentIndex && !isCanceled;
         const isCurrent = i === currentIndex;
         const isCancelPoint = isCanceled && i === currentIndex;
+        const isLast = i === steps.length - 1;
+        const accent = isCancelPoint ? "#e11d48" : "#1B2B4B";
+
         return (
-          <div key={i} className="relative mb-12">
-            {(isCurrent || isCancelPoint) && (
-              <div className={`absolute left-[20px] top-[6px] -translate-x-1/2 w-7 h-7 rounded-full border-[4px] bg-white z-10 animate-pulseSlow`}
-                style={{ borderColor: isCancelPoint ? "#e11d48" : "#1B2B4B" }} />
-            )}
-            <div className="absolute left-[20px] top-[14px] -translate-x-1/2 w-3 h-3 rounded-full z-10"
-              style={{ background: isCancelPoint ? "#e11d48" : isCurrent ? "#1B2B4B" : isPrev ? "#1B2B4B" : "#d1d5db" }} />
-            <div className="ml-14">
-              <div className="text-[20px] font-bold"
-                style={{ color: isCancelPoint ? "#e11d48" : isCurrent ? "#1B2B4B" : isPrev ? "#374151" : "#9ca3af" }}>
-                {isCancelPoint ? "취소 [오더취소] 배차중" : step.title}
+          <div key={i} className="relative flex">
+            {/* 아이콘 + 연결선 (flex라 항상 정확히 중앙정렬된다) */}
+            <div className="relative flex flex-col items-center shrink-0" style={{ width: 36 }}>
+              <div
+                className="relative z-10 flex items-center justify-center rounded-full shrink-0 transition-all duration-300"
+                style={{
+                  width: 30, height: 30,
+                  background: isPrev ? accent : "#fff",
+                  border: isCurrent ? `2.5px solid ${accent}` : isPrev ? "none" : "2px solid #e1e6ef",
+                  boxShadow: isPrev
+                    ? "0 2px 5px rgba(27,43,75,0.25)"
+                    : isCurrent
+                    ? `0 0 0 5px ${isCancelPoint ? "rgba(225,29,72,0.12)" : "rgba(27,43,75,0.1)"}`
+                    : "none",
+                }}
+              >
+                {isPrev && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+                {isCurrent && (
+                  <span className="rounded-full shrink-0 animate-timelinePulse" style={{ width: 10, height: 10, background: accent }} />
+                )}
               </div>
-              {step.company && <div className="text-[16px] text-gray-700 mt-1">{step.company}</div>}
-              {step.location && <div className="text-[14px] text-gray-500">{step.location}</div>}
-              {step.ts && <div className="text-[14px] text-gray-400 mt-1">{step.title} 시각: {fmtDateTime(step.ts)}</div>}
+              {!isLast && (
+                <div
+                  className="w-[2px] flex-1"
+                  style={{ minHeight: 44, background: isPrev ? accent : "#e5e9f2", transition: "background 0.3s" }}
+                />
+              )}
+            </div>
+
+            {/* 내용 카드 — 진행중 단계만 살짝 강조해 어디까지 왔는지 한눈에 보이게 */}
+            <div className={`flex-1 min-w-0 ${isLast ? "pb-1" : "pb-7"} pl-4`}>
+              <div
+                className="rounded-xl px-4 py-2.5 transition-all duration-300"
+                style={{
+                  background: isCurrent ? (isCancelPoint ? "#fef2f2" : "#f4f6fb") : "transparent",
+                  border: `1px solid ${isCurrent ? (isCancelPoint ? "#fecdd3" : "#dfe4f0") : "transparent"}`,
+                  marginTop: -2,
+                }}
+              >
+                <div
+                  className="font-bold text-[15px] tracking-tight"
+                  style={{ color: isCancelPoint ? "#e11d48" : isCurrent ? "#1B2B4B" : isPrev ? "#334155" : "#a3adc2" }}
+                >
+                  {isCancelPoint ? "취소 [오더취소] 배차중" : step.title}
+                </div>
+                {step.company && (
+                  <div className="text-[13px] mt-0.5" style={{ color: isPrev || isCurrent ? "#64748b" : "#c1c8d6" }}>
+                    {step.company}
+                  </div>
+                )}
+                {step.location && (
+                  <div className="text-[12.5px]" style={{ color: isPrev || isCurrent ? "#94a3b8" : "#c1c8d6" }}>
+                    {step.location}
+                  </div>
+                )}
+                {step.ts && (
+                  <div className="text-[11.5px] text-gray-400 mt-1">
+                    {step.title} 시각 · {fmtDateTime(step.ts)}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
       })}
       <style>{`
-        .animate-pulseSlow { animation: pulseSlow 2s infinite; }
-        @keyframes pulseSlow {
-          0% { transform: translateX(-50%) scale(1); opacity: 1; }
-          50% { transform: translateX(-50%) scale(1.2); opacity: 0.6; }
-          100% { transform: translateX(-50%) scale(1); opacity: 1; }
+        @keyframes timelinePulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.4); opacity: 0.5; }
         }
+        .animate-timelinePulse { animation: timelinePulse 1.6s ease-in-out infinite; }
       `}</style>
     </div>
   );
