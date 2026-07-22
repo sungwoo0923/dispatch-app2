@@ -157,11 +157,11 @@ setRejectedList(rejectedList);
 
       {/* ================= 테이블 ================= */}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full text-[16px]">
+        <table className="w-full text-sm">
 
           {/* 헤더 */}
-          <thead className="bg-gray-100">
-            <tr className="text-center text-gray-700 text-[16px] font-semibold">
+          <thead className="bg-[#1B2B4B]">
+            <tr className="text-center text-white text-xs font-bold">
               <th className="py-3">이름</th>
               <th>부서/직책</th>
               <th>연락처</th>
@@ -192,28 +192,28 @@ setRejectedList(rejectedList);
 
     {/* 마스터 */}
 {u.permissions?.master && (
-  <span className="px-3 py-[4px] text-[13px] rounded bg-purple-100 text-purple-700">
+  <span className="px-2.5 py-[4px] text-[12px] font-bold rounded bg-[#1B2B4B] text-white">
     마스터
   </span>
 )}
 
 {/* 부마스터 */}
 {u.permissions?.subMaster && (
-  <span className="px-3 py-[4px] text-[13px] rounded bg-indigo-100 text-indigo-700">
+  <span className="px-2.5 py-[4px] text-[12px] font-bold rounded bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20">
     부마스터
   </span>
 )}
 
 {/* 정산 */}
 {u.permissions?.settlement && (
-  <span className="px-3 py-[4px] text-[13px] rounded bg-green-100 text-green-700">
+  <span className="px-2.5 py-[4px] text-[12px] font-bold rounded bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20">
     정산
   </span>
 )}
 
 {/* 운송 */}
 {u.permissions?.transport && (
-  <span className="px-3 py-[4px] text-[13px] rounded bg-blue-100 text-blue-700">
+  <span className="px-2.5 py-[4px] text-[12px] font-bold rounded bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20">
     운송
   </span>
 )}
@@ -223,7 +223,7 @@ setRejectedList(rejectedList);
  !u.permissions?.subMaster &&
  !u.permissions?.settlement &&
  !u.permissions?.transport && (
-  <span className="px-3 py-[4px] text-[13px] rounded bg-gray-100 text-gray-500">
+  <span className="px-2.5 py-[4px] text-[12px] font-bold rounded bg-gray-100 text-gray-500">
     없음
   </span>
 )}
@@ -246,7 +246,7 @@ setRejectedList(rejectedList);
         setMode("approve");
         setOpen(true);
       }}
-      className="px-3 py-1 text-xs border rounded bg-blue-50"
+      className="px-3 py-1 text-xs font-semibold rounded-md border border-[#1B2B4B]/25 bg-[#1B2B4B]/8 text-[#1B2B4B] hover:bg-[#1B2B4B]/15 transition"
     >
       가입여부
     </button>
@@ -256,7 +256,7 @@ setRejectedList(rejectedList);
   <>
     {u.permissions?.master && !me?.permissions?.master ? (
       // ❌ 부마스터는 마스터 수정 못함
-      <span className="text-gray-400 text-sm">수정불가</span>
+      <span className="text-gray-400 text-xs">수정불가</span>
     ) : (
       <button
         onClick={() => {
@@ -264,6 +264,7 @@ setRejectedList(rejectedList);
           setMode("edit");
           setOpen(true);
         }}
+        className="px-3 py-1 text-xs font-semibold rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition"
       >
         수정
       </button>
@@ -279,7 +280,7 @@ setRejectedList(rejectedList);
     setMode("reApprove");
     setOpen(true);
   }}
-  className="px-3 py-1 text-xs border rounded bg-green-50"
+  className="px-3 py-1 text-xs font-semibold rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
 >
   재승인
 </button>

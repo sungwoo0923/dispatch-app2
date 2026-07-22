@@ -3243,8 +3243,8 @@ return (
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
-                        ? "bg-white/15 text-white font-semibold"
-                        : "text-white/60 hover:text-white hover:bg-white/10"
+                        ? "bg-[#28406b] text-white font-semibold ring-1 ring-emerald-400/30"
+                        : "text-white/60 hover:text-white hover:bg-[#28406b] hover:ring-1 hover:ring-emerald-400/30"
                     }`}
                 >
                   {m}

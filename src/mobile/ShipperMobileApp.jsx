@@ -24,6 +24,12 @@ const getDate = (offset = 0) => {
   return d.toISOString().slice(0, 10);
 };
 
+const get6MonthsAgo = () => {
+  const d = new Date(Date.now() + 9 * 3600000);
+  d.setMonth(d.getMonth() - 6);
+  return d.toISOString().slice(0, 10);
+};
+
 const getMonthStart = (offset = 0) => {
   const d = new Date(Date.now() + 9 * 3600000);
   d.setMonth(d.getMonth() + offset, 1);
@@ -441,6 +447,24 @@ export default function ShipperMobileApp() {
     return () => unsub();
   }, []);
 
+  // 운송목록 조회기간 제한(기본 6개월) — PC와 동일하게 companyApplications 문서의
+  // viewLimitUnlockedUntil로 운송사 관리자/최고관리자가 임시 해제할 수 있다.
+  const [viewLimitUntil, setViewLimitUntil] = useState(undefined);
+  useEffect(() => {
+    if (!userData?.companyName) return;
+    getDocs(query(
+      collection(db, "companyApplications"),
+      where("companyName", "==", userData.companyName),
+      where("status", "==", "approved"),
+    )).then(snap => {
+      if (snap.empty) { setViewLimitUntil(null); return; }
+      setViewLimitUntil(snap.docs[0].data()?.viewLimitUnlockedUntil ?? null);
+    }).catch(() => setViewLimitUntil(null));
+  }, [userData?.companyName]);
+  const todayStr2 = todayStr();
+  const viewLimitActive = viewLimitUntil !== null && !(viewLimitUntil && viewLimitUntil >= todayStr2);
+  const minAllowedDate = viewLimitActive ? get6MonthsAgo() : undefined;
+
   useEffect(() => {
     if (!user || !userData) return;
     const q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName));
@@ -718,7 +742,7 @@ export default function ShipperMobileApp() {
             onSelect={(o) => { setSelectedOrder(o); setPage("detail"); }}
             onBack={() => setPage("home")}
             onEdit={(o) => { setEditOrderData(withPendingEdit(o)); setPage("order"); }}
-            user={user} />
+            user={user} minAllowedDate={minAllowedDate} />
         )}
         {page === "detail" && selectedOrder && (
           <ShipperDetailM order={selectedOrder} onBack={() => setPage("history")}
@@ -1421,7 +1445,7 @@ function OdometerNumber({ value, suffix = "" }) {
 // ======================================================================
 // 운송내역
 // ======================================================================
-function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
+function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user, minAllowedDate }) {
   const nowY = new Date(Date.now() + 9 * 3600000).getFullYear();
   const parseMD = (dateStr) => {
     const [, m, d] = (dateStr || "").split("-");
@@ -1442,7 +1466,12 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
 
   const applyDateQuery = () => {
     const pad = (n) => String(n).padStart(2, "0");
-    setStartDate(`${nowY}-${pad(draftStart.month)}-${pad(draftStart.day)}`);
+    let newStart = `${nowY}-${pad(draftStart.month)}-${pad(draftStart.day)}`;
+    if (minAllowedDate && newStart < minAllowedDate) {
+      newStart = minAllowedDate;
+      alert(`조회 가능 기간은 최근 6개월까지입니다. (${minAllowedDate} 이후)\n더 이전 데이터가 필요하면 운송사 관리자에게 요청해 주세요.`);
+    }
+    setStartDate(newStart);
     setEndDate(`${nowY}-${pad(draftEnd.month)}-${pad(draftEnd.day)}`);
   };
 
@@ -1512,6 +1541,9 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user }) {
             조회
           </button>
         </div>
+        {minAllowedDate && (
+          <div className="text-[11px] text-gray-400">※ 최근 6개월까지 조회 가능</div>
+        )}
         <div className="flex gap-2">
           <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-24 shrink-0"
             value={searchType} onChange={(e) => setSearchType(e.target.value)}>

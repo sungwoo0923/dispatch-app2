@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { db, auth } from "../../firebase";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -55,7 +55,7 @@ const getMonthEnd = (offset = 0) => {
   return kst.toISOString().slice(0, 10);
 };
 
-const GROUP_LABEL = { month: "월별", client: "거래처별", transport: "운송사별" };
+const GROUP_LABEL = { month: "월별", transport: "운송사별" };
 
 export default function ShipperSettlement() {
   const user = auth.currentUser;
@@ -70,6 +70,12 @@ export default function ShipperSettlement() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceTransport, setInvoiceTransport] = useState("");
   const [invoiceSaving, setInvoiceSaving] = useState(false);
+  const [transportEmail, setTransportEmail] = useState("");
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -77,6 +83,19 @@ export default function ShipperSettlement() {
       if (snap.exists()) setUserData(snap.data());
     });
   }, [user]);
+
+  // 정산내역서 이메일 받는이 기본값 — 항상 연동된 운송사의 이메일(운송사관리 등록 이메일)로 설정
+  useEffect(() => {
+    const linked = userData?.linkedTransportCompany;
+    if (!linked?.companyName) return;
+    getDocs(query(
+      collection(db, "transportApplications"),
+      where("companyName", "==", linked.companyName),
+      where("status", "==", "approved"),
+    )).then(snap => {
+      if (!snap.empty) setTransportEmail(snap.docs[0].data()?.email || "");
+    }).catch(() => {});
+  }, [userData]);
 
   useEffect(() => {
     if (!user || !userData) return;
@@ -115,8 +134,7 @@ export default function ShipperSettlement() {
   // 그룹 분석 (월별 / 거래처별 / 운송사별 공용)
   const groupKeyOf = (o) => {
     if (groupBy === "month") return toYMD(o.상차일).slice(0, 7);
-    if (groupBy === "transport") return o.운송사명 || "(미지정)";
-    return o.거래처명 || "(미지정)";
+    return o.운송사명 || "(미지정)";
   };
   const groupLabelOf = (key) => {
     if (groupBy === "month") return key ? `${key.slice(0, 4)}년 ${key.slice(5)}월` : "-";
@@ -274,14 +292,14 @@ export default function ShipperSettlement() {
     else { setSortKey(key); setSortDir(key === "청구운임" ? "desc" : "desc"); }
   };
 
-  const SortTh = ({ label, sortField, align = "left" }) => (
+  const SortTh = ({ label, sortField }) => (
     <th
-      className={`px-3 py-2.5 text-${align} cursor-pointer select-none hover:text-[#1B2B4B] transition whitespace-nowrap`}
+      className="px-2 py-2.5 text-center cursor-pointer select-none hover:text-emerald-300 transition whitespace-nowrap text-white"
       onClick={() => toggleSort(sortField)}
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        <span className={`text-[10px] ${sortKey === sortField ? "text-[#1B2B4B]" : "text-gray-300"}`}>
+        <span className={`text-[10px] ${sortKey === sortField ? "text-emerald-300" : "text-white/40"}`}>
           {sortKey === sortField ? (sortDir === "asc" ? "▲" : "▼") : "▲▼"}
         </span>
       </span>
@@ -299,12 +317,16 @@ export default function ShipperSettlement() {
         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
 
         <div className="flex gap-2">
-          {[0, -1, -2].map(offset => {
-            const ym = getMonthStart(offset).slice(0, 7);
+          {[
+            { label: "당월", start: getMonthStart(0), end: getMonthEnd(0) },
+            { label: "전월", start: getMonthStart(-1), end: getMonthEnd(-1) },
+            { label: "최근 3개월", start: getMonthStart(-2), end: getMonthEnd(0) },
+          ].map(preset => {
+            const isActive = startDate === preset.start && endDate === preset.end;
             return (
-              <button key={offset} onClick={() => { setStartDate(getMonthStart(offset)); setEndDate(getMonthEnd(offset)); }}
-                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]">
-                {ym.slice(0, 4) + "년 " + ym.slice(5) + "월"}
+              <button key={preset.label} onClick={() => { setStartDate(preset.start); setEndDate(preset.end); }}
+                className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${isActive ? "bg-[#1B2B4B] text-white" : "bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2]"}`}>
+                {preset.label}
               </button>
             );
           })}
@@ -332,7 +354,7 @@ export default function ShipperSettlement() {
           <div className="px-5 py-4 border-b flex items-center justify-between">
             <div className="font-bold text-gray-800">분석</div>
             <div className="flex gap-1">
-              {["month", "client", "transport"].map(g => (
+              {["month", "transport"].map(g => (
                 <button key={g} onClick={() => { setGroupBy(g); setSelectedGroup(null); }}
                   className={`px-2.5 py-1 rounded text-[12px] font-semibold ${groupBy === g ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
                   {GROUP_LABEL[g]}
@@ -372,17 +394,41 @@ export default function ShipperSettlement() {
             {payBreakdown.length === 0 ? (
               <div className="text-center text-gray-400 text-xs py-4">데이터 없음</div>
             ) : (
-              <div className="space-y-2">
-                {payBreakdown.map(p => (
-                  <div key={p.key} className="flex items-center justify-between text-[13px]">
-                    <span className="text-gray-600 font-medium">{p.key}</span>
-                    <span className="text-gray-800">
-                      <span className="font-bold">{p.건수}건</span>
-                      <span className="text-gray-400 mx-1">·</span>
-                      <span className="font-semibold text-[#1B2B4B]">{p.총청구.toLocaleString()}원</span>
-                    </span>
-                  </div>
-                ))}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-[#1B2B4B] text-white">
+                      <th className="px-3 py-2 text-left font-semibold">지급방식</th>
+                      <th className="px-3 py-2 text-right font-semibold">건수</th>
+                      <th className="px-3 py-2 text-right font-semibold">청구금액</th>
+                      <th className="px-3 py-2 text-right font-semibold">비중</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payBreakdown.map((p, i) => (
+                      <tr key={p.key} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-3 py-2 border-t border-gray-100 font-semibold text-gray-700 whitespace-nowrap">{p.key}</td>
+                        <td className="px-3 py-2 border-t border-gray-100 text-right text-gray-600 whitespace-nowrap">{p.건수}건</td>
+                        <td className="px-3 py-2 border-t border-gray-100 text-right font-bold text-[#1B2B4B] whitespace-nowrap">{p.총청구.toLocaleString()}원</td>
+                        <td className="px-3 py-2 border-t border-gray-100 text-right text-gray-500 whitespace-nowrap">
+                          {totalBilling > 0 ? Math.round((p.총청구 / totalBilling) * 100) : 0}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-100">
+                      <td className="px-3 py-2 border-t border-gray-200 font-bold text-gray-700 whitespace-nowrap">합계</td>
+                      <td className="px-3 py-2 border-t border-gray-200 text-right font-bold text-gray-700 whitespace-nowrap">
+                        {payBreakdown.reduce((s, p) => s + p.건수, 0)}건
+                      </td>
+                      <td className="px-3 py-2 border-t border-gray-200 text-right font-bold text-[#1B2B4B] whitespace-nowrap">
+                        {payBreakdown.reduce((s, p) => s + p.총청구, 0).toLocaleString()}원
+                      </td>
+                      <td className="px-3 py-2 border-t border-gray-200 text-right font-bold text-gray-700 whitespace-nowrap">100%</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
           </div>
@@ -399,31 +445,37 @@ export default function ShipperSettlement() {
             )}
           </div>
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-[12.5px] min-w-[760px]">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-semibold sticky top-0">
+                <tr className="bg-[#1B2B4B] sticky top-0">
                   <SortTh label="상차일" sortField="상차일" />
+                  <SortTh label="하차일" sortField="하차일" />
                   <SortTh label="거래처" sortField="거래처명" />
                   <SortTh label="상차지" sortField="상차지명" />
                   <SortTh label="하차지" sortField="하차지명" />
                   <SortTh label="차량번호" sortField="차량번호" />
-                  <SortTh label="청구운임" sortField="청구운임" align="right" />
-                  <th className="px-3 py-2.5 text-center whitespace-nowrap">지급방식</th>
+                  <SortTh label="청구운임" sortField="청구운임" />
+                  <th className="px-2 py-2.5 text-center whitespace-nowrap text-white font-semibold">지급방식</th>
+                  <th className="px-2 py-2.5 text-center whitespace-nowrap text-white font-semibold">메모</th>
                 </tr>
               </thead>
               <tbody>
                 {shownOrders.map(o => (
                   <tr key={o.id} className="border-t hover:bg-gray-50 transition">
-                    <td className="px-3 py-2 whitespace-nowrap text-gray-700">{o.상차일 || "-"}</td>
-                    <td className="px-3 py-2 font-semibold text-gray-900 truncate max-w-[120px]">{o.거래처명 || "-"}</td>
-                    <td className="px-3 py-2 text-gray-600 truncate max-w-[100px]">{o.상차지명 || "-"}</td>
-                    <td className="px-3 py-2 text-gray-600 truncate max-w-[100px]">{o.하차지명 || "-"}</td>
-                    <td className="px-3 py-2 text-gray-600">{o.차량번호 || "-"}</td>
-                    <td className="px-3 py-2 text-right font-bold text-[#1B2B4B]">
+                    <td className="px-2 py-2 text-center whitespace-nowrap text-gray-700">{o.상차일 || "-"}</td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap text-gray-700">{o.하차일 || "-"}</td>
+                    <td className="px-2 py-2 text-center font-semibold text-gray-900 truncate max-w-[90px]">{o.거래처명 || "-"}</td>
+                    <td className="px-2 py-2 text-center text-gray-600 truncate max-w-[80px]">{o.상차지명 || "-"}</td>
+                    <td className="px-2 py-2 text-center text-gray-600 truncate max-w-[80px]">{o.하차지명 || "-"}</td>
+                    <td className="px-2 py-2 text-center text-gray-600 whitespace-nowrap">{o.차량번호 || "-"}</td>
+                    <td className="px-2 py-2 text-center font-bold text-[#1B2B4B] whitespace-nowrap">
                       {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-2 py-2 text-center">
                       <span className="px-2 py-0.5 bg-gray-100 rounded text-[11px] text-gray-600">{o.지급방식 || "-"}</span>
+                    </td>
+                    <td className="px-2 py-2 text-center text-gray-500 truncate max-w-[100px]" title={[o.상차메모, o.하차메모].filter(Boolean).join(" / ")}>
+                      {[o.상차메모, o.하차메모].filter(Boolean).join(" / ") || "-"}
                     </td>
                   </tr>
                 ))}
@@ -533,11 +585,115 @@ export default function ShipperSettlement() {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t bg-white flex justify-end gap-2 shrink-0">
-              <button onClick={() => setShowInvoice(false)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold">닫기</button>
-              <button onClick={saveInvoiceImage} disabled={invoiceSaving} className="px-4 py-2 text-sm rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] font-semibold hover:bg-[#eef1f7] disabled:opacity-50">이미지 저장</button>
-              <button onClick={saveInvoicePDF} disabled={invoiceSaving} className="px-4 py-2 text-sm rounded-lg bg-[#1B2B4B] text-white font-semibold hover:opacity-90 disabled:opacity-50">
-                {invoiceSaving ? "저장 중..." : "PDF 저장"}
+            <div className="px-6 py-4 border-t bg-white flex justify-between gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  setEmailTo(transportEmail || "");
+                  setEmailSubject(`[정산내역서] ${userData?.companyName || ""} ${startDate}~${endDate}`);
+                  setEmailBody(`안녕하세요.\n${userData?.companyName || ""} 정산내역서를 보내드립니다.\n거래기간: ${startDate} ~ ${endDate}\n\n첨부된 PDF 파일을 확인해 주세요. 감사합니다.`);
+                  setEmailModalOpen(true);
+                }}
+                className="px-4 py-2 text-sm rounded-lg bg-white border border-sky-600 text-sky-600 font-semibold hover:bg-sky-50">
+                이메일 전송
+              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setShowInvoice(false)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold">닫기</button>
+                <button onClick={saveInvoiceImage} disabled={invoiceSaving} className="px-4 py-2 text-sm rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] font-semibold hover:bg-[#eef1f7] disabled:opacity-50">이미지 저장</button>
+                <button onClick={saveInvoicePDF} disabled={invoiceSaving} className="px-4 py-2 text-sm rounded-lg bg-[#1B2B4B] text-white font-semibold hover:opacity-90 disabled:opacity-50">
+                  {invoiceSaving ? "저장 중..." : "PDF 저장"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 이메일 전송 팝업 */}
+      {emailModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[999999] flex items-center justify-center p-6" onClick={() => !emailSending && setEmailModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 bg-[#1B2B4B] flex items-center justify-between shrink-0">
+              <h3 className="text-white font-bold text-[15px]">정산내역서 이메일 전송</h3>
+              <button onClick={() => setEmailModalOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="p-6 space-y-3.5 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">받는이</label>
+                <input value={emailTo} onChange={e => setEmailTo(e.target.value)}
+                  placeholder="이메일 주소"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none" />
+                {transportEmail && (
+                  <p className="text-[11px] text-gray-400 mt-1">연동된 운송사({userData?.linkedTransportCompany?.companyName}) 이메일이 기본으로 입력되어 있습니다.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">제목</label>
+                <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">내용</label>
+                <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} rows={6}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none resize-none" />
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
+                발송 버튼 클릭 시 정산내역서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t bg-white flex gap-2 shrink-0">
+              <button onClick={() => setEmailModalOpen(false)} disabled={emailSending}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition disabled:opacity-50">
+                취소
+              </button>
+              <button
+                disabled={!emailTo.trim() || emailSending}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+                onClick={async () => {
+                  if (!emailTo.trim()) return;
+                  setEmailSending(true);
+                  try {
+                    const area = document.getElementById("shipperInvoiceArea");
+                    const canvas = await html2canvas(area, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
+                    const imgData = canvas.toDataURL("image/jpeg", 0.85);
+                    const pdf = new jsPDF("p", "mm", "a4");
+                    const imgWidth = 210;
+                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                    let heightLeft = imgHeight, position = 0;
+                    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+                    heightLeft -= 297;
+                    while (heightLeft > 0) {
+                      position = heightLeft - imgHeight;
+                      pdf.addPage();
+                      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+                      heightLeft -= 297;
+                    }
+                    const attachment = {
+                      filename: `정산내역서_${invoiceTransport || "전체"}_${startDate}~${endDate}.pdf`,
+                      content: pdf.output("datauristring").split(",")[1],
+                      contentType: "application/pdf",
+                    };
+                    const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l || "&nbsp;"}</p>`).join("");
+                    const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}</div>`;
+                    const res = await fetch("/api/send-email", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ to: emailTo, subject: emailSubject, html: bodyHtml, attachments: [attachment] }),
+                    });
+                    if (res.ok) {
+                      alert(`${emailTo} 로 발송 완료`);
+                      setEmailModalOpen(false);
+                    } else {
+                      let errMsg = `서버 오류 (${res.status})`;
+                      try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch {}
+                      alert(`발송 실패: ${errMsg}`);
+                    }
+                  } catch (e) {
+                    alert("네트워크 오류로 발송 실패");
+                  } finally {
+                    setEmailSending(false);
+                  }
+                }}>
+                {emailSending ? "발송 중..." : "발송"}
               </button>
             </div>
           </div>
