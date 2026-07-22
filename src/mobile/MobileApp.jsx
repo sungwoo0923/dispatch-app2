@@ -7714,6 +7714,11 @@ function MobileOrderDetail({
       return null;
     };
     const cargoParsed = parseCargoQty(cargo);
+    // ⭐ 운임조회 전용 — 기본 화물내용/톤수 + 모든 경유지(상/하차) 화물내용/톤수를 합산한 총량으로 비교
+    if (cargoParsed && cargoParsed.unit === "파레트" && hasWaypointCargo && totalPallet > 0) {
+      cargoParsed.qty = totalPallet;
+    }
+    const myTonKg = totalKg;
 
     const areaMatch = (oAddr = "", area) => {
       if (!area) return true;
@@ -7753,9 +7758,15 @@ function MobileOrderDetail({
       const isClientMatch = formClient && oClient === formClient;
       if (isClientMatch) { score += 100; tags.push("거래처일치"); }
 
+      // 경유지 포함 합산 총량 (운임조회 전용)
+      const oTotals = getOrderCargoTotals(o);
+
       // 화물내용 (최대 30pt)
       if (cargo) {
         const oCargoParsed = parseCargoQty(o.화물내용 || "");
+        if (oCargoParsed && oCargoParsed.unit === "파레트" && oTotals.hasWaypointCargo && oTotals.totalPallet > 0) {
+          oCargoParsed.qty = oTotals.totalPallet;
+        }
         const normCargo = ns(cargo);
         const normOCargo = ns(o.화물내용 || "");
         if (normOCargo === normCargo) { score += 30; tags.push("화물일치"); }
@@ -7782,9 +7793,13 @@ function MobileOrderDetail({
       if (dropNameMatch) score += 10;
       if (pickNameMatch && dropNameMatch) tags.push("지명일치");
 
-      // 톤수 (최대 15pt)
+      // 톤수 (최대 15pt) — 경유지 포함 합산 총량(kg) 기준으로 비교
       const oTon = o.톤수 || o.차량톤수 || "";
-      if (ton && oTon) {
+      const oTonKg = oTotals.totalKg;
+      if (ton && oTon && myTonKg > 0 && oTonKg > 0) {
+        if (myTonKg === oTonKg) { score += 15; tags.push("톤수일치"); }
+        else if (Math.abs(myTonKg - oTonKg) / (myTonKg || 1) <= 0.1) { score += 8; }
+      } else if (ton && oTon) {
         if (ns(oTon) === ns(ton)) { score += 15; tags.push("톤수일치"); }
         else {
           const tn = parseFloat(ton); const otn = parseFloat(oTon);
@@ -7803,7 +7818,7 @@ function MobileOrderDetail({
 
     finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
     return finalList.slice(0, 50);
-  }, [orders, order.상차지주소, order.하차지주소, order.상차지명, order.하차지명, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.id]);
+  }, [orders, order.상차지주소, order.하차지주소, order.상차지명, order.하차지명, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.경유상차목록, order.경유하차목록, order.id]);
 
   const applyFareDirectly = async (claim, drv) => {
     setShowDetailFareHistory(false);
@@ -14659,7 +14674,7 @@ const calcFareMobile = () => {
   const baseGroup = list.filter(r =>
     !isTransitStopRow(r) &&
     (!기준차량그룹 || normalizeVehicleGroup(r.차량종류) === 기준차량그룹) &&
-    (!기준파렛트 || extractCargoNumber(r.화물내용) === 기준파렛트)
+    (!기준파렛트 || extractCargoNumber(mergedCargoOf(r)) === 기준파렛트)
   );
   const rawFares = baseGroup.map(r => Number(String(r.청구운임||0).replace(/[^\d]/g,""))).filter(n=>n>0);
   const roughAvg = rawFares.length > 0 ? rawFares.reduce((a,b)=>a+b,0)/rawFares.length : null;

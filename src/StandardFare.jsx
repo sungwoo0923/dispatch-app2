@@ -809,7 +809,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     const baseGroup = list.filter(r =>
       !isTransitStop(r) &&
       (!기준차량그룹 || normalizeVehicleGroup(r.차량종류) === 기준차량그룹) &&
-      (!기준파렛트 || extractCargoNumber(r.화물내용) === 기준파렛트)
+      (!기준파렛트 || extractCargoNumber(mergedCargoOf(r)) === 기준파렛트)
     );
     const rawFares = baseGroup.map(r => Number(String(r.청구운임||0).replace(/[^\d]/g,""))).filter(n=>n>0);
     const roughAvg = rawFares.length > 0 ? rawFares.reduce((a,b)=>a+b,0)/rawFares.length : null;
