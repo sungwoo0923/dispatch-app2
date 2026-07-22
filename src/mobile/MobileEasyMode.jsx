@@ -201,7 +201,7 @@ function OrderCard({ order, onClick }) {
 // ==================================================================
 // 홈 화면
 // ==================================================================
-function HomeScreen({ unassignedCount, onNavigate, onExitEasyMode, onLogout }) {
+function HomeScreen({ unassignedCount, onNavigate, onExitEasyMode, onLogout, easyScale, onChangeEasyScale }) {
   return (
     <div className="flex-1 flex flex-col">
       <div
@@ -230,7 +230,25 @@ function HomeScreen({ unassignedCount, onNavigate, onExitEasyMode, onLogout }) {
             )}
           </div>
         </div>
-        <div className="mt-6 bg-white/10 rounded-2xl px-4 py-3">
+
+        <div className="mt-5 flex items-center justify-between bg-white/10 rounded-2xl px-4 py-3 gap-3">
+          <span className="text-white text-sm font-bold shrink-0">글자 크기</span>
+          <div className="flex gap-1.5">
+            {[{ v: 1, l: "기본" }, { v: 1.15, l: "크게" }, { v: 1.3, l: "아주크게" }].map(({ v, l }) => (
+              <button
+                key={v}
+                onClick={() => onChangeEasyScale(v)}
+                className={`px-3 py-1.5 rounded-full text-sm font-bold transition-colors ${
+                  easyScale === v ? "bg-white text-[#1B2B4B]" : "bg-white/15 text-white active:bg-white/25"
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-3 bg-white/10 rounded-2xl px-4 py-3">
           <span className="text-white text-lg font-bold">
             오늘 미배차 {unassignedCount}건
           </span>
@@ -794,6 +812,13 @@ export default function MobileEasyMode({
   const [assignOrder, setAssignOrder] = useState(null);
   const [assignFrom, setAssignFrom] = useState("list");
   const [detailOrder, setDetailOrder] = useState(null);
+  // 쉬운모드 자체 글자크기 배율(기본/크게/아주크게) — 일반모드의 fontScale과는 별도로
+  // 관리하며, 이 화면트리 전체(모든 화면 공통)에 zoom으로 적용해 "모든 글씨"가 함께 커진다.
+  const [easyScale, setEasyScale] = useState(() => Number(localStorage.getItem("easyModeScale") || "1"));
+  const onChangeEasyScale = (v) => {
+    setEasyScale(v);
+    localStorage.setItem("easyModeScale", String(v));
+  };
 
   const today = todayLocal();
   const todayUnassignedCount = useMemo(
@@ -824,10 +849,12 @@ export default function MobileEasyMode({
   return (
     <div
       className="w-full min-h-screen flex flex-col relative"
-      style={{ backgroundColor: "#F4F6F9" }}
+      style={{ backgroundColor: "#F4F6F9", zoom: easyScale }}
     >
       {screen === "home" && (
         <HomeScreen
+          easyScale={easyScale}
+          onChangeEasyScale={onChangeEasyScale}
           unassignedCount={todayUnassignedCount}
           onNavigate={setScreen}
           onExitEasyMode={onExitEasyMode}

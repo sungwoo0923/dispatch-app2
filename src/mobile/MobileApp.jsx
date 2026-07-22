@@ -1129,11 +1129,12 @@ const normalizePhone = (p = "") =>
 
 export default function MobileApp({ role, user, userCompany = "" }) {
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
-  // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드가 켜져 있으면 글자크기
-  // 설정과 무관하게 항상 가장 큰 배율을 적용한다.
+  // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드는 자체 화면(MobileEasyMode)이
+  // 이미 큰 글씨/큰 버튼으로 설계되어 있으므로, 여기서 별도로 확대하지 않는다
+  // (쉬운모드 안의 글자크기 조정은 MobileEasyMode 자체 배율로 처리한다).
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
   const [easyMode, setEasyMode] = useState(() => localStorage.getItem("easyMode") === "1");
-  const effectiveScale = easyMode ? 1.3 : fontScale;
+  const effectiveScale = fontScale;
 
   useEffect(() => {
     const root = document.getElementById("root");
@@ -16223,9 +16224,9 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           />
           <SettingRow
             label="글자 크기"
-            sub={easyMode ? "쉬운모드가 켜져 있어 자동으로 가장 크게 표시돼요" : "목록/상세 텍스트 크기"}
+            sub="목록/상세 텍스트 크기"
             right={
-              <div className={`flex gap-1.5 ${easyMode ? "opacity-40 pointer-events-none" : ""}`}>
+              <div className="flex gap-1.5">
                 {[{v:1,l:"기본"},{v:1.1,l:"크게"},{v:1.2,l:"아주크게"}].map(({v,l}) => (
                   <button key={v} type="button"
                     onClick={() => { setFontScale(v); localStorage.setItem("fontScale", String(v)); }}
