@@ -1769,9 +1769,10 @@ function ToastProvider({ children }) {
     setToasts((prev) => prev.filter(t => t.id !== id));
   };
 
-  // 알림 클릭 → 해당 오더로 스크롤 + 하이라이트
-  const handleToastClick = (toast) => {
   // 🔔 showToast를 window에 노출 + 큐에 쌓인 알림 즉시 처리
+  // (이 useEffect는 컴포넌트 최상위에서 마운트 시 1회만 실행되어야 한다 — 과거에
+  // handleToastClick 안쪽에 잘못 중첩되어 있어서 실제로는 절대 실행되지 않았고,
+  // 그 결과 window.__sflowToastQueue가 세션 내내 무한정 쌓이는 메모리 누수가 있었다.)
   React.useEffect(() => {
     window.__sflowShowToast = showToast;
 
@@ -1786,6 +1787,8 @@ function ToastProvider({ children }) {
     return () => { delete window.__sflowShowToast; };
   }, []);
 
+  // 알림 클릭 → 해당 오더로 스크롤 + 하이라이트
+  const handleToastClick = (toast) => {
     if (!toast.meta?.orderId) return;
     removeToast(toast.id);
 
@@ -3110,27 +3113,38 @@ React.useEffect(() => {
   );
 
   // ---------------- 화주사 푸시 알림 (상차 임박 시 화주사가 보낸 푸시 — 확인 전까지 중앙 팝업 유지) ----------------
-  const pendingNudges = (dispatchData || []).filter(r => r.재촉대기 === true);
-  const activeNudge = pendingNudges.length > 0
-    ? [...pendingNudges].sort((a, b) => {
-        const ma = typeof a.재촉일시 === "number" ? a.재촉일시 : 0;
-        const mb = typeof b.재촉일시 === "number" ? b.재촉일시 : 0;
-        return ma - mb;
-      })[0]
-    : null;
+  // ⚡ 렌더마다 dispatchData 전체를 filter/sort 하지 않도록 useMemo로 스코프 (pendingShipperRequests와 동일 패턴)
+  const pendingNudges = React.useMemo(
+    () => (dispatchData || []).filter(r => r.재촉대기 === true),
+    [dispatchData]
+  );
+  const activeNudge = React.useMemo(() => (
+    pendingNudges.length > 0
+      ? [...pendingNudges].sort((a, b) => {
+          const ma = typeof a.재촉일시 === "number" ? a.재촉일시 : 0;
+          const mb = typeof b.재촉일시 === "number" ? b.재촉일시 : 0;
+          return ma - mb;
+        })[0]
+      : null
+  ), [pendingNudges]);
 
   // ---------------- 화주사 수정요청/기사취소요청 중앙 팝업 (재촉 알림과 동일 패턴) ----------------
   // "확인" 버튼은 승인/거절이 아니라 알림 자체만 닫는다 — 실제 승인/거절은 기존 뱃지 클릭 팝업에서 처리한다.
-  const pendingReqAlerts = (dispatchData || []).filter(
-    r => (r.수정요청 === true && !r.수정요청알림확인) || (r.취소요청 === true && r.배차상태 !== "배차취소" && !r.취소요청알림확인)
+  const pendingReqAlerts = React.useMemo(
+    () => (dispatchData || []).filter(
+      r => (r.수정요청 === true && !r.수정요청알림확인) || (r.취소요청 === true && r.배차상태 !== "배차취소" && !r.취소요청알림확인)
+    ),
+    [dispatchData]
   );
-  const activeReqAlert = pendingReqAlerts.length > 0
-    ? [...pendingReqAlerts].sort((a, b) => {
-        const ma = typeof a.수정요청일시?.seconds === "number" ? a.수정요청일시.seconds * 1000 : (typeof a.취소요청일시?.seconds === "number" ? a.취소요청일시.seconds * 1000 : 0);
-        const mb = typeof b.수정요청일시?.seconds === "number" ? b.수정요청일시.seconds * 1000 : (typeof b.취소요청일시?.seconds === "number" ? b.취소요청일시.seconds * 1000 : 0);
-        return ma - mb;
-      })[0]
-    : null;
+  const activeReqAlert = React.useMemo(() => (
+    pendingReqAlerts.length > 0
+      ? [...pendingReqAlerts].sort((a, b) => {
+          const ma = typeof a.수정요청일시?.seconds === "number" ? a.수정요청일시.seconds * 1000 : (typeof a.취소요청일시?.seconds === "number" ? a.취소요청일시.seconds * 1000 : 0);
+          const mb = typeof b.수정요청일시?.seconds === "number" ? b.수정요청일시.seconds * 1000 : (typeof b.취소요청일시?.seconds === "number" ? b.취소요청일시.seconds * 1000 : 0);
+          return ma - mb;
+        })[0]
+      : null
+  ), [pendingReqAlerts]);
   const activeReqAlertIsEdit = !!activeReqAlert?.수정요청;
 
   // ---------------- 메뉴 UI ----------------
@@ -18887,7 +18901,7 @@ onDoubleClick={(e) => {
 
 
     className={`
-cursor-pointer transition-all duration-300
+cursor-pointer transition-[background-color,border-color,opacity] duration-300
 ${fadingIds.has(r._id) ? "opacity-0" : "opacity-100"}
 ${
   r.긴급 === true &&
@@ -27413,7 +27427,7 @@ return (
   setCopyPanelOpen(true);
 }}
 
-      className={`cursor-pointer transition-all duration-300 ${fadingIds.has(id) ? "opacity-0" : "opacity-100"} ${justMovedIds.has(id) ? "row-highlight" : ""} ${
+      className={`cursor-pointer transition-[background-color,border-color,opacity] duration-300 ${fadingIds.has(id) ? "opacity-0" : "opacity-100"} ${justMovedIds.has(id) ? "row-highlight" : ""} ${
         selected.has(id)
           ? "bg-blue-50 hover:bg-blue-100"
           : r.긴급 === true && row.배차상태 === "배차중"
