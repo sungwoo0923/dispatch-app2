@@ -1127,9 +1127,16 @@ const normalizePhone = (p = "") =>
 // ======================================================================
 
 export default function MobileApp({ role, user, userCompany = "" }) {
+  // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
+  // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드가 켜져 있으면 글자크기
+  // 설정과 무관하게 항상 가장 큰 배율을 적용한다.
+  const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
+  const [easyMode, setEasyMode] = useState(() => localStorage.getItem("easyMode") === "1");
+  const effectiveScale = easyMode ? 1.3 : fontScale;
+
   useEffect(() => {
     const root = document.getElementById("root");
-    if (root) root.style.zoom = "1";
+    if (root) root.style.zoom = String(effectiveScale);
     // viewport 강제 리셋 — 브라우저에서 확대/축소 후 앱 접속해도 항상 1:1 비율 유지
     const meta = document.querySelector('meta[name="viewport"]');
     const resetContent = "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover";
@@ -1141,15 +1148,15 @@ export default function MobileApp({ role, user, userCompany = "" }) {
       m.content = resetContent;
       document.head.appendChild(m);
     }
-    // document.body zoom/transform 리셋 (일부 브라우저 잔여 줌 제거)
-    document.body.style.zoom = "1";
-    document.documentElement.style.zoom = "1";
+    // document.body zoom/transform 리셋 (일부 브라우저 잔여 줌 제거) — 글자크기 설정 배율 적용
+    document.body.style.zoom = String(effectiveScale);
+    document.documentElement.style.zoom = String(effectiveScale);
     return () => {
       if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
       document.body.style.zoom = "";
       document.documentElement.style.zoom = "";
     };
-  }, []);
+  }, [effectiveScale]);
   // ===================== 연동 승인된 화주사 목록(자동 전송용) =====================
   // 운송사가 오더 등록 시 거래처명이 여기 목록의 화주사 회사명과 일치하면,
   // PC(DispatchApp.jsx)와 동일하게 즉시 화주사 화면에도 사본을 생성한다.
@@ -2188,7 +2195,6 @@ const [detailFrom, setDetailFrom] = useState(null);
       window.scrollTo(0, scrollY);
     };
   }, [showMenu]);
-  const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
   const appVersion = APP_VERSION;
 
   const logout = async () => {
@@ -4430,6 +4436,8 @@ setOpenMemo={setOpenMemo}
             toggleAlarm={toggleAlarm}
             fontScale={fontScale}
             setFontScale={setFontScale}
+            easyMode={easyMode}
+            setEasyMode={(v) => { setEasyMode(v); localStorage.setItem("easyMode", v ? "1" : "0"); }}
             appVersion={appVersion}
             showSuccess={showSuccess}
             onLogout={logout}
@@ -9116,18 +9124,18 @@ const handleAssignClick = () => {
                                     </div>
                                   )}
                                   {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
-                                  <div className="flex flex-wrap gap-1 mt-1">
+                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
                                     {o.화물내용 && (
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-500"}`}>
+                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-600"}`}>
                                         {o.화물내용}
                                       </span>
                                     )}
-                                    {o.톤수 && (
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${te ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                                        {o.톤수}
+                                    {(o.톤수 || o.차량톤수) && (
+                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${te ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                                        {o.톤수 || o.차량톤수}
                                       </span>
                                     )}
-                                    {(o.차종 || o.차량종류) && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500">{o.차종 || o.차량종류}</span>}
+                                    {(o.차종 || o.차량종류) && <span className="text-[12.5px] font-bold px-2 py-1 rounded-md bg-gray-100 text-gray-600">{o.차종 || o.차량종류}</span>}
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
@@ -11520,18 +11528,18 @@ const pickDrop = (c) => {
                                     </div>
                                   )}
                                   {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
-                                  <div className="flex flex-wrap gap-1 mt-1">
+                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
                                     {o.화물내용 && (
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-500"}`}>
+                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-600"}`}>
                                         {o.화물내용}
                                       </span>
                                     )}
-                                    {o.톤수 && (
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${te ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                                        {o.톤수}
+                                    {(o.톤수 || o.차량톤수) && (
+                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${te ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                                        {o.톤수 || o.차량톤수}
                                       </span>
                                     )}
-                                    {o.차종 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500">{o.차종}</span>}
+                                    {(o.차종 || o.차량종류) && <span className="text-[12.5px] font-bold px-2 py-1 rounded-md bg-gray-100 text-gray-600">{o.차종 || o.차량종류}</span>}
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
@@ -15983,7 +15991,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, easyMode, setEasyMode, appVersion, showSuccess, onLogout, userCompany }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const SectionHeader = ({ title }) => (
@@ -16017,7 +16025,21 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       <div className="flex-1 pb-10">
 
         <SectionHeader title="화면" />
-        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+        <div className="mx-4 rounded-2xl overflow-hidden border-2 border-[#1B2B4B]/15 shadow-sm">
+          <div className="px-4 py-3.5 bg-[#f4f7fc]">
+            <div className="flex items-center justify-between">
+              <div className="text-left flex items-center gap-2">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] flex items-center justify-center shrink-0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8.5" x2="11" y2="11.5"/><circle cx="11" cy="14" r="0.5" fill="white"/></svg>
+                </span>
+                <div>
+                  <div className="text-[13.5px] font-bold text-gray-800">쉬운모드</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">글씨・버튼・아이콘이 한 번에 크게 보여요</div>
+                </div>
+              </div>
+              <Toggle value={easyMode} onChange={(v) => setEasyMode(v)} />
+            </div>
+          </div>
           <SettingRow
             label="디자인 테마"
             sub={cardVersionB ? "B형 (다크 네이비 헤더)" : "A형 (라이트)"}
@@ -16035,10 +16057,10 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           />
           <SettingRow
             label="글자 크기"
-            sub="목록/상세 텍스트 크기"
+            sub={easyMode ? "쉬운모드가 켜져 있어 자동으로 가장 크게 표시돼요" : "목록/상세 텍스트 크기"}
             right={
-              <div className="flex gap-1.5">
-                {[{v:1,l:"기본"},{v:1.1,l:"크게"},{v:1.2,l:"더 크게"}].map(({v,l}) => (
+              <div className={`flex gap-1.5 ${easyMode ? "opacity-40 pointer-events-none" : ""}`}>
+                {[{v:1,l:"기본"},{v:1.1,l:"크게"},{v:1.2,l:"아주크게"}].map(({v,l}) => (
                   <button key={v} type="button"
                     onClick={() => { setFontScale(v); localStorage.setItem("fontScale", String(v)); }}
                     className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all ${fontScale===v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
