@@ -159,7 +159,8 @@ export default function UploadPage() {
   // 브라우저 Geolocation API로 좌표를 받아 오더 문서(+화주사 전송사본)에 기록한다.
   // 화면이 꺼지거나 다른 앱으로 전환되면(특히 iOS Safari) 위치 전송이 멈추는
   // 플랫폼 제약이 있어, "이 화면을 보고 있는 동안의 대략적인 위치"용 기능이다.
-  const [sharingLoc, setSharingLoc] = useState(false);
+  // 기사가 업로드 링크로 들어오면 별도 조작 없이 곧바로 위치 공유가 시작되도록 기본값 on
+  const [sharingLoc, setSharingLoc] = useState(true);
   const [locError, setLocError] = useState(null);
   const [lastLoc, setLastLoc] = useState(null);
   const watchIdRef = useRef(null);
@@ -529,7 +530,7 @@ export default function UploadPage() {
                 </div>
 
                 {/* 실시간 위치 공유 토글 */}
-                <div style={{ marginTop: 10, background: sharingLoc ? "#ecfdf5" : "#f8fafc", border: sharingLoc ? "1px solid #6ee7b7" : "1px solid transparent", borderRadius: 8, padding: "10px 12px" }}>
+                <div style={{ marginTop: 10, background: "#f8fafc", borderRadius: 8, padding: "10px 12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 }}>
