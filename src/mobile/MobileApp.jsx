@@ -7101,6 +7101,20 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
   );
 }
 
+// 차량종류 구분용 이모지 — 색을 여러 개 쓰지 않고 이모지로만 구분한다
+const vehicleTypeEmoji = (t = "") => {
+  const s = String(t);
+  if (s.includes("냉동")) return "❄️";
+  if (s.includes("냉장")) return "🧊";
+  if (s.includes("윙바디")) return "🚛";
+  if (s.includes("탑차")) return "📦";
+  if (s.includes("카고")) return "🚚";
+  if (s.includes("라보") || s.includes("다마스")) return "🚐";
+  if (s.includes("리프트")) return "🏗️";
+  if (s.includes("오토바이")) return "🏍️";
+  return s ? "🚚" : "";
+};
+
 const MobileOrderCard = React.memo(function MobileOrderCard({
   order,
   onSelect,
@@ -7348,27 +7362,32 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
           </div>
 
-          {/* 하단 정보 — 톤수/차종/화물부터 청구·기사운임까지 한 판으로 묶어 디지털 톤 배경 적용 */}
+          {/* 하단 정보 — 톤수/차종/화물부터 청구·기사운임까지 한 판으로 묶어 표시 */}
           <div
-            className="flex items-center justify-between gap-2 mt-2.5 px-2.5 py-1.5 rounded-xl"
-            style={{
-              background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
-              border: `1px solid ${statusRing}`,
-              boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
-            }}
+            className="flex items-center justify-between gap-2 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
+            style={{ border: `1px solid ${statusRing}` }}
           >
-            <span className="text-[0.72em] text-white/60 truncate leading-relaxed">
-              {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
+            <span className="flex items-center gap-1.5 min-w-0 flex-1 text-[0.88em] leading-relaxed">
+              {ton && <span className="font-bold text-gray-900 whitespace-nowrap">⚖️ {ton}</span>}
+              {carType && (
+                <span className="font-bold text-gray-900 whitespace-nowrap">
+                  {vehicleTypeEmoji(carType)} {carType}
+                </span>
+              )}
+              {cargo && (
+                <span className="font-bold text-amber-600 truncate">📦 {cargo}</span>
+              )}
+              {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
             </span>
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="flex items-baseline gap-0.5">
-                <span className="text-[0.62em] text-white/50 font-semibold">청구</span>
-                <span className="text-[0.85em] font-bold text-white tabular-nums">{fmtMoney(claim)}</span>
+                <span className="text-[0.62em] text-gray-400 font-semibold">청구</span>
+                <span className="text-[0.95em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
               </span>
-              <span className="w-px h-2.5 bg-white/20" />
+              <span className="w-px h-2.5 bg-gray-200" />
               <span className="flex items-baseline gap-0.5">
-                <span className="text-[0.62em] text-white/50 font-semibold">기사</span>
-                <span className="text-[0.85em] font-bold text-amber-300 tabular-nums">{fmtMoney(fee)}</span>
+                <span className="text-[0.62em] text-gray-400 font-semibold">기사</span>
+                <span className="text-[0.95em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
               </span>
             </div>
           </div>
