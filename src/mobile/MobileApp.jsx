@@ -3115,34 +3115,35 @@ const deleteSingleOrder = async (order) => {
     }
 
     const 청구운임 = toNumber(simple.청구운임);
-    const 기사운임 = 0;
+    const 기사운임 = toNumber(simple.기사운임);
     const 수수료 = 청구운임 - 기사운임;
     const today = todayKST();
     const 상차일 = simple.상차일 || today;
+    const 하차일 = simple.하차일 || 상차일;
 
     const docData = {
       거래처명: simple.거래처명 || "",
       상차지명: simple.상차지명,
-      상차지주소: "",
-      상차지담당자: "",
-      상차지담당자번호: "",
+      상차지주소: simple.상차지주소 || "",
+      상차지담당자: simple.상차지담당자 || "",
+      상차지담당자번호: simple.상차지담당자번호 || "",
       하차지명: simple.하차지명,
-      하차지주소: "",
-      하차지담당자: "",
-      하차지담당자번호: "",
+      하차지주소: simple.하차지주소 || "",
+      하차지담당자: simple.하차지담당자 || "",
+      하차지담당자번호: simple.하차지담당자번호 || "",
       화물내용: simple.화물내용 || "",
       차량종류: simple.차량종류 || "",
       차량톤수: toTonUnit(simple.톤수) || "",
-      상차방법: "",
-      하차방법: "",
+      상차방법: simple.상차방법 || "",
+      하차방법: simple.하차방법 || "",
       상차일,
-      상차시간: "",
-      상차시간기준: null,
-      하차일: 상차일,
-      하차시간: "",
-      하차시간기준: null,
-      지급방식: "",
-      배차방식: "",
+      상차시간: simple.상차시간 || "",
+      상차시간기준: simple.상차시간기준 || null,
+      하차일,
+      하차시간: simple.하차시간 || "",
+      하차시간기준: simple.하차시간기준 || null,
+      지급방식: simple.지급방식 || "",
+      배차방식: simple.배차방식 || "",
       혼적여부: "독차",
       혼적: false,
       적요: "",
@@ -3253,6 +3254,7 @@ const deleteSingleOrder = async (order) => {
         unassignedOrders={unassignedOrders}
         drivers={drivers}
         clients={clients}
+        places={places}
         currentUser={currentUser}
         userCompany={userCompany}
         role={role}
