@@ -11,7 +11,7 @@ import {
 import ShipperApp from "./shipper/ShipperApp";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "./firebase";
-import { doc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
 import DispatchApp from "./DispatchApp";
 import MobileApp from "./mobile/MobileApp";
@@ -332,6 +332,18 @@ export default function App() {
   //  일반적인 한계가 있음 — 명시적 로그아웃/세션 종료 시에만 기록된다.)
   const sessionLogRef = useRef({ uid: null, info: null });
 
+  // 접속이력이 무한정 쌓이지 않도록, 기록을 남길 때마다 최신 50건만 남기고
+  // 과거순으로 초과분을 정리한다.
+  const pruneSessionLogs = async () => {
+    try {
+      const snap = await getDocs(query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(200)));
+      const excess = snap.docs.slice(50);
+      if (excess.length) {
+        await Promise.all(excess.map((d) => deleteDoc(doc(db, "sessionLogs", d.id))));
+      }
+    } catch {}
+  };
+
   // 인증 + 역할
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -341,7 +353,7 @@ export default function App() {
             ...sessionLogRef.current.info,
             event: "logout",
             at: serverTimestamp(),
-          }).catch(() => {});
+          }).then(pruneSessionLogs).catch(() => {});
         }
         sessionLogRef.current = { uid: null, info: null };
         setUser(null);
@@ -380,7 +392,7 @@ export default function App() {
               ...loginInfo,
               event: "login",
               at: serverTimestamp(),
-            }).catch(() => {});
+            }).then(pruneSessionLogs).catch(() => {});
           }
           // approved !== false allows old accounts (undefined) and explicitly true
           // only blocks accounts explicitly set to false (new unapproved signups)

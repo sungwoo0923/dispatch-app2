@@ -4,7 +4,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { updateDoc } from "firebase/firestore";
+import { updateDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 // pages
 import ShipperHome from "./pages/ShipperHome";
 import ShipperOrder from "./pages/ShipperOrder";
@@ -20,6 +20,31 @@ import InternalMessenger from "../InternalMessenger";
 const myInfoLabelCls = "block text-xs font-bold text-gray-600 mb-1";
 const myInfoInputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
 
+// ── 실시간 현황판: 운송사가 오늘 배차완료/수정한 이벤트만 뽑아낸다(화주사 자신의 등록은 제외) ──
+const _todayKST = () => {
+  const kst = new Date(Date.now() + 9 * 3600000);
+  return kst.toISOString().slice(0, 10);
+};
+const _tsToDate = (v) => {
+  if (!v) return null;
+  if (typeof v === "number") return new Date(v);
+  if (v?.toDate) return v.toDate();
+  if (v?.seconds) return new Date(v.seconds * 1000);
+  return null;
+};
+const _isTodayKST = (d) => {
+  if (!d) return false;
+  const kst = new Date(d.getTime() + 9 * 3600000);
+  return kst.toISOString().slice(0, 10) === _todayKST();
+};
+const _fmtTimeKST = (d) => {
+  const kst = new Date(d.getTime() + 9 * 3600000);
+  const hh = kst.getUTCHours(), mm = kst.getUTCMinutes();
+  const isAM = hh < 12;
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${isAM ? "오전" : "오후"} ${h12}:${String(mm).padStart(2, "0")}`;
+};
+
 export default function ShipperApp() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -28,12 +53,42 @@ export default function ShipperApp() {
 const location = useLocation();
 const [myInfoOpen, setMyInfoOpen] = useState(false);
 const [transportMenuOpen, setTransportMenuOpen] = useState(false);
+const [liveEvents, setLiveEvents] = useState([]);
+const [liveBigOpen, setLiveBigOpen] = useState(false);
 const [form, setForm] = useState({
   name: "",
   phone: "",
   department: "",
   position: ""
 });
+
+// ================= 실시간 현황판: 오늘 운송사가 배차완료/수정한 이벤트만 수집 =================
+useEffect(() => {
+  if (!companyName) return;
+  const q = query(collection(db, "orders"), where("shipperCompany", "==", companyName));
+  const unsub = onSnapshot(q, (snap) => {
+    const evts = [];
+    snap.docs.forEach((d) => {
+      const o = d.data();
+      const from = o.상차지명 || "-";
+      const to = o.하차지명 || "-";
+      const transportName = o.운송사명 || "운송사";
+      const doneAt = _tsToDate(o.배차완료일시);
+      if (doneAt && _isTodayKST(doneAt)) {
+        evts.push({ id: `${d.id}-done`, type: "배차완료", time: doneAt, text: `${transportName}에서 ${from} → ${to} 배차를 완료했습니다.` });
+      }
+      if (o.최종수정출처 === "transport") {
+        const editAt = _tsToDate(o.최종수정일시);
+        if (editAt && _isTodayKST(editAt)) {
+          evts.push({ id: `${d.id}-edit`, type: "수정", time: editAt, text: `${transportName}에서 ${from} → ${to} 오더를 수정했습니다.` });
+        }
+      }
+    });
+    evts.sort((a, b) => a.time - b.time);
+    setLiveEvents(evts);
+  });
+  return () => unsub();
+}, [companyName]);
   // ================= 화주 권한 확인 =================
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
@@ -100,20 +155,23 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
     <div className="min-h-screen bg-[#f3f4f6]">
       {/* ================= HEADER ================= */}
       <header className="bg-[#2f3e55] text-white">
-  <div className="px-8 py-4 flex items-center justify-between">
+  <div className="px-8 py-4 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
 
-    {/* 좌측 로고 + 메뉴 */}
-    <div className="flex items-center gap-10">
+    {/* 좌측 로고 + 실시간 현황판 */}
+    <div className="flex items-center gap-4 min-w-0">
 
       {/* 로고 */}
       <div
         onClick={() => navigate("/shipper")}
-        className="text-lg font-bold cursor-pointer"
+        className="text-lg font-bold cursor-pointer shrink-0"
       >
         KP-FLOW
       </div>
 
-<nav className="flex gap-6 text-sm font-semibold">
+      <ShipperLiveTicker events={liveEvents} onOpenBig={() => setLiveBigOpen(true)} />
+    </div>
+
+<nav className="flex items-center justify-center gap-6 text-sm font-semibold">
 
   <MenuBtn
     label="대시보드"
@@ -192,10 +250,9 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
 />
 
 </nav>
-    </div>
 
     {/* 우측 */}
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4 justify-end">
       <div className="text-sm text-right">
         <div>{companyName}</div>
         <div className="text-xs text-gray-300">{user.email}</div>
@@ -377,9 +434,95 @@ location.pathname.startsWith("/shipper/transport")
     </div>
   </div>
 )}
+
+      {liveBigOpen && (
+        <ShipperLiveBigModal events={liveEvents} onClose={() => setLiveBigOpen(false)} />
+      )}
     </div>
   );
 }
+
+function ShipperLiveTicker({ events, onOpenBig }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (events.length <= 1) { setIdx(0); return; }
+    const t = setInterval(() => setIdx((i) => (i + 1) % events.length), 3800);
+    return () => clearInterval(t);
+  }, [events.length]);
+
+  const current = events[idx] || null;
+
+  return (
+    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 max-w-[420px] flex-1">
+      <style>{`
+        @keyframes shipperTickerSlideIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .shipper-ticker-slide { animation: shipperTickerSlideIn 0.4s ease; }
+      `}</style>
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+      <div className="flex-1 min-w-0 h-[18px] overflow-hidden relative">
+        <div key={current ? current.id : "empty"} className="shipper-ticker-slide absolute inset-0 flex items-center gap-1.5">
+          {current ? (
+            <>
+              <span className="text-[12px] text-white/85 truncate">{current.text}</span>
+              <span className="text-[11px] text-white/40 shrink-0">{_fmtTimeKST(current.time)}</span>
+            </>
+          ) : (
+            <span className="text-[12px] text-white/40">오늘 발생한 이벤트가 없습니다</span>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={onOpenBig}
+        className="shrink-0 text-white/50 hover:text-white text-[11px] font-semibold px-2 py-1 rounded-full hover:bg-white/10 transition whitespace-nowrap"
+      >
+        크게보기
+      </button>
+    </div>
+  );
+}
+
+function ShipperLiveBigModal({ events, onClose }) {
+  const listRef = React.useRef(null);
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [events.length]);
+
+  const todayLabel = (() => {
+    const kst = new Date(Date.now() + 9 * 3600000);
+    return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
+  })();
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[999999] flex items-center justify-center p-6" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-[480px] max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="text-white font-bold text-[15px]">실시간 현황판</h3>
+            <p className="text-white/50 text-[11px] mt-0.5">{todayLabel} 오늘 발생한 이벤트</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
+          {events.length === 0 ? (
+            <div className="text-center text-gray-400 text-sm py-16">오늘 발생한 이벤트가 없습니다</div>
+          ) : (
+            events.map((e) => (
+              <div key={e.id} className="bg-white rounded-xl px-4 py-3 border border-gray-100 flex items-start gap-3">
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${e.type === "배차완료" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <div className="flex-1 min-w-0 text-[13px] text-gray-800">{e.text}</div>
+                <span className="text-[11px] text-gray-400 shrink-0 whitespace-nowrap">{_fmtTimeKST(e.time)}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MenuBtn({ label, active, onClick }) {
   return (
     <button

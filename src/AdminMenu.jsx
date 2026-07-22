@@ -64,6 +64,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [adminTab, setAdminTab] = useState("members");
   const [sessionLogs, setSessionLogs] = useState([]);
   const [sessionLogEventFilter, setSessionLogEventFilter] = useState("all");
+  const [sessionLogPage, setSessionLogPage] = useState(1);
+  const SESSION_LOG_PAGE_SIZE = 10;
   const [users, setUsers] = useState([]);
   const [allShipperApps, setAllShipperApps] = useState([]);
   const [search, setSearch] = useState("");
@@ -136,7 +138,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 최고관리자 전용 접속이력(로그인/로그아웃) — 탭을 열었을 때만 구독한다.
   useEffect(() => {
     if (!isTotalMaster || adminTab !== "sessionLogs") return;
-    const q = query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(300));
+    const q = query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(50));
     const unsub = onSnapshot(q, (snap) => {
       setSessionLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
@@ -1136,13 +1138,18 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           )}
 
           {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}
-          {adminTab === "sessionLogs" && isTotalMaster && (
+          {adminTab === "sessionLogs" && isTotalMaster && (() => {
+            const filteredLogs = sessionLogs.filter(l => sessionLogEventFilter === "all" || l.event === sessionLogEventFilter);
+            const totalPages = Math.max(1, Math.ceil(filteredLogs.length / SESSION_LOG_PAGE_SIZE));
+            const page = Math.min(sessionLogPage, totalPages);
+            const pageLogs = filteredLogs.slice((page - 1) * SESSION_LOG_PAGE_SIZE, page * SESSION_LOG_PAGE_SIZE);
+            return (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-                <span className="text-[13px] font-semibold text-gray-600">최근 300건</span>
+                <span className="text-[13px] font-semibold text-gray-600">최근 50건 중 {filteredLogs.length}건 · 10건씩 표시</span>
                 <select
                   value={sessionLogEventFilter}
-                  onChange={e => setSessionLogEventFilter(e.target.value)}
+                  onChange={e => { setSessionLogEventFilter(e.target.value); setSessionLogPage(1); }}
                   className="ml-auto h-[32px] px-2.5 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none"
                 >
                   <option value="all">전체</option>
@@ -1150,42 +1157,58 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <option value="logout">로그아웃만</option>
                 </select>
               </div>
-              {sessionLogs.filter(l => sessionLogEventFilter === "all" || l.event === sessionLogEventFilter).length === 0 ? (
+              {filteredLogs.length === 0 ? (
                 <div className="text-[13px] text-gray-400 text-center py-16">접속 이력이 없습니다.</div>
               ) : (
+                <>
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B] text-white">
-                      <th className="px-4 py-2.5 text-left font-semibold">구분</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">회사명</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">이름</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">이메일</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">권한</th>
-                      <th className="px-4 py-2.5 text-center font-semibold">시각</th>
+                      <th className="px-2 py-2.5 text-center font-semibold w-[70px]">구분</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">회사명</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">이름</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">이메일</th>
+                      <th className="px-2 py-2.5 text-center font-semibold w-[80px]">권한</th>
+                      <th className="px-2 py-2.5 text-center font-semibold w-[140px]">시각</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {sessionLogs.filter(l => sessionLogEventFilter === "all" || l.event === sessionLogEventFilter).map(l => (
+                    {pageLogs.map(l => (
                       <tr key={l.id} className="hover:bg-gray-50 transition">
-                        <td className="px-4 py-3">
+                        <td className="px-2 py-2.5 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${l.event === "login" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"}`}>
                             {l.event === "login" ? "로그인" : "로그아웃"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-700">{l.companyName || "-"}</td>
-                        <td className="px-4 py-3 text-gray-700">{l.name || "-"}</td>
-                        <td className="px-4 py-3 text-gray-500">{l.email || "-"}</td>
-                        <td className="px-4 py-3 text-gray-500">{ROLE_LABELS[l.role] || l.role || "-"}</td>
-                        <td className="px-4 py-3 text-center text-gray-400 whitespace-nowrap">
+                        <td className="px-2 py-2.5 text-center text-gray-700 truncate max-w-[120px]">{l.companyName || "-"}</td>
+                        <td className="px-2 py-2.5 text-center text-gray-700 truncate max-w-[100px]">{l.name || "-"}</td>
+                        <td className="px-2 py-2.5 text-center text-gray-500 truncate max-w-[160px]">{l.email || "-"}</td>
+                        <td className="px-2 py-2.5 text-center text-gray-500">{ROLE_LABELS[l.role] || l.role || "-"}</td>
+                        <td className="px-2 py-2.5 text-center text-gray-400 whitespace-nowrap">
                           {l.at?.seconds ? new Date(l.at.seconds * 1000).toLocaleString("ko-KR") : "-"}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                <div className="flex items-center justify-center gap-1 py-3 border-t border-gray-100">
+                  <button
+                    onClick={() => setSessionLogPage(p => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-2.5 py-1 rounded-md text-[12px] font-semibold border border-gray-200 text-gray-500 disabled:opacity-40 hover:bg-gray-50"
+                  >이전</button>
+                  <span className="text-[12px] text-gray-500 px-2">{page} / {totalPages}</span>
+                  <button
+                    onClick={() => setSessionLogPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-2.5 py-1 rounded-md text-[12px] font-semibold border border-gray-200 text-gray-500 disabled:opacity-40 hover:bg-gray-50"
+                  >다음</button>
+                </div>
+                </>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* 모바일 미리보기 */}
