@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import MobileFleetView from "./MobileFleetView";
+import MobileEasyMode from "./MobileEasyMode";
 import MobileAttendanceBoard from "./MobileAttendanceBoard";
 import MobileIntelView from "./MobileIntelView";
 import InternalMessenger from "../InternalMessenger";
@@ -3098,6 +3099,171 @@ const deleteSingleOrder = async (order) => {
     }
   };
 
+
+  // --------------------------------------------------
+  // 🟢 쉬운모드(easyMode) 전용 핸들러
+  // 기존 "🔹 신규 등록"(handleSave) / handleSaveDriverToOrder 와 동일한 Firestore
+  // 저장 시퀀스를 그대로 재현한다 (로직 이원화 방지를 위해 필드만 단순화).
+  // --------------------------------------------------
+  const easyModeSubmitRegister = async (simple) => {
+    if (role === "viewer") {
+      return { ok: false, error: "조회전용 권한으로는 등록할 수 없습니다." };
+    }
+    if (!simple?.상차지명 || !simple?.하차지명) {
+      return { ok: false, error: "상차지 / 하차지는 필수입니다." };
+    }
+
+    const 청구운임 = toNumber(simple.청구운임);
+    const 기사운임 = 0;
+    const 수수료 = 청구운임 - 기사운임;
+    const today = todayKST();
+    const 상차일 = simple.상차일 || today;
+
+    const docData = {
+      거래처명: simple.거래처명 || "",
+      상차지명: simple.상차지명,
+      상차지주소: "",
+      상차지담당자: "",
+      상차지담당자번호: "",
+      하차지명: simple.하차지명,
+      하차지주소: "",
+      하차지담당자: "",
+      하차지담당자번호: "",
+      화물내용: simple.화물내용 || "",
+      차량종류: simple.차량종류 || "",
+      차량톤수: toTonUnit(simple.톤수) || "",
+      상차방법: "",
+      하차방법: "",
+      상차일,
+      상차시간: "",
+      상차시간기준: null,
+      하차일: 상차일,
+      하차시간: "",
+      하차시간기준: null,
+      지급방식: "",
+      배차방식: "",
+      혼적여부: "독차",
+      혼적: false,
+      적요: "",
+      메모: "",
+      전달사항: "",
+      전달사항고정: false,
+
+      차량번호: "",
+      기사명: "",
+      전화번호: "",
+      이름: "",
+      전화: "",
+
+      청구운임,
+      기사운임,
+      수수료,
+
+      배차상태: "배차중",
+      상태: "배차중",
+
+      경유상차목록: [],
+      경유지_상차: [],
+      경유하차목록: [],
+      경유지_하차: [],
+
+      updatedAt: serverTimestamp(),
+      _lastModified: Date.now(),
+    };
+
+    try {
+      const ref = await addDoc(collection(db, collName), {
+        ...docData,
+        _id: "",
+        id: "",
+        등록일: today,
+        createdAt: serverTimestamp(),
+      });
+
+      await updateDoc(doc(db, collName, ref.id), {
+        _id: ref.id,
+        id: ref.id,
+      });
+
+      await syncPlaceFromOrder(docData);
+
+      // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (일반모드와 동일)
+      const matchedShipper = approvedShippers.find(
+        (a) => (a.companyName || "").trim() === String(docData.거래처명 || "").trim()
+      );
+      if (matchedShipper) {
+        autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
+          console.error("자동 화주사 전송 실패:", e)
+        );
+      }
+
+      showSuccess("등록 완료");
+      return { ok: true };
+    } catch (e) {
+      console.error(e);
+      return { ok: false, error: e?.message || "등록 실패" };
+    }
+  };
+
+  const easyModeAssignVehicle = async (order, { 차량번호, 기사명, 전화번호 }) => {
+    if (role === "viewer") {
+      return { ok: false, error: "조회전용 권한으로는 배차할 수 없습니다." };
+    }
+    if (!order) return { ok: false, error: "오더 정보가 없습니다." };
+    if (!String(차량번호 || "").trim()) {
+      return { ok: false, error: "차량번호를 입력해주세요." };
+    }
+    try {
+      const colName = order.__col || collName;
+      const docId = order._id || order.id;
+
+      await updateDoc(doc(db, colName, docId), {
+        차량번호,
+        기사명: 기사명 || "",
+        이름: 기사명 || "",
+        전화번호: 전화번호 || "",
+        전화: 전화번호 || "",
+        배차상태: "배차완료",
+        상태: "배차완료",
+        배차완료일시: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        _lastModified: Date.now(),
+      });
+
+      // 신규 기사면 기사관리에 등록 (일반모드 handleSaveDriverToOrder와 동일)
+      const nd = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+      const existingDriver = drivers.find((d) => nd(d.차량번호) === nd(차량번호));
+      if (!existingDriver) {
+        await upsertDriver({ 차량번호, 이름: 기사명 || "", 전화번호: 전화번호 || "" });
+      }
+
+      showSuccess("배차 완료");
+      return { ok: true };
+    } catch (e) {
+      console.error("배차 저장 오류:", e);
+      return { ok: false, error: e?.message || "배차 저장 실패" };
+    }
+  };
+
+  if (easyMode) {
+    return (
+      <MobileEasyMode
+        orders={orders}
+        unassignedOrders={unassignedOrders}
+        drivers={drivers}
+        clients={clients}
+        currentUser={currentUser}
+        userCompany={userCompany}
+        role={role}
+        onExitEasyMode={() => { setEasyMode(false); localStorage.setItem("easyMode", "0"); }}
+        onSubmitRegister={easyModeSubmitRegister}
+        onAssignVehicle={easyModeAssignVehicle}
+        showToast={showToast}
+        showSuccess={showSuccess}
+        onLogout={logout}
+      />
+    );
+  }
 
 const title =
   page === "list" ? "등록내역"
