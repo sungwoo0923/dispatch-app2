@@ -17,6 +17,9 @@ import ShipperNotice from "./pages/ShipperNotice";
 import ShipperInquiry from "./pages/ShipperInquiry";
 import InternalMessenger from "../InternalMessenger";
 
+const myInfoLabelCls = "block text-xs font-bold text-gray-600 mb-1";
+const myInfoInputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
+
 export default function ShipperApp() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -199,7 +202,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
       </div>
 <button
   onClick={() => setMyInfoOpen(true)}
-  className="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-sm"
+  className="bg-white/10 hover:bg-white/20 border border-white/15 px-3 py-1.5 rounded-lg text-sm font-semibold transition"
 >
   내정보
 </button>
@@ -242,48 +245,54 @@ location.pathname.startsWith("/shipper/transport")
         excludeRoles={["driver", "viewer"]}
       />
       {myInfoOpen && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-xl w-[420px] p-6 shadow-xl">
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setMyInfoOpen(false)}>
+    <div className="bg-white rounded-2xl w-[420px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
 
-      <h2 className="text-lg font-bold mb-4">내 정보</h2>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <h2 className="text-white font-bold text-[15px]">내 정보</h2>
+        <button onClick={() => setMyInfoOpen(false)} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+      </div>
+
+      <div className="p-6 space-y-3.5 max-h-[70vh] overflow-y-auto">
 
       {/* 아이디 */}
-      <div className="mb-3">
-        <label className="text-sm">아이디</label>
+      <div>
+        <label className={myInfoLabelCls}>아이디</label>
         <input
           value={user.email}
           disabled
-          className="w-full border px-3 py-2 rounded bg-gray-100"
+          className={myInfoInputCls + " bg-gray-100 text-gray-500"}
         />
       </div>
 
       {/* 이름 */}
-      <div className="mb-3">
-        <label className="text-sm">이름</label>
+      <div>
+        <label className={myInfoLabelCls}>이름</label>
         <input
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className="w-full border px-3 py-2 rounded"
+          className={myInfoInputCls}
         />
       </div>
 
       {/* 핸드폰 */}
-      <div className="mb-3">
-        <label className="text-sm">핸드폰번호</label>
+      <div>
+        <label className={myInfoLabelCls}>핸드폰번호</label>
         <input
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          className="w-full border px-3 py-2 rounded"
+          className={myInfoInputCls}
         />
       </div>
 
       {/* 부서 */}
-      <div className="mb-3">
-        <label className="text-sm">부서</label>
+      <div>
+        <label className={myInfoLabelCls}>부서</label>
         <select
   value={form.department}
+  onChange={(e) => setForm({ ...form, department: e.target.value })}
   disabled={!(isMaster || isSubMaster)}
-          className="w-full border px-3 py-2 rounded"
+          className={myInfoInputCls + (!(isMaster || isSubMaster) ? " bg-gray-100 text-gray-500" : "")}
         >
           <option>선택</option>
           <option>경영</option>
@@ -299,12 +308,13 @@ location.pathname.startsWith("/shipper/transport")
       </div>
 
       {/* 직책 */}
-      <div className="mb-3">
-        <label className="text-sm">직책</label>
+      <div>
+        <label className={myInfoLabelCls}>직책</label>
         <select
   value={form.position}
+  onChange={(e) => setForm({ ...form, position: e.target.value })}
   disabled={!(isMaster || isSubMaster)}
-          className="w-full border px-3 py-2 rounded"
+          className={myInfoInputCls + (!(isMaster || isSubMaster) ? " bg-gray-100 text-gray-500" : "")}
         >
           <option>선택</option>
           <option>대표</option>
@@ -319,9 +329,9 @@ location.pathname.startsWith("/shipper/transport")
       </div>
 
       {/* 내 권한 */}
-      <div className="mb-3">
-        <label className="text-sm text-gray-600 block mb-1">내 권한</label>
-        <div className="w-full border px-3 py-2 rounded bg-gray-50 text-sm text-gray-700">
+      <div>
+        <label className={myInfoLabelCls}>내 권한</label>
+        <div className={myInfoInputCls + " bg-gray-50 font-semibold text-[#1B2B4B]"}>
           {userData?.permissions?.master
             ? "마스터"
             : userData?.permissions?.subMaster
@@ -339,16 +349,17 @@ location.pathname.startsWith("/shipper/transport")
       {/* 비밀번호 변경 */}
       <button
         onClick={() => navigate("/shipper/change-password")}
-        className="w-full bg-gray-800 text-white py-2 rounded mt-2"
+        className="w-full border border-gray-200 text-gray-600 hover:bg-gray-50 py-2.5 rounded-lg text-sm font-semibold transition"
       >
         비밀번호 변경
       </button>
+      </div>
 
       {/* 버튼 */}
-      <div className="flex gap-2 mt-4">
+      <div className="border-t border-gray-100 px-6 py-4 flex gap-2">
         <button
           onClick={() => setMyInfoOpen(false)}
-          className="flex-1 border py-2 rounded"
+          className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-semibold transition"
         >
           닫기
         </button>
@@ -358,7 +369,7 @@ location.pathname.startsWith("/shipper/transport")
             alert("저장 완료");
             setMyInfoOpen(false);
           }}
-          className="flex-1 bg-blue-500 text-white py-2 rounded"
+          className="flex-1 bg-[#1B2B4B] hover:opacity-90 text-white py-2.5 rounded-lg text-sm font-bold transition"
         >
           저장
         </button>
@@ -374,10 +385,10 @@ function MenuBtn({ label, active, onClick }) {
     <button
       onClick={onClick}
       className={`
-        px-3 py-1.5 rounded-md transition
+        px-3 py-1.5 rounded-md transition-all
         ${active
-          ? "bg-white/20"
-          : "hover:bg-white/10 text-gray-200"}
+          ? "bg-[#28406b] text-white font-semibold ring-1 ring-emerald-400/30"
+          : "text-gray-200 hover:text-white hover:bg-[#28406b] hover:ring-1 hover:ring-emerald-400/30"}
       `}
     >
       {label}

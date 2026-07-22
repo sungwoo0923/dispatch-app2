@@ -19,6 +19,11 @@ const generateTransportCode = () => {
   return code;
 };
 
+const todayStr = () => {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+};
+
 const fmtDate = (ts) => {
   if (!ts?.seconds) return "-";
   return new Date(ts.seconds * 1000).toLocaleString("ko-KR", {
@@ -71,6 +76,27 @@ export default function CompanyApplications() {
   const [reviewingEdit, setReviewingEdit] = useState(null);
   const [editRejectReason, setEditRejectReason] = useState("");
   const [showEditRejectInput, setShowEditRejectInput] = useState(false);
+  const [viewLimitDraft, setViewLimitDraft] = useState("");
+
+  useEffect(() => {
+    setViewLimitDraft(managingApp?.viewLimitUnlockedUntil || "");
+  }, [managingApp?.id]);
+
+  const saveViewLimitUnlock = async (untilValue) => {
+    setProcessing(true);
+    try {
+      await updateDoc(doc(db, "companyApplications", managingApp.id), {
+        viewLimitUnlockedUntil: untilValue || null,
+        viewLimitUnlockedBy: auth.currentUser?.email || "",
+        viewLimitUnlockedAt: serverTimestamp(),
+      });
+      setManagingApp((prev) => (prev ? { ...prev, viewLimitUnlockedUntil: untilValue || null } : null));
+      setViewLimitDraft(untilValue || "");
+      alert(untilValue ? `조회제한이 ${untilValue}까지 해제되었습니다.` : "조회제한이 다시 적용되었습니다.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
@@ -892,6 +918,46 @@ export default function CompanyApplications() {
                   </div>
                 )}
               </div>
+
+              {/* 운송목록 조회기간 제한 (화주 탭 + 승인된 회사) */}
+              {activeTab === "화주" && managingApp.status === "approved" && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    운송목록 조회기간 제한
+                  </div>
+                  <div className="px-4 py-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-gray-600">현재 상태</span>
+                      {managingApp.viewLimitUnlockedUntil && managingApp.viewLimitUnlockedUntil >= todayStr() ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          {managingApp.viewLimitUnlockedUntil}까지 확장 허용
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                          기본 6개월 제한 적용 중
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={viewLimitDraft} onChange={(e) => setViewLimitDraft(e.target.value)}
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px]" />
+                      <button onClick={() => saveViewLimitUnlock(viewLimitDraft)} disabled={processing || !viewLimitDraft}
+                        className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition disabled:opacity-50 whitespace-nowrap">
+                        확장 허용
+                      </button>
+                    </div>
+                    {managingApp.viewLimitUnlockedUntil && (
+                      <button onClick={() => saveViewLimitUnlock(null)} disabled={processing}
+                        className="w-full py-2 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50">
+                        지금 다시 잠그기
+                      </button>
+                    )}
+                    <p className="text-[11px] text-gray-400">해제 만료일까지는 6개월 이전 데이터도 화주사 화면(PC/모바일)에서 조회할 수 있습니다.</p>
+                  </div>
+                </div>
+              )}
 
               {/* 권한 관리 (화주 탭 + userId 있는 경우) */}
               {activeTab === "화주" && managingApp.userId && appUserPerms !== null && (

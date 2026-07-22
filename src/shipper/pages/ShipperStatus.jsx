@@ -52,6 +52,13 @@ const get3MonthsAgo = () => {
   return kst.toISOString().slice(0, 10);
 };
 
+const get6MonthsAgo = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 6);
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+};
+
 // 이번 달 1일 ~ 말일 (KST 기준) — 운송목록 진입 시 기본 조회 구간
 const getMonthStartKST = () => {
   const now = new Date();
@@ -239,6 +246,38 @@ export default function ShipperStatus() {
       if (snap.exists()) setUserData(snap.data());
     });
   }, [user]);
+
+  // 운송목록 조회기간 제한(기본 6개월) — 운송사 관리자/최고관리자가 companyApplications
+  // 문서에 임시로 걸어둔 확장 허용(viewLimitUnlockedUntil)이 있으면 해제된다.
+  const [viewLimitUntil, setViewLimitUntil] = useState(undefined); // undefined=조회전, null=제한없음(관리자해제), "YYYY-MM-DD"=해제만료일
+  useEffect(() => {
+    if (!userData?.companyName) return;
+    getDocs(query(
+      collection(db, "companyApplications"),
+      where("companyName", "==", userData.companyName),
+      where("status", "==", "approved"),
+    )).then(snap => {
+      if (snap.empty) { setViewLimitUntil(null); return; }
+      setViewLimitUntil(snap.docs[0].data()?.viewLimitUnlockedUntil ?? null);
+    }).catch(() => setViewLimitUntil(null));
+  }, [userData?.companyName]);
+
+  const today = getTodayKST();
+  const viewLimitActive = viewLimitUntil !== null && !(viewLimitUntil && viewLimitUntil >= today);
+  const minAllowedDate = viewLimitActive ? get6MonthsAgo() : undefined;
+
+  useEffect(() => {
+    if (minAllowedDate && startDate < minAllowedDate) setStartDate(minAllowedDate);
+  }, [minAllowedDate]);
+
+  const handleStartDateChange = (v) => {
+    if (minAllowedDate && v < minAllowedDate) {
+      setStartDate(minAllowedDate);
+      alert(`조회 가능 기간은 최근 6개월까지입니다. (${minAllowedDate} 이후)\n더 이전 데이터가 필요하면 운송사 관리자에게 요청해 주세요.`);
+      return;
+    }
+    setStartDate(v);
+  };
 
   useEffect(() => {
     if (!user || !userData) return;
@@ -978,9 +1017,12 @@ export default function ShipperStatus() {
 
             {/* 검색 영역 */}
             <div className="flex gap-2 items-center flex-wrap">
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+              <input type="date" value={startDate} min={minAllowedDate} onChange={(e) => handleStartDateChange(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
               <span>~</span>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+              {viewLimitActive && (
+                <span className="text-[11px] text-gray-400">※ 최근 6개월까지 조회 가능</span>
+              )}
 
               <button
                 onClick={() => { const t = getTodayKST(); setStartDate(t); setEndDate(t); }}
