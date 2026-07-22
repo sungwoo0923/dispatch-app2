@@ -540,43 +540,37 @@ const sixMonthsAgo = getSixMonthsAgo();
       // ✅ 1️⃣ orders (화주 + 신규) + 알림 감지
   let ordersFirstLoad = true;
   const ordersPrev = new Map();
+  // id -> 가공된 row 객체. 매 스냅샷마다 전체 문서를 다시 map()하면 오더가
+  // 쌓일수록(수천 건) 다른 사람의 사소한 쓰기 한 건에도 전체를 재가공하게 되어
+  // 그때마다 화면이 버벅였다(기사 업로드/화주사 등록/모바일 등록 등 "누군가 쓸
+  // 때마다" PC 전체가 순간 렉걸리던 원인) — 실제로 변경된 문서만 다시 가공한다.
+  const ordersRowMap = new Map();
+  const parseWaypointsShared = (v) => {
+    if (Array.isArray(v) && v.length > 0) return v;
+    if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const ks = Object.keys(v);
+      if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
+      if (v.업체명) return [v];
+    }
+    return null;
+  };
+  const buildOrderRow = (id, data) => ({
+    _id: id,
+    __col: collName,
+    ...data,
+    경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
+    경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
+  });
 
   unsubs.push(
     onSnapshot(collection(db, collName), (snap) => {
-      const arr = snap.docs.map(d => {
-        const data = d.data() || {};
-        return {
-          _id: d.id,
-          __col: collName,
-          ...data,
-                    경유지_상차: (() => {
-            const parse = (v) => {
-              if (Array.isArray(v) && v.length > 0) return v;
-              if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
-              if (v && typeof v === "object" && !Array.isArray(v)) {
-                const ks = Object.keys(v);
-                if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
-                if (v.업체명) return [v];
-              }
-              return null;
-            };
-            return parse(data.경유지_상차) || parse(data.경유상차목록) || [];
-          })(),
-          경유지_하차: (() => {
-            const parse = (v) => {
-              if (Array.isArray(v) && v.length > 0) return v;
-              if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
-              if (v && typeof v === "object" && !Array.isArray(v)) {
-                const ks = Object.keys(v);
-                if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
-                if (v.업체명) return [v];
-              }
-              return null;
-            };
-            return parse(data.경유지_하차) || parse(data.경유하차목록) || [];
-          })(),
-        };
+      const changes = snap.docChanges();
+      changes.forEach((ch) => {
+        if (ch.type === "removed") { ordersRowMap.delete(ch.doc.id); return; }
+        ordersRowMap.set(ch.doc.id, buildOrderRow(ch.doc.id, ch.doc.data() || {}));
       });
+      const arr = Array.from(ordersRowMap.values());
 
       // "화주사 전송"으로 새로 생성된 사본은 화주사 화면에만 보이면 되는 문서라
       // 운송사 자체 배차 화면(dispatchData)에는 섞여 나오면 안 된다 — 원본 문서는
@@ -605,7 +599,7 @@ const sixMonthsAgo = getSixMonthsAgo();
       }
 
             // 🔔 변경 감지
-      snap.docChanges().forEach((ch) => {
+      changes.forEach((ch) => {
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
 
@@ -700,30 +694,24 @@ const sixMonthsAgo = getSixMonthsAgo();
     // ✅ 2️⃣ 기존 dispatch 데이터 + 알림 감지
   let dispatchFirstLoad = true;
   const dispatchPrev = new Map();
+  // orders 리스너와 동일한 이유로, 변경된 문서만 다시 가공한다.
+  const dispatchRowMap = new Map();
+  const buildDispatchRow = (id, data) => ({
+    _id: id,
+    __col: "dispatch",
+    ...data,
+    경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
+    경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
+  });
 
   unsubs.push(
     onSnapshot(collection(db, "dispatch"), (snap) => {
-            const arr2 = snap.docs.map(d => {
-        const data = d.data() || {};
-        const parseStops = (v) => {
-          if (Array.isArray(v) && v.length > 0) return v;
-          if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
-          if (v && typeof v === "object" && !Array.isArray(v)) {
-            const ks = Object.keys(v);
-            if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
-            if (v.업체명) return [v];
-          }
-          return null;
-        };
-        return {
-          _id: d.id,
-          __col: "dispatch",
-          ...data,
-          경유지_상차: parseStops(data.경유지_상차) || parseStops(data.경유상차목록) || [],
-          경유지_하차: parseStops(data.경유지_하차) || parseStops(data.경유하차목록) || [],
-
-        };
+      const changes = snap.docChanges();
+      changes.forEach((ch) => {
+        if (ch.type === "removed") { dispatchRowMap.delete(ch.doc.id); return; }
+        dispatchRowMap.set(ch.doc.id, buildDispatchRow(ch.doc.id, ch.doc.data() || {}));
       });
+      const arr2 = Array.from(dispatchRowMap.values());
 
       dispatchCache = arr2;
       React.startTransition(() => {
@@ -744,7 +732,7 @@ const sixMonthsAgo = getSixMonthsAgo();
       }
 
             // 🔔 변경 감지
-      snap.docChanges().forEach((ch) => {
+      changes.forEach((ch) => {
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
 
