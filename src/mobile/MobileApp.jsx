@@ -49,6 +49,72 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const role = localStorage.getItem("role") || "user";
 const collName = "dispatch";
 
+// 운송사가 연동 승인된 화주사의 거래처명으로 오더를 등록하면, DispatchApp.jsx(PC)의
+// autoTransmitToShipper / AdminMenu.jsx의 수동 "화주사 전송"과 동일한 매핑으로
+// 화주사가 볼 수 있는 사본을 즉시 생성한다. (모듈 최상위 스코프)
+const autoTransmitToShipperMobile = async (savedRecord, shipperApp) => {
+  let myCompanyCode = "";
+  try {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      const meSnap = await getDoc(doc(db, "users", uid));
+      myCompanyCode = meSnap.exists() ? (meSnap.data().companyCode || "") : "";
+    }
+  } catch {}
+
+  const effectiveCompanyName = savedRecord.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+  const payload = {
+    거래처명: shipperApp.companyName,
+    shipperCompany: shipperApp.companyName,
+    company: effectiveCompanyName,
+    companyCode: myCompanyCode,
+    운송사명: effectiveCompanyName,
+    운송사코드: myCompanyCode,
+    작성자: auth.currentUser?.email || "",
+    상차지명: savedRecord.상차지명 || "",
+    상차지주소: savedRecord.상차지주소 || "",
+    상차담당자명: savedRecord.상차지담당자 || "",
+    상차담당자번호: savedRecord.상차지담당자번호 || "",
+    하차지명: savedRecord.하차지명 || "",
+    하차지주소: savedRecord.하차지주소 || "",
+    하차담당자명: savedRecord.하차지담당자 || "",
+    하차담당자번호: savedRecord.하차지담당자번호 || "",
+    등록일: savedRecord.등록일 || savedRecord.상차일 || "",
+    상차일: savedRecord.상차일 || "",
+    상차시간: savedRecord.상차시간 || "",
+    상차시간구분: savedRecord.상차시간기준 || "정각",
+    하차일: savedRecord.하차일 || "",
+    하차시간: savedRecord.하차시간 || "",
+    하차시간구분: savedRecord.하차시간기준 || "정각",
+    차량종류: savedRecord.차량종류 || "",
+    차량톤수: savedRecord.차량톤수 || "",
+    상차방법: savedRecord.상차방법 || "",
+    하차방법: savedRecord.하차방법 || "",
+    지급방식: savedRecord.지급방식 || "",
+    화물내용: savedRecord.화물내용 || "",
+    화물단위: savedRecord.화물타입 || "",
+    청구운임: Number(savedRecord.청구운임) || 0,
+    차량번호: savedRecord.차량번호 || "",
+    이름: savedRecord.이름 || "",
+    전화번호: savedRecord.전화번호 || "",
+    배차상태: savedRecord.차량번호 ? "배차완료" : "배차중",
+    경유상차목록: Array.isArray(savedRecord.경유상차목록) ? savedRecord.경유상차목록 : [],
+    경유하차목록: Array.isArray(savedRecord.경유하차목록) ? savedRecord.경유하차목록 : [],
+    source: "transport_transmit",
+    originCol: savedRecord.__col || "dispatch",
+    originId: savedRecord._id,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const newDocRef = await addDoc(collection(db, "orders"), payload);
+  await updateDoc(doc(db, savedRecord.__col || "dispatch", savedRecord._id), {
+    _transmittedToShipper: shipperApp.companyName,
+    _transmittedOrderId: newDocRef.id,
+    _transmittedAt: Date.now(),
+  });
+};
+
 // 배차중 뱃지 pulse 애니메이션 CSS (한 번만 삽입)
 if (typeof document !== "undefined" && !document.getElementById("__mobile-badge-style")) {
   const s = document.createElement("style");
@@ -1084,6 +1150,21 @@ export default function MobileApp({ role, user, userCompany = "" }) {
       document.documentElement.style.zoom = "";
     };
   }, []);
+  // ===================== 연동 승인된 화주사 목록(자동 전송용) =====================
+  // 운송사가 오더 등록 시 거래처명이 여기 목록의 화주사 회사명과 일치하면,
+  // PC(DispatchApp.jsx)와 동일하게 즉시 화주사 화면에도 사본을 생성한다.
+  const [approvedShippers, setApprovedShippers] = useState([]);
+  useEffect(() => {
+    const viewCompany = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+    const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((a) => a.linkedTransportCompany?.companyName === viewCompany && a.transportApprovalStatus === "approved");
+      setApprovedShippers(list);
+    });
+    return () => unsub();
+  }, [userCompany]);
+
   const [page, setPage] = useState("list");
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
   const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장
@@ -2673,6 +2754,16 @@ const groupedByDate = useMemo(() => {
 
       // ★ PC 거래처관리(places) 동기화
       await syncPlaceFromOrder(docData);
+
+      // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (PC와 동일)
+      const matchedShipper = approvedShippers.find(
+        (a) => (a.companyName || "").trim() === String(docData.거래처명 || "").trim()
+      );
+      if (matchedShipper) {
+        autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
+          console.error("자동 화주사 전송 실패:", e)
+        );
+      }
 
       showSuccess("등록 완료");
       setPage("list");
