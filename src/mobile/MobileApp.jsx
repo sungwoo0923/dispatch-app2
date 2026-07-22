@@ -4517,6 +4517,7 @@ setOpenMemo={setOpenMemo}
                 !places.some(p => normalizeCompany(p.거래처명) === normalizeCompany(c.거래처명))
               )
             ]}
+            basicClients={clients}
             onSave={handleSave}
             setPage={setPage}
             showToast={showToast}
@@ -9839,6 +9840,7 @@ function MobileOrderForm({
   form,
   setForm,
   clients,
+  basicClients,
   onSave,
   setPage,
   showToast,
@@ -9848,6 +9850,10 @@ function MobileOrderForm({
   cardVersionB = false,
   role,
 }) {
+  // 거래처명 자동완성은 기본거래처만 대상으로 한다 — clients prop은 상/하차지 주소
+  // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
+  // 하차지명이 거래처 드롭다운에 함께 뜬다.
+  const basicClientsOnly = basicClients || clients;
     const isLockedShipperEdit = !!form._editId &&
       (form.source === "shipper" || form.source === "shipper_mobile");
     const handleSwapPickupDrop = () => {
@@ -9881,7 +9887,9 @@ const [matchedClients, setMatchedClients] = useState([]);
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
-// 🔍 거래처 검색 함수 (clients prop은 MobileApp에서 이미 places+clients 통합 전달됨)
+// 🔍 거래처 검색 함수 — 기본거래처(basicClientsOnly)만 대상으로 한다.
+// (clients prop은 MobileApp에서 이미 places+clients 통합 전달되어 상/하차지
+//  주소 자동완성에 쓰이므로, 거래처명 검색에는 별도로 받은 basicClients를 사용한다)
 const searchClient = (q) => {
   if (!q.trim()) {
     setMatchedClients([]);
@@ -9894,7 +9902,7 @@ const searchClient = (q) => {
   const starts = [];
   const includes = [];
 
-  clients.forEach((c) => {
+  basicClientsOnly.forEach((c) => {
     const nameRaw = c.거래처명 || "";
     const name = normalizeCompany(nameRaw);
 
@@ -10676,7 +10684,7 @@ const pickDrop = (c) => {
         const results = q
           ? (() => {
               const exact = [], starts = [], includes = [];
-              clients.forEach((c) => {
+              basicClientsOnly.forEach((c) => {
                 const n = normalizeCompany(c.거래처명 || "");
                 if (n === nq) exact.push(c);
                 else if (n.startsWith(nq)) starts.push(c);

@@ -6127,18 +6127,37 @@ function makeAiExplain(ai) {
   );
 }
     // =====================
-    // ⭐ 거래처 = 하차지거래처 기반으로 자동완성
+    // ⭐ 거래처 자동완성 — 기본거래처(clients)만 대상으로 한다. 하차지거래처(places)는
+    // 배송지 주소록일 뿐 회사명 목록이 아니라서, 여기에 섞이면 관련 없는 하차지명이
+    // 거래처 드롭다운에 함께 뜨는 원인이 된다.
     // =====================
     const norm = (s = "") => String(s).trim().toLowerCase();
 
-    // placeRows = [{업체명, 주소, 담당자, 담당자번호}]
+    const basicClientsOnly = React.useMemo(() => {
+      return (clients || [])
+        .map(c => {
+          const name = c.업체명 || c.거래처명 || "";
+          if (!name) return null;
+          return {
+            업체명: name,
+            주소: c.주소 || "",
+            담당자: c.담당자 || "",
+            담당자번호: c.연락처 || c.담당자번호 || "",
+            메모: c.메모 || "",
+            등급: c.등급 || "일반",
+            등급변경일: c.등급변경일 || null,
+          };
+        })
+        .filter(Boolean);
+    }, [clients]);
+
     const filteredClients = React.useMemo(() => {
   const q = norm(clientQuery);
-  if (!q) return mergedClients;
+  if (!q) return basicClientsOnly;
 
   const nq = normalizeKey(q);
 
-  return mergedClients
+  return basicClientsOnly
     .map(p => {
       const name = p.업체명 || "";
       const nName = norm(name);
@@ -6163,7 +6182,7 @@ function makeAiExplain(ai) {
     })
     .filter(p => p.__score > 0)
     .sort((a, b) => b.__score - a.__score);
-}, [clientQuery, mergedClients]);
+}, [clientQuery, basicClientsOnly]);
 const focusById = (id) => {
   if (!id) return false;
   const el = document.getElementById(id);
