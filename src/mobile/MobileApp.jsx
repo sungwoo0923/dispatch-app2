@@ -7362,20 +7362,20 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             style={{ border: `1px solid ${statusRing}` }}
           >
             {cargo && (
-              <div className="font-bold text-amber-600 text-[0.92em] leading-relaxed break-words inline-flex items-start gap-1">
-                <Package className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" /> <span>{cargo}</span>
+              <div className="font-extrabold text-amber-600 text-[1em] leading-relaxed break-words inline-flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-amber-500 shrink-0" /> <span>{cargo}</span>
               </div>
             )}
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 min-w-0 flex-1 text-[0.85em] leading-relaxed">
+              <span className="flex items-center gap-2.5 min-w-0 flex-1 text-[0.9em] leading-relaxed">
                 {ton && (
                   <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-                    <Scale className="w-3 h-3 text-gray-500 shrink-0" /> {ton}
+                    <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
                   </span>
                 )}
                 {carType && (
                   <span className="font-bold text-gray-900 truncate inline-flex items-center gap-1">
-                    <VehicleTypeIcon type={carType} className="w-3 h-3 text-gray-500 shrink-0" /> {carType}
+                    <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
                   </span>
                 )}
                 {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
@@ -7617,20 +7617,20 @@ const dt = new Date(y, m - 1, d, hh, mm);
       {/* ▶ 하단 정보 — 화물내용이 절대 잘리지 않도록 첫 줄에 단독 배치, 톤수/차종·운임은 아래 줄 */}
       <div className="flex flex-col gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
         {cargo && (
-          <div className="font-bold text-amber-600 text-[0.85em] leading-relaxed break-words inline-flex items-start gap-1">
-            <Package className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" /> <span>{cargo}</span>
+          <div className="font-extrabold text-amber-600 text-[0.95em] leading-relaxed break-words inline-flex items-center gap-1.5">
+            <Package className="w-4 h-4 text-amber-500 shrink-0" /> <span>{cargo}</span>
           </div>
         )}
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 min-w-0 flex-1 text-[0.78em] leading-relaxed">
+          <span className="flex items-center gap-2.5 min-w-0 flex-1 text-[0.82em] leading-relaxed">
             {ton && (
               <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-                <Scale className="w-3 h-3 text-gray-500 shrink-0" /> {ton}
+                <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
               </span>
             )}
             {carType && (
               <span className="font-bold text-gray-900 truncate inline-flex items-center gap-1">
-                <VehicleTypeIcon type={carType} className="w-3 h-3 text-gray-500 shrink-0" /> {carType}
+                <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
               </span>
             )}
             {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
@@ -9340,18 +9340,22 @@ const handleAssignClick = () => {
                                     </div>
                                   )}
                                   {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
-                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                  <div className="flex items-center gap-3 mt-1.5 overflow-x-auto whitespace-nowrap">
                                     {o.화물내용 && (
-                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-600"}`}>
-                                        {o.화물내용}
+                                      <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
+                                        <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {o.화물내용}
                                       </span>
                                     )}
                                     {(o.톤수 || o.차량톤수) && (
-                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${te ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                                        {o.톤수 || o.차량톤수}
+                                      <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
+                                        <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {o.톤수 || o.차량톤수}
                                       </span>
                                     )}
-                                    {(o.차종 || o.차량종류) && <span className="text-[12.5px] font-bold px-2 py-1 rounded-md bg-gray-100 text-gray-600">{o.차종 || o.차량종류}</span>}
+                                    {(o.차종 || o.차량종류) && (
+                                      <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
+                                        <VehicleTypeIcon type={o.차종 || o.차량종류} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {o.차종 || o.차량종류}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
@@ -11751,18 +11755,22 @@ const pickDrop = (c) => {
                                     </div>
                                   )}
                                   {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
-                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                  <div className="flex items-center gap-3 mt-1.5 overflow-x-auto whitespace-nowrap">
                                     {o.화물내용 && (
-                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-600"}`}>
-                                        {o.화물내용}
+                                      <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
+                                        <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {o.화물내용}
                                       </span>
                                     )}
                                     {(o.톤수 || o.차량톤수) && (
-                                      <span className={`text-[12.5px] font-bold px-2 py-1 rounded-md ${te ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                                        {o.톤수 || o.차량톤수}
+                                      <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
+                                        <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {o.톤수 || o.차량톤수}
                                       </span>
                                     )}
-                                    {(o.차종 || o.차량종류) && <span className="text-[12.5px] font-bold px-2 py-1 rounded-md bg-gray-100 text-gray-600">{o.차종 || o.차량종류}</span>}
+                                    {(o.차종 || o.차량종류) && (
+                                      <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
+                                        <VehicleTypeIcon type={o.차종 || o.차량종류} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {o.차종 || o.차량종류}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
