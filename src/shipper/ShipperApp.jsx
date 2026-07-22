@@ -75,12 +75,12 @@ useEffect(() => {
       const transportName = o.운송사명 || "운송사";
       const doneAt = _tsToDate(o.배차완료일시);
       if (doneAt && _isTodayKST(doneAt)) {
-        evts.push({ id: `${d.id}-done`, type: "배차완료", time: doneAt, text: `${transportName}에서 ${from} → ${to} 배차를 완료했습니다.` });
+        evts.push({ id: `${d.id}-done`, type: "배차완료", time: doneAt, text: `${transportName}에서 ${from} → ${to} 배차완료` });
       }
       if (o.최종수정출처 === "transport") {
         const editAt = _tsToDate(o.최종수정일시);
         if (editAt && _isTodayKST(editAt)) {
-          evts.push({ id: `${d.id}-edit`, type: "수정", time: editAt, text: `${transportName}에서 ${from} → ${to} 오더를 수정했습니다.` });
+          evts.push({ id: `${d.id}-edit`, type: "수정", time: editAt, text: `${transportName}에서 ${from} → ${to} 수정했습니다` });
         }
       }
     });
@@ -155,7 +155,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
     <div className="min-h-screen bg-[#f3f4f6]">
       {/* ================= HEADER ================= */}
       <header className="bg-[#2f3e55] text-white">
-  <div className="px-8 py-4 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+  <div className="px-8 py-4 grid grid-cols-[1.7fr_auto_1fr] items-center gap-4">
 
     {/* 좌측 로고 + 실시간 현황판 */}
     <div className="flex items-center gap-4 min-w-0">
@@ -453,7 +453,7 @@ function ShipperLiveTicker({ events, onOpenBig }) {
   const current = events[idx] || null;
 
   return (
-    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 max-w-[420px] flex-1">
+    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 w-full flex-1">
       <style>{`
         @keyframes shipperTickerSlideIn {
           from { opacity: 0; transform: translateY(8px); }
@@ -466,7 +466,7 @@ function ShipperLiveTicker({ events, onOpenBig }) {
         <div key={current ? current.id : "empty"} className="shipper-ticker-slide absolute inset-0 flex items-center gap-1.5">
           {current ? (
             <>
-              <span className="text-[12px] text-white/85 truncate">{current.text}</span>
+              <span className="text-[12px] text-white/85 whitespace-nowrap">{current.text}</span>
               <span className="text-[11px] text-white/40 shrink-0">{_fmtTimeKST(current.time)}</span>
             </>
           ) : (
