@@ -1859,9 +1859,17 @@ function ToastProvider({ children }) {
             <div className="flex items-start gap-3 px-4 py-3">
               {/* 아이콘 */}
               <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-[16px]">
-                  {t.type === "dispatch" ? "🚚" : t.type === "order" ? "📦" : t.type === "cancel" ? "🚫" : "🔔"}
-                </span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {t.type === "dispatch" ? (
+                    <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
+                  ) : t.type === "order" ? (
+                    <><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v9"/></>
+                  ) : t.type === "cancel" ? (
+                    <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
+                  ) : (
+                    <><path d="M12 3a5 5 0 0 0-5 5v3.5L5 15h14l-2-3.5V8a5 5 0 0 0-5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></>
+                  )}
+                </svg>
               </div>
 
               {/* 내용 */}
@@ -1916,7 +1924,13 @@ function ToastProvider({ children }) {
           >
             <div className="flex items-start gap-3 px-4 py-3">
               <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-[16px]">{t.type === "editRequest" ? "✏️" : "🚫"}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {t.type === "editRequest" ? (
+                    <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>
+                  ) : (
+                    <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
+                  )}
+                </svg>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-[13px] font-bold leading-snug">
@@ -16345,9 +16359,12 @@ React.useEffect(() => {
       const el = document.getElementById(`row-${id}`);
       if (!el) return;
       el.classList.remove('row-highlight');
-      void el.offsetWidth; // reflow 강제
-      el.classList.add('row-highlight');
-      setTimeout(() => el.classList.remove('row-highlight'), 2500);
+      // 강제 동기 reflow(offsetWidth 읽기) 대신 다음 프레임으로 미뤄 애니메이션을 재시작한다 —
+      // 저장 직후 큰 표를 다시 그리는 시점과 겹치면 동기 reflow가 눈에 띄는 끊김을 유발했다.
+      requestAnimationFrame(() => {
+        el.classList.add('row-highlight');
+        setTimeout(() => el.classList.remove('row-highlight'), 2500);
+      });
     });
   }, []);
 
