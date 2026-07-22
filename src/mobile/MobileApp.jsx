@@ -7221,10 +7221,6 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   const cargo = hasWaypointCargo && totalPallet > 0
     ? `${totalPallet}파레트`
     : (order.화물내용 || "");
-  const bottomText = [ton && `${ton}`, carType, cargo]
-    .filter(Boolean)
-    .join(" · ");
-
   const isCold =
     String(order.차량종류 || order.차종 || "").includes("냉장") ||
     String(order.차량종류 || order.차종 || "").includes("냉동");
@@ -7618,13 +7614,38 @@ const dt = new Date(y, m - 1, d, hh, mm);
         )}
       </div>
 
-      <div className="mt-2 pt-2 border-t border-dashed border-gray-200" />
-
-      {/* ▶ 하단 */}
-      <div className="flex justify-between text-[0.8em] text-gray-700">
-        <div className="truncate">{bottomText || "-"}</div>
-        <div className="whitespace-nowrap">
-          청구 {fmtMoney(claim)} · 기사 {fmtMoney(fee)}
+      {/* ▶ 하단 정보 — 화물내용이 절대 잘리지 않도록 첫 줄에 단독 배치, 톤수/차종·운임은 아래 줄 */}
+      <div className="flex flex-col gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+        {cargo && (
+          <div className="font-bold text-amber-600 text-[0.85em] leading-relaxed break-words inline-flex items-start gap-1">
+            <Package className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" /> <span>{cargo}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 min-w-0 flex-1 text-[0.78em] leading-relaxed">
+            {ton && (
+              <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
+                <Scale className="w-3 h-3 text-gray-500 shrink-0" /> {ton}
+              </span>
+            )}
+            {carType && (
+              <span className="font-bold text-gray-900 truncate inline-flex items-center gap-1">
+                <VehicleTypeIcon type={carType} className="w-3 h-3 text-gray-500 shrink-0" /> {carType}
+              </span>
+            )}
+            {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="flex items-baseline gap-0.5">
+              <span className="text-[0.6em] text-gray-400 font-semibold">청구</span>
+              <span className="text-[0.78em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
+            </span>
+            <span className="w-px h-2.5 bg-gray-200" />
+            <span className="flex items-baseline gap-0.5">
+              <span className="text-[0.6em] text-gray-400 font-semibold">기사</span>
+              <span className="text-[0.78em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
+            </span>
+          </div>
         </div>
       </div>
 
