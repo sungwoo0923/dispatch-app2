@@ -609,11 +609,13 @@ const sixMonthsAgo = getSixMonthsAgo();
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
 
+        // 운송사 자신이 방금 등록한 오더까지 "신규 오더 등록" 배너가 떠서 불필요하고
+        // 등록 직후 표 렌더링과 겹쳐 끊김만 유발했다 — 화주사가 실제로 새로 보낸
+        // 배차요청일 때만("source"가 shipper 계열일 때만) 배너를 띄운다.
         if (ch.type === "added" && !ordersPrev.has(id)) {
-          if (d.상차지명 || d.거래처명) {
-            const prefix = (d.source === "shipper" || d.source === "shipper_mobile") ? "[화주사 배차요청] " : "";
+          if ((d.상차지명 || d.거래처명) && (d.source === "shipper" || d.source === "shipper_mobile")) {
             sflowToast(
-              `${prefix}${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              `[화주사 배차요청] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
               "order",
               { orderId: id, source: d.source }
             );
@@ -746,15 +748,9 @@ const sixMonthsAgo = getSixMonthsAgo();
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
 
-        if (ch.type === "added" && !dispatchPrev.has(id)) {
-          if (d.상차지명 || d.거래처명) {
-            sflowToast(
-              `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
-              "order",
-              { orderId: id }
-            );
-          }
-        }
+        // "dispatch" 컬렉션은 운송사 자신의 등록(PC/모바일)만 들어오는 컬렉션이라
+        // 여기서 새 오더 배너를 띄우면 항상 "내가 방금 등록한 오더" 자기 알림이 되어
+        // 불필요하고, 등록 직후 표 렌더링과 겹쳐 끊김만 유발했다 — 배너를 띄우지 않는다.
 
         if (ch.type === "modified") {
           const prev = dispatchPrev.get(id);
