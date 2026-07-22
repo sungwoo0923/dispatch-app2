@@ -133,6 +133,7 @@ export default function ShipperOrder({ editData, onClose }) {
   const [companyEditable, setCompanyEditable] = useState(false);
   const [companyEdit, setCompanyEdit] = useState("");
   const [contactPicker, setContactPicker] = useState(null); // { field, item, contacts }
+  const [contactQueue, setContactQueue] = useState([]); // 오더 불러오기 시 상/하차 모두 담당자 다중이면 순차 표시
   const [cargoRows, setCargoRows] = useState([{ qty: "", unit: "파레트", palletCo: "" }]);
   const [errors, setErrors] = useState({}); // { fieldKey: true }
   const [cargoRowErrors, setCargoRowErrors] = useState({}); // { rowIdx: true } — 파렛트사 미선택
@@ -271,14 +272,24 @@ export default function ShipperOrder({ editData, onClose }) {
     return () => window.removeEventListener("keydown", handler);
   }, [previewOpen]);
 
+  // 다른 화주사 계정으로 로그인했을 때 이전 계정의 데이터가 남아있지 않도록,
+  // 계정 구분 없이 공용으로 저장되던 예전 방식의 키는 최초 마운트 시 제거한다.
   useEffect(() => {
-    const saved = localStorage.getItem("fixedTransport");
+    try {
+      localStorage.removeItem("shipperOrderDraft");
+      localStorage.removeItem("fixedTransport");
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const saved = localStorage.getItem(`fixedTransport_${user.uid}`);
     if (saved) {
       const parsed = JSON.parse(saved);
       setFixedTransport(parsed);
       setForm(p => ({ ...p, 운송사명: parsed.name, 운송사코드: parsed.code }));
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     getDocs(query(
@@ -372,14 +383,17 @@ export default function ShipperOrder({ editData, onClose }) {
     setCargoRows([{ qty: "", unit: "파레트", palletCo: "" }]);
     setSuggestions([]); setShowDropdown(null); setActiveIndex(-1);
     setErrors({}); setCargoRowErrors({});
-    try { localStorage.removeItem("shipperOrderDraft"); } catch {}
+    try { if (user?.uid) localStorage.removeItem(`shipperOrderDraft_${user.uid}`); } catch {}
   };
 
-  /* 임시저장 (탭 이동/새로고침에도 작성 중이던 내용 유지) — 수정 모드에서는 사용 안 함 */
+  /* 임시저장 (탭 이동/새로고침에도 작성 중이던 내용 유지) — 수정 모드에서는 사용 안 함.
+     각 화주사 계정(uid)마다 완전히 분리된 key를 사용해, 다른 화주사 계정으로 로그인했을 때
+     이전 계정이 작성 중이던 임시저장 내용이 절대 노출되지 않도록 한다. */
   useEffect(() => {
     if (editId || editData) return;
+    if (!user?.uid) return;
     try {
-      const saved = localStorage.getItem("shipperOrderDraft");
+      const saved = localStorage.getItem(`shipperOrderDraft_${user.uid}`);
       if (saved) {
         const draft = JSON.parse(saved);
         if (draft.form) setForm(p => ({ ...p, ...draft.form }));
@@ -387,18 +401,19 @@ export default function ShipperOrder({ editData, onClose }) {
         if (draft.companyEdit) { setCompanyEdit(draft.companyEdit); setCompanyEditable(true); }
       }
     } catch {}
-  }, []);
+  }, [user]);
 
   const skipFirstDraftSaveRef = useRef(true);
   useEffect(() => {
     if (editId || editData) return;
+    if (!user?.uid) return;
     if (skipFirstDraftSaveRef.current) { skipFirstDraftSaveRef.current = false; return; }
     const hasContent = form.상차지명 || form.하차지명 || form.상차지주소 || form.하차지주소 || cargoRows.some(r => r.qty);
     try {
-      if (hasContent) localStorage.setItem("shipperOrderDraft", JSON.stringify({ form, cargoRows, companyEdit: companyEditable ? companyEdit : "" }));
-      else localStorage.removeItem("shipperOrderDraft");
+      if (hasContent) localStorage.setItem(`shipperOrderDraft_${user.uid}`, JSON.stringify({ form, cargoRows, companyEdit: companyEditable ? companyEdit : "" }));
+      else localStorage.removeItem(`shipperOrderDraft_${user.uid}`);
     } catch {}
-  }, [form, cargoRows, companyEdit, companyEditable, editId, editData]);
+  }, [form, cargoRows, companyEdit, companyEditable, editId, editData, user]);
 
   const upsertPlace = async (data, type) => {
     const currentCompany = companyEditable ? companyEdit : company;
@@ -537,7 +552,7 @@ export default function ShipperOrder({ editData, onClose }) {
       alert(editData?.차량번호 ? "수정요청을 전송했습니다. 운송사 승인 후 반영됩니다." : "수정 완료");
       onClose ? onClose() : navigate("/shipper/status");
     } else {
-      try { localStorage.removeItem("shipperOrderDraft"); } catch {}
+      try { if (user?.uid) localStorage.removeItem(`shipperOrderDraft_${user.uid}`); } catch {}
       navigate("/shipper/status");
     }
   };
@@ -591,7 +606,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
   // 운송사 프로그램의 "오더복사" 기능과 동일한 규칙: 날짜는 오늘로, 상하차시간은 원본과 동일하게,
   // 화물내용/톤수/파렛트사는 새로 입력하도록 비워둔다.
-  const applyOrder = (item) => {
+  const applyOrder = async (item) => {
     setForm(p => ({
       ...p,
       상차지명: item.상차지명 || "", 상차지주소: item.상차지주소 || "",
@@ -611,6 +626,35 @@ export default function ShipperOrder({ editData, onClose }) {
     setCargoRows([{ qty: "", unit: "파레트", palletCo: "" }]);
     setLoadedNotice(true);
     setTimeout(() => setLoadedNotice(false), 1800);
+
+    // 불러온 상/하차지에 저장된 담당자가 여러 명이면, 어느 담당자를 쓸지 순차적으로 선택받는다.
+    if (!user?.uid) return;
+    const lookups = [
+      { field: "상차지명", name: item.상차지명, type: "상차" },
+      { field: "하차지명", name: item.하차지명, type: "하차" },
+    ].filter(l => l.name?.trim());
+    if (!lookups.length) return;
+    try {
+      const queue = [];
+      for (const l of lookups) {
+        const snap = await getDocs(query(
+          collection(db, "places"),
+          where("userId", "==", user.uid),
+          where("name", "==", l.name),
+          where("type", "==", l.type),
+        ));
+        if (snap.empty) continue;
+        const place = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (b.updatedAt?.seconds || b.createdAt?.seconds || 0) - (a.updatedAt?.seconds || a.createdAt?.seconds || 0))[0];
+        const contacts = Array.isArray(place.contacts) ? place.contacts.filter(c => c.name || c.phone) : [];
+        if (contacts.length > 1) queue.push({ field: l.field, item: place, contacts });
+      }
+      if (queue.length) {
+        setContactPicker(queue[0]);
+        setContactQueue(queue.slice(1));
+      }
+    } catch {}
   };
 
   /* 주소록 자동완성 */
@@ -670,7 +714,7 @@ export default function ShipperOrder({ editData, onClose }) {
     }
     if (field === "운송사명") {
       setForm(p => ({ ...p, 운송사명: item.name, 운송사코드: item.code || "" }));
-      if (fixedTransport) { setFixedTransport({ name: item.name, code: item.code || "" }); localStorage.setItem("fixedTransport", JSON.stringify({ name: item.name, code: item.code || "" })); }
+      if (fixedTransport && user?.uid) { setFixedTransport({ name: item.name, code: item.code || "" }); localStorage.setItem(`fixedTransport_${user.uid}`, JSON.stringify({ name: item.name, code: item.code || "" })); }
     }
     setShowDropdown(null);
   };
@@ -735,12 +779,13 @@ export default function ShipperOrder({ editData, onClose }) {
                 onChange={e => {
                   if (e.target.checked) {
                     if (!form.운송사명) { alert("운송사를 먼저 선택하세요"); return; }
+                    if (!user?.uid) return;
                     const data = { name: form.운송사명, code: form.운송사코드 };
                     setFixedTransport(data);
-                    localStorage.setItem("fixedTransport", JSON.stringify(data));
+                    localStorage.setItem(`fixedTransport_${user.uid}`, JSON.stringify(data));
                   } else {
                     setFixedTransport(null);
-                    localStorage.removeItem("fixedTransport");
+                    if (user?.uid) localStorage.removeItem(`fixedTransport_${user.uid}`);
                   }
                 }}
               />
@@ -1228,7 +1273,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
       {/* 담당자 선택 팝업 */}
       {contactPicker && (
-        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center" onClick={() => setContactPicker(null)}>
+        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center" onClick={() => { setContactPicker(contactQueue[0] || null); setContactQueue(prev => prev.slice(1)); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4">
               <h3 className="text-white font-bold text-[15px]">{contactPicker.item.name} 담당자 선택</h3>
@@ -1238,7 +1283,11 @@ export default function ShipperOrder({ editData, onClose }) {
               {contactPicker.contacts.map((c, i) => (
                 <button
                   key={i}
-                  onClick={() => { applyPlaceContact(contactPicker.item, contactPicker.field, c); setContactPicker(null); }}
+                  onClick={() => {
+                    applyPlaceContact(contactPicker.item, contactPicker.field, c);
+                    setContactPicker(contactQueue[0] || null);
+                    setContactQueue(prev => prev.slice(1));
+                  }}
                   className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-[#1B2B4B] hover:bg-[#eef1f7] transition"
                 >
                   <div className="font-bold text-[14px] text-gray-900">{c.name || "(이름 없음)"}</div>
@@ -1247,7 +1296,7 @@ export default function ShipperOrder({ editData, onClose }) {
               ))}
             </div>
             <div className="border-t border-gray-100 px-4 py-3 flex justify-end">
-              <button onClick={() => setContactPicker(null)} className="px-4 py-2 text-[13px] font-semibold text-gray-500 hover:text-gray-700">취소</button>
+              <button onClick={() => { setContactPicker(contactQueue[0] || null); setContactQueue(prev => prev.slice(1)); }} className="px-4 py-2 text-[13px] font-semibold text-gray-500 hover:text-gray-700">취소</button>
             </div>
           </div>
         </div>
@@ -1286,7 +1335,7 @@ export default function ShipperOrder({ editData, onClose }) {
 }
 
 function ViaStopModal({ type, list, onSave, onClose }) {
-  const emptyStop = () => ({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 화물내용: "", 차량톤수: "", 상차시간: "", 하차시간: "", 방법: "" });
+  const emptyStop = () => ({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 화물내용: "", 차량톤수: "", 상차시간: "", 하차시간: "", 시간구분: "", 방법: "" });
   const [rows, setRows] = useState(() => {
     const init = (list || []).filter(s => s?.업체명?.trim());
     return init.length ? init.map(s => ({ ...emptyStop(), ...s })) : [emptyStop()];
@@ -1364,17 +1413,30 @@ function ViaStopModal({ type, list, onSave, onClose }) {
                 <input className={inputCls} placeholder="톤수 (예: 1톤)" value={stop.차량톤수} onChange={e => update(idx, "차량톤수", e.target.value)} />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <input className={inputCls} placeholder={`${type}시간`} value={stop[timeKey]} onChange={e => update(idx, timeKey, e.target.value)} />
+                <select className={inputCls} value={stop[timeKey]} onChange={e => update(idx, timeKey, e.target.value)}>
+                  <option value="">{type}시간 선택</option>
+                  {timeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
                 <select className={inputCls} value={stop.방법} onChange={e => update(idx, "방법", e.target.value)}>
                   <option value="">방법 선택</option>
                   {["지게차", "수도움", "수작업", "크레인"].map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
-              {rows.length > 1 && (
-                <div className="text-right">
-                  <button type="button" onClick={() => removeRow(idx)} className="text-[11px] text-red-500 hover:text-red-700 font-semibold">삭제</button>
-                </div>
-              )}
+              <div className="flex gap-2">
+                <button type="button"
+                  onClick={() => update(idx, "시간구분", stop.시간구분 === "이전" ? "" : "이전")}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${stop.시간구분 === "이전" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                  이전
+                </button>
+                <button type="button"
+                  onClick={() => update(idx, "시간구분", stop.시간구분 === "이후" ? "" : "이후")}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${stop.시간구분 === "이후" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                  이후
+                </button>
+              </div>
+              <div className="text-right">
+                <button type="button" onClick={() => removeRow(idx)} className="text-[11px] text-red-500 hover:text-red-700 font-semibold">경유지 삭제</button>
+              </div>
             </div>
           ))}
           <button type="button" onClick={addRow}
