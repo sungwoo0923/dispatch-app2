@@ -14,28 +14,32 @@ import {
   Plus,
   LogOut,
   X,
+  Scale,
+  Package,
+  Snowflake,
+  Car,
+  Bike,
+  Forklift,
+  StickyNote,
 } from "lucide-react";
 
 const NAVY = "#1B2B4B";
 
-// 차량종류 + 구분용 이모지(알록달록한 색 대신 이모지로만 구분)
-const VEHICLE_TYPE_OPTIONS = [
-  ["카고", "🚚"],
-  ["윙바디", "🚛"],
-  ["탑차", "📦"],
-  ["냉장탑", "🧊"],
-  ["냉동탑", "❄️"],
-  ["냉장윙", "🧊"],
-  ["냉동윙", "❄️"],
-  ["냉장/냉동탑", "🧊"],
-  ["냉장/냉동윙", "🧊"],
-  ["라보/다마스", "🚐"],
-  ["리프트", "🏗️"],
-  ["오토바이", "🏍️"],
-  ["기타", "🚗"],
+const VEHICLE_TYPES = [
+  "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙",
+  "냉장/냉동탑", "냉장/냉동윙", "라보/다마스", "리프트", "오토바이", "기타",
 ];
-const VEHICLE_TYPES = VEHICLE_TYPE_OPTIONS.map(([v]) => v);
-const vehicleEmoji = (t) => VEHICLE_TYPE_OPTIONS.find(([v]) => v === t)?.[1] || "🚚";
+
+// 차량종류 구분 아이콘 — 알록달록한 색 이모지 대신 프로그램 아이콘과 동일한
+// 단색 라인 아이콘(lucide)으로 구분한다.
+function VehicleTypeIcon({ type = "", className = "" }) {
+  const s = String(type);
+  if (s.includes("냉동") || s.includes("냉장")) return <Snowflake className={className} />;
+  if (s.includes("라보") || s.includes("다마스")) return <Car className={className} />;
+  if (s.includes("오토바이")) return <Bike className={className} />;
+  if (s.includes("리프트")) return <Forklift className={className} />;
+  return <Truck className={className} />;
+}
 
 const TON_PRESETS = ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "8톤", "11톤", "15톤", "18톤", "25톤"];
 const PALLET_PRESETS = Array.from({ length: 18 }, (_, i) => `${i + 1}파레트`);
@@ -232,27 +236,22 @@ function ErrorBanner({ text }) {
   );
 }
 
-// 프리셋 선택 버튼 그룹 (차량종류/지급방식/배차방식/상하차방법 공용)
-function PillSelectGroup({ label, value, onChange, options, getEmoji, optional = true }) {
+// 선택 드롭다운 (차량종류/지급방식/배차방식/상하차방법 공용) — 버튼 나열 대신
+// 프로그램 톤에 맞는 단정한 select 드롭다운으로 통일한다.
+function SelectField({ label, value, onChange, options, optional = true, placeholder = "선택 안함" }) {
   return (
     <div className="mb-5">
       <FieldLabel>{optional ? `${label} (선택)` : label}</FieldLabel>
-      <div className="flex flex-wrap gap-2">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full text-lg rounded-2xl border-2 border-gray-200 px-4 py-4 focus:outline-none focus:border-[#1B2B4B] bg-white"
+      >
+        <option value="">{placeholder}</option>
         {options.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => onChange(value === t ? "" : t)}
-            className={`px-5 py-3 rounded-2xl text-lg font-bold border-2 ${
-              value === t ? "text-white border-transparent" : "bg-white text-gray-600 border-gray-200"
-            }`}
-            style={value === t ? { backgroundColor: NAVY } : undefined}
-          >
-            {getEmoji ? `${getEmoji(t)} ` : ""}
-            {t}
-          </button>
+          <option key={t} value={t}>{t}</option>
         ))}
-      </div>
+      </select>
     </div>
   );
 }
@@ -438,25 +437,35 @@ function OrderCard({ order, onClick, variant }) {
         </div>
       </div>
       <div className="flex items-center justify-between mt-3">
-        <span className="text-base text-gray-700 font-semibold truncate">📦 {order.화물내용 || "-"}</span>
+        <span className="text-base text-gray-700 font-semibold truncate inline-flex items-center gap-1">
+          <Package className="w-4 h-4 shrink-0" /> {order.화물내용 || "-"}
+        </span>
         <span className="text-2xl font-extrabold" style={{ color: NAVY }}>
           {fmtMoney(order.청구운임)}
         </span>
       </div>
       {showExtra && (order.차량종류 || order.차량톤수 || order.톤수 || order.메모) && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-base text-gray-600 font-semibold">
-          {(order.차량종류 || order.차량톤수 || order.톤수) && (
-            <span>
-              {vehicleEmoji(order.차량종류)} {order.차량종류 || "-"}
-              {(order.차량톤수 || order.톤수) ? ` · ⚖️ ${order.차량톤수 || order.톤수}` : ""}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-base text-gray-900 font-bold">
+          {order.차량종류 && (
+            <span className="inline-flex items-center gap-1">
+              <VehicleTypeIcon type={order.차량종류} className="w-4 h-4 text-gray-500 shrink-0" /> {order.차량종류}
             </span>
           )}
-          {order.메모 && <span className="text-gray-500 truncate">📝 {order.메모}</span>}
+          {(order.차량톤수 || order.톤수) && (
+            <span className="inline-flex items-center gap-1">
+              <Scale className="w-4 h-4 text-gray-500 shrink-0" /> {order.차량톤수 || order.톤수}
+            </span>
+          )}
+          {order.메모 && (
+            <span className="text-gray-500 font-semibold truncate inline-flex items-center gap-1">
+              <StickyNote className="w-4 h-4 shrink-0" /> {order.메모}
+            </span>
+          )}
         </div>
       )}
       {hasCar && (
-        <div className="mt-2 text-base text-gray-600 font-semibold">
-          🚚 {order.차량번호} · {order.기사명 || "-"}
+        <div className="mt-2 text-base text-gray-600 font-semibold inline-flex items-center gap-1">
+          <Truck className="w-4 h-4 shrink-0" /> {order.차량번호} · {order.기사명 || "-"}
         </div>
       )}
     </button>
@@ -759,10 +768,10 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
           onBasis={set하차시간기준}
         />
 
-        <PillSelectGroup label="상차방법" value={상차방법} onChange={set상차방법} options={LOAD_METHODS} />
-        <PillSelectGroup label="하차방법" value={하차방법} onChange={set하차방법} options={LOAD_METHODS} />
-        <PillSelectGroup label="지급방식" value={지급방식} onChange={set지급방식} options={PAYMENT_METHODS} />
-        <PillSelectGroup label="배차방식" value={배차방식} onChange={set배차방식} options={DISPATCH_METHODS} />
+        <SelectField label="상차방법" value={상차방법} onChange={set상차방법} options={LOAD_METHODS} />
+        <SelectField label="하차방법" value={하차방법} onChange={set하차방법} options={LOAD_METHODS} />
+        <SelectField label="지급방식" value={지급방식} onChange={set지급방식} options={PAYMENT_METHODS} />
+        <SelectField label="배차방식" value={배차방식} onChange={set배차방식} options={DISPATCH_METHODS} />
 
         <div className="mb-5">
           <FieldLabel>화물내용</FieldLabel>
@@ -773,25 +782,7 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
           />
         </div>
 
-        <div className="mb-5">
-          <FieldLabel>차량종류</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {VEHICLE_TYPES.map((t) => (
-              <button
-                key={t}
-                onClick={() => set차량종류((prev) => (prev === t ? "" : t))}
-                className={`px-5 py-3 rounded-2xl text-lg font-bold border-2 ${
-                  차량종류 === t
-                    ? "text-white border-transparent"
-                    : "bg-white text-gray-600 border-gray-200"
-                }`}
-                style={차량종류 === t ? { backgroundColor: NAVY } : undefined}
-              >
-                {vehicleEmoji(t)} {t}
-              </button>
-            ))}
-          </div>
-        </div>
+        <SelectField label="차량종류" value={차량종류} onChange={set차량종류} options={VEHICLE_TYPES} />
 
         <PresetOrCustomField label="톤수" value={톤수} onChange={set톤수} presets={TON_PRESETS} placeholder="예: 5톤" />
 
@@ -997,7 +988,7 @@ function OrderDetailSheet({ order, onClose }) {
           <Row label="하차지" value={order.하차지명} />
           <Row label="상차일" value={getPickupDate(order)} />
           <Row label="화물내용" value={order.화물내용} />
-          <Row label="차량종류" value={order.차량종류 ? `${vehicleEmoji(order.차량종류)} ${order.차량종류}` : ""} />
+          <Row label="차량종류" value={order.차량종류} />
           <Row label="톤수" value={order.차량톤수 || order.톤수} />
           <Row label="메모" value={order.메모} />
           <Row label="차량번호" value={order.차량번호} />
@@ -1323,7 +1314,7 @@ function FareScreen({ orders, clients, places, onBack }) {
           >
             <option value="">전체</option>
             {VEHICLE_TYPES.map((t) => (
-              <option key={t} value={t}>{vehicleEmoji(t)} {t}</option>
+              <option key={t} value={t}>{t}</option>
             ))}
           </select>
         </div>
@@ -1383,10 +1374,20 @@ function FareScreen({ orders, clients, places, onBack }) {
                       <div className="flex items-center gap-1.5"><DirBadge dir="하" /><span>{o.하차지명 || "-"}</span></div>
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-base text-gray-700 font-semibold truncate">
-                        📦 {o.화물내용 || "-"}
-                        {(o.차량톤수 || o.톤수) ? ` · ⚖️ ${o.차량톤수 || o.톤수}` : ""}
-                        {o.차량종류 ? ` · ${vehicleEmoji(o.차량종류)} ${o.차량종류}` : ""}
+                      <span className="text-base text-gray-700 font-semibold truncate inline-flex items-center gap-1 flex-wrap">
+                        <Package className="w-4 h-4 shrink-0" /> {o.화물내용 || "-"}
+                        {(o.차량톤수 || o.톤수) && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-gray-300">·</span>
+                            <Scale className="w-4 h-4 text-gray-500 shrink-0" /> {o.차량톤수 || o.톤수}
+                          </span>
+                        )}
+                        {o.차량종류 && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-gray-300">·</span>
+                            <VehicleTypeIcon type={o.차량종류} className="w-4 h-4 text-gray-500 shrink-0" /> {o.차량종류}
+                          </span>
+                        )}
                       </span>
                       <span className="text-2xl font-extrabold" style={{ color: NAVY }}>
                         {fmtMoney(o.청구운임)}

@@ -9,6 +9,7 @@ import PalletSimulator from "../PalletSimulator";
 import southKorea from "@svg-maps/south-korea";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
+import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -7101,19 +7102,16 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
   );
 }
 
-// 차량종류 구분용 이모지 — 색을 여러 개 쓰지 않고 이모지로만 구분한다
-const vehicleTypeEmoji = (t = "") => {
-  const s = String(t);
-  if (s.includes("냉동")) return "❄️";
-  if (s.includes("냉장")) return "🧊";
-  if (s.includes("윙바디")) return "🚛";
-  if (s.includes("탑차")) return "📦";
-  if (s.includes("카고")) return "🚚";
-  if (s.includes("라보") || s.includes("다마스")) return "🚐";
-  if (s.includes("리프트")) return "🏗️";
-  if (s.includes("오토바이")) return "🏍️";
-  return s ? "🚚" : "";
-};
+// 차량종류 구분용 아이콘 — 알록달록한 색 이모지 대신 프로그램 아이콘과 동일한
+// 단색 라인 아이콘(lucide)으로 구분한다.
+function VehicleTypeIcon({ type = "", className = "" }) {
+  const s = String(type);
+  if (s.includes("냉동") || s.includes("냉장")) return <Snowflake className={className} />;
+  if (s.includes("라보") || s.includes("다마스")) return <Car className={className} />;
+  if (s.includes("오토바이")) return <Bike className={className} />;
+  if (s.includes("리프트")) return <Forklift className={className} />;
+  return <Truck className={className} />;
+}
 
 const MobileOrderCard = React.memo(function MobileOrderCard({
   order,
@@ -7367,15 +7365,21 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             className="flex items-center justify-between gap-2 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
             style={{ border: `1px solid ${statusRing}` }}
           >
-            <span className="flex items-center gap-1.5 min-w-0 flex-1 text-[0.88em] leading-relaxed">
-              {ton && <span className="font-bold text-gray-900 whitespace-nowrap">⚖️ {ton}</span>}
+            <span className="flex items-center gap-2 min-w-0 flex-1 text-[0.92em] leading-relaxed">
+              {ton && (
+                <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
+                  <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
+                </span>
+              )}
               {carType && (
-                <span className="font-bold text-gray-900 whitespace-nowrap">
-                  {vehicleTypeEmoji(carType)} {carType}
+                <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
+                  <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
                 </span>
               )}
               {cargo && (
-                <span className="font-bold text-amber-600 truncate">📦 {cargo}</span>
+                <span className="font-bold text-amber-600 truncate inline-flex items-center gap-1">
+                  <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
+                </span>
               )}
               {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
             </span>
