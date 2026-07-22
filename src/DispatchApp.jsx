@@ -687,8 +687,8 @@ const sixMonthsAgo = getSixMonthsAgo();
           if ((d.source === "shipper" || d.source === "shipper_mobile") && d.최종수정출처 === "shipper"
             && prev && nextEditStamp && nextEditStamp !== prev.editStamp) {
             sflowToast(
-              `[화주사 수정] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
-              "order",
+              `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "shipperEdit",
               { orderId: id, source: d.source }
             );
           }
@@ -1903,6 +1903,8 @@ function ToastProvider({ children }) {
                 ? "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)"
                 : t.type === "order"
                 ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
+                : t.type === "shipperEdit"
+                ? "linear-gradient(135deg, #3b5998 0%, #0f2151 100%)"
                 : t.type === "cancel"
                 ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
                 : "#1e293b",
@@ -1917,6 +1919,8 @@ function ToastProvider({ children }) {
                     <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
                   ) : t.type === "order" ? (
                     <><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v9"/></>
+                  ) : t.type === "shipperEdit" ? (
+                    <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>
                   ) : t.type === "cancel" ? (
                     <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
                   ) : (
@@ -1928,7 +1932,7 @@ function ToastProvider({ children }) {
               {/* 내용 */}
               <div className="flex-1 min-w-0">
                 <div className="text-white text-[13px] font-bold leading-snug">
-                  {t.type === "dispatch" ? "배차 완료" : t.type === "order" ? "신규 오더 등록" : t.type === "cancel" ? "오더 취소" : "알림"}
+                  {t.type === "dispatch" ? "배차 완료" : t.type === "order" ? "신규 오더 등록" : t.type === "shipperEdit" ? "화주사 수정" : t.type === "cancel" ? "오더 취소" : "알림"}
                 </div>
                 <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed break-words">
                   {t.message}

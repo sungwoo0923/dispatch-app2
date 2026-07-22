@@ -143,12 +143,10 @@ export default function ShipperStatus() {
   const scrollRef = useRef(null);
   const prevAttachRef = useRef({});
   const attachPendingRef = useRef({}); // { [orderId]: { delta, order, timer } } — 여러 장을 연속 업로드해도 알림 1개로 묶기 위한 디바운스 누적
-  const [attachNotif, setAttachNotif] = useState(null);
   const [attachViewer, setAttachViewer] = useState(null);
   const [liveLocViewer, setLiveLocViewer] = useState(null);
   const prevVehicleRef = useRef({}); // 차량번호 "문자열" 값 저장 (배차완료/재배차완료 구분용)
   const prevWatchedFieldsRef = useRef({}); // 차량배정과 무관한 "진짜 수정" 필드 값 저장
-  const [dispatchNotif, setDispatchNotif] = useState(null);
   const prevEditStampRef = useRef({});
   const editStampFirstLoadRef = useRef(true);
   const prevEditReqRef = useRef({});
@@ -331,13 +329,7 @@ export default function ShipperStatus() {
             const { delta, order } = attachPendingRef.current[o.id] || {};
             delete attachPendingRef.current[o.id];
             if (!delta) return;
-            setAttachNotif({
-              id: order.id,
-              text: `${order.거래처명 || order.상차지명 || "오더"}에 첨부파일이 추가되었습니다. (${delta}장)`,
-              order,
-            });
-            setTimeout(() => setAttachNotif(null), 5000);
-            pushToast({ type: "attach", order, title: "첨부파일 추가", desc: `${order.상차지명 || "-"} → ${order.하차지명 || "-"} · ${delta}장` });
+            pushToast({ type: "attach", order, title: "첨부파일 추가", desc: `${order.거래처명 || ""} | ${order.상차지명 || "-"} → ${order.하차지명 || "-"} · ${delta}장` });
           }, 4000);
         }
         prevAttachRef.current[o.id] = cur;
@@ -354,22 +346,10 @@ export default function ShipperStatus() {
         if (prevPlate !== undefined) {
           if (!prevPlate && curPlate) {
             vehicleChangedThisPass.add(o.id);
-            setDispatchNotif({
-              id: o.id,
-              text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호} · ${o.이름 || ""})`,
-              order: o,
-            });
-            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
-            pushToast({ type: "dispatch", order: o, title: "배차완료", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+            pushToast({ type: "dispatch", order: o, title: "배차완료", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
           } else if (prevPlate && curPlate && prevPlate !== curPlate) {
             vehicleChangedThisPass.add(o.id);
-            setDispatchNotif({
-              id: o.id,
-              text: `${o.거래처명 || o.상차지명 || "오더"} 재배차완료 되었습니다. (${o.차량번호} · ${o.이름 || ""})`,
-              order: o,
-            });
-            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
-            pushToast({ type: "dispatch", order: o, title: "재배차완료", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+            pushToast({ type: "dispatch", order: o, title: "재배차완료", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
           }
         }
         prevVehicleRef.current[o.id] = curPlate;
@@ -401,13 +381,7 @@ export default function ShipperStatus() {
           const prev = prevPendingRef.current[o.id];
           if (prev === true && cur === false && !o.배차거절) {
             approvedThisPass.add(o.id);
-            setDispatchNotif({
-              id: o.id,
-              text: `${o.거래처명 || o.상차지명 || "오더"} 배차요청을 운송사가 승인했습니다. (배차중)`,
-              order: o,
-            });
-            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
-            pushToast({ type: "dispatch", order: o, title: "배차요청 승인", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+            pushToast({ type: "dispatch", order: o, title: "배차요청 승인", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 배차중으로 전환됨` });
           }
           prevPendingRef.current[o.id] = cur;
         });
@@ -423,14 +397,7 @@ export default function ShipperStatus() {
           const prev = prevEditStampRef.current[o.id];
           const vehicleOnlyChange = vehicleChangedThisPass.has(o.id) && !otherFieldChangedThisPass.has(o.id);
           if (!approvedThisPass.has(o.id) && !vehicleOnlyChange && o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
-            setDispatchNotif({
-              id: o.id,
-              text: `${o.거래처명 || o.상차지명 || "오더"} 배차정보를 운송사가 수정했습니다.`,
-              order: o,
-              kind: "transportEdit",
-            });
-            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
-            pushToast({ type: "dispatch", order: o, title: "배차정보 수정", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+            pushToast({ type: "dispatch", order: o, title: "배차정보 수정", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}`, kind: "transportEdit" });
           }
           prevEditStampRef.current[o.id] = cur;
         });
@@ -444,12 +411,12 @@ export default function ShipperStatus() {
         docs.forEach((o) => {
           const wasPending = prevEditReqRef.current[o.id];
           if (wasPending && !o.수정요청) {
-            const text = o.수정거절
-              ? `${o.거래처명 || o.상차지명 || "오더"} 수정요청이 거절되었습니다.`
-              : `${o.거래처명 || o.상차지명 || "오더"} 수정요청이 승인되어 반영되었습니다.`;
-            setDispatchNotif({ id: o.id, text, order: o });
-            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
-            pushToast({ type: "dispatch", order: o, title: o.수정거절 ? "수정요청 거절" : "수정요청 승인", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+            pushToast({
+              type: o.수정거절 ? "cancel" : "dispatch",
+              order: o,
+              title: o.수정거절 ? "수정요청 거절" : "수정요청 승인",
+              desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}`,
+            });
           }
           prevEditReqRef.current[o.id] = !!o.수정요청;
         });
@@ -464,12 +431,12 @@ export default function ShipperStatus() {
         docs.forEach((o) => {
           const wasPending = prevCancelReqRef.current[o.id];
           if (wasPending && !o.취소요청) {
-            const text = o.취소거절
-              ? `${o.거래처명 || o.상차지명 || "오더"} 배차취소 요청이 거절되었습니다.`
-              : `${o.거래처명 || o.상차지명 || "오더"} 배차취소 요청이 승인되어 취소되었습니다.`;
-            setDispatchNotif({ id: o.id, text, order: o });
-            setTimeout(() => setDispatchNotif(prev2 => prev2?.id === o.id ? null : prev2), 6000);
-            pushToast({ type: "dispatch", order: o, title: o.취소거절 ? "배차취소 거절" : "배차취소 승인", desc: `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+            pushToast({
+              type: o.취소거절 ? "dispatch" : "cancel",
+              order: o,
+              title: o.취소거절 ? "배차취소 거절" : "배차취소 승인",
+              desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}`,
+            });
           }
           prevCancelReqRef.current[o.id] = !!o.취소요청;
         });
@@ -900,77 +867,55 @@ export default function ShipperStatus() {
   return (
     <div className="flex min-h-screen">
 
-      {/* 배차완료 알림 배너 */}
-      {dispatchNotif && (
-        <div
-          style={{
-            position: "fixed", top: 0, left: 0, right: 0, zIndex: 999999,
-            background: "#1B2B4B", color: "white", textAlign: "center",
-            padding: "10px 16px", fontSize: "13px", fontWeight: 600,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-            animation: "bannerDown 0.4s ease-out forwards",
-          }}
-          onClick={() => {
-            if (dispatchNotif.kind === "transportEdit") {
-              openTransportEditPopup(dispatchNotif.order);
-            } else {
-              focusOnOrder(dispatchNotif.order);
-            }
-            setDispatchNotif(null);
-          }}
-          className="cursor-pointer"
-        >
-          <style>{`@keyframes bannerDown { from { opacity:0; transform:translateY(-100%); } to { opacity:1; transform:translateY(0); } }`}</style>
-          <span style={{ display:"inline-block", width:6, height:6, borderRadius:"50%", background:"#93c5fd", marginRight:8, verticalAlign:"middle" }} />
-          {dispatchNotif.text}
-          <span style={{ marginLeft:12, textDecoration:"underline", opacity:0.85 }}>클릭하여 확인</span>
-        </div>
-      )}
 
-      {/* 첨부 알림 배너 */}
-      {attachNotif && (
-        <div
-          style={{
-            position: "fixed", top: dispatchNotif ? 40 : 0, left: 0, right: 0, zIndex: 999998,
-            background: "#059669", color: "white", textAlign: "center",
-            padding: "10px 16px", fontSize: "13px", fontWeight: 600,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-            animation: "bannerDown 0.4s ease-out forwards",
-          }}
-          onClick={() => { setAttachViewer(attachNotif.order); setAttachNotif(null); }}
-          className="cursor-pointer"
-        >
-          <style>{`@keyframes bannerDown { from { opacity:0; transform:translateY(-100%); } to { opacity:1; transform:translateY(0); } }`}</style>
-          <span style={{ display:"inline-block", width:6, height:6, borderRadius:"50%", background:"#a7f3d0", marginRight:8, verticalAlign:"middle" }} />
-          {attachNotif.text}
-          <span style={{ marginLeft:12, textDecoration:"underline", opacity:0.85 }}>클릭하여 확인</span>
-        </div>
-      )}
-
-      {/* 알림 토스트 카드 (우측 하단) */}
-      <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 999997, display: "flex", flexDirection: "column", gap: 10, width: 320 }}>
-        <style>{`@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } } @keyframes cancelReqBlink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }`}</style>
+      {/* 알림 토스트 카드 (상단 중앙 — 운송사 프로그램과 동일한 플로팅 카드 스타일) */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999997] space-y-2 pointer-events-none" style={{ width: "min(560px, 92vw)" }}>
+        <style>{`
+          @keyframes shipperToastSlideDown { 0% { opacity:0; transform:translateY(-100%); } 100% { opacity:1; transform:translateY(0); } }
+          .shipper-toast-enter { animation: shipperToastSlideDown 0.35s ease-out forwards; }
+        `}</style>
         {toasts.map(t => (
-          <div key={t.id}
+          <div
+            key={t.id}
+            className="shipper-toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
+            style={{
+              background: t.type === "cancel"
+                ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
+                : t.type === "attach"
+                ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
+                : "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)",
+            }}
             onClick={() => {
-              if (t.type === "attach") setAttachViewer(t.order);
+              if (t.kind === "transportEdit") openTransportEditPopup(t.order);
+              else if (t.type === "attach") setAttachViewer(t.order);
               else focusOnOrder(t.order);
               setToasts(prev => prev.filter(x => x.id !== t.id));
             }}
-            style={{
-              background: "#fff", borderRadius: 14, boxShadow: "0 8px 28px rgba(0,0,0,0.18)",
-              borderLeft: `4px solid ${t.type === "dispatch" ? "#1B2B4B" : "#059669"}`,
-              padding: "12px 14px", cursor: "pointer", animation: "toastIn 0.25s ease-out",
-            }}
           >
-            <div className="flex items-center justify-between">
-              <span style={{ fontSize: 12, fontWeight: 800, color: t.type === "dispatch" ? "#1B2B4B" : "#059669" }}>
-                {t.title}
-              </span>
-              <button onClick={(e) => { e.stopPropagation(); setToasts(prev => prev.filter(x => x.id !== t.id)); }}
-                className="text-gray-300 hover:text-gray-500 text-sm leading-none">×</button>
+            <div className="flex items-start gap-3 px-4 py-3">
+              <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {t.type === "attach" ? (
+                    <><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></>
+                  ) : t.type === "cancel" ? (
+                    <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
+                  ) : (
+                    <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
+                  )}
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-[13px] font-bold leading-snug">{t.title}</div>
+                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed break-words">{t.desc}</div>
+                <div className="text-white/50 text-[10px] mt-1">클릭하면 해당 오더로 이동합니다</div>
+              </div>
+              <button
+                className="text-white/40 hover:text-white text-[18px] leading-none shrink-0 mt-0.5 px-1"
+                onClick={(e) => { e.stopPropagation(); setToasts(prev => prev.filter(x => x.id !== t.id)); }}
+              >
+                ✕
+              </button>
             </div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 4, fontWeight: 600 }}>{t.desc}</div>
           </div>
         ))}
       </div>
