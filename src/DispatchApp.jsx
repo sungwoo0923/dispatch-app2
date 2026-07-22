@@ -1930,7 +1930,7 @@ function ToastProvider({ children }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-[13px] font-bold leading-snug">
-                  {t.type === "editRequest" ? "화주사 수정요청" : "화주사 기사취소요청"}
+                  {t.type === "editRequest" ? "화주사 수정요청" : "화주사 오더취소요청"}
                 </div>
                 <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed truncate">
                   {t.message}
@@ -3116,12 +3116,6 @@ React.useEffect(() => {
       </div>
     );
   }
-  // ---------------- 화주사 배차요청 대기 건수 (헤더 상시 알림용) ----------------
-  const pendingShipperRequests = React.useMemo(
-    () => (dispatchData || []).filter(r => r.화주사확인대기 === true),
-    [dispatchData]
-  );
-
   // ---------------- 화주사 푸시 알림 (상차 임박 시 화주사가 보낸 푸시 — 확인 전까지 중앙 팝업 유지) ----------------
   // ⚡ 렌더마다 dispatchData 전체를 filter/sort 하지 않도록 useMemo로 스코프 (pendingShipperRequests와 동일 패턴)
   const pendingNudges = React.useMemo(
@@ -3338,24 +3332,6 @@ return (
         </div>
       </header>
 
-      {/* 화주사 배차요청 대기 상시 알림 바 — 새로고침/재접속과 무관하게 미확인 건이 있으면 항상 표시 */}
-      {pendingShipperRequests.length > 0 && (
-        <div
-          className="w-full sticky top-14 z-40 cursor-pointer"
-          style={{
-            background: "linear-gradient(90deg, #0369a1 0%, #0ea5e9 100%)",
-            color: "white", textAlign: "center", padding: "8px 16px", fontSize: 13, fontWeight: 700,
-            boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-          }}
-          onClick={() => {
-            const first = pendingShipperRequests[0];
-            const el = document.getElementById(`row-${first._id}`);
-            if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("toast-flash-border"); setTimeout(() => el.classList.remove("toast-flash-border"), 2000); }
-          }}
-        >
-          화주사 배차요청 {pendingShipperRequests.length}건이 대기 중입니다 — 클릭하여 확인
-        </div>
-      )}
 
       {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}
       {activeNudge && (
@@ -3410,11 +3386,11 @@ return (
             <div
               className="px-6 py-4 flex items-center gap-2"
               style={{
-                background: activeReqAlertIsEdit ? "linear-gradient(135deg,#3b5998,#0f2151)" : "linear-gradient(135deg,#f87171,#b91c1c)",
+                background: activeReqAlertIsEdit ? "linear-gradient(135deg,#3b5998,#0f2151)" : "#dc2626",
                 animation: "nudgeHeaderBlink 1.2s ease-in-out infinite",
               }}
             >
-              <h3 className="text-white font-black text-[17px]">{activeReqAlertIsEdit ? "화주사 수정요청" : "화주사 기사취소요청"}</h3>
+              <h3 className="text-white font-black text-[17px]">{activeReqAlertIsEdit ? "화주사 수정요청" : "화주사 오더취소요청"}</h3>
               {pendingReqAlerts.length > 1 && (
                 <span className="ml-auto bg-white/20 text-white text-[12px] font-bold px-2 py-0.5 rounded-full">
                   외 {pendingReqAlerts.length - 1}건 대기
@@ -19082,6 +19058,11 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                         style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          // rows는 dispatchData 변경 → useEffect → startTransition 을 거쳐야 반영되는
+                          // 별도 로컬 상태라, patchDispatch의 낙관적 업데이트만으로는 뱃지가 즉시
+                          // 바뀌지 않고 그 체인이 다 끝날 때까지 지연되어 보였다 — 여기서 직접
+                          // rows를 갱신해 클릭 즉시 배지가 바뀌도록 한다.
+                          setRows(prev => prev.map(x => x._id === r._id ? { ...x, 화주사확인대기: false, 배차중전환일시: Date.now() } : x));
                           patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
                         }}
                       >
@@ -27651,6 +27632,9 @@ return (
                       <button
                         onClick={() => {
                           if (isViewer) return;
+                          // localOverrides를 직접 갱신해 클릭 즉시 뱃지가 바뀌도록 한다
+                          // (dispatchData 갱신만 기다리면 반영까지 지연이 느껴졌다)
+                          setLocalOverrides(prev => ({ ...prev, [row._id]: { ...(prev[row._id] || {}), 화주사확인대기: false, 배차중전환일시: Date.now() } }));
                           patchDispatch(row._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: row.__col });
                         }}
                         title="클릭 시 배차중으로 전환"
@@ -36252,6 +36236,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              // patchDispatch 내부의 낙관적 업데이트는 startTransition(저우선순위)이라
+                              // 클릭 즉시 반영되지 않고 지연되어 보였다 — dispatchData를 먼저
+                              // 동기적으로(우선순위 높게) 갱신해 뱃지가 바로 바뀌게 한다.
+                              setDispatchData(prev => prev.map(x => x._id === r._id ? { ...x, 화주사확인대기: false, 배차중전환일시: Date.now() } : x));
                               patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
                             }}
                           >
