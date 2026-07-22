@@ -7356,41 +7356,39 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
           </div>
 
-          {/* 하단 정보 — 화물내용이 절대 잘리지 않도록 첫 줄에 단독 배치, 톤수/차종·운임은 아래 줄 */}
+          {/* 하단 정보 — 화물내용/톤수/차종을 가로로 표시하되, 폭이 좁아지면(폴더블 커버 화면 등) 잘리지 않고 자동 줄바꿈 */}
           <div
-            className="flex flex-col gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
+            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
             style={{ border: `1px solid ${statusRing}` }}
           >
-            {cargo && (
-              <div className="font-extrabold text-amber-600 text-[1em] leading-relaxed break-words inline-flex items-center gap-1.5">
-                <Package className="w-4 h-4 text-amber-500 shrink-0" /> <span>{cargo}</span>
-              </div>
-            )}
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2.5 min-w-0 flex-1 text-[0.9em] leading-relaxed">
-                {ton && (
-                  <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-                    <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
-                  </span>
-                )}
-                {carType && (
-                  <span className="font-bold text-gray-900 truncate inline-flex items-center gap-1">
-                    <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
-                  </span>
-                )}
-                {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 flex-1 min-w-[120px] text-[0.88em] leading-relaxed">
+              {cargo && (
+                <span className="font-extrabold text-amber-600 break-words inline-flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
+                </span>
+              )}
+              {ton && (
+                <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
+                  <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
+                </span>
+              )}
+              {carType && (
+                <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
+                  <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
+                </span>
+              )}
+              {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="flex items-baseline gap-0.5">
+                <span className="text-[0.58em] text-gray-400 font-semibold">청구</span>
+                <span className="text-[0.8em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
               </span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="flex items-baseline gap-0.5">
-                  <span className="text-[0.58em] text-gray-400 font-semibold">청구</span>
-                  <span className="text-[0.8em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
-                </span>
-                <span className="w-px h-2.5 bg-gray-200" />
-                <span className="flex items-baseline gap-0.5">
-                  <span className="text-[0.58em] text-gray-400 font-semibold">기사</span>
-                  <span className="text-[0.8em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
-                </span>
-              </div>
+              <span className="w-px h-2.5 bg-gray-200" />
+              <span className="flex items-baseline gap-0.5">
+                <span className="text-[0.58em] text-gray-400 font-semibold">기사</span>
+                <span className="text-[0.8em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
+              </span>
             </div>
           </div>
 
@@ -7614,38 +7612,36 @@ const dt = new Date(y, m - 1, d, hh, mm);
         )}
       </div>
 
-      {/* ▶ 하단 정보 — 화물내용이 절대 잘리지 않도록 첫 줄에 단독 배치, 톤수/차종·운임은 아래 줄 */}
-      <div className="flex flex-col gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
-        {cargo && (
-          <div className="font-extrabold text-amber-600 text-[0.95em] leading-relaxed break-words inline-flex items-center gap-1.5">
-            <Package className="w-4 h-4 text-amber-500 shrink-0" /> <span>{cargo}</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2.5 min-w-0 flex-1 text-[0.82em] leading-relaxed">
-            {ton && (
-              <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-                <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
-              </span>
-            )}
-            {carType && (
-              <span className="font-bold text-gray-900 truncate inline-flex items-center gap-1">
-                <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
-              </span>
-            )}
-            {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
+      {/* ▶ 하단 정보 — 화물내용/톤수/차종을 가로로 표시하되, 폭이 좁아지면(폴더블 커버 화면 등) 잘리지 않고 자동 줄바꿈 */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 flex-1 min-w-[120px] text-[0.8em] leading-relaxed">
+          {cargo && (
+            <span className="font-extrabold text-amber-600 break-words inline-flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
+            </span>
+          )}
+          {ton && (
+            <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
+              <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
+            </span>
+          )}
+          {carType && (
+            <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
+              <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
+            </span>
+          )}
+          {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="flex items-baseline gap-0.5">
+            <span className="text-[0.6em] text-gray-400 font-semibold">청구</span>
+            <span className="text-[0.78em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
           </span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="flex items-baseline gap-0.5">
-              <span className="text-[0.6em] text-gray-400 font-semibold">청구</span>
-              <span className="text-[0.78em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
-            </span>
-            <span className="w-px h-2.5 bg-gray-200" />
-            <span className="flex items-baseline gap-0.5">
-              <span className="text-[0.6em] text-gray-400 font-semibold">기사</span>
-              <span className="text-[0.78em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
-            </span>
-          </div>
+          <span className="w-px h-2.5 bg-gray-200" />
+          <span className="flex items-baseline gap-0.5">
+            <span className="text-[0.6em] text-gray-400 font-semibold">기사</span>
+            <span className="text-[0.78em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
+          </span>
         </div>
       </div>
 
