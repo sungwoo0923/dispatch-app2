@@ -177,22 +177,30 @@ export default function UploadPage() {
       ? { col: "orders", id: order._transmittedOrderId }
       : (order.originCol && order.originId ? { col: order.originCol, id: order.originId } : null);
 
+    // 위치공유 on/off는 오더 문서에 한 번만 기록한다(운송사 PC 표의 "공유중" 점 표시용) —
+    // 실제로 계속 바뀌는 좌표는 아래에서 오더 문서와 완전히 분리된 liveLocations
+    // 컬렉션에만 써서, 운송사 PC의 전체 오더 목록 리스너가 GPS 갱신을 아예 감지하지
+    // 못하게 한다 — 그래야 위치공유가 켜져 있는 내내 PC가 절대 끊기지 않는다.
+    updateDoc(doc(db, order._col, orderId), { 위치공유중: true }).catch(() => {});
+    if (mirrorTarget) {
+      updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 위치공유중: true }).catch(() => {});
+    }
+
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setLastLoc({ lat, lng, at: Date.now() });
         setLocError(null);
-        // GPS 콜백은 초 단위로 매우 자주 발생할 수 있는데, 콜백마다 그대로 Firestore에
-        // write하면 운송사 PC 화면이 위치공유가 켜져 있는 내내 계속 갱신되어 버벅였다 —
-        // 최소 8초 간격으로만 실제로 서버에 반영한다(화면에 보여줄 좌표 자체는 그대로 갱신).
+        // GPS 콜백은 초 단위로 매우 자주 발생할 수 있어 8초 간격으로만 실제로
+        // 서버에 반영한다(화면에 보여줄 좌표 자체는 그대로 갱신).
         const now = Date.now();
         if (now - lastLocWriteRef.current < 8000) return;
         lastLocWriteRef.current = now;
         const payload = { 위치: { lat, lng }, 위치갱신일시: serverTimestamp() };
-        updateDoc(doc(db, order._col, orderId), payload).catch(() => {});
+        setDoc(doc(db, "liveLocations", orderId), payload, { merge: true }).catch(() => {});
         if (mirrorTarget) {
-          updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), payload).catch(() => {});
+          setDoc(doc(db, "liveLocations", mirrorTarget.id), payload, { merge: true }).catch(() => {});
         }
       },
       (err) => {
@@ -205,6 +213,10 @@ export default function UploadPage() {
     return () => {
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
+      updateDoc(doc(db, order._col, orderId), { 위치공유중: false }).catch(() => {});
+      if (mirrorTarget) {
+        updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 위치공유중: false }).catch(() => {});
+      }
     };
   }, [sharingLoc, order, isManual, orderId]);
 

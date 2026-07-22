@@ -661,7 +661,10 @@ const sixMonthsAgo = getSixMonthsAgo();
           const wasNotDone = prev && prev.status !== "배차완료";
           const isNowDone = (d.배차상태 || "").trim() === "배차완료" && (d.차량번호 || "").trim();
 
-          if (wasNotDone && isNowDone) {
+          // "transport_transmit" 사본은 운송사가 방금 dispatch 컬렉션에서 직접
+          // 배차완료 처리한 건의 미러 카피라, dispatch 리스너에서 이미 같은 내용의
+          // 배차완료 토스트를 띄운다 — 여기서 또 띄우면 동일 알림이 2번 뜬다.
+          if (wasNotDone && isNowDone && d.source !== "transport_transmit") {
             sflowToast(
               `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
               "dispatch",
@@ -1136,20 +1139,27 @@ const removeDispatch = async (arg) => {
   const id = typeof arg === "string" ? arg : arg?._id;
   if (!id) return;
 
-  let ref = doc(db, "dispatch", id);
-  let snap = await getDoc(ref);
-
-  if (!snap.exists()) {
-    ref = doc(db, "orders", id);
-    snap = await getDoc(ref);
+  // ★ 메모리 캐시에서 먼저 찾기 (patchDispatch와 동일한 이유 — getDoc 왕복을 건너뛰어
+  //   여러 건 선택삭제 시 순번대로 네트워크 왕복이 쌓여 버벅이던 지연을 줄인다)
+  const cached = [...ordersCache, ...dispatchCache].find(d => d._id === id);
+  let ref, data;
+  if (cached) {
+    ref = doc(db, cached.__col || "dispatch", id);
+    data = cached;
+  } else {
+    ref = doc(db, "dispatch", id);
+    let snap = await getDoc(ref);
+    if (!snap.exists()) {
+      ref = doc(db, "orders", id);
+      snap = await getDoc(ref);
+    }
+    if (!snap.exists()) {
+      console.error("❌ 삭제 대상 없음", id);
+      return;
+    }
+    data = snap.data();
   }
 
-  if (!snap.exists()) {
-    console.error("❌ 삭제 대상 없음", id);
-    return;
-  }
-
-  const data = snap.data();
   await deleteDoc(ref);
 
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 삭제할 때
@@ -13638,23 +13648,25 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
 }
 
 // 기사 실시간 위치 팝업 — UploadPage.jsx(기사 업로드 링크)에서 "실시간 위치 공유"를
-// 켠 동안 오더 문서에 기록되는 위치/위치갱신일시 필드를 지도(Tmap)에 마커로 표시한다.
+// 켠 동안 liveLocations 컬렉션(오더 문서와 완전히 분리된 전용 컬렉션 — GPS 갱신이
+// 운송사 PC의 전체 오더 목록 리스너에 절대 영향을 주지 않도록 하기 위함)에 기록되는
+// 위치/위치갱신일시 필드를 지도(Tmap)에 마커로 표시한다.
 // index.html에 전역 로드된 window.Tmapv2를 그대로 사용 — 별도 API 키/스크립트 불필요.
 function LiveLocationPopup({ row, onClose }) {
-  const [loc, setLoc] = React.useState(row?.위치 || null);
-  const [updatedAt, setUpdatedAt] = React.useState(row?.위치갱신일시 || null);
+  const [loc, setLoc] = React.useState(null);
+  const [updatedAt, setUpdatedAt] = React.useState(null);
   const mapObjRef = React.useRef(null);
   const markerObjRef = React.useRef(null);
   const mapElId = "dispatch-live-loc-map";
 
   React.useEffect(() => {
     if (!row?._id) return;
-    const unsub = onSnapshot(doc(db, row.__col || "orders", row._id), (snap) => {
+    const unsub = onSnapshot(doc(db, "liveLocations", row._id), (snap) => {
       const d = snap.data();
       if (d?.위치) { setLoc(d.위치); setUpdatedAt(d.위치갱신일시 || null); }
     });
     return () => unsub();
-  }, [row?._id, row?.__col]);
+  }, [row?._id]);
 
   React.useEffect(() => {
     if (!loc) return;
@@ -18226,13 +18238,9 @@ const handleCloseFileUpload = async (e) => {
 
     const ids = deleteList.map(r => r._id);
 
-    for (const id of ids) {
-      try {
-        await removeDispatch(id);
-      } catch (e) {
-        console.error("삭제 실패:", e);
-      }
-    }
+    // 여러 건 선택삭제 시 하나씩 순차 대기하면 건수만큼 지연이 쌓여 버벅였다 —
+    // 서로 독립적인 삭제라 병렬로 처리한다.
+    await Promise.all(ids.map(id => removeDispatch(id).catch((e) => console.error("삭제 실패:", e))));
 
     // 화면에서 제거
     setRows(prev => prev.filter(r => !ids.includes(r._id)));
@@ -19275,7 +19283,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                         title="실시간 위치 보기"
                       >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                          stroke={r.위치 ? "#10b981" : "#cbd5e1"}
+                          stroke={r.위치공유중 ? "#10b981" : "#cbd5e1"}
                           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                           <circle cx="12" cy="10" r="3"/>
@@ -27823,7 +27831,7 @@ return (
                         title="실시간 위치 보기"
                       >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                          stroke={row.위치 ? "#10b981" : "#cbd5e1"}
+                          stroke={row.위치공유중 ? "#10b981" : "#cbd5e1"}
                           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                           <circle cx="12" cy="10" r="3"/>

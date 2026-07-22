@@ -155,10 +155,10 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
     <div className="min-h-screen bg-[#f3f4f6]">
       {/* ================= HEADER ================= */}
       <header className="bg-[#2f3e55] text-white">
-  <div className="px-8 py-4 grid grid-cols-[1.7fr_auto_1fr] items-center gap-4">
+  <div className="px-8 py-4 flex items-center gap-4 relative">
 
     {/* 좌측 로고 + 실시간 현황판 */}
-    <div className="flex items-center gap-4 min-w-0">
+    <div className="flex items-center gap-4 min-w-0 flex-1">
 
       {/* 로고 */}
       <div
@@ -171,7 +171,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
       <ShipperLiveTicker events={liveEvents} onOpenBig={() => setLiveBigOpen(true)} />
     </div>
 
-<nav className="flex items-center justify-center gap-6 text-sm font-semibold">
+<nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6 text-sm font-semibold whitespace-nowrap">
 
   <MenuBtn
     label="대시보드"
@@ -252,7 +252,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
 </nav>
 
     {/* 우측 */}
-    <div className="flex items-center gap-4 justify-end">
+    <div className="flex items-center gap-4 justify-end ml-auto shrink-0">
       <div className="text-sm text-right">
         <div>{companyName}</div>
         <div className="text-xs text-gray-300">{user.email}</div>
@@ -453,7 +453,7 @@ function ShipperLiveTicker({ events, onOpenBig }) {
   const current = events[idx] || null;
 
   return (
-    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 w-full flex-1">
+    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 max-w-[320px] flex-1">
       <style>{`
         @keyframes shipperTickerSlideIn {
           from { opacity: 0; transform: translateY(8px); }
