@@ -545,6 +545,25 @@ const sixMonthsAgo = getSixMonthsAgo();
   // 그때마다 화면이 버벅였다(기사 업로드/화주사 등록/모바일 등록 등 "누군가 쓸
   // 때마다" PC 전체가 순간 렉걸리던 원인) — 실제로 변경된 문서만 다시 가공한다.
   const ordersRowMap = new Map();
+  const ordersRawPrev = new Map(); // id -> 직전 raw doc.data() (위치 전용 변경 감지용)
+  // 기사가 업로드링크 화면에서 위치공유를 켜두면 GPS 콜백마다 위치/위치갱신일시
+  // 두 필드만 바뀐 채 계속 write가 들어오는데, 이 두 필드만 바뀐 경우까지 매번
+  // 전체 목록을 다시 그리면 위치공유가 켜져 있는 내내 PC 화면이 계속 버벅였다.
+  // 실제로 의미 있는(위치 외) 필드가 바뀌었을 때만 전체 재렌더를 트리거한다.
+  const isLocationOnlyChange = (prevData, nextData) => {
+    if (!prevData) return false;
+    const keys = new Set([...Object.keys(prevData), ...Object.keys(nextData)]);
+    for (const k of keys) {
+      if (k === "위치" || k === "위치갱신일시") continue;
+      const pv = prevData[k], nv = nextData[k];
+      if (pv === nv) continue;
+      if (typeof pv === "object" || typeof nv === "object") {
+        if (JSON.stringify(pv) === JSON.stringify(nv)) continue;
+      }
+      return false;
+    }
+    return true;
+  };
   const parseWaypointsShared = (v) => {
     if (Array.isArray(v) && v.length > 0) return v;
     if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
@@ -566,10 +585,31 @@ const sixMonthsAgo = getSixMonthsAgo();
   unsubs.push(
     onSnapshot(collection(db, collName), (snap) => {
       const changes = snap.docChanges();
+      let hasSignificantChange = ordersFirstLoad;
       changes.forEach((ch) => {
-        if (ch.type === "removed") { ordersRowMap.delete(ch.doc.id); return; }
-        ordersRowMap.set(ch.doc.id, buildOrderRow(ch.doc.id, ch.doc.data() || {}));
+        const id = ch.doc.id;
+        if (ch.type === "removed") {
+          ordersRowMap.delete(id);
+          ordersRawPrev.delete(id);
+          hasSignificantChange = true;
+          return;
+        }
+        const data = ch.doc.data() || {};
+        if (ch.type === "modified" && isLocationOnlyChange(ordersRawPrev.get(id), data)) {
+          // 캐시는 최신화하되(나중에 열어보는 화면엔 최신 위치가 보이도록), 화면 전체
+          // 재계산/재렌더는 건너뛴다 — 위치 필드는 표에서 "위치공유중" 여부만 쓰이므로
+          // 이미 켜져 있던 표시가 다시 바뀔 일이 없다.
+          ordersRowMap.set(id, buildOrderRow(id, data));
+          ordersRawPrev.set(id, data);
+          return;
+        }
+        ordersRawPrev.set(id, data);
+        ordersRowMap.set(id, buildOrderRow(id, data));
+        hasSignificantChange = true;
       });
+
+      if (!hasSignificantChange) return;
+
       const arr = Array.from(ordersRowMap.values());
 
       // "화주사 전송"으로 새로 생성된 사본은 화주사 화면에만 보이면 되는 문서라
@@ -696,6 +736,7 @@ const sixMonthsAgo = getSixMonthsAgo();
   const dispatchPrev = new Map();
   // orders 리스너와 동일한 이유로, 변경된 문서만 다시 가공한다.
   const dispatchRowMap = new Map();
+  const dispatchRawPrev = new Map();
   const buildDispatchRow = (id, data) => ({
     _id: id,
     __col: "dispatch",
@@ -707,10 +748,28 @@ const sixMonthsAgo = getSixMonthsAgo();
   unsubs.push(
     onSnapshot(collection(db, "dispatch"), (snap) => {
       const changes = snap.docChanges();
+      let hasSignificantChange = dispatchFirstLoad;
       changes.forEach((ch) => {
-        if (ch.type === "removed") { dispatchRowMap.delete(ch.doc.id); return; }
-        dispatchRowMap.set(ch.doc.id, buildDispatchRow(ch.doc.id, ch.doc.data() || {}));
+        const id = ch.doc.id;
+        if (ch.type === "removed") {
+          dispatchRowMap.delete(id);
+          dispatchRawPrev.delete(id);
+          hasSignificantChange = true;
+          return;
+        }
+        const data = ch.doc.data() || {};
+        if (ch.type === "modified" && isLocationOnlyChange(dispatchRawPrev.get(id), data)) {
+          dispatchRowMap.set(id, buildDispatchRow(id, data));
+          dispatchRawPrev.set(id, data);
+          return;
+        }
+        dispatchRawPrev.set(id, data);
+        dispatchRowMap.set(id, buildDispatchRow(id, data));
+        hasSignificantChange = true;
       });
+
+      if (!hasSignificantChange) return;
+
       const arr2 = Array.from(dispatchRowMap.values());
 
       dispatchCache = arr2;
@@ -1824,7 +1883,7 @@ function ToastProvider({ children }) {
       `}</style>
 
       {/* 상단 중앙 알림 배너 */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] space-y-2 pointer-events-none" style={{ width: "420px", maxWidth: "90vw" }}>
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] space-y-2 pointer-events-none" style={{ width: "min(560px, 92vw)" }}>
         {toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest").map(t => (
           <div
             key={t.id}
@@ -1861,7 +1920,7 @@ function ToastProvider({ children }) {
                 <div className="text-white text-[13px] font-bold leading-snug">
                   {t.type === "dispatch" ? "배차 완료" : t.type === "order" ? "신규 오더 등록" : t.type === "cancel" ? "오더 취소" : "알림"}
                 </div>
-                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed truncate">
+                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed break-words">
                   {t.message}
                 </div>
                 {t.meta?.orderId && (t.meta?.source === "shipper" || t.meta?.source === "shipper_mobile") ? (
@@ -18476,7 +18535,7 @@ const head = isDark
     db={db}
     onClose={() => setAttachViewer(null)}
     isViewed={rows.find(r => r._id === attachViewer?._id)?.attachViewed ?? false}
-    onToggleViewed={() => { const r2 = rows.find(r => r._id === attachViewer?._id); updateDoc(doc(db, attachViewer.__col || "orders", attachViewer._id), { attachViewed: !r2?.attachViewed }).catch(() => {}); }}
+    onToggleViewed={() => { const r2 = rows.find(r => r._id === attachViewer?._id); const nextVal = !r2?.attachViewed; setRows(prev => prev.map(x => x._id === attachViewer._id ? { ...x, attachViewed: nextVal } : x)); updateDoc(doc(db, attachViewer.__col || "orders", attachViewer._id), { attachViewed: nextVal }).catch(() => {}); }}
     isViewer={isViewer}
   />
 )}
@@ -19193,7 +19252,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   {/* 첨부 */}
                   <td className={cell}>
                     <button
-                      onClick={() => { setAttachViewer(r); updateDoc(doc(db, r.__col || "orders", r._id), { attachViewed: true }).catch(() => {}); }}
+                      onClick={() => { setAttachViewer(r); if (!r.attachViewed) { setRows(prev => prev.map(x => x._id === r._id ? { ...x, attachViewed: true } : x)); } updateDoc(doc(db, r.__col || "orders", r._id), { attachViewed: true }).catch(() => {}); }}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >
@@ -27048,7 +27107,7 @@ return (
     db={db}
     onClose={() => setAttachViewer(null)}
     isViewed={filtered.find(r => getId(r) === getId(attachViewer))?.attachViewed ?? false}
-    onToggleViewed={() => { const r2 = filtered.find(r => getId(r) === getId(attachViewer)); updateDoc(doc(db, attachViewer.__col || "orders", getId(attachViewer)), { attachViewed: !r2?.attachViewed }).catch(() => {}); }}
+    onToggleViewed={() => { const r2 = filtered.find(r => getId(r) === getId(attachViewer)); const nextVal = !r2?.attachViewed; const aid = getId(attachViewer); setLocalOverrides(prev => ({ ...prev, [aid]: { ...(prev[aid] || {}), attachViewed: nextVal } })); updateDoc(doc(db, attachViewer.__col || "orders", aid), { attachViewed: nextVal }).catch(() => {}); }}
     isViewer={isViewer}
   />
 )}
@@ -27741,7 +27800,7 @@ return (
                {/* 첨부 */}
                   <td className="border text-center whitespace-nowrap">
                     <button
-                      onClick={() => { setAttachViewer(row); updateDoc(doc(db, row.__col || "orders", row._id), { attachViewed: true }).catch(() => {}); }}
+                      onClick={() => { setAttachViewer(row); if (!row.attachViewed) { const rid = getId(row); setLocalOverrides(prev => ({ ...prev, [rid]: { ...(prev[rid] || {}), attachViewed: true } })); } updateDoc(doc(db, row.__col || "orders", row._id), { attachViewed: true }).catch(() => {}); }}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >

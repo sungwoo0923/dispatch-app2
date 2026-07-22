@@ -164,6 +164,7 @@ export default function UploadPage() {
   const [locError, setLocError] = useState(null);
   const [lastLoc, setLastLoc] = useState(null);
   const watchIdRef = useRef(null);
+  const lastLocWriteRef = useRef(0);
 
   useEffect(() => {
     if (!sharingLoc || !order || isManual) return;
@@ -182,6 +183,12 @@ export default function UploadPage() {
         const lng = pos.coords.longitude;
         setLastLoc({ lat, lng, at: Date.now() });
         setLocError(null);
+        // GPS 콜백은 초 단위로 매우 자주 발생할 수 있는데, 콜백마다 그대로 Firestore에
+        // write하면 운송사 PC 화면이 위치공유가 켜져 있는 내내 계속 갱신되어 버벅였다 —
+        // 최소 8초 간격으로만 실제로 서버에 반영한다(화면에 보여줄 좌표 자체는 그대로 갱신).
+        const now = Date.now();
+        if (now - lastLocWriteRef.current < 8000) return;
+        lastLocWriteRef.current = now;
         const payload = { 위치: { lat, lng }, 위치갱신일시: serverTimestamp() };
         updateDoc(doc(db, order._col, orderId), payload).catch(() => {});
         if (mirrorTarget) {
