@@ -236,22 +236,37 @@ export default function UploadPage() {
     new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} 시간 초과 (네트워크 상태를 확인해주세요)`)), ms)),
   ]);
 
+  // 이미지 압축은 업로드 전 최적화일 뿐이라, 읽기/디코딩 중 어느 단계에서든 실패하면
+  // (예: HEIC 등 일부 사진이 <img>로 디코딩되지 않는 경우) 원본 파일 그대로 진행해야 한다.
+  // 예전에는 reader/img의 onerror가 아예 연결되어 있지 않아 실패 시 Promise가 영원히
+  // 응답하지 않았고, 그 결과 handleUpload의 await가 멈춰버려 진행률이 92% 같은 어중간한
+  // 값에서 그대로 멈춘 채 성공도 실패도 표시되지 않는 버그의 원인이었다.
   const compressImage = (file) => new Promise((resolve) => {
     if (file.type === "application/pdf") { resolve(file); return; }
+    let settled = false;
+    const done = (result) => { if (!settled) { settled = true; resolve(result); } };
+    const safetyTimer = setTimeout(() => done(file), 8000);
     const reader = new FileReader();
+    reader.onerror = () => { clearTimeout(safetyTimer); done(file); };
     reader.onload = (e) => {
       const img = new Image();
+      img.onerror = () => { clearTimeout(safetyTimer); done(file); };
       img.onload = () => {
-        const MAX = 1200;
-        let w = img.width, h = img.height;
-        if (w > MAX || h > MAX) {
-          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-          else { w = Math.round(w * MAX / h); h = MAX; }
+        clearTimeout(safetyTimer);
+        try {
+          const MAX = 1200;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          canvas.toBlob((blob) => done(blob ? new File([blob], file.name, { type: "image/jpeg" }) : file), "image/jpeg", 0.75);
+        } catch {
+          done(file);
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: "image/jpeg" })), "image/jpeg", 0.75);
       };
       img.src = e.target.result;
     };
