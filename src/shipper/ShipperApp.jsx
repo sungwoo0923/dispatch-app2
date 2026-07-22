@@ -453,7 +453,7 @@ function ShipperLiveTicker({ events, onOpenBig }) {
   const current = events[idx] || null;
 
   return (
-    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 max-w-[320px] flex-1">
+    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 max-w-[480px] flex-1">
       <style>{`
         @keyframes shipperTickerSlideIn {
           from { opacity: 0; transform: translateY(8px); }
