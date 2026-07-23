@@ -5,6 +5,7 @@ import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { updateDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { hardReloadForUpdate } from "../UpdateBanner";
 // pages
 import ShipperHome from "./pages/ShipperHome";
 import ShipperOrder from "./pages/ShipperOrder";
@@ -324,7 +325,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
             새 버전이 있습니다. 새로고침해서 업데이트해주세요.
           </span>
           <button
-            onClick={() => window.location.reload()}
+            onClick={hardReloadForUpdate}
             style={{ background: "white", color: "#1B2B4B", border: "none", borderRadius: 6, padding: "5px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
           >
             업데이트

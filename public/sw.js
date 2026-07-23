@@ -51,10 +51,11 @@ self.addEventListener("fetch", (event) => {
   // sw.js 자체는 캐시하지 않음
   if (url.pathname === "/sw.js") return;
 
-  // HTML은 항상 네트워크
+  // HTML은 항상 네트워크(브라우저 HTTP 캐시까지 완전히 건너뛰어, 배포 직후에도
+  // 예전 index.html이 참조하던 예전 JS 청크 해시가 남아있지 않도록 한다)
   if (event.request.headers.get("accept")?.includes("text/html")) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match("/index.html"))
+      fetch(event.request, { cache: "no-store" }).catch(() => caches.match("/index.html"))
     );
     return;
   }
