@@ -3586,6 +3586,7 @@ return (
             approveEditRequest={approveEditRequestSafe}
             rejectEditRequest={rejectEditRequestSafe}
             markEditRequestSeen={markEditRequestSeen}
+            approvedShippers={approvedShippers}
           />
         </div>
 
@@ -4421,6 +4422,7 @@ return (
     approveEditRequest = () => {},
     rejectEditRequest = () => {},
     markEditRequestSeen = () => {},
+    approvedShippers = [],
   }) {
 
       const [useNewForm, setUseNewForm] = React.useState(false);
