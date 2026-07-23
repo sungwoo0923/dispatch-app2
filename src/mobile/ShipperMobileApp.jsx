@@ -44,6 +44,8 @@ const getMonthEnd = (offset = 0) => {
 
 const fmtMoney = (v) => `${Number(v || 0).toLocaleString("ko-KR")}원`;
 
+const getViaListM = (v) => (Array.isArray(v) ? v.filter(s => s && (s.업체명 || s.주소)) : []);
+
 const getPalletSummary = (o) => {
   if (Array.isArray(o.화물목록) && o.화물목록.length) {
     const totals = {};
@@ -1729,6 +1731,9 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
           {order.상차지담당자 && <MDetailRow label="담당자" value={order.상차지담당자} />}
           {order.상차지담당자번호 && <MDetailRow label="연락처" value={order.상차지담당자번호} />}
           {order.상차메모 && <MDetailRow label="메모" value={order.상차메모} />}
+          {getViaListM(order.경유상차목록).map((s, i) => (
+            <MDetailRow key={i} label={`경유${i + 1}`} value={`${s.업체명 || ""} ${s.주소 || ""}`.trim() || "-"} />
+          ))}
         </DetailGroup>
 
         <DetailGroup label="하차지">
@@ -1737,6 +1742,9 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
           {order.하차지담당자 && <MDetailRow label="담당자" value={order.하차지담당자} />}
           {order.하차지담당자번호 && <MDetailRow label="연락처" value={order.하차지담당자번호} />}
           {order.하차메모 && <MDetailRow label="메모" value={order.하차메모} />}
+          {getViaListM(order.경유하차목록).map((s, i) => (
+            <MDetailRow key={i} label={`경유${i + 1}`} value={`${s.업체명 || ""} ${s.주소 || ""}`.trim() || "-"} />
+          ))}
         </DetailGroup>
 
         <DetailGroup label="화물 / 차량">

@@ -8,14 +8,17 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import ShipperApp from "./shipper/ShipperApp";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "./firebase";
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
-import DispatchApp from "./DispatchApp";
-import MobileApp from "./mobile/MobileApp";
-import ShipperMobileApp from "./mobile/ShipperMobileApp";
+// 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
+// 즉시 로드되어, 로그인 화면 하나만 보려 해도 운송사/화주사/모바일 프로그램 전체
+// 코드를 다운로드/파싱해야 했다(초기 접속 로딩이 느린 주된 원인).
+const ShipperApp = React.lazy(() => import("./shipper/ShipperApp"));
+const DispatchApp = React.lazy(() => import("./DispatchApp"));
+const MobileApp = React.lazy(() => import("./mobile/MobileApp"));
+const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
 
 import DriverHome from "./driver/DriverHome";
 import DriverLogin from "./driver/DriverLogin";
@@ -477,12 +480,29 @@ export default function App() {
 
   const isMobile = isSmartPhone();
 
+  const routeFallback = (
+    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff" }}>
+      <style>{`
+        @keyframes routeFallbackPulse {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50%       { opacity: 1;   transform: scale(1); }
+        }
+      `}</style>
+      <div style={{ display: "flex", gap: "9px" }}>
+        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "routeFallbackPulse 1.1s ease-in-out 0.9s infinite" }} />
+        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "routeFallbackPulse 1.1s ease-in-out 1.1s infinite" }} />
+        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "routeFallbackPulse 1.1s ease-in-out 1.3s infinite" }} />
+      </div>
+    </div>
+  );
+
   return (
     <>
       {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침) */}
       <UpdateBanner />
 
       <Router>
+        <React.Suspense fallback={routeFallback}>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
 
@@ -592,6 +612,7 @@ export default function App() {
             }
           />
         </Routes>
+        </React.Suspense>
       </Router>
     </>
   );

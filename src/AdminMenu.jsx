@@ -691,6 +691,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             접속이력
           </button>
         )}
+        {isTotalMaster && (
+          <button
+            onClick={() => setAdminTab("forceUpdate")}
+            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "forceUpdate" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+          >
+            화주사 강제 업데이트
+          </button>
+        )}
       </div>
 
       <div className="flex gap-6">
@@ -1209,6 +1217,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             </div>
             );
           })()}
+
+          {/* ====== 화주사 강제 업데이트 탭 (최고관리자 전용) ====== */}
+          {adminTab === "forceUpdate" && isTotalMaster && (
+            <ShipperForceUpdatePanel currentVersion={__APP_VERSION__} />
+          )}
         </div>
 
         {/* 모바일 미리보기 */}
@@ -1465,6 +1478,70 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ====== 화주사 강제 업데이트 (최고관리자 전용) ======
+// 화주사 클라이언트가 자체 서비스워커 갱신을 놓치는 경우에 대비해, 최고관리자가
+// systemConfig/forceUpdate 문서의 minVersion을 직접 올리면 화주사 프로그램(ShipperApp.jsx)이
+// 자신의 __APP_VERSION__과 비교해 뒤처진 경우 강제로 업데이트 배너를 띄운다.
+function ShipperForceUpdatePanel({ currentVersion }) {
+  const [minVersion, setMinVersion] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "systemConfig", "forceUpdate"), (snap) => {
+      if (snap.exists()) {
+        setMinVersion(snap.data().minVersion || null);
+        setUpdatedAt(snap.data().updatedAt || null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleForceUpdate = async () => {
+    setSending(true);
+    try {
+      await setDoc(doc(db, "systemConfig", "forceUpdate"), {
+        minVersion: currentVersion,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.email || "",
+      });
+      alert(`화주사 강제 업데이트를 발송했습니다. (기준 버전 v${currentVersion})`);
+    } catch (e) {
+      alert("발송 실패: " + e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const isCurrentAlreadyMin = minVersion === currentVersion;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl">
+      <div className="text-[14px] font-bold text-gray-800 mb-1">화주사 강제 업데이트</div>
+      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
+        화주사 프로그램(PC)이 새 버전을 자동으로 못 받아오는 경우를 대비한 기능입니다.
+        아래 버튼을 누르면 현재 운송사 프로그램의 버전(v{currentVersion})을 기준으로,
+        이보다 낮은 버전을 쓰고 있는 모든 화주사 화면 상단에 업데이트 안내가 강제로 표시됩니다.
+      </p>
+      <div className="bg-gray-50 rounded-lg px-4 py-3 mb-5 text-[12px] text-gray-600 space-y-1">
+        <div>현재 최신 버전 (운송사 기준): <span className="font-bold text-[#1B2B4B]">v{currentVersion}</span></div>
+        <div>
+          화주사 강제 최소 버전: <span className="font-bold">{minVersion ? `v${minVersion}` : "설정 안 됨"}</span>
+          {isCurrentAlreadyMin && <span className="ml-2 text-emerald-600 font-semibold">(최신 상태로 반영됨)</span>}
+        </div>
+        <div>마지막 발송: {updatedAt?.seconds ? new Date(updatedAt.seconds * 1000).toLocaleString("ko-KR") : "-"}</div>
+      </div>
+      <button
+        onClick={handleForceUpdate}
+        disabled={sending}
+        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
+      >
+        {sending ? "발송 중..." : "화주사 강제 업데이트 발송"}
+      </button>
     </div>
   );
 }

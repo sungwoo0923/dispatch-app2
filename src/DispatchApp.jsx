@@ -891,6 +891,48 @@ const addDispatch = async (record) => {
 
   return _id;
 };
+
+  // "오더 복사/수정 패널"의 "복사 등록" 공용 로직 — 원본 오더 필드를 그대로 복사해
+  // 새 오더를 생성한다. 원본에 화주사 전송 포인터(_transmittedOrderId 등)가 있어도
+  // 반드시 제거해야 한다: 그대로 이어받으면 (1) 새로 만든 복사본은 autoTransmitToShipper가
+  // 호출되지 않아 화주사 화면에 전혀 나타나지 않고, (2) 나중에 복사본을 삭제할 때
+  // removeDispatch가 원본의 화주사 사본 id로 착각해 원본 쪽 화주사 사본을 대신 지워버린다.
+  const submitCopyOrderPC = async (copyTarget, cargoOverride) => {
+    const newId = crypto.randomUUID();
+    const payload = {
+      ...copyTarget,
+      _id: newId,
+      화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
+      상차일: todayStr(),
+      하차일: todayStr(),
+      등록일: todayStr(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
+      업체전달상태: "미전달",
+    };
+    delete payload.화물수량;
+    delete payload.화물타입;
+    delete payload.톤수값;
+    delete payload.톤수타입;
+    delete payload._transmittedOrderId;
+    delete payload._transmittedToShipper;
+    delete payload._transmittedAt;
+
+    const col = copyTarget.__col || "orders";
+    await setDoc(doc(db, col, newId), payload);
+
+    if (!copyTarget.source) {
+      const matchedShipper = approvedShippers.find(
+        (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(payload.거래처명)
+      );
+      if (matchedShipper) {
+        autoTransmitToShipper({ ...payload, _id: newId, __col: col }, matchedShipper).catch((e) =>
+          console.error("자동 화주사 전송 실패:", e)
+        );
+      }
+    }
+  };
   // 🔥 undefined 깊이 제거 (중첩 객체까지 안전)
   const stripUndefinedDeep = (obj) => {
     if (obj === null || typeof obj !== "object") return obj;
@@ -19431,8 +19473,8 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
 const savedId = copyTarget._id;
     showAlert("오더 수정 완료");
+    setCopyPanelOpen(false);
     React.startTransition(() => {
-      setCopyPanelOpen(false);
       setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
     });
 
@@ -19459,37 +19501,7 @@ flashRow(savedId);
       showAlert("복사할 데이터가 없습니다.");
       return;
     }
-
-    // ✅ 화물내용: 이미 onChange에서 동기화되어 있음
-    const finalCargo = copyTarget.화물내용 || "";
-
-    const payload = {
-      ...copyTarget,
-      화물내용: finalCargo,
-      상차일: todayStr(),
-      하차일: todayStr(),
-      등록일: todayStr(),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      배차상태:
-        copyTarget?.차량번호?.trim()
-          ? "배차완료"
-          : "배차중",
-      업체전달상태: "미전달",
-    };
-
-    delete payload._id;
-    // ✅ 임시 UI 필드 제거
-    delete payload.화물수량;
-    delete payload.화물타입;
-    delete payload.톤수값;
-    delete payload.톤수타입;
-
-    await setDoc(
-      doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
-      payload
-    );
-
+    await submitCopyOrderPC(copyTarget);
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
   }}
@@ -23431,8 +23443,10 @@ setConfirmChange(null);
                 업체전달자: deliveryConfirm.after === "전달완료" ? sender : null,
                 __system: true,
               };
-              setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
               setDeliveryConfirm(null);
+              React.startTransition(() => {
+                setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
+              });
               patchDispatch(deliveryConfirm.rowId, patch).catch(console.error);
             }
           }}
@@ -23470,8 +23484,10 @@ setConfirmChange(null);
                       업체전달자: sender,
                       __system: true,
                     };
-                    setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
                     setDeliveryConfirm(null);
+                    React.startTransition(() => {
+                      setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
+                    });
                     patchDispatch(deliveryConfirm.rowId, patch).catch(console.error);
                   }}
                 >변경</button>
@@ -29169,38 +29185,7 @@ return (
       return;
     }
 
-    // ✅ 화물내용: 이미 onChange에서 동기화되어 있음
-    const finalCargo = copyTarget.화물내용 || "";
-
-    const payload = {
-      ...copyTarget,
-      화물내용: finalCargo,
-      상차일: todayStr(),
-      하차일: todayStr(),
-      등록일: todayStr(),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-
-      배차상태:
-        copyTarget?.차량번호?.trim()
-          ? "배차완료"
-          : "배차중",
-
-      업체전달상태: "미전달",
-    };
-
-    // ⭐ 기존 id 제거 (새 오더 생성)
-    delete payload._id;
-    // ✅ 임시 UI 필드 제거
-    delete payload.화물수량;
-    delete payload.화물타입;
-    delete payload.톤수값;
-    delete payload.톤수타입;
-
-    await setDoc(
-      doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
-      payload
-    );
+    await submitCopyOrderPC(copyTarget);
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
@@ -36564,9 +36549,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      const payload = { ...copyTarget, 화물내용: finalCargo, 등록일: todayStr(), createdAt: Date.now(), updatedAt: Date.now(), 배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중", 업체전달상태: "미전달" };
-                      delete payload._id;
-                      await setDoc(doc(db, copyTarget.__col || "orders", crypto.randomUUID()), payload);
+                      await submitCopyOrderPC(copyTarget, finalCargo);
                       showToast("복사 등록 완료");
                       setCopyPanelOpen(false);
                     }}
