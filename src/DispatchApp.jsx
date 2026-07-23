@@ -6,6 +6,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
+import { hardReloadForUpdate } from "./UpdateBanner";
 import AdminMenu from "./AdminMenu";
 import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
@@ -3302,7 +3303,7 @@ return (
                 {co && <span className="text-[14px] font-bold text-white/90 truncate max-w-[100px]">{co}</span>}
                 {hasUpdate ? (
                   <button
-                    onClick={() => window.location.reload()}
+                    onClick={hardReloadForUpdate}
                     style={{ animation: "versionBlink 1.2s ease-in-out infinite" }}
                     className="text-[13px] font-bold text-yellow-300 bg-white/10 border border-yellow-300/60 rounded px-2 py-0.5 cursor-pointer shrink-0"
                   >

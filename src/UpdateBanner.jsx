@@ -1,6 +1,25 @@
 // src/UpdateBanner.jsx
 import React from "react";
 
+// 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
+// 새 배포와 꼬여있는 경우(구버전 SW가 새 index.html은 네트워크로 받아오면서도
+// 그 안에서 참조하는 새 JS 청크는 아직 캐시에 없다는 이유로 못 받아오는 등) 계속
+// 예전 코드가 로드되는 문제가 있었다. 서비스워커를 완전히 해제하고 모든 캐시를
+// 지운 뒤 새로고침해서, 어떤 경우에도 확실히 최신 코드를 받아오도록 한다.
+export const hardReloadForUpdate = async () => {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch {}
+  window.location.reload();
+};
+
 export default function UpdateBanner() {
   const [visible, setVisible] = React.useState(false);
   const [blinking, setBlinking] = React.useState(false);
@@ -109,7 +128,7 @@ export default function UpdateBanner() {
           새 버전이 준비되었습니다.
         </span>
         <button
-          onClick={() => window.location.reload()}
+          onClick={hardReloadForUpdate}
           style={{
             background: "white",
             color: "#1B2B4B",
