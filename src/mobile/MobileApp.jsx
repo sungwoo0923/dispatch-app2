@@ -51,6 +51,11 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const role = localStorage.getItem("role") || "user";
 const collName = "dispatch";
 
+// 거래처명 매칭용 공백/대소문자 무시 정규화 (오더복사 등으로 기존 오더에서 그대로
+// 복사된 거래처명이 실제 저장값과 공백만 다른 경우에도 연동 화주사를 정확히 찾기 위함)
+const normalizeCompanyKey = (s = "") =>
+  String(s).normalize("NFC").replace(/\s+/g, "").toLowerCase();
+
 // 운송사가 연동 승인된 화주사의 거래처명으로 오더를 등록하면, DispatchApp.jsx(PC)의
 // autoTransmitToShipper / AdminMenu.jsx의 수동 "화주사 전송"과 동일한 매핑으로
 // 화주사가 볼 수 있는 사본을 즉시 생성한다. (모듈 최상위 스코프)
@@ -115,6 +120,39 @@ const autoTransmitToShipperMobile = async (savedRecord, shipperApp) => {
     _transmittedOrderId: newDocRef.id,
     _transmittedAt: Date.now(),
   });
+};
+
+// PC(DispatchApp.jsx)의 patchDispatch에 있는 _transmittedOrderId 미러 동기화와 동일한 로직.
+// 운송사가 등록해 화주사에게 자동전송된 오더는, 전송 이후 원본을 수정해도(기사배정/운임 등)
+// 화주사가 실제로 구독하는 사본 문서에는 반영되지 않던 버그가 있었다 — 화주사에게 노출되는
+// 필드만 화이트리스트로 골라 사본에도 함께 반영한다. (기사운임은 의도적으로 제외)
+const SHIPPER_MIRROR_FIELDS_MOBILE = [
+  "상차지명", "상차지주소", "상차담당자명", "상차담당자번호",
+  "하차지명", "하차지주소", "하차담당자명", "하차담당자번호",
+  "상차일", "상차시간", "상차시간구분", "하차일", "하차시간", "하차시간구분",
+  "차량종류", "차량톤수", "상차방법", "하차방법", "지급방식",
+  "화물내용", "화물단위", "청구운임",
+  "차량번호", "이름", "전화번호",
+  "경유상차목록", "경유하차목록",
+];
+const syncShipperMirrorMobile = async (order, patch) => {
+  if (!order?._transmittedOrderId) return;
+  const mirrorPatch = {};
+  SHIPPER_MIRROR_FIELDS_MOBILE.forEach((key) => {
+    if (key in patch) mirrorPatch[key] = patch[key];
+  });
+  if ("차량번호" in patch || "배차완료일시" in patch) {
+    const mirrorPlate = String(patch.차량번호 ?? order.차량번호 ?? "").trim();
+    mirrorPatch.배차상태 = mirrorPlate ? "배차완료" : "배차중";
+    if ("배차완료일시" in patch) mirrorPatch.배차완료일시 = patch.배차완료일시;
+  }
+  if (Object.keys(mirrorPatch).length === 0) return;
+  mirrorPatch.updatedAt = Date.now();
+  try {
+    await updateDoc(doc(db, "orders", order._transmittedOrderId), mirrorPatch);
+  } catch (e) {
+    console.error("화주사 전송사본 동기화 오류:", e);
+  }
 };
 
 // 배차중 뱃지 pulse 애니메이션 CSS (한 번만 삽입)
@@ -2766,7 +2804,7 @@ const groupedByDate = useMemo(() => {
 
       // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (PC와 동일)
       const matchedShipper = approvedShippers.find(
-        (a) => (a.companyName || "").trim() === String(docData.거래처명 || "").trim()
+        (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
       );
       if (matchedShipper) {
         autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
@@ -2991,7 +3029,7 @@ const deleteSingleOrder = async (order) => {
     }
 
     // 사용자가 선택한 값(이름, 차량번호, 전화번호)을 그대로 저장
-    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
+    const assignPatch = {
       기사명: 이름,
       이름: 이름,
       차량번호: 차량번호,
@@ -3003,7 +3041,9 @@ const deleteSingleOrder = async (order) => {
       배차완료일시: serverTimestamp(),
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
-    });
+    };
+    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), assignPatch);
+    syncShipperMirrorMobile(selectedOrder, assignPatch).catch(() => {});
 
     setSelectedOrder((prev) =>
       prev
@@ -3025,7 +3065,7 @@ const deleteSingleOrder = async (order) => {
     if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!selectedOrder) return;
 
-    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
+    const cancelPatch = {
   기사명: "",
   이름: "",
   차량번호: "",
@@ -3036,7 +3076,9 @@ const deleteSingleOrder = async (order) => {
   배차완료일시: null,
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
-});
+};
+    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), cancelPatch);
+    syncShipperMirrorMobile(selectedOrder, cancelPatch).catch(() => {});
 
     setSelectedOrder((prev) =>
       prev
@@ -3192,7 +3234,7 @@ const deleteSingleOrder = async (order) => {
 
       // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (일반모드와 동일)
       const matchedShipper = approvedShippers.find(
-        (a) => (a.companyName || "").trim() === String(docData.거래처명 || "").trim()
+        (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
       );
       if (matchedShipper) {
         autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
@@ -6980,6 +7022,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         }
       }
       await updateDoc(doc(db, col, id), patch);
+      syncShipperMirrorMobile(order, patch).catch(() => {});
       onSuccess?.();
       onClose();
     } catch (e) {
@@ -8411,7 +8454,7 @@ const handleAssignClick = () => {
       const colName = order.__col || collName;
       const docId = order._id || order.id;
 
-      await updateDoc(doc(db, colName, docId), {
+      const driverPatch = {
   차량번호: carNo,
   기사명: name || "",
   이름: name || "",
@@ -8422,7 +8465,9 @@ const handleAssignClick = () => {
   배차완료일시: serverTimestamp(),
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
-});
+};
+      await updateDoc(doc(db, colName, docId), driverPatch);
+      syncShipperMirrorMobile(order, driverPatch).catch(() => {});
 
       // 신규 기사면 기사관리에 등록
       if (isNewDriver && carNo) {

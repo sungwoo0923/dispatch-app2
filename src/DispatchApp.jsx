@@ -320,6 +320,11 @@ const combineTonStringDA = (r) => {
   return `${ton}${unit}`;
 };
 
+// 거래처명 매칭용 공백/대소문자 무시 정규화 (오더복사 등으로 기존 오더에서 그대로
+// 복사된 거래처명이 실제 저장값과 공백만 다른 경우에도 연동 화주사를 정확히 찾기 위함)
+const normalizeCompanyKey = (s = "") =>
+  String(s).normalize("NFC").replace(/\s+/g, "").toLowerCase();
+
 // 운송사가 연동 승인된 화주사의 거래처명으로 오더를 등록하면, AdminMenu.jsx의 수동
 // "화주사 전송"과 동일한 매핑으로 화주사가 볼 수 있는 사본을 즉시 생성한다.
 // (모듈 최상위 스코프 — useRealtimeCollections 안의 addDispatch에서 호출된다)
@@ -876,7 +881,7 @@ const addDispatch = async (record) => {
   // 등록과 동시에 화주사 화면에도 자동으로 사본을 생성한다. 이후 기사배정/금액 등
   // 수정은 patchDispatch의 _transmittedOrderId 미러 동기화가 그대로 이어받는다.
   const matchedShipper = approvedShippers.find(
-    (a) => (a.companyName || "").trim() === String(cleanRecord.거래처명 || "").trim()
+    (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(cleanRecord.거래처명)
   );
   if (matchedShipper) {
     autoTransmitToShipper({ ...cleanRecord, _id, __col: COLL.dispatch }, matchedShipper).catch((e) =>
@@ -3195,11 +3200,15 @@ React.useEffect(() => {
 
   // ---------------- 화주사 수정요청/기사취소요청 중앙 팝업 (재촉 알림과 동일 패턴) ----------------
   // "확인" 버튼은 승인/거절이 아니라 알림 자체만 닫는다 — 실제 승인/거절은 기존 뱃지 클릭 팝업에서 처리한다.
+  // ⚡ patchDispatch의 Firestore 왕복(onSnapshot)을 기다리면 dispatchData 전체가 갱신될 때까지
+  // 팝업이 닫히지 않아 끊김처럼 느껴진다 — 클릭 즉시 로컬에서 숨기고, 실제 쓰기는 백그라운드로 보낸다.
+  const [dismissedReqAlertIds, setDismissedReqAlertIds] = React.useState(() => new Set());
   const pendingReqAlerts = React.useMemo(
     () => (dispatchData || []).filter(
-      r => (r.수정요청 === true && !r.수정요청알림확인) || (r.취소요청 === true && r.배차상태 !== "배차취소" && !r.취소요청알림확인)
+      r => !dismissedReqAlertIds.has(r._id) &&
+        ((r.수정요청 === true && !r.수정요청알림확인) || (r.취소요청 === true && r.배차상태 !== "배차취소" && !r.취소요청알림확인))
     ),
-    [dispatchData]
+    [dispatchData, dismissedReqAlertIds]
   );
   const activeReqAlert = React.useMemo(() => (
     pendingReqAlerts.length > 0
@@ -3474,11 +3483,16 @@ return (
               <button
                 onClick={() => {
                   const field = activeReqAlertIsEdit ? "수정요청알림확인" : "취소요청알림확인";
-                  patchDispatch(activeReqAlert._id, { [field]: true, __col: activeReqAlert.__col, __system: true });
-                  const el = document.getElementById(`row-${activeReqAlert._id}`);
+                  const id = activeReqAlert._id;
+                  const col = activeReqAlert.__col;
+                  setDismissedReqAlertIds(prev => new Set(prev).add(id));
+                  patchDispatch(id, { [field]: true, __col: col, __system: true });
+                  const el = document.getElementById(`row-${id}`);
                   if (el) setTimeout(() => { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("toast-flash-border"); setTimeout(() => el.classList.remove("toast-flash-border"), 2000); }, 300);
                 }}
-                className="w-full py-3 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-xl font-bold text-[14px] transition"
+                className={`w-full py-3 text-white rounded-xl font-bold text-[14px] transition ${
+                  activeReqAlertIsEdit ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-red-600 hover:bg-red-700"
+                }`}
               >
                 확인했습니다
               </button>
