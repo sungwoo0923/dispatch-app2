@@ -1135,7 +1135,7 @@ const patchDispatch = async (_id, patch) => {
   // 사본(화주사 화면이 실제로 구독하는 문서)에는 반영되지 않고 전송 시점 값으로 멈춰있던 버그가 있었다.
   // 기사배정/차량정보/금액 등 화주사에게 노출되는 필드만 화이트리스트로 골라 사본에도 함께 반영한다.
   // (기사운임은 화주사에게 노출하지 않는 필드라 의도적으로 제외)
-  if (prev._transmittedOrderId) {
+  {
     const SHIPPER_MIRROR_FIELDS = [
       "상차지명", "상차지주소", "상차담당자명", "상차담당자번호",
       "하차지명", "하차지주소", "하차담당자명", "하차담당자번호",
@@ -1158,30 +1158,46 @@ const patchDispatch = async (_id, patch) => {
     }
     if (Object.keys(mirrorPatch).length > 0) {
       mirrorPatch.updatedAt = Date.now();
-      const mirrorRef = doc(db, "orders", prev._transmittedOrderId);
-      updateDoc(mirrorRef, mirrorPatch).catch(async (e) => {
-        console.error("화주사 전송사본 동기화 오류:", e);
-        // _transmittedOrderId가 가리키는 문서가 이미 없어졌거나(삭제/재전송 등으로
-        // 포인터가 끊어진 경우) updateDoc이 조용히 실패하면, 화주사 화면은 영영
-        // 예전 값에 멈춰 있게 된다. originCol/originId 역참조로 실제 사본을 다시
-        // 찾아 갱신하고, 끊어진 포인터도 함께 복구한다.
+      // originCol/originId 역참조로 실제 사본을 다시 찾아 갱신하고, 끊어진(또는 애초에
+      // 기록되지 않은) 포인터도 함께 복구한다. addDoc→updateDoc 두 단계로 만들어지는
+      // _transmittedOrderId 백포인터 쓰기가 아직 반영되지 않은 시점에 배차/재배차가
+      // 일어나면(캐시에 prev._transmittedOrderId가 없음) 사본 동기화 자체가 통째로
+      // 건너뛰어져 화주사 화면이 영영 갱신되지 않던 버그가 있었다 — 포인터 유무와
+      // 무관하게 항상 동기화를 시도한다.
+      const findMirrorId = async () => {
+        const q = query(
+          collection(db, "orders"),
+          where("originCol", "==", prev.__col || "dispatch"),
+          where("originId", "==", _id),
+          limit(1)
+        );
+        const snap = await getDocs(q);
+        return snap.empty ? null : snap.docs[0].id;
+      };
+      (async () => {
         try {
-          const q = query(
-            collection(db, "orders"),
-            where("originCol", "==", prev.__col || "dispatch"),
-            where("originId", "==", _id),
-            limit(1)
-          );
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            const realMirrorId = snap.docs[0].id;
+          if (prev._transmittedOrderId) {
+            await updateDoc(doc(db, "orders", prev._transmittedOrderId), mirrorPatch);
+            return;
+          }
+          const realMirrorId = await findMirrorId();
+          if (realMirrorId) {
             await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
             await updateDoc(ref, { _transmittedOrderId: realMirrorId }).catch(() => {});
           }
-        } catch (e2) {
-          console.error("화주사 전송사본 재탐색 동기화 오류:", e2);
+        } catch (e) {
+          console.error("화주사 전송사본 동기화 오류:", e);
+          try {
+            const realMirrorId = await findMirrorId();
+            if (realMirrorId) {
+              await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
+              await updateDoc(ref, { _transmittedOrderId: realMirrorId }).catch(() => {});
+            }
+          } catch (e2) {
+            console.error("화주사 전송사본 재탐색 동기화 오류:", e2);
+          }
         }
-      });
+      })();
     }
   }
 };
@@ -1218,6 +1234,24 @@ const removeDispatch = async (arg) => {
     deleteDoc(doc(db, "orders", data._transmittedOrderId)).catch((e) =>
       console.error("화주사 전송사본 삭제 동기화 오류:", e)
     );
+  } else if (!data?.source) {
+    // _transmittedOrderId 포인터가 없어도(백포인터 기록 전에 삭제된 경우 등) originCol/originId
+    // 역참조로 실제 사본을 찾아 함께 지운다 — 그러지 않으면 화주사 화면에는 "배차중"으로
+    // 영원히 남아있게 된다.
+    (async () => {
+      try {
+        const q = query(
+          collection(db, "orders"),
+          where("originCol", "==", data?.__col || cached?.__col || "dispatch"),
+          where("originId", "==", id),
+          limit(1)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) await deleteDoc(doc(db, "orders", snap.docs[0].id));
+      } catch (e) {
+        console.error("화주사 전송사본 삭제 재탐색 오류:", e);
+      }
+    })();
   }
 };
 

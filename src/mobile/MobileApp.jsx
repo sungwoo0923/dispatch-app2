@@ -34,6 +34,7 @@ import {
   serverTimestamp,
   query,
   where,
+  limit,
   setDoc,
   getDoc,
   arrayUnion,
@@ -135,8 +136,21 @@ const SHIPPER_MIRROR_FIELDS_MOBILE = [
   "차량번호", "이름", "전화번호",
   "경유상차목록", "경유하차목록",
 ];
+// originCol/originId 역참조로 실제 사본을 찾는다 — addDoc→updateDoc 두 단계로 만들어지는
+// _transmittedOrderId 백포인터 쓰기가 아직 반영되지 않았거나 끊어진 경우에도 동기화가
+// 통째로 건너뛰어지지 않도록 하기 위함.
+const findShipperMirrorIdMobile = async (order) => {
+  const q = query(
+    collection(db, "orders"),
+    where("originCol", "==", order?.__col || "dispatch"),
+    where("originId", "==", order?.id || order?._id),
+    limit(1)
+  );
+  const snap = await getDocs(q);
+  return snap.empty ? null : snap.docs[0].id;
+};
 const syncShipperMirrorMobile = async (order, patch) => {
-  if (!order?._transmittedOrderId) return;
+  if (order?.source) return; // 화주사가 등록한 오더는 사본 동기화 대상이 아님
   const mirrorPatch = {};
   SHIPPER_MIRROR_FIELDS_MOBILE.forEach((key) => {
     if (key in patch) mirrorPatch[key] = patch[key];
@@ -149,9 +163,26 @@ const syncShipperMirrorMobile = async (order, patch) => {
   if (Object.keys(mirrorPatch).length === 0) return;
   mirrorPatch.updatedAt = Date.now();
   try {
-    await updateDoc(doc(db, "orders", order._transmittedOrderId), mirrorPatch);
+    if (order?._transmittedOrderId) {
+      await updateDoc(doc(db, "orders", order._transmittedOrderId), mirrorPatch);
+      return;
+    }
+    const realMirrorId = await findShipperMirrorIdMobile(order);
+    if (realMirrorId) {
+      await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
+      await updateDoc(doc(db, order.__col || "dispatch", order.id || order._id), { _transmittedOrderId: realMirrorId }).catch(() => {});
+    }
   } catch (e) {
     console.error("화주사 전송사본 동기화 오류:", e);
+    try {
+      const realMirrorId = await findShipperMirrorIdMobile(order);
+      if (realMirrorId) {
+        await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
+        await updateDoc(doc(db, order.__col || "dispatch", order.id || order._id), { _transmittedOrderId: realMirrorId }).catch(() => {});
+      }
+    } catch (e2) {
+      console.error("화주사 전송사본 재탐색 동기화 오류:", e2);
+    }
   }
 };
 
@@ -2958,6 +2989,23 @@ const handleOrderDuplicateWithDriver = (order) => {
   window.scrollTo(0, 0);
 };
 
+// 운송사가 연동 화주사로 전송(자동/수동)한 오더를 삭제할 때, 화주사 화면이 실제로 구독하는
+// 사본 문서도 함께 지운다. 그러지 않으면 원본은 없어져도 화주사 화면에는 "배차중"으로
+// 영원히 남아있게 된다. (PC DispatchApp.jsx의 removeDispatch와 동일한 로직)
+const deleteShipperMirrorMobile = async (order) => {
+  if (order?.source) return; // 화주사가 등록한 오더는 사본이 없음
+  try {
+    if (order?._transmittedOrderId) {
+      await deleteDoc(doc(db, "orders", order._transmittedOrderId));
+      return;
+    }
+    const realMirrorId = await findShipperMirrorIdMobile(order);
+    if (realMirrorId) await deleteDoc(doc(db, "orders", realMirrorId));
+  } catch (e) {
+    console.error("화주사 전송사본 삭제 동기화 오류:", e);
+  }
+};
+
 const deleteSingleOrder = async (order) => {
   if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
   const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
@@ -2969,6 +3017,7 @@ const deleteSingleOrder = async (order) => {
   const id = order.id || order._id;
   if (!col || !id) return;
   await deleteDoc(doc(db, col, id));
+  deleteShipperMirrorMobile(order).catch(() => {});
   setOrders(prev => prev.filter(o => (o.id || o._id) !== id));
 };
 
@@ -3106,6 +3155,7 @@ const deleteSingleOrder = async (order) => {
     if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!deleteConfirmMobile) return;
     await deleteDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id));
+    deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
     setSelectedOrder(null);
     showSuccess("오더 삭제 완료");
@@ -3134,7 +3184,10 @@ const deleteSingleOrder = async (order) => {
       for (const order of selectedOrders) {
         const col = order.__col || collName;
         const id = order.id || order._id;
-        if (col && id) await deleteDoc(doc(db, col, id));
+        if (col && id) {
+          await deleteDoc(doc(db, col, id));
+          deleteShipperMirrorMobile(order).catch(() => {});
+        }
       }
       const deletedIds = new Set(selectedOrders.map(o => o.id || o._id));
       setOrders(prev => prev.filter(o => !deletedIds.has(o.id) && !deletedIds.has(o._id)));
