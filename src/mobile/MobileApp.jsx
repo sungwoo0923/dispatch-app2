@@ -3192,6 +3192,12 @@ const deleteSingleOrder = async (order) => {
   const confirmDeleteMobile = async () => {
     if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!deleteConfirmMobile) return;
+    const isShipperOrder = deleteConfirmMobile.source === "shipper" || deleteConfirmMobile.source === "shipper_mobile";
+    if (isShipperOrder && !deleteConfirmMobile.취소요청) {
+      alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
+      setDeleteConfirmMobile(null);
+      return;
+    }
     await deleteDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id));
     deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
@@ -7299,6 +7305,13 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   const approveCancelDelete = async () => {
     if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
     try {
+      // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 취소 상태는
+      // 화주사의 "배차취소" 목록에만 남기고 운송사 쪽 원본은 삭제한다.
+      if (order._transmittedOrderId) {
+        await updateDoc(doc(db, "orders", order._transmittedOrderId), {
+          상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
+        }).catch(() => {});
+      }
       await deleteDoc(doc(db, order.__col || "orders", order.id));
     } catch {}
     setShowRequestModal(false);
@@ -7494,12 +7507,14 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
           </div>
 
-          {/* 하단 정보 — 화물내용/톤수/차종은 화면 크기와 무관하게 항상 한 줄 가로로 표시. 좁은 화면(폴더블 커버 등)에서는 청구/기사 운임을 아래 줄로 내려 배치 */}
+          {/* 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임을 항상 같은 줄에 정렬해, 화물정보 행의
+              높이에 청구/기사 부분이 맞춰지도록 한다(예전엔 sm: 이상 너비에서만 한 줄이라 실제
+              휴대폰 화면에서는 항상 두 줄로 떨어져 높이가 어긋나 보였다). */}
           <div
-            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
+            className="flex flex-row items-center justify-between gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
             style={{ border: `1px solid ${statusRing}` }}
           >
-            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 sm:flex-1 text-[0.88em] leading-relaxed">
+            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 flex-1 text-[0.88em] leading-relaxed">
               {cargo && (
                 <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
                   <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
@@ -7750,9 +7765,9 @@ const dt = new Date(y, m - 1, d, hh, mm);
         )}
       </div>
 
-      {/* ▶ 하단 정보 — 화물내용/톤수/차종은 화면 크기와 무관하게 항상 한 줄 가로로 표시. 좁은 화면(폴더블 커버 등)에서는 청구/기사 운임을 아래 줄로 내려 배치 */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 sm:flex-1 text-[0.8em] leading-relaxed">
+      {/* ▶ 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임을 항상 같은 줄에 정렬해 높이를 맞춘다 */}
+      <div className="flex flex-row items-center justify-between gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 flex-1 text-[0.8em] leading-relaxed">
           {cargo && (
             <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
               <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
@@ -8293,6 +8308,13 @@ function MobileOrderDetail({
   const approveCancelDelete = async () => {
     if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 오더를 삭제하시겠습니까?")) return;
     try {
+      // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 취소 상태는
+      // 화주사의 "배차취소" 목록에만 남기고 운송사 쪽 원본은 삭제한다.
+      if (order._transmittedOrderId) {
+        await updateDoc(doc(db, "orders", order._transmittedOrderId), {
+          상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
+        }).catch(() => {});
+      }
       await deleteDoc(doc(db, order.__col || "orders", order.id));
       setPage("list");
     } catch {}

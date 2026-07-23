@@ -638,6 +638,14 @@ export default function ShipperStatus() {
     try { await deleteDoc(doc(db, order.originCol, order.originId)); }
     catch (e) { console.error("원본 오더 삭제 동기화 실패:", e); }
   };
+  // 배차취소는 화주사의 "배차취소" 목록에만 남아야 한다 — 운송사 배차현황/실시간배차현황에는
+  // 배차상태가 "배차취소"인 오더가 존재하면 안 되므로, 운송사 쪽 원본은 상태만 바꾸지 않고
+  // 아예 삭제한다(화주사 쪽 사본에는 취소 상태를 그대로 남긴다).
+  const propagateCancelDeleteToOrigin = async (order) => {
+    if (!order?.originCol || !order?.originId) return;
+    try { await deleteDoc(doc(db, order.originCol, order.originId)); }
+    catch (e) { console.error("원본 오더 취소삭제 동기화 실패:", e); }
+  };
 
   const deleteOrders = (targets, onDone, { permanent = false } = {}) => {
     if (targets.length === 0) { alert("선택된 항목 없음"); return; }
@@ -663,7 +671,9 @@ export default function ShipperStatus() {
       for (const o of cancelable) {
         const patch = { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true };
         await updateDoc(doc(db, "orders", o.id), patch);
-        await propagateToOrigin(o, patch);
+        // 배차취소된 오더는 화주사의 "배차취소" 목록에만 남아야 한다 — 운송사 배차현황에는
+        // 배차상태가 "배차취소"인 오더가 존재하면 안 되므로 운송사 쪽 원본은 삭제한다.
+        await propagateCancelDeleteToOrigin(o);
       }
     };
 
@@ -866,10 +876,10 @@ export default function ShipperStatus() {
       return;
     }
     openConfirm("오더를 취소하시겠습니까?", async () => {
-      // 운송사 배차현황에도 즉시 반영되도록 배차상태까지 함께 취소 처리
       const patch = { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true };
       await updateDoc(doc(db, "orders", id), patch);
-      await propagateToOrigin(target, patch);
+      // 배차취소된 오더는 화주사의 "배차취소" 목록에만 남아야 한다 — 운송사 쪽 원본은 삭제한다.
+      await propagateCancelDeleteToOrigin(target);
       setSelectedOrder(prev => prev?.id === id ? { ...prev, 상태: "취소", 배차상태: "배차취소" } : prev);
       setConfirmOpen(false);
     });

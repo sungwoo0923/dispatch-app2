@@ -273,6 +273,9 @@ const getEditRequestDiff = (order) => {
 // 전환해 화주사/운송사 양쪽의 "배차취소" 목록에 남아 재등록할 수 있게 한다.
 // (모듈 최상위 스코프에 둬야 여러 하위 컴포넌트에서 prop 없이 바로 호출할 수 있다 —
 //  useRealtimeCollections 안에 두면 그 훅을 호출하는 컴포넌트에서만 접근 가능해 ReferenceError가 난다.)
+// 화주사의 배차취소 요청을 승인하면, 그 오더는 이제 화주사의 "배차취소" 목록에만 남아야
+// 한다 — 운송사 배차현황/실시간배차현황에는 배차상태가 "배차취소"인 오더가 존재하면 안 되므로,
+// 운송사 쪽 원본은 상태만 바꾸지 않고 아예 삭제한다(화주사 사본에는 취소 상태를 그대로 반영).
 const approveCancelRequestPC = async (order) => {
   const ref = doc(db, order.__col || "orders", order._id || order.id);
   const patch = {
@@ -285,13 +288,17 @@ const approveCancelRequestPC = async (order) => {
     취소처리일시: serverTimestamp(),
     updatedAt: Date.now(),
   };
-  await updateDoc(ref, patch);
-  // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 승인 결과를
-  // 화주사 화면에도 즉시 반영한다.
+  // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 취소 상태는
+  // 화주사 사본에만 남기고 운송사 쪽 원본은 삭제한다.
   if (order._transmittedOrderId) {
-    updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch((e) =>
+    await updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch((e) =>
       console.error("화주사 전송사본 취소승인 동기화 오류:", e)
     );
+    await deleteDoc(ref);
+  } else {
+    // 화주사가 직접 등록한 오더(사본 없음) — 이 문서 자체가 화주사의 유일한 기록이므로
+    // 삭제하지 않고 취소 상태만 반영한다.
+    await updateDoc(ref, patch);
   }
 };
 const rejectCancelRequestPC = async (order) => {
@@ -688,7 +695,13 @@ const sixMonthsAgo = getSixMonthsAgo();
       // "화주사 전송"으로 새로 생성된 사본은 화주사 화면에만 보이면 되는 문서라
       // 운송사 자체 배차 화면(dispatchData)에는 섞여 나오면 안 된다 — 원본 문서는
       // 건드리지 않으므로, 여기서 사본만 제외해도 데이터 손실은 없다.
-      const filteredArr = arr.filter(row => row.source !== "transport_transmit");
+      // 배차상태가 "배차취소"인 오더(화주사가 취소한 오더)도 마찬가지로 화주사의
+      // "배차취소" 목록에만 남아야 하므로 운송사 화면에서는 제외한다.
+      const filteredArr = arr.filter(row =>
+        row.source !== "transport_transmit" &&
+        row.배차상태 !== "배차취소" &&
+        !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
+      );
 
       ordersCache = filteredArr;
       React.startTransition(() => {
@@ -848,7 +861,10 @@ const sixMonthsAgo = getSixMonthsAgo();
 
       const arr2 = Array.from(dispatchRowMap.values());
 
-      dispatchCache = arr2;
+      // 배차상태가 "배차취소"인 오더는 화주사의 "배차취소" 목록에만 남아야 하므로 제외한다.
+      dispatchCache = arr2.filter(row =>
+        row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
+      );
       React.startTransition(() => {
         setDispatchData([...ordersCache, ...dispatchCache]);
       });
@@ -1004,8 +1020,11 @@ const patchDispatch = async (_id, patch) => {
   delete patch.createdTime;
 
   // ★ 메모리 캐시에서 먼저 찾기 (getDoc 완전 제거 → 딜레이 없음)
-  const allCache = [...ordersCache, ...dispatchCache];
-  const cached = allCache.find(d => d._id === _id);
+  // 두 캐시를 매번 새 배열로 합치면(스프레드) 호출마다 N+M 크기 배열을 새로 할당/복사하게
+  // 되어, 오더가 많은 회사에서는 전달상태 등 단순 토글 하나에도 매번 그 비용이 들어 렉으로
+  // 느껴졌다 — 배열을 합치지 않고 각 캐시에서 순서대로 찾는다(첫 번째에서 찾으면 두 번째는
+  // 아예 스캔하지 않는다).
+  const cached = ordersCache.find(d => d._id === _id) || dispatchCache.find(d => d._id === _id);
 
   let ref, prev;
   if (cached) {
@@ -1249,8 +1268,9 @@ const removeDispatch = async (arg) => {
   if (!id) return;
 
   // ★ 메모리 캐시에서 먼저 찾기 (patchDispatch와 동일한 이유 — getDoc 왕복을 건너뛰어
-  //   여러 건 선택삭제 시 순번대로 네트워크 왕복이 쌓여 버벅이던 지연을 줄인다)
-  const cached = [...ordersCache, ...dispatchCache].find(d => d._id === id);
+  //   여러 건 선택삭제 시 순번대로 네트워크 왕복이 쌓여 버벅이던 지연을 줄인다.
+  //   배열을 매번 새로 합치지 않고 각 캐시에서 순서대로 찾는다.)
+  const cached = ordersCache.find(d => d._id === id) || dispatchCache.find(d => d._id === id);
   let ref, data;
   if (cached) {
     ref = doc(db, cached.__col || "dispatch", id);
@@ -16147,6 +16167,7 @@ setFarePanelOpen(true);
     const drop = copyTarget.하차지명?.trim();
     if (!pickup || !drop) return showAlert("상/하차지를 입력해주세요.");
 
+    try {
     const targetCargo = String(copyTarget.화물내용 || "").trim();
     const targetTon = String(copyTarget.차량톤수 || "").trim();
     const targetVehicle = String(copyTarget.차량종류 || "").trim();
@@ -16210,6 +16231,10 @@ setFarePanelOpen(true);
       latest: scored[0],
     });
     setCopyFarePanelOpen(true);
+    } catch (e) {
+      console.error("운임조회 오류:", e);
+      showAlert("운임조회 중 오류가 발생했습니다.\n" + (e?.message || e));
+    }
   };
 const [editStopOpen, setEditStopOpen] = React.useState(false);
 const [editStopType, setEditStopType] = React.useState("pickup");
@@ -26179,6 +26204,7 @@ if (mode === "driver") {
     const drop = copyTarget.하차지명?.trim();
     if (!pickup || !drop) return showAlert("상/하차지를 입력해주세요.");
 
+    try {
     const _copyVehicle = String(copyTarget.차량종류 || "");
     const _isCopyCold = _copyVehicle.includes("냉장") || _copyVehicle.includes("냉동");
     const _p5CopyPickup = getRouteStops(copyTarget, "pickup");
@@ -26233,6 +26259,10 @@ if (mode === "driver") {
       max: Math.max(...fares),
     });
     setCopyFarePanelOpen(true);
+    } catch (e) {
+      console.error("운임조회 오류:", e);
+      showAlert("운임조회 중 오류가 발생했습니다.\n" + (e?.message || e));
+    }
   };
   // ======================= 신규 오더 등록 팝업 상태 =======================
   const [showCreate, setShowCreate] = React.useState(false);
@@ -36194,6 +36224,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
   const removeDocs = async (ids) => {
     if (!ids.length) { showToast("선택된 항목이 없습니다.", "err"); return; }
+    const isShipperOrder = (r) => r?.source === "shipper" || r?.source === "shipper_mobile";
+    if (ids.some((id) => {
+      const r = (dispatchData || []).find((d) => d._id === id);
+      return isShipperOrder(r) && !r?.취소요청;
+    })) {
+      showToast("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.", "err");
+      return;
+    }
     try {
       await Promise.all(ids.map((id) => removeDispatch(id)));
       showToast(`${ids.length}건 삭제 완료`);
