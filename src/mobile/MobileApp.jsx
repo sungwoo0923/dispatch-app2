@@ -57,6 +57,24 @@ const collName = "dispatch";
 const normalizeCompanyKey = (s = "") =>
   String(s).normalize("NFC").replace(/\s+/g, "").toLowerCase();
 
+// approvedShippers(연동 승인된 화주사 목록)는 onSnapshot으로 비동기 로딩되는 컴포넌트 state라,
+// 앱을 켠 직후(목록이 아직 채워지기 전) 곧바로 오더를 등록하면 실제로는 연동되어 있어도
+// 로컬 배열이 비어있어 매칭에 실패 — 화주사 전송이 조용히 통째로 누락되는 문제가 있었다
+// ("운송사엔 9건인데 화주사엔 8건"). 로컬에서 못 찾았을 때 실시간으로 한 번 더 확인하는 안전장치.
+// (PC DispatchApp.jsx의 findApprovedShipperLive와 동일)
+const findApprovedShipperLiveMobile = async (myCompanyName, targetCompanyName) => {
+  try {
+    const snap = await getDocs(collection(db, "companyApplications"));
+    const list = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((a) => a.linkedTransportCompany?.companyName === myCompanyName && a.transportApprovalStatus === "approved");
+    return list.find((a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(targetCompanyName)) || null;
+  } catch (e) {
+    console.error("연동 화주사 실시간 조회 실패:", e);
+    return null;
+  }
+};
+
 // 운송사가 연동 승인된 화주사의 거래처명으로 오더를 등록하면, DispatchApp.jsx(PC)의
 // autoTransmitToShipper / AdminMenu.jsx의 수동 "화주사 전송"과 동일한 매핑으로
 // 화주사가 볼 수 있는 사본을 즉시 생성한다. (모듈 최상위 스코프)
@@ -162,6 +180,16 @@ const syncShipperMirrorMobile = async (order, patch) => {
   }
   if (Object.keys(mirrorPatch).length === 0) return;
   mirrorPatch.updatedAt = Date.now();
+  // 사본 문서 자체가 (과거 버전의 버그 등으로) 완전히 삭제되어 역참조로도 찾을 수 없는
+  // 경우: 취소된 오더가 아니라면 처음 등록될 때와 동일하게 새로 전송해 복구한다.
+  const recreateMirror = async () => {
+    if (String(order?.상태 || "").trim() === "취소") return;
+    const myCompanyName = order?.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+    const matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, patch.거래처명 ?? order?.거래처명);
+    if (matchedShipper) {
+      await autoTransmitToShipperMobile({ ...order, ...patch, _id: order.id || order._id, __col: order.__col || "dispatch" }, matchedShipper);
+    }
+  };
   try {
     if (order?._transmittedOrderId) {
       await updateDoc(doc(db, "orders", order._transmittedOrderId), mirrorPatch);
@@ -171,6 +199,8 @@ const syncShipperMirrorMobile = async (order, patch) => {
     if (realMirrorId) {
       await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
       await updateDoc(doc(db, order.__col || "dispatch", order.id || order._id), { _transmittedOrderId: realMirrorId }).catch(() => {});
+    } else {
+      await recreateMirror();
     }
   } catch (e) {
     console.error("화주사 전송사본 동기화 오류:", e);
@@ -179,6 +209,8 @@ const syncShipperMirrorMobile = async (order, patch) => {
       if (realMirrorId) {
         await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
         await updateDoc(doc(db, order.__col || "dispatch", order.id || order._id), { _transmittedOrderId: realMirrorId }).catch(() => {});
+      } else {
+        await recreateMirror();
       }
     } catch (e2) {
       console.error("화주사 전송사본 재탐색 동기화 오류:", e2);
@@ -2834,9 +2866,15 @@ const groupedByDate = useMemo(() => {
       await syncPlaceFromOrder(docData);
 
       // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (PC와 동일)
-      const matchedShipper = approvedShippers.find(
+      let matchedShipper = approvedShippers.find(
         (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
       );
+      if (!matchedShipper) {
+        // approvedShippers는 onSnapshot으로 비동기 로딩되는 state라, 앱을 켠 직후 목록이
+        // 채워지기 전 등록하면 여기서 빈 배열이라 매칭이 실패한다 — 실시간으로 한 번 더 확인.
+        const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+        matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, docData.거래처명);
+      }
       if (matchedShipper) {
         autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
           console.error("자동 화주사 전송 실패:", e)
@@ -3286,9 +3324,13 @@ const deleteSingleOrder = async (order) => {
       await syncPlaceFromOrder(docData);
 
       // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (일반모드와 동일)
-      const matchedShipper = approvedShippers.find(
+      let matchedShipper = approvedShippers.find(
         (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
       );
+      if (!matchedShipper) {
+        const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+        matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, docData.거래처명);
+      }
       if (matchedShipper) {
         autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
           console.error("자동 화주사 전송 실패:", e)

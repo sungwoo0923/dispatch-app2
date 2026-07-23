@@ -326,6 +326,24 @@ const combineTonStringDA = (r) => {
 const normalizeCompanyKey = (s = "") =>
   String(s).normalize("NFC").replace(/\s+/g, "").toLowerCase();
 
+// approvedShippers(연동 승인된 화주사 목록)는 onSnapshot으로 비동기 로딩되는 컴포넌트 state라,
+// 페이지 로드 직후(리스트가 아직 채워지기 전) 곧바로 오더를 등록/복사등록하면 실제로는
+// 연동되어 있어도 로컬 배열이 비어있어 매칭에 실패 — 화주사 전송이 조용히 통째로 누락되는
+// 문제가 있었다("운송사엔 9건인데 화주사엔 8건"). 로컬에서 못 찾았을 때 실시간으로 한 번 더
+// 확인하는 안전장치.
+const findApprovedShipperLive = async (myCompanyName, targetCompanyName) => {
+  try {
+    const snap = await getDocs(collection(db, "companyApplications"));
+    const list = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((a) => a.linkedTransportCompany?.companyName === myCompanyName && a.transportApprovalStatus === "approved");
+    return list.find((a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(targetCompanyName)) || null;
+  } catch (e) {
+    console.error("연동 화주사 실시간 조회 실패:", e);
+    return null;
+  }
+};
+
 // 운송사가 연동 승인된 화주사의 거래처명으로 오더를 등록하면, AdminMenu.jsx의 수동
 // "화주사 전송"과 동일한 매핑으로 화주사가 볼 수 있는 사본을 즉시 생성한다.
 // (모듈 최상위 스코프 — useRealtimeCollections 안의 addDispatch에서 호출된다)
@@ -425,14 +443,19 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   await setDoc(doc(db, col, newId), payload);
 
   if (!copyTarget.source) {
-    const matchedShipper = (approvedShippers || []).find(
-      (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(payload.거래처명)
-    );
-    if (matchedShipper) {
-      autoTransmitToShipper({ ...payload, _id: newId, __col: col }, matchedShipper).catch((e) =>
-        console.error("자동 화주사 전송 실패:", e)
+    (async () => {
+      let matchedShipper = (approvedShippers || []).find(
+        (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(payload.거래처명)
       );
-    }
+      if (!matchedShipper) {
+        matchedShipper = await findApprovedShipperLive(payload.companyName, payload.거래처명);
+      }
+      if (matchedShipper) {
+        autoTransmitToShipper({ ...payload, _id: newId, __col: col }, matchedShipper).catch((e) =>
+          console.error("자동 화주사 전송 실패:", e)
+        );
+      }
+    })();
   }
 };
 
@@ -925,14 +948,21 @@ const addDispatch = async (record) => {
   // 거래처명이 연동 승인된 화주사 회사명과 일치하면, 별도의 수동 "화주사 전송" 없이
   // 등록과 동시에 화주사 화면에도 자동으로 사본을 생성한다. 이후 기사배정/금액 등
   // 수정은 patchDispatch의 _transmittedOrderId 미러 동기화가 그대로 이어받는다.
-  const matchedShipper = approvedShippers.find(
-    (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(cleanRecord.거래처명)
-  );
-  if (matchedShipper) {
-    autoTransmitToShipper({ ...cleanRecord, _id, __col: COLL.dispatch }, matchedShipper).catch((e) =>
-      console.error("자동 화주사 전송 실패:", e)
+  (async () => {
+    let matchedShipper = approvedShippers.find(
+      (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(cleanRecord.거래처명)
     );
-  }
+    if (!matchedShipper) {
+      // approvedShippers는 onSnapshot으로 비동기 로딩되는 state라, 페이지 로드 직후
+      // 목록이 채워지기 전 등록하면 여기서 빈 배열이라 매칭이 실패한다 — 실시간으로 한 번 더 확인.
+      matchedShipper = await findApprovedShipperLive(cleanRecord.companyName || userCompany, cleanRecord.거래처명);
+    }
+    if (matchedShipper) {
+      autoTransmitToShipper({ ...cleanRecord, _id, __col: COLL.dispatch }, matchedShipper).catch((e) =>
+        console.error("자동 화주사 전송 실패:", e)
+      );
+    }
+  })();
 
   return _id;
 };
@@ -1174,6 +1204,15 @@ const patchDispatch = async (_id, patch) => {
         const snap = await getDocs(q);
         return snap.empty ? null : snap.docs[0].id;
       };
+      // 사본 문서 자체가 (과거 버전의 버그 등으로) 완전히 삭제되어 역참조로도 찾을 수
+      // 없는 경우: 취소된 오더가 아니라면 처음 등록될 때와 동일하게 새로 전송해 복구한다.
+      const recreateMirror = async () => {
+        if (String(prev.상태 || "").trim() === "취소") return;
+        const matchedShipper = await findApprovedShipperLive(prev.companyName || userCompany, cleanPatch.거래처명 ?? prev.거래처명);
+        if (matchedShipper) {
+          await autoTransmitToShipper({ ...prev, ...cleanPatch, _id, __col: prev.__col || "dispatch" }, matchedShipper);
+        }
+      };
       (async () => {
         try {
           if (prev._transmittedOrderId) {
@@ -1184,6 +1223,8 @@ const patchDispatch = async (_id, patch) => {
           if (realMirrorId) {
             await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
             await updateDoc(ref, { _transmittedOrderId: realMirrorId }).catch(() => {});
+          } else {
+            await recreateMirror();
           }
         } catch (e) {
           console.error("화주사 전송사본 동기화 오류:", e);
@@ -1192,6 +1233,8 @@ const patchDispatch = async (_id, patch) => {
             if (realMirrorId) {
               await updateDoc(doc(db, "orders", realMirrorId), mirrorPatch);
               await updateDoc(ref, { _transmittedOrderId: realMirrorId }).catch(() => {});
+            } else {
+              await recreateMirror();
             }
           } catch (e2) {
             console.error("화주사 전송사본 재탐색 동기화 오류:", e2);
