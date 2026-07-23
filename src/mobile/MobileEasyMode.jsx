@@ -103,7 +103,7 @@ function getEasyStatusInfo(order = {}) {
   const isCancelled = order.상태 === "취소" || order.배차상태 === "취소" || order.배차거절 === true;
   if (isCancelled) return { label: "취소", className: "bg-red-100 text-red-700" };
   if (hasCar) return { label: "배차완료", className: "text-white" };
-  return { label: "배차중", className: "bg-amber-100 text-amber-800" };
+  return { label: "배차중", className: "bg-gray-100 text-gray-600" };
 }
 
 function StatusPill({ order }) {
@@ -412,19 +412,32 @@ function ContactPickerModal({ contacts, onSelect, onClose }) {
   );
 }
 
-function OrderCard({ order, onClick, variant }) {
+function OrderCard({ order, onClick, variant, onOpenFare }) {
   const hasCar = !!String(order.차량번호 || "").trim();
   const showExtra = variant === "unassigned";
   return (
-    <button
+    <div
       onClick={onClick}
-      className="w-full text-left bg-white rounded-3xl p-5 shadow-sm border border-black/5 active:scale-[0.98] transition-transform"
+      role="button"
+      tabIndex={0}
+      className="w-full text-left bg-white rounded-3xl p-5 shadow-sm border border-black/5 active:scale-[0.98] transition-transform cursor-pointer"
     >
       <div className="flex items-center justify-between mb-2">
         <StatusPill order={order} />
-        <span className="text-sm font-bold text-gray-400">
-          {getPickupDate(order) || "-"}
-        </span>
+        <div className="flex items-center gap-2">
+          {onOpenFare && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenFare(order); }}
+              className="text-sm font-bold px-3 py-1 rounded-full border-2"
+              style={{ borderColor: NAVY, color: NAVY }}
+            >
+              운임조회
+            </button>
+          )}
+          <span className="text-sm font-bold text-gray-400">
+            {getPickupDate(order) || "-"}
+          </span>
+        </div>
       </div>
       <div className="flex flex-col gap-1 mb-1">
         <div className="flex items-center gap-1.5 text-xl font-extrabold text-gray-900 leading-snug break-keep">
@@ -468,7 +481,7 @@ function OrderCard({ order, onClick, variant }) {
           <Truck className="w-4 h-4 shrink-0" /> {order.차량번호} · {order.기사명 || "-"}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -892,6 +905,7 @@ function OrderListScreen({
   todayStr,
   tomorrowStr,
   cardVariant,
+  onOpenFare,
 }) {
   const groups = useMemo(() => {
     if (!grouped) return null;
@@ -940,6 +954,7 @@ function OrderListScreen({
                         order={o}
                         variant={cardVariant}
                         onClick={() => (hasCar ? onOpenDetail(o) : onOpenOrder(o))}
+                        onOpenFare={onOpenFare}
                       />
                     );
                   })}
@@ -957,6 +972,7 @@ function OrderListScreen({
                   order={o}
                   variant={cardVariant}
                   onClick={() => (hasCar ? onOpenDetail(o) : onOpenOrder(o))}
+                  onOpenFare={onOpenFare}
                 />
               );
             })}
@@ -967,7 +983,7 @@ function OrderListScreen({
   );
 }
 
-function OrderDetailSheet({ order, onClose }) {
+function OrderDetailSheet({ order, onClose, onOpenFare }) {
   if (!order) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end" onClick={onClose}>
@@ -996,6 +1012,15 @@ function OrderDetailSheet({ order, onClose }) {
           <Row label="청구운임" value={fmtMoney(order.청구운임)} />
           <Row label="기사운임" value={fmtMoney(order.기사운임)} />
         </div>
+        {onOpenFare && (
+          <button
+            onClick={() => onOpenFare(order)}
+            className="w-full mt-5 py-4 rounded-2xl text-white text-lg font-extrabold active:scale-[0.98] transition-transform"
+            style={{ backgroundColor: NAVY }}
+          >
+            운임조회
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1011,9 +1036,121 @@ function Row({ label, value }) {
 }
 
 // ==================================================================
+// 운임조회 결과 팝업 — 일반모드 오더상세의 "운임조회"와 동일하게, 현재 오더와
+// 같은 노선의 과거 운송 기록을 자동으로 찾아 청구운임 참고자료로 보여준다.
+// ==================================================================
+function FareMatchModal({ order, orders, onClose }) {
+  const matches = useMemo(() => {
+    if (!order) return [];
+    const selfId = order._id || order.id;
+    const pName = normalizeText(order.상차지명);
+    const dName = normalizeText(order.하차지명);
+    const cargo = normalizeText(order.화물내용);
+    const ton = normalizeText(order.차량톤수 || order.톤수);
+    if (!pName || !dName) return [];
+
+    return (orders || [])
+      .filter((o) => (o._id || o.id) !== selfId)
+      .filter((o) => (Number(o.청구운임) || 0) > 0)
+      .map((o) => {
+        const routeMatch = normalizeText(o.상차지명) === pName && normalizeText(o.하차지명) === dName;
+        if (!routeMatch) return null;
+        const cargoMatch = !!cargo && normalizeText(o.화물내용) === cargo;
+        const tonMatch = !!ton && normalizeText(o.차량톤수 || o.톤수) === ton;
+        const tagLabel = cargoMatch && tonMatch ? "완전일치" : (cargoMatch || tonMatch) ? "부분일치" : "노선일치";
+        return { order: o, tagLabel };
+      })
+      .filter(Boolean)
+      .sort((a, b) => getCreatedMs(b.order) - getCreatedMs(a.order))
+      .slice(0, 15);
+  }, [order, orders]);
+
+  const summary = useMemo(() => {
+    if (matches.length < 2) return null;
+    const fares = matches.map((m) => Number(m.order.청구운임) || 0);
+    return {
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+    };
+  }, [matches]);
+
+  if (!order) return null;
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/40 flex items-end" onClick={onClose}>
+      <div
+        className="bg-white w-full rounded-t-3xl px-6 py-6 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-xl font-extrabold" style={{ color: NAVY }}>운임조회 결과</div>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-gray-100">
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
+        </div>
+        <div className="text-base text-gray-400 font-semibold mb-4 inline-flex items-center gap-1.5">
+          <DirBadge dir="상" /><span>{order.상차지명 || "-"}</span>
+          <span className="text-gray-300">→</span>
+          <DirBadge dir="하" /><span>{order.하차지명 || "-"}</span>
+        </div>
+
+        {summary && (
+          <div className="bg-gray-50 rounded-2xl px-4 py-4 mb-4 flex justify-between text-center">
+            <div>
+              <div className="text-xs text-gray-400 font-bold mb-0.5">최저</div>
+              <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.min)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 font-bold mb-0.5">평균</div>
+              <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.avg)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 font-bold mb-0.5">최고</div>
+              <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.max)}</div>
+            </div>
+          </div>
+        )}
+
+        {matches.length === 0 ? (
+          <div className="text-center text-gray-400 text-lg font-semibold py-16">
+            동일 노선의 과거 운송 기록이 없습니다.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 pb-2">
+            {matches.map((m, i) => {
+              const o = m.order;
+              const tagStyle = m.tagLabel === "완전일치"
+                ? { backgroundColor: NAVY, color: "#fff" }
+                : m.tagLabel === "부분일치"
+                  ? { backgroundColor: "#d1fae5", color: "#047857" }
+                  : { backgroundColor: "#f3f4f6", color: "#6b7280" };
+              return (
+                <div key={o._id || o.id || i} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={tagStyle}>{m.tagLabel}</span>
+                    <span className="text-xs text-gray-400 font-semibold">{getPickupDate(o) || "-"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-base text-gray-700 font-semibold truncate inline-flex items-center gap-1">
+                      <Package className="w-4 h-4 text-amber-500 shrink-0" /> {o.화물내용 || "-"}
+                    </span>
+                    <span className="text-xl font-extrabold shrink-0" style={{ color: NAVY }}>{fmtMoney(o.청구운임)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==================================================================
 // 차량정보 입력(배차완료) 화면
 // ==================================================================
-function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone }) {
+function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, onOpenFare }) {
   const [차량번호, set차량번호] = useState("");
   const [기사명, set기사명] = useState("");
   const [전화번호, set전화번호] = useState("");
@@ -1089,9 +1226,20 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone })
       <TopBar title="차량정보 입력" onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="bg-white rounded-3xl p-5 mb-6 shadow-sm border border-black/5">
-          <div className="flex flex-col gap-1 text-lg font-extrabold text-gray-900 break-keep">
-            <div className="flex items-center gap-1.5"><DirBadge dir="상" /><span>{order.상차지명 || "-"}</span></div>
-            <div className="flex items-center gap-1.5"><DirBadge dir="하" /><span>{order.하차지명 || "-"}</span></div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex flex-col gap-1 text-lg font-extrabold text-gray-900 break-keep">
+              <div className="flex items-center gap-1.5"><DirBadge dir="상" /><span>{order.상차지명 || "-"}</span></div>
+              <div className="flex items-center gap-1.5"><DirBadge dir="하" /><span>{order.하차지명 || "-"}</span></div>
+            </div>
+            {onOpenFare && (
+              <button
+                onClick={() => onOpenFare(order)}
+                className="text-sm font-bold px-3 py-1.5 rounded-full border-2 shrink-0"
+                style={{ borderColor: NAVY, color: NAVY }}
+              >
+                운임조회
+              </button>
+            )}
           </div>
           <div className="text-base text-gray-500 mt-1">
             상차일 {getPickupDate(order) || "-"}
@@ -1427,6 +1575,7 @@ export default function MobileEasyMode({
   const [assignOrder, setAssignOrder] = useState(null);
   const [assignFrom, setAssignFrom] = useState("list");
   const [detailOrder, setDetailOrder] = useState(null);
+  const [fareMatchOrder, setFareMatchOrder] = useState(null);
   const [listDateMode, setListDateMode] = useState("today");
   // 쉬운모드 자체 글자크기 배율(기본/크게/아주크게) — 일반모드의 fontScale과는 별도로
   // 관리하며, 이 화면트리 전체(모든 화면 공통)에 zoom으로 적용해 "모든 글씨"가 함께 커진다.
@@ -1507,6 +1656,7 @@ export default function MobileEasyMode({
           showAddButton
           onAdd={() => setScreen("register")}
           headerExtra={<DateToggle mode={listDateMode} onChange={setListDateMode} todayStr={today} tomorrowStr={tomorrow} />}
+          onOpenFare={setFareMatchOrder}
         />
       )}
 
@@ -1523,6 +1673,7 @@ export default function MobileEasyMode({
           todayStr={today}
           tomorrowStr={tomorrow}
           cardVariant="unassigned"
+          onOpenFare={setFareMatchOrder}
         />
       )}
 
@@ -1537,13 +1688,18 @@ export default function MobileEasyMode({
             setAssignOrder(null);
             setScreen(assignFrom);
           }}
+          onOpenFare={setFareMatchOrder}
         />
       )}
 
       {screen === "fare" && <FareScreen orders={orders} clients={clients} places={places} onBack={goHome} />}
 
       {detailOrder && (
-        <OrderDetailSheet order={detailOrder} onClose={() => setDetailOrder(null)} />
+        <OrderDetailSheet order={detailOrder} onClose={() => setDetailOrder(null)} onOpenFare={setFareMatchOrder} />
+      )}
+
+      {fareMatchOrder && (
+        <FareMatchModal order={fareMatchOrder} orders={orders} onClose={() => setFareMatchOrder(null)} />
       )}
     </div>
   );
