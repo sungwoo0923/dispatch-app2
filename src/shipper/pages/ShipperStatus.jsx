@@ -350,6 +350,11 @@ export default function ShipperStatus() {
           } else if (prevPlate && curPlate && prevPlate !== curPlate) {
             vehicleChangedThisPass.add(o.id);
             pushToast({ type: "dispatch", order: o, title: "재배차완료", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+          } else if (prevPlate && !curPlate) {
+            // 운송사가 배정된 차량정보를 다시 비워 배차중으로 되돌린 경우 — 단순 "수정"이 아니라
+            // 재배차가 진행 중임을 알려야 한다.
+            vehicleChangedThisPass.add(o.id);
+            pushToast({ type: "dispatch", order: o, title: "재배차 진행중", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 기사 배정이 취소되어 재배차가 진행 중입니다` });
           }
         }
         prevVehicleRef.current[o.id] = curPlate;

@@ -498,7 +498,7 @@ export default function ShipperMobileApp() {
         setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호}${o.이름 ? " · " + o.이름 : ""})` });
         setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
       } else if (prev === true && cur === false) {
-        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 취소되었습니다.` });
+        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 기사 배정이 취소되어 재배차가 진행 중입니다.` });
         setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
       }
       prevVehicleRef.current[o.id] = cur;
