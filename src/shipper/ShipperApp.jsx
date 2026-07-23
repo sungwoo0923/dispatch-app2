@@ -89,6 +89,28 @@ useEffect(() => {
   });
   return () => unsub();
 }, [companyName]);
+
+// ================= 최고관리자 강제 업데이트 감지 =================
+// 화주사 클라이언트가 서비스워커 자동 갱신을 놓치는 경우를 대비해, 최고관리자가
+// systemConfig/forceUpdate에 올려둔 minVersion보다 현재 실행중인 버전이 낮으면
+// 닫을 수 없는 업데이트 배너를 띄운다.
+const [forceUpdateNeeded, setForceUpdateNeeded] = useState(false);
+useEffect(() => {
+  const unsub = onSnapshot(doc(db, "systemConfig", "forceUpdate"), (snap) => {
+    if (!snap.exists()) return;
+    const minVersion = snap.data().minVersion;
+    if (!minVersion) return;
+    const cur = String(__APP_VERSION__).split(".").map(Number);
+    const min = String(minVersion).split(".").map(Number);
+    for (let i = 0; i < Math.max(cur.length, min.length); i++) {
+      const c = cur[i] || 0, m = min[i] || 0;
+      if (c < m) { setForceUpdateNeeded(true); return; }
+      if (c > m) { setForceUpdateNeeded(false); return; }
+    }
+    setForceUpdateNeeded(false);
+  });
+  return () => unsub();
+}, []);
   // ================= 화주 권한 확인 =================
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
@@ -153,6 +175,25 @@ const isMaster = isTotalMasterUser || userData?.permissions?.master;
 const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
   return (
     <div className="min-h-screen bg-[#f3f4f6]">
+      {/* ================= 강제 업데이트 배너 ================= */}
+      {forceUpdateNeeded && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[999999] flex items-center justify-center gap-4 px-5 py-2.5"
+          style={{ background: "#1B2B4B", color: "white", fontSize: 13, fontWeight: 600 }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#4ade80" }} />
+            새 버전이 있습니다. 새로고침해서 업데이트해주세요.
+          </span>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ background: "white", color: "#1B2B4B", border: "none", borderRadius: 6, padding: "5px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+          >
+            업데이트
+          </button>
+        </div>
+      )}
+
       {/* ================= HEADER ================= */}
       <header className="bg-[#2f3e55] text-white">
   <div className="px-8 py-4 flex items-center gap-4 relative">
@@ -167,6 +208,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
       >
         KP-FLOW
       </div>
+      <span className="text-[11px] font-mono text-white/50 shrink-0">v{__APP_VERSION__}</span>
 
       <ShipperLiveTicker events={liveEvents} onOpenBig={() => setLiveBigOpen(true)} />
     </div>

@@ -72,6 +72,20 @@ const getMonthEndKST = () => {
   return lastDay.toISOString().slice(0, 10);
 };
 
+// 이전 달 1일 ~ 말일 (KST 기준)
+const getPrevMonthStartKST = () => {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const d = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() - 1, 1));
+  return d.toISOString().slice(0, 10);
+};
+const getPrevMonthEndKST = () => {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const lastDay = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), 0));
+  return lastDay.toISOString().slice(0, 10);
+};
+
 const fmt12 = (t) => {
   if (!t) return "-";
   const [h, m] = t.split(":").map(Number);
@@ -140,6 +154,7 @@ export default function ShipperStatus() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
+  const [keywordInput, setKeywordInput] = useState("");
   const scrollRef = useRef(null);
   const prevAttachRef = useRef({});
   const attachPendingRef = useRef({}); // { [orderId]: { delta, order, timer } } — 여러 장을 연속 업로드해도 알림 1개로 묶기 위한 디바운스 누적
@@ -976,7 +991,7 @@ export default function ShipperStatus() {
 
               <button
                 onClick={() => { const t = getTodayKST(); setStartDate(t); setEndDate(t); }}
-                className="px-3 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
+                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
               >당일</button>
 
               <button
@@ -986,18 +1001,18 @@ export default function ShipperStatus() {
                   const tmr = kst.toISOString().slice(0, 10);
                   setStartDate(tmr); setEndDate(tmr);
                 }}
-                className="px-3 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
+                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
               >내일</button>
 
               <button
                 onClick={() => { setStartDate(getMonthStartKST()); setEndDate(getMonthEndKST()); }}
-                className="px-3 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
+                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
               >이번달</button>
 
               <button
-                onClick={() => { setStartDate(get3MonthsAgo()); setEndDate(getTodayKST()); }}
-                className="px-3 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
-              >3개월</button>
+                onClick={() => { setStartDate(getPrevMonthStartKST()); setEndDate(getPrevMonthEndKST()); }}
+                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
+              >이전달</button>
 
               <select
                 value={transportFilter}
@@ -1008,24 +1023,34 @@ export default function ShipperStatus() {
                 {transportOptions.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
 
-              <select
-                value={searchType}
-                onChange={(e) => setSearchType(e.target.value)}
-                className="border rounded-lg px-3 py-2 text-sm"
-              >
-                <option>통합검색</option>
-                <option>운송사명</option>
-                <option>상차지명</option>
-                <option>차량번호</option>
-                <option>이름</option>
-              </select>
+              {/* 통합검색: 필터 드롭다운 + 검색어 입력 + 조회 버튼을 하나의 칸으로 결합 */}
+              <div className="flex items-stretch border rounded-lg overflow-hidden">
+                <select
+                  value={searchType}
+                  onChange={(e) => setSearchType(e.target.value)}
+                  className="border-r px-2 text-sm bg-gray-50 text-gray-600 font-semibold outline-none"
+                >
+                  <option value="통합">통합검색</option>
+                  <option>운송사명</option>
+                  <option>상차지명</option>
+                  <option>차량번호</option>
+                  <option>이름</option>
+                </select>
 
-              <input
-                className="border rounded-lg px-4 py-2 text-sm w-64"
-                placeholder="검색어 입력"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-              />
+                <input
+                  className="px-3 py-2 text-sm w-56 outline-none"
+                  placeholder="검색어 입력 후 Enter"
+                  value={keywordInput}
+                  onChange={(e) => setKeywordInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") setKeyword(keywordInput); }}
+                />
+                <button
+                  onClick={() => setKeyword(keywordInput)}
+                  className="px-4 bg-[#1B2B4B] text-white text-sm font-semibold hover:bg-[#243a60] transition shrink-0"
+                >
+                  조회
+                </button>
+              </div>
             </div>
 
             {/* 버튼 */}
@@ -1312,6 +1337,44 @@ export default function ShipperStatus() {
           </div>
 
           <div className="p-8 space-y-8 text-[20px]">
+            {/* 상하차 정보 */}
+            <Section title="상하차 정보">
+              <div className="grid grid-cols-2 gap-x-6">
+                <div>
+                  <Row label="상차지" value={selectedOrder?.상차지명 || "-"} />
+                  <Row label="상차주소" value={selectedOrder?.상차지주소 || "-"} />
+                  {getViaList(selectedOrder?.경유상차목록).length > 0 && (
+                    <div className="flex justify-between py-2 text-[18px]">
+                      <div className="text-gray-500 w-[110px]">상차경유지</div>
+                      <div className="text-right flex-1">
+                        <ShipperViaBadge
+                          count={getViaList(selectedOrder?.경유상차목록).length}
+                          label="상차경유지"
+                          onOpen={() => setViaPopup({ label: "상차경유지", list: getViaList(selectedOrder?.경유상차목록) })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <Row label="하차지" value={selectedOrder?.하차지명 || "-"} />
+                  <Row label="하차주소" value={selectedOrder?.하차지주소 || "-"} />
+                  {getViaList(selectedOrder?.경유하차목록).length > 0 && (
+                    <div className="flex justify-between py-2 text-[18px]">
+                      <div className="text-gray-500 w-[110px]">하차경유지</div>
+                      <div className="text-right flex-1">
+                        <ShipperViaBadge
+                          count={getViaList(selectedOrder?.경유하차목록).length}
+                          label="하차경유지"
+                          onOpen={() => setViaPopup({ label: "하차경유지", list: getViaList(selectedOrder?.경유하차목록) })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Section>
+
             {/* 배차 / 기사 정보 */}
             {selectedOrder?.차량번호 ? (
               <Section title="기사 / 배차 정보">
@@ -1627,7 +1690,9 @@ function ShipperLiveLocationPopup({ order, onClose }) {
 
   useEffect(() => {
     if (!order?.id) return;
-    const unsub = onSnapshot(doc(db, "orders", order.id), (snap) => {
+    // 실제 GPS 좌표는 오더 문서가 아니라, 오더 목록 리스너에 영향을 주지 않도록
+    // 완전히 분리된 liveLocations 컬렉션에 기록된다(운송사 PC의 LiveLocationPopup과 동일).
+    const unsub = onSnapshot(doc(db, "liveLocations", order.id), (snap) => {
       const d = snap.data();
       if (d?.위치) { setLoc(d.위치); setUpdatedAt(d.위치갱신일시 || null); }
     });
