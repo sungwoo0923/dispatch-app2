@@ -1333,6 +1333,7 @@ const markEditRequestSeen = async (order) => {
     removeDriver,
     upsertClient,
     removeClient,
+    approvedShippers,
   };
 }  // ← ⭐ 이거 반드시 필요
 
@@ -2900,6 +2901,7 @@ useEffect(() => {
     removeDriver,
     upsertClient,
     removeClient,
+    approvedShippers,
   } = useRealtimeCollections(user, userCompany, role);
 
 
