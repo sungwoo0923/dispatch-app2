@@ -2181,21 +2181,13 @@ const [detailFrom, setDetailFrom] = useState(null);
 
   useEffect(() => {
     if (!showMenu) return;
-    const scrollY = window.scrollY;
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = "0";
-    document.body.style.right = "0";
-    document.body.style.width = "100%";
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
+    document.body.style.overscrollBehavior = "none";
     return () => {
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.left = "";
-      document.body.style.right = "";
-      document.body.style.width = "";
       document.body.style.overflow = "";
-      window.scrollTo(0, scrollY);
+      document.documentElement.style.overscrollBehavior = "";
+      document.body.style.overscrollBehavior = "";
     };
   }, [showMenu]);
   const appVersion = APP_VERSION;
@@ -5478,10 +5470,13 @@ function MobileSideMenu({
         {/* 메뉴 본문 */}
         <div
           className="flex-1 overflow-y-auto py-1"
-          style={dark
-            ? { scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }
-            : { scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }
-          }
+          style={{
+            overscrollBehavior: "contain",
+            touchAction: "pan-y",
+            ...(dark
+              ? { scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }
+              : { scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }),
+          }}
         >
           <MenuSection title="배차관리" dark={dark}>
             <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
