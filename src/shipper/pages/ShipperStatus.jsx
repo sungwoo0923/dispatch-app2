@@ -477,6 +477,20 @@ export default function ShipperStatus() {
     if (latest) setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
   }, [orders]);
 
+  // ShipperApp.jsx(전역 알림 배너)에서 클릭 시 이 페이지로 이동하며 남겨둔
+  // 대상 오더 id를 읽어와 해당 행으로 스크롤 + 하이라이트한다.
+  useEffect(() => {
+    if (!orders.length) return;
+    let pendingId;
+    try { pendingId = sessionStorage.getItem("shipperFocusOrderId"); } catch { pendingId = null; }
+    if (!pendingId) return;
+    const target = orders.find((o) => o.id === pendingId);
+    if (target) {
+      try { sessionStorage.removeItem("shipperFocusOrderId"); } catch {}
+      focusOnOrder(target);
+    }
+  }, [orders]);
+
   // 운송사에서 전송받은 오더(originCol/originId 보유)는 첨부파일이 원본(운송사) 쪽 서브컬렉션에
   // 먼저 올라간 뒤 이 화면 쪽으로 미러링되는데, 예전 건들 중 미러링이 안 된 채로 남아있는
   // 경우가 있어 목록을 불러올 때마다(오더당 1회) 자동으로 양쪽을 비교해 누락분을 보정한다.
@@ -888,57 +902,9 @@ export default function ShipperStatus() {
     <div className="flex min-h-screen">
 
 
-      {/* 알림 토스트 카드 (상단 중앙 — 운송사 프로그램과 동일한 플로팅 카드 스타일) */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999997] space-y-2 pointer-events-none" style={{ width: "min(560px, 92vw)" }}>
-        <style>{`
-          @keyframes shipperToastSlideDown { 0% { opacity:0; transform:translateY(-100%); } 100% { opacity:1; transform:translateY(0); } }
-          .shipper-toast-enter { animation: shipperToastSlideDown 0.35s ease-out forwards; }
-        `}</style>
-        {toasts.map(t => (
-          <div
-            key={t.id}
-            className="shipper-toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
-            style={{
-              background: t.type === "cancel"
-                ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
-                : t.type === "attach"
-                ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
-                : "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)",
-            }}
-            onClick={() => {
-              if (t.kind === "transportEdit") openTransportEditPopup(t.order);
-              else if (t.type === "attach") setAttachViewer(t.order);
-              else focusOnOrder(t.order);
-              setToasts(prev => prev.filter(x => x.id !== t.id));
-            }}
-          >
-            <div className="flex items-start gap-3 px-4 py-3">
-              <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  {t.type === "attach" ? (
-                    <><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></>
-                  ) : t.type === "cancel" ? (
-                    <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
-                  ) : (
-                    <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
-                  )}
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-white text-[13px] font-bold leading-snug">{t.title}</div>
-                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed break-words">{t.desc}</div>
-                <div className="text-white/50 text-[10px] mt-1">클릭하면 해당 오더로 이동합니다</div>
-              </div>
-              <button
-                className="text-white/40 hover:text-white text-[18px] leading-none shrink-0 mt-0.5 px-1"
-                onClick={(e) => { e.stopPropagation(); setToasts(prev => prev.filter(x => x.id !== t.id)); }}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* 알림 토스트: 이제 ShipperApp.jsx(항상 마운트된 전역 레이아웃)에서 어느 메뉴에
+          있어도 뜨도록 처리한다. 이 페이지 안에서만 뜨던 기존 배너는 중복 표시를 막기
+          위해 렌더링을 제거했다(감지/추적 로직 자체는 오더 목록 상태 갱신에 계속 쓰이므로 유지). */}
 
       {/* 메인 */}
       <div className="flex-1 min-w-0 px-8 py-6 bg-[#f4f7fb] space-y-6 transition-all duration-300">

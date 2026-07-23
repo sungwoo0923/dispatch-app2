@@ -482,28 +482,40 @@ export default function ShipperMobileApp() {
     return () => unsub();
   }, [user, userData]);
 
-  // 배차완료 / 재배차 / 기사취소 상단 알림 배너 — 차량번호 유무 전환을 감지
-  const [dispatchNotif, setDispatchNotif] = useState(null); // { id, text }
+  // 배차완료 / 재배차 / 기사취소 등 상단 알림 배너 — PC 화주사 프로그램과 동일한
+  // 카드형 토스트 스타일 + 동일한 문구/구분 로직(배차완료 vs 재배차완료 vs 재배차 진행중)
+  const [dispatchNotifs, setDispatchNotifs] = useState([]); // [{ id, type, title, desc }]
+  const notifIdRef = useRef(0);
+  const pushNotif = (n) => {
+    const id = ++notifIdRef.current;
+    setDispatchNotifs((prev) => [...prev, { ...n, id }].slice(-4));
+    setTimeout(() => setDispatchNotifs((prev) => prev.filter((x) => x.id !== id)), 7000);
+  };
+
+  // 차량번호 "문자열" 값 자체를 저장해 최초 배정(빈값→배정)과 재배차(다른 차량으로 교체),
+  // 기사취소로 인한 재배차 진행중(배정값→빈값)을 PC와 동일하게 구분한다.
   const prevVehicleRef = useRef({});
   const vehicleFirstLoadRef = useRef(true);
   useEffect(() => {
     if (!orders.length) return;
     if (vehicleFirstLoadRef.current) {
       vehicleFirstLoadRef.current = false;
-      orders.forEach((o) => { prevVehicleRef.current[o.id] = !!(o.차량번호 && o.차량번호.trim()); });
+      orders.forEach((o) => { prevVehicleRef.current[o.id] = String(o.차량번호 || "").trim(); });
       return;
     }
     orders.forEach((o) => {
-      const cur = !!(o.차량번호 && o.차량번호.trim());
-      const prev = prevVehicleRef.current[o.id];
-      if (prev === false && cur === true) {
-        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차가 완료되었습니다. (${o.차량번호}${o.이름 ? " · " + o.이름 : ""})` });
-        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
-      } else if (prev === true && cur === false) {
-        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 기사 배정이 취소되어 재배차가 진행 중입니다.` });
-        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+      const curPlate = String(o.차량번호 || "").trim();
+      const prevPlate = prevVehicleRef.current[o.id];
+      if (prevPlate !== undefined) {
+        if (!prevPlate && curPlate) {
+          pushNotif({ type: "dispatch", title: "배차완료", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+        } else if (prevPlate && curPlate && prevPlate !== curPlate) {
+          pushNotif({ type: "dispatch", title: "재배차완료", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+        } else if (prevPlate && !curPlate) {
+          pushNotif({ type: "dispatch", title: "재배차 진행중", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 기사 배정이 취소되어 재배차가 진행 중입니다` });
+        }
       }
-      prevVehicleRef.current[o.id] = cur;
+      prevVehicleRef.current[o.id] = curPlate;
     });
   }, [orders]);
 
@@ -521,8 +533,7 @@ export default function ShipperMobileApp() {
       const cur = o.배차거절 === true;
       const prev = prevRejectRef.current[o.id];
       if (prev === false && cur === true) {
-        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차요청을 운송사가 거절했습니다. 재요청하거나 삭제해주세요.` });
-        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+        pushNotif({ type: "cancel", title: "배차요청 거절", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 재요청하거나 삭제해주세요` });
       }
       prevRejectRef.current[o.id] = cur;
     });
@@ -542,8 +553,7 @@ export default function ShipperMobileApp() {
       const cur = o.화주사확인대기 === true;
       const prev = prevPendingRef.current[o.id];
       if (prev === true && cur === false && !o.배차거절) {
-        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차요청을 운송사가 승인했습니다. (배차중)` });
-        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+        pushNotif({ type: "dispatch", title: "배차요청 승인", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 배차중으로 전환됨` });
       }
       prevPendingRef.current[o.id] = cur;
     });
@@ -563,8 +573,7 @@ export default function ShipperMobileApp() {
       const cur = o.최종수정일시?.seconds || 0;
       const prev = prevEditStampRef.current[o.id];
       if (o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
-        setDispatchNotif({ id: o.id, text: `${o.거래처명 || o.상차지명 || "오더"} 배차정보를 운송사가 수정했습니다. (${o.상차지명 || "-"} → ${o.하차지명 || "-"})` });
-        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+        pushNotif({ type: "shipperEdit", title: "배차정보 수정", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
       }
       prevEditStampRef.current[o.id] = cur;
     });
@@ -584,11 +593,11 @@ export default function ShipperMobileApp() {
       const cur = !!o.수정요청;
       const prev = prevEditReqRef.current[o.id];
       if (prev === true && cur === false) {
-        const text = o.수정거절
-          ? `${o.거래처명 || o.상차지명 || "오더"} 수정요청을 운송사가 거절했습니다.`
-          : `${o.거래처명 || o.상차지명 || "오더"} 수정요청이 승인되어 반영되었습니다.`;
-        setDispatchNotif({ id: o.id, text });
-        setTimeout(() => setDispatchNotif((p) => (p?.id === o.id ? null : p)), 6000);
+        pushNotif({
+          type: o.수정거절 ? "cancel" : "dispatch",
+          title: o.수정거절 ? "수정요청 거절" : "수정요청 승인",
+          desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}`,
+        });
       }
       prevEditReqRef.current[o.id] = cur;
     });
@@ -645,14 +654,51 @@ export default function ShipperMobileApp() {
         </div>
       )}
 
-      {dispatchNotif && (
-        <div className="fixed top-0 left-0 right-0 z-[9998] px-4 py-3 text-white text-sm font-semibold shadow-lg"
-          style={{ background: NAVY, animation: "bannerDownM 0.25s ease-out" }}
-          onClick={() => setDispatchNotif(null)}>
-          {dispatchNotif.text}
-        </div>
-      )}
-      <style>{`@keyframes bannerDownM { from { transform: translateY(-100%); } to { transform: translateY(0); } }`}</style>
+      {/* 배차완료/재배차/수정 등 실시간 알림 — PC 화주사 프로그램과 동일한 카드형 토스트 스타일 */}
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[9998] space-y-2 px-3" style={{ width: "min(480px, 94vw)" }}>
+        <style>{`
+          @keyframes shipperMNotifSlideDown { 0% { opacity:0; transform:translateY(-100%); } 100% { opacity:1; transform:translateY(0); } }
+          .shipper-m-notif-enter { animation: shipperMNotifSlideDown 0.3s ease-out forwards; }
+        `}</style>
+        {dispatchNotifs.map((t) => (
+          <div
+            key={t.id}
+            className="shipper-m-notif-enter cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
+            style={{
+              background: t.type === "cancel"
+                ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
+                : t.type === "shipperEdit"
+                ? "linear-gradient(135deg, #3b5998 0%, #0f2151 100%)"
+                : "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)",
+            }}
+            onClick={() => setDispatchNotifs((prev) => prev.filter((x) => x.id !== t.id))}
+          >
+            <div className="flex items-start gap-2.5 px-3.5 py-3">
+              <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {t.type === "cancel" ? (
+                    <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
+                  ) : t.type === "shipperEdit" ? (
+                    <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>
+                  ) : (
+                    <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
+                  )}
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-[13px] font-bold leading-snug">{t.title}</div>
+                <div className="text-white/80 text-[11px] mt-0.5 leading-relaxed break-words">{t.desc}</div>
+              </div>
+              <button
+                className="text-white/40 text-[16px] leading-none shrink-0 mt-0.5 px-1"
+                onClick={(e) => { e.stopPropagation(); setDispatchNotifs((prev) => prev.filter((x) => x.id !== t.id)); }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* 사이드 메뉴 */}
       {showMenu && (

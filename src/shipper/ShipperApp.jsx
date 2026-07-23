@@ -1,5 +1,5 @@
 // ======================= src/shipper/ShipperApp.jsx =======================
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
@@ -111,6 +111,144 @@ useEffect(() => {
   });
   return () => unsub();
 }, []);
+
+// ================= 전역 실시간 알림 배너 (어느 메뉴에 있어도 표시) =================
+// 기존에는 이 감지 로직이 ShipperStatus.jsx(운송목록 페이지) 안에만 있어서, 그 화면에
+// 들어가 있을 때만 알림이 떴다. ShipperApp은 /shipper/* 전체를 감싸는 항상 마운트된
+// 컴포넌트라, 여기서 감지하면 어느 메뉴에 있어도 실시간으로 뜬다.
+const [globalToasts, setGlobalToasts] = useState([]);
+const globalToastIdRef = useRef(0);
+const pushGlobalToast = (t) => {
+  const id = ++globalToastIdRef.current;
+  setGlobalToasts((prev) => [...prev, { ...t, id }].slice(-4));
+  setTimeout(() => setGlobalToasts((prev) => prev.filter((x) => x.id !== id)), 7000);
+};
+const gPrevVehicleRef = useRef({});
+const gPrevWatchedFieldsRef = useRef({});
+const gPrevPendingRef = useRef({});
+const gPendingFirstLoadRef = useRef(true);
+const gPrevEditStampRef = useRef({});
+const gEditStampFirstLoadRef = useRef(true);
+const gPrevEditReqRef = useRef({});
+const gEditReqFirstLoadRef = useRef(true);
+const gPrevCancelReqRef = useRef({});
+const gCancelReqFirstLoadRef = useRef(true);
+
+useEffect(() => {
+  if (!companyName) return;
+  const q = query(collection(db, "orders"), where("shipperCompany", "==", companyName));
+  const unsub = onSnapshot(q, (snap) => {
+    const docs = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((o) => o.지급방식 !== "손실");
+
+    const vehicleChangedThisPass = new Set();
+    docs.forEach((o) => {
+      const curPlate = String(o.차량번호 || "").trim();
+      const prevPlate = gPrevVehicleRef.current[o.id];
+      if (prevPlate !== undefined) {
+        if (!prevPlate && curPlate) {
+          vehicleChangedThisPass.add(o.id);
+          pushGlobalToast({ type: "dispatch", order: o, title: "배차완료", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+        } else if (prevPlate && curPlate && prevPlate !== curPlate) {
+          vehicleChangedThisPass.add(o.id);
+          pushGlobalToast({ type: "dispatch", order: o, title: "재배차완료", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · ${o.차량번호} ${o.이름 || ""}` });
+        } else if (prevPlate && !curPlate) {
+          vehicleChangedThisPass.add(o.id);
+          pushGlobalToast({ type: "dispatch", order: o, title: "재배차 진행중", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 기사 배정이 취소되어 재배차가 진행 중입니다` });
+        }
+      }
+      gPrevVehicleRef.current[o.id] = curPlate;
+    });
+
+    const WATCHED_EDIT_FIELDS = ["청구운임", "지급방식", "화물내용", "차량종류", "차량톤수", "상차일", "상차시간", "하차일", "하차시간", "상차방법", "하차방법", "상차지명", "상차지주소", "하차지명", "하차지주소"];
+    const otherFieldChangedThisPass = new Set();
+    docs.forEach((o) => {
+      const prevFields = gPrevWatchedFieldsRef.current[o.id];
+      if (prevFields && WATCHED_EDIT_FIELDS.some((f) => String(prevFields[f] ?? "") !== String(o[f] ?? ""))) {
+        otherFieldChangedThisPass.add(o.id);
+      }
+      gPrevWatchedFieldsRef.current[o.id] = Object.fromEntries(WATCHED_EDIT_FIELDS.map((f) => [f, o[f]]));
+    });
+
+    const approvedThisPass = new Set();
+    if (gPendingFirstLoadRef.current) {
+      gPendingFirstLoadRef.current = false;
+      docs.forEach((o) => { gPrevPendingRef.current[o.id] = !!o.화주사확인대기; });
+    } else {
+      docs.forEach((o) => {
+        const cur = !!o.화주사확인대기;
+        const prev = gPrevPendingRef.current[o.id];
+        if (prev === true && cur === false && !o.배차거절) {
+          approvedThisPass.add(o.id);
+          pushGlobalToast({ type: "dispatch", order: o, title: "배차요청 승인", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 배차중으로 전환됨` });
+        }
+        gPrevPendingRef.current[o.id] = cur;
+      });
+    }
+
+    if (gEditStampFirstLoadRef.current) {
+      gEditStampFirstLoadRef.current = false;
+      docs.forEach((o) => { gPrevEditStampRef.current[o.id] = o.최종수정일시?.seconds || 0; });
+    } else {
+      docs.forEach((o) => {
+        const cur = o.최종수정일시?.seconds || 0;
+        const prev = gPrevEditStampRef.current[o.id];
+        const vehicleOnlyChange = vehicleChangedThisPass.has(o.id) && !otherFieldChangedThisPass.has(o.id);
+        if (!approvedThisPass.has(o.id) && !vehicleOnlyChange && o.최종수정출처 === "transport" && cur && prev !== undefined && cur !== prev) {
+          pushGlobalToast({ type: "shipperEdit", order: o, title: "배차정보 수정", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}` });
+        }
+        gPrevEditStampRef.current[o.id] = cur;
+      });
+    }
+
+    if (gEditReqFirstLoadRef.current) {
+      gEditReqFirstLoadRef.current = false;
+      docs.forEach((o) => { gPrevEditReqRef.current[o.id] = !!o.수정요청; });
+    } else {
+      docs.forEach((o) => {
+        const wasPending = gPrevEditReqRef.current[o.id];
+        if (wasPending && !o.수정요청) {
+          pushGlobalToast({
+            type: o.수정거절 ? "cancel" : "dispatch",
+            order: o,
+            title: o.수정거절 ? "수정요청 거절" : "수정요청 승인",
+            desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}`,
+          });
+        }
+        gPrevEditReqRef.current[o.id] = !!o.수정요청;
+      });
+    }
+
+    if (gCancelReqFirstLoadRef.current) {
+      gCancelReqFirstLoadRef.current = false;
+      docs.forEach((o) => { gPrevCancelReqRef.current[o.id] = !!o.취소요청; });
+    } else {
+      docs.forEach((o) => {
+        const wasPending = gPrevCancelReqRef.current[o.id];
+        if (wasPending && !o.취소요청) {
+          pushGlobalToast({
+            type: o.취소거절 ? "dispatch" : "cancel",
+            order: o,
+            title: o.취소거절 ? "배차취소 거절" : "배차취소 승인",
+            desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"}`,
+          });
+        }
+        gPrevCancelReqRef.current[o.id] = !!o.취소요청;
+      });
+    }
+  });
+  return () => unsub();
+}, [companyName]);
+
+const handleGlobalToastClick = (t) => {
+  setGlobalToasts((prev) => prev.filter((x) => x.id !== t.id));
+  if (t.order?.id) {
+    try { sessionStorage.setItem("shipperFocusOrderId", t.order.id); } catch {}
+  }
+  navigate("/shipper/transport");
+};
+
   // ================= 화주 권한 확인 =================
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
@@ -193,6 +331,51 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
           </button>
         </div>
       )}
+
+      {/* ================= 전역 실시간 알림 배너 (어느 메뉴에 있어도 표시) ================= */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[999998] space-y-2 pointer-events-none" style={{ width: "min(560px, 92vw)" }}>
+        <style>{`
+          @keyframes shipperGlobalToastSlideDown { 0% { opacity:0; transform:translateY(-100%); } 100% { opacity:1; transform:translateY(0); } }
+          .shipper-global-toast-enter { animation: shipperGlobalToastSlideDown 0.35s ease-out forwards; }
+        `}</style>
+        {globalToasts.map(t => (
+          <div
+            key={t.id}
+            className="shipper-global-toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
+            style={{
+              background: t.type === "cancel"
+                ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
+                : t.type === "attach"
+                ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
+                : "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)",
+            }}
+            onClick={() => handleGlobalToastClick(t)}
+          >
+            <div className="flex items-start gap-3 px-4 py-3">
+              <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {t.type === "cancel" ? (
+                    <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
+                  ) : (
+                    <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
+                  )}
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-[13px] font-bold leading-snug">{t.title}</div>
+                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed break-words">{t.desc}</div>
+                <div className="text-white/50 text-[10px] mt-1">클릭하면 해당 오더로 이동합니다</div>
+              </div>
+              <button
+                className="text-white/40 hover:text-white text-[18px] leading-none shrink-0 mt-0.5 px-1"
+                onClick={(e) => { e.stopPropagation(); setGlobalToasts(prev => prev.filter(x => x.id !== t.id)); }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* ================= HEADER ================= */}
       <header className="bg-[#2f3e55] text-white">

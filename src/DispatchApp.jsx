@@ -391,6 +391,50 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
   });
 };
 
+// "오더 복사/수정 패널"의 "복사 등록" 공용 로직 — 원본 오더 필드를 그대로 복사해
+// 새 오더를 생성한다. 원본에 화주사 전송 포인터(_transmittedOrderId 등)가 있어도
+// 반드시 제거해야 한다: 그대로 이어받으면 (1) 새로 만든 복사본은 autoTransmitToShipper가
+// 호출되지 않아 화주사 화면에 전혀 나타나지 않고, (2) 나중에 복사본을 삭제할 때
+// removeDispatch가 원본의 화주사 사본 id로 착각해 원본 쪽 화주사 사본을 대신 지워버린다.
+// (모듈 최상위 스코프 — RealtimeStatus/DispatchStatus/UnassignedStatus 등 여러 하위
+// 컴포넌트의 "복사 등록" 버튼에서 공통으로 호출되므로 approvedShippers를 인자로 받는다.)
+const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) => {
+  const newId = crypto.randomUUID();
+  const payload = {
+    ...copyTarget,
+    _id: newId,
+    화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
+    상차일: todayStr(),
+    하차일: todayStr(),
+    등록일: todayStr(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
+    업체전달상태: "미전달",
+  };
+  delete payload.화물수량;
+  delete payload.화물타입;
+  delete payload.톤수값;
+  delete payload.톤수타입;
+  delete payload._transmittedOrderId;
+  delete payload._transmittedToShipper;
+  delete payload._transmittedAt;
+
+  const col = copyTarget.__col || "orders";
+  await setDoc(doc(db, col, newId), payload);
+
+  if (!copyTarget.source) {
+    const matchedShipper = (approvedShippers || []).find(
+      (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(payload.거래처명)
+    );
+    if (matchedShipper) {
+      autoTransmitToShipper({ ...payload, _id: newId, __col: col }, matchedShipper).catch((e) =>
+        console.error("자동 화주사 전송 실패:", e)
+      );
+    }
+  }
+};
+
 /* -------------------------------------------------
    배차 수정 이력 생성 함수 (⭐ 반드시 필요)
 --------------------------------------------------*/
@@ -891,48 +935,6 @@ const addDispatch = async (record) => {
 
   return _id;
 };
-
-  // "오더 복사/수정 패널"의 "복사 등록" 공용 로직 — 원본 오더 필드를 그대로 복사해
-  // 새 오더를 생성한다. 원본에 화주사 전송 포인터(_transmittedOrderId 등)가 있어도
-  // 반드시 제거해야 한다: 그대로 이어받으면 (1) 새로 만든 복사본은 autoTransmitToShipper가
-  // 호출되지 않아 화주사 화면에 전혀 나타나지 않고, (2) 나중에 복사본을 삭제할 때
-  // removeDispatch가 원본의 화주사 사본 id로 착각해 원본 쪽 화주사 사본을 대신 지워버린다.
-  const submitCopyOrderPC = async (copyTarget, cargoOverride) => {
-    const newId = crypto.randomUUID();
-    const payload = {
-      ...copyTarget,
-      _id: newId,
-      화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
-      상차일: todayStr(),
-      하차일: todayStr(),
-      등록일: todayStr(),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
-      업체전달상태: "미전달",
-    };
-    delete payload.화물수량;
-    delete payload.화물타입;
-    delete payload.톤수값;
-    delete payload.톤수타입;
-    delete payload._transmittedOrderId;
-    delete payload._transmittedToShipper;
-    delete payload._transmittedAt;
-
-    const col = copyTarget.__col || "orders";
-    await setDoc(doc(db, col, newId), payload);
-
-    if (!copyTarget.source) {
-      const matchedShipper = approvedShippers.find(
-        (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(payload.거래처명)
-      );
-      if (matchedShipper) {
-        autoTransmitToShipper({ ...payload, _id: newId, __col: col }, matchedShipper).catch((e) =>
-          console.error("자동 화주사 전송 실패:", e)
-        );
-      }
-    }
-  };
   // 🔥 undefined 깊이 제거 (중첩 객체까지 안전)
   const stripUndefinedDeep = (obj) => {
     if (obj === null || typeof obj !== "object") return obj;
@@ -3604,6 +3606,7 @@ return (
             approveEditRequest={approveEditRequestSafe}
             rejectEditRequest={rejectEditRequestSafe}
             markEditRequestSeen={markEditRequestSeen}
+            approvedShippers={approvedShippers}
             key={menu}
           />
         )}
@@ -3644,6 +3647,7 @@ return (
                 clearFocusOrder={() => setFocusOrderId(null)}
                 isViewer={isViewer}
                 setCargoAddPopup={setCargoAddPopup}
+                approvedShippers={approvedShippers}
               />
             )}
             {배차현황Tab === "미배차현황" && (
@@ -3658,6 +3662,7 @@ return (
                 upsertDriver={upsertDriver}
                 isViewer={isViewer}
                 setCargoAddPopup={setCargoAddPopup}
+                approvedShippers={approvedShippers}
               />
             )}
           </div>
@@ -13233,6 +13238,7 @@ setConfirmChange(null);
       approveEditRequest={approveEditRequest}
       rejectEditRequest={rejectEditRequest}
       markEditRequestSeen={markEditRequestSeen}
+      approvedShippers={approvedShippers}
     />
   </div>
 )}
@@ -15005,6 +15011,7 @@ function RealtimeStatus({
   approveEditRequest = () => {},
   rejectEditRequest = () => {},
   markEditRequestSeen = () => {},
+  approvedShippers = [],
 }) {
 const rtTableWrapRef = React.useRef(null);
 const mergedClients = React.useMemo(() => {
@@ -19501,7 +19508,7 @@ flashRow(savedId);
       showAlert("복사할 데이터가 없습니다.");
       return;
     }
-    await submitCopyOrderPC(copyTarget);
+    await submitCopyOrderPC(copyTarget, approvedShippers);
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
   }}
@@ -24307,6 +24314,7 @@ function DispatchStatus({
   upsertDriver,
   isViewer = false,
   setCargoAddPopup = () => {},
+  approvedShippers = [],
 }) {
 const dsTableWrapRef = React.useRef(null);
 const [companyBankData, setCompanyBankData] = React.useState(null);
@@ -29185,7 +29193,7 @@ return (
       return;
     }
 
-    await submitCopyOrderPC(copyTarget);
+    await submitCopyOrderPC(copyTarget, approvedShippers);
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
@@ -35790,7 +35798,7 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, isViewer = false, setCargoAddPopup = () => {} }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [] }) {
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -36549,7 +36557,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      await submitCopyOrderPC(copyTarget, finalCargo);
+                      await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
                       showToast("복사 등록 완료");
                       setCopyPanelOpen(false);
                     }}
