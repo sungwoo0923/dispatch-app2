@@ -45,6 +45,14 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* 모바일 화면에서만 적용 — 스크롤 컨테이너가 경계에 닿았을 때 오버스크롤이 상위(고정된
+   배경 등)로 전파되어 일부 안드로이드 기기에서 스크롤이 위로 튕겨 올라가는 현상 방지 */
+@media screen and (max-width: 768px) {
+  .overflow-y-auto, .overflow-y-scroll, [data-fare-scroll] {
+    overscroll-behavior: contain;
+  }
+}
+
 /* 모바일 입력칸 자동 확대 방지 (iOS/Android는 font-size < 16px 이면 줌인됨) */
 @media screen and (max-width: 768px) {
   input, select, textarea {
