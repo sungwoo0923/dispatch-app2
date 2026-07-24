@@ -7439,8 +7439,10 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               style={{ touchAction: "manipulation" }}
               onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
               className={`flex items-center gap-0.5 text-[0.68em] font-semibold tabular-nums ${
-                order.attachCount > 0
-                  ? (order.attachViewed ? "text-[#1B2B4B]" : "text-emerald-600")
+                order.attachViewed
+                  ? "text-[#1B2B4B]"
+                  : order.attachCount > 0
+                  ? "text-emerald-600"
                   : "text-gray-300"
               }`}
             >
@@ -7651,10 +7653,10 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     style={{ touchAction: "manipulation" }}
     onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
     className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-      order.attachCount > 0
-        ? (order.attachViewed
-            ? "bg-[#eef1f7] border-[#c7d1e3] text-[#1B2B4B]"
-            : "bg-emerald-50 border-emerald-300 text-emerald-700")
+      order.attachViewed
+        ? "bg-[#eef1f7] border-[#c7d1e3] text-[#1B2B4B]"
+        : order.attachCount > 0
+        ? "bg-emerald-50 border-emerald-300 text-emerald-700"
         : "bg-white border-dashed border-gray-200 text-gray-300"
     }`}
   >
