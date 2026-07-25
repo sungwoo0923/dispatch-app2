@@ -995,7 +995,7 @@ const TP_FLAT_CLASS = {
   배차중: "bg-gray-100 text-gray-600 border-gray-300",
 };
 
-function TransportStatusBadge({ order, className = "", onClick, flat = false }) {
+function TransportStatusBadge({ order, className = "", onClick, flat = false, compact = false }) {
   const { label, blink, dot, text, ring, isPending, isHold } = getTransportBadgeInfo(order);
   const clickable = isPending || isHold;
 
@@ -1003,7 +1003,7 @@ function TransportStatusBadge({ order, className = "", onClick, flat = false }) 
     return (
       <span
         onClick={clickable ? onClick : undefined}
-        className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap ${blink ? "badge-dispatching" : ""} ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${TP_FLAT_CLASS[label]} ${className}`}
+        className={`${compact ? "px-2 py-0.5 rounded" : "px-2 py-0.5 rounded-full"} border ${compact ? "text-[10px]" : "text-[11px]"} font-semibold whitespace-nowrap ${blink ? "badge-dispatching" : ""} ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${TP_FLAT_CLASS[label]} ${className}`}
       >
         {label}
       </span>
@@ -7551,7 +7551,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           {state === "배차완료" && (order.이름 || order.차량번호) && (
             <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
               <span className="text-[0.75em] text-gray-400 truncate flex-1">
-                {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
+                {[order.차량번호, order.이름, order.전화번호].filter(Boolean).join(" · ")}
               </span>
               {order.전화번호 && (
                 <div className="flex gap-1">
@@ -7619,13 +7619,13 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   <div className="flex items-center gap-1 shrink-0">
 
   {!showUndeliveredOnly && isUrgentOrder(order) && (
-    <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold">
+    <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">
       긴급
     </span>
   )}
 
   {isCold && (
-    <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
+    <span className="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold">
       냉장/냉동
     </span>
   )}
@@ -7652,7 +7652,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   <button
     style={{ touchAction: "manipulation" }}
     onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-    className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+    className={`flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold border ${
       order.attachViewed
         ? "bg-[#eef1f7] border-[#c7d1e3] text-[#1B2B4B]"
         : order.attachCount > 0
@@ -7665,7 +7665,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   </button>
 
   <div className="relative inline-block shrink-0">
-    <TransportStatusBadge order={order} className="text-[11px]" onClick={openReqModal} flat />
+    <TransportStatusBadge order={order} onClick={openReqModal} flat compact />
     {isRecentlyEditedByShipper && !isEditRequested && (
       <span title="화주사가 오더 정보를 수정했습니다"
         className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
@@ -7804,7 +7804,7 @@ const dt = new Date(y, m - 1, d, hh, mm);
       {state === "배차완료" && (order.이름 || order.차량번호) && (
         <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
           <span className="text-[11px] text-gray-400 truncate flex-1">
-            {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
+            {[order.차량번호, order.이름, order.전화번호].filter(Boolean).join(" · ")}
           </span>
           {order.전화번호 && (
             <div className="flex gap-1">
@@ -8652,7 +8652,10 @@ const handleAssignClick = () => {
     {/* 상단: 거래처 + 수정/삭제 + 메모 */}
     <div className="px-4 pt-4 pb-3 border-b border-gray-100">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[13px] font-bold text-gray-700">{order.거래처명 || "-"}</span>
+        <div className="min-w-0">
+          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">거래처명</div>
+          <span className="text-[13px] font-bold text-gray-700 truncate">{order.거래처명 || "-"}</span>
+        </div>
         <div className="flex items-center gap-2">
           <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
           <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500">삭제</button>
@@ -8710,33 +8713,11 @@ const handleAssignClick = () => {
         <div className="flex gap-2">
           <span className={`mt-0.5 w-5 h-5 rounded-full ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0`}>상</span>
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-0.5">
-              <div className="text-[13px] font-bold text-gray-900 flex-1 min-w-0">{order.상차지명 || "-"}</div>
-              <div className="shrink-0 flex flex-col items-end gap-1">
-                <div className="flex items-center gap-1.5">
-                  {activeRequestType && (
-                    <button
-                      onClick={() => setShowRequestModal(true)}
-                      className="text-[11px] font-extrabold"
-                      style={{
-                        color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
-                        animation: "dispatchingPulse 1.8s ease-in-out infinite",
-                      }}
-                    >
-                      요청
-                    </button>
-                  )}
-                  <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
-                </div>
-                {state === "배차완료" && order.배차완료일시?.seconds && (
-                  <span className="text-[9px] text-gray-400 mt-0.5">
-                    {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                )}
-              </div>
+            <div className="flex items-baseline justify-between gap-2 mb-0.5">
+              <div className="text-[13px] font-bold text-gray-900 truncate">{order.상차지명 || "-"}</div>
+              <div className="text-[11px] text-gray-400 shrink-0">{상차일시 || "-"}</div>
             </div>
             {order.상차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{order.상차지주소}</div>}
-            <div className="text-[11px] text-gray-400 mt-0.5">{상차일시 || "-"}</div>
           </div>
         </div>
         {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => (
@@ -8761,14 +8742,34 @@ const handleAssignClick = () => {
         ))}
       </div>
 
-      {/* ── 상→하 route 구분선 ── */}
-      <div className="flex items-center gap-0 px-4 py-0">
+      {/* ── 상→하 route 구분선 + 배차상태(상/하차지 중간) ── */}
+      <div className="flex items-center gap-2 px-4 py-1">
         <div className="flex flex-col items-center shrink-0 ml-2">
           <div className="w-px h-3 bg-gray-200" />
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div className="w-px h-3 bg-gray-200" />
         </div>
         <div className="flex-1 ml-3 border-t border-dashed border-gray-200" />
+        <div className="shrink-0 flex items-center gap-1.5">
+          {activeRequestType && (
+            <button
+              onClick={() => setShowRequestModal(true)}
+              className="text-[11px] font-extrabold"
+              style={{
+                color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
+                animation: "dispatchingPulse 1.8s ease-in-out infinite",
+              }}
+            >
+              요청
+            </button>
+          )}
+          <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
+          {state === "배차완료" && order.배차완료일시?.seconds && (
+            <span className="text-[9px] text-gray-400">
+              {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── 하차지 블록 ── */}
@@ -8796,65 +8797,47 @@ const handleAssignClick = () => {
         <div className="flex gap-2">
           <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-500 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">하</span>
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-bold text-gray-900">{order.하차지명 || "-"}</div>
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="text-[13px] font-bold text-gray-900 truncate">{order.하차지명 || "-"}</div>
+              <div className="text-[11px] text-gray-400 shrink-0">{하차일시 || "-"}</div>
+            </div>
             {order.하차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{order.하차지주소}</div>}
-            <div className="text-[11px] text-gray-400 mt-0.5">{하차일시 || "-"}</div>
-            {(order.화물내용 || order.차량톤수 || order.톤수) && (
-              <div className="text-[12px] font-semibold text-gray-700 mt-0.5">
-                화물정보 : {[order.화물내용, toTonUnit(order.차량톤수 || order.톤수)].filter(Boolean).join(" · ")}
-              </div>
-            )}
           </div>
         </div>
       </div>
-      {/* 차량/화물 정보 */}
-      {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
-        <div className="flex border-t border-gray-100 mt-2.5">
+      {/* 화물/차량/배차 정보 — 칩 형태로 가볍게 요약 (아래 운임 정보와 시각적으로 구분) */}
+      {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부 || order.배차방식 || order.지급방식) && (
+        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 border-t border-gray-100 bg-gray-50/60">
           {(order.차량톤수 || order.톤수) && (
-            <div className="flex-1 text-center py-2.5 border-r border-gray-100">
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{hasWaypointCargo ? "총톤수" : "톤수"}</div>
-              <div className="text-[12px] font-semibold text-gray-800">{hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}</div>
-            </div>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">
+              <Scale className="w-3 h-3 text-gray-400" />
+              {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
+            </span>
           )}
           {(order.차량종류 || order.차종) && (
-            <div className="flex-1 text-center py-2.5 border-r border-gray-100">
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">차종</div>
-              <div className="text-[12px] font-semibold text-gray-800">{order.차량종류 || order.차종}</div>
-            </div>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">
+              <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-3 h-3 text-gray-400" />
+              {order.차량종류 || order.차종}
+            </span>
           )}
           {order.화물내용 && (
-            <div className="flex-1 text-center py-2.5 border-r border-gray-100 last:border-r-0">
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{hasWaypointCargo ? "총화물" : "화물"}</div>
-              <div className="text-[12px] font-semibold text-gray-800">{hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}</div>
-            </div>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">
+              <Package className="w-3 h-3 text-gray-400" />
+              {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
+            </span>
           )}
           {order.혼적여부 && order.혼적여부 !== "독차" && (
-            <div className="flex-1 text-center py-2.5">
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">혼적</div>
-              <div className="text-[12px] font-semibold text-gray-800">{order.혼적여부}</div>
-            </div>
+            <span className="text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">{order.혼적여부}</span>
+          )}
+          {order.배차방식 && (
+            <span className={`text-[11px] font-bold rounded-full px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>{order.배차방식}</span>
+          )}
+          {order.지급방식 && (
+            <span className={`text-[11px] font-bold rounded-full px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>{order.지급방식}</span>
           )}
         </div>
       )}
     </div>
-
-    {/* 배차방식/지급방식 */}
-    {(order.배차방식 || order.지급방식) && (
-      <div className="flex border-t border-gray-100">
-        {order.배차방식 && (
-          <div className={`flex-1 text-center py-2.5 ${order.지급방식 ? "border-r border-gray-100" : ""}`}>
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">배차방식</div>
-            <div className={`text-[12px] font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.배차방식}</div>
-          </div>
-        )}
-        {order.지급방식 && (
-          <div className="flex-1 text-center py-2.5">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">지급방식</div>
-            <div className={`text-[12px] font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.지급방식}</div>
-          </div>
-        )}
-      </div>
-    )}
 
     {/* 운임 정보 + 업체전달 */}
     <div className="px-4 py-3 border-b border-gray-100">
@@ -8980,17 +8963,34 @@ const handleAssignClick = () => {
           </div>
         </>
       )}
-      <div className="space-y-2 mb-3">
-        {isNewDriver && state !== "배차완료" && (
-          <div className="flex items-center gap-1.5 px-1 mb-1">
-            <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">신규 기사</span>
-            <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
+      {state === "배차완료" ? (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">차량번호</div>
+            <div className="text-[12px] font-bold text-gray-800 truncate">{carNo || "-"}</div>
           </div>
-        )}
-        <input readOnly={state === "배차완료"} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none ${state === "배차완료" ? "bg-gray-50 border-gray-100 text-gray-500 cursor-default" : "border-gray-200 focus:border-[#1B2B4B]"}`} placeholder="차량번호" value={carNo} onChange={e => { if (state !== "배차완료") { setCarNo(e.target.value); setIsNewDriver(false); } }} />
-        <input readOnly={state === "배차완료"} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none ${state === "배차완료" ? "bg-gray-50 border-gray-100 text-gray-500 cursor-default" : "border-gray-200 focus:border-[#1B2B4B]"}`} placeholder="기사 이름" value={name} onChange={e => { if (state !== "배차완료") setName(e.target.value); }} />
-        <input readOnly={state === "배차완료"} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none ${state === "배차완료" ? "bg-gray-50 border-gray-100 text-gray-500 cursor-default" : "border-gray-200 focus:border-[#1B2B4B]"}`} placeholder="기사 연락처" value={phone} onChange={e => { if (state !== "배차완료") setPhone(e.target.value); }} />
-      </div>
+          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">이름</div>
+            <div className="text-[12px] font-bold text-gray-800 truncate">{name || "-"}</div>
+          </div>
+          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">연락처</div>
+            <div className="text-[12px] font-bold text-gray-800 truncate">{phone || "-"}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2 mb-3">
+          {isNewDriver && (
+            <div className="flex items-center gap-1.5 px-1 mb-1">
+              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">신규 기사</span>
+              <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
+            </div>
+          )}
+          <input className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} />
+          <input className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
+          <input className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
+        </div>
+      )}
       {phone && (
         <div className="grid grid-cols-2 gap-2 mb-2">
           <a href={`tel:${normalizePhone(phone)}`} className={`py-2.5 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-1.5 ${cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-blue-600 text-white"}`}>
