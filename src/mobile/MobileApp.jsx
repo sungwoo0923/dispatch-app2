@@ -7509,14 +7509,14 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
           </div>
 
-          {/* 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임을 항상 같은 줄에 정렬해, 화물정보 행의
-              높이에 청구/기사 부분이 맞춰지도록 한다(예전엔 sm: 이상 너비에서만 한 줄이라 실제
-              휴대폰 화면에서는 항상 두 줄로 떨어져 높이가 어긋나 보였다). */}
+          {/* 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임. 일반 휴대폰 화면(380px~)에서는 한
+              줄로 나란히 정렬해 높이를 맞추고, 그보다 좁은 화면(폴더블 커버 등)에서는 화물정보와
+              운임 두 줄로 내려 겹치거나 뒤섞이지 않게 한다. 청구/기사는 항상 세로로 줄바꿈해서 표시. */}
           <div
-            className="flex flex-row items-center justify-between gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
+            className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
             style={{ border: `1px solid ${statusRing}` }}
           >
-            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 flex-1 text-[0.88em] leading-relaxed">
+            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 text-[0.88em] leading-relaxed">
               {cargo && (
                 <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
                   <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
@@ -7534,13 +7534,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               )}
               {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
             </span>
-            <div className="flex items-center justify-end gap-1.5 shrink-0">
-              <span className="flex items-baseline gap-0.5">
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className="flex items-baseline gap-1">
                 <span className="text-[0.58em] text-gray-400 font-semibold">청구</span>
                 <span className="text-[0.8em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
               </span>
-              <span className="w-px h-2.5 bg-gray-200" />
-              <span className="flex items-baseline gap-0.5">
+              <span className="flex items-baseline gap-1">
                 <span className="text-[0.58em] text-gray-400 font-semibold">기사</span>
                 <span className="text-[0.8em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
               </span>
@@ -7767,9 +7766,10 @@ const dt = new Date(y, m - 1, d, hh, mm);
         )}
       </div>
 
-      {/* ▶ 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임을 항상 같은 줄에 정렬해 높이를 맞춘다 */}
-      <div className="flex flex-row items-center justify-between gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 flex-1 text-[0.8em] leading-relaxed">
+      {/* ▶ 하단 정보 — 일반 휴대폰 화면(380px~)에서는 화물정보와 청구/기사 운임을 한 줄로,
+          폴더블 커버 같은 좁은 화면에서는 두 줄로 내려 겹치지 않게 한다. 청구/기사는 세로 줄바꿈. */}
+      <div className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 text-[0.8em] leading-relaxed">
           {cargo && (
             <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
               <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
@@ -7787,13 +7787,12 @@ const dt = new Date(y, m - 1, d, hh, mm);
           )}
           {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
         </span>
-        <div className="flex items-center justify-end gap-1.5 shrink-0">
-          <span className="flex items-baseline gap-0.5">
+        <div className="flex flex-col items-end gap-0.5 shrink-0">
+          <span className="flex items-baseline gap-1">
             <span className="text-[0.6em] text-gray-400 font-semibold">청구</span>
             <span className="text-[0.78em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
           </span>
-          <span className="w-px h-2.5 bg-gray-200" />
-          <span className="flex items-baseline gap-0.5">
+          <span className="flex items-baseline gap-1">
             <span className="text-[0.6em] text-gray-400 font-semibold">기사</span>
             <span className="text-[0.78em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
           </span>
