@@ -6221,11 +6221,19 @@ const summary = useMemo(() => {
                 glow: "none",
               };
           const segTrack = "bg-gray-100";
-          const segActive = "bg-white text-[#1B2B4B] shadow";
+          const segActive = `bg-white shadow ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`;
           const segInactive = "text-gray-500";
           const field = "bg-gray-50 text-gray-800 border border-gray-200 focus:border-[#1B2B4B]/30 focus:ring-[#1B2B4B]/10";
           const icon = "text-gray-400";
           const rangeText = "text-gray-500";
+          const todayStr = todayKST();
+          const tomorrowStr = (() => {
+            const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+            kst.setDate(kst.getDate() + 1);
+            return kst.toISOString().slice(0, 10);
+          })();
+          const isTodaySelected = startDate === todayStr && endDate === todayStr;
+          const isTomorrowSelected = startDate === tomorrowStr && endDate === tomorrowStr;
           return (
             <>
               {/* KPI 디지털 다이얼 */}
@@ -6248,20 +6256,20 @@ const summary = useMemo(() => {
               </div>
 
               {/* 조회기간 + 당일/내일 세그먼트 */}
-              <div className="flex items-center justify-between pt-0.5">
-                <div className={`text-[11px] font-semibold ${rangeText}`}>
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <div className={`text-[11px] font-semibold truncate min-w-0 ${rangeText}`}>
                   {formatRangeShort(startDate, endDate)}
                 </div>
-                <div className={`flex items-center gap-0.5 p-0.5 rounded-full ${segTrack}`}>
+                <div className={`flex items-center gap-0.5 p-0.5 rounded-full shrink-0 ${segTrack}`}>
                   <button
                     onClick={setTodayRange}
-                    className={`px-3 py-1 text-[11px] font-bold rounded-full transition ${segActive}`}
+                    className={`px-3 py-1 text-[11px] font-bold rounded-full transition ${isTodaySelected ? segActive : segInactive}`}
                   >
                     당일
                   </button>
                   <button
                     onClick={setTomorrowRange}
-                    className={`px-3 py-1 text-[11px] font-bold rounded-full transition ${segInactive}`}
+                    className={`px-3 py-1 text-[11px] font-bold rounded-full transition ${isTomorrowSelected ? segActive : segInactive}`}
                   >
                     내일
                   </button>
@@ -7618,19 +7626,19 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   <div className="flex items-center gap-1 shrink-0">
 
   {!showUndeliveredOnly && isUrgentOrder(order) && (
-    <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">
+    <span className="inline-flex items-center leading-none px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">
       긴급
     </span>
   )}
 
   {isCold && (
-    <span className="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold">
+    <span className="inline-flex items-center leading-none px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold">
       냉장/냉동
     </span>
   )}
 
   {String(order.운행유형 || "").trim() === "왕복" && (
-    <span className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-wide">
+    <span className="inline-flex items-center leading-none px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-wide">
       왕복
     </span>
   )}
@@ -7651,7 +7659,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   <button
     style={{ touchAction: "manipulation" }}
     onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-    className={`flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold border ${
+    className={`inline-flex items-center leading-none gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold border ${
       order.attachViewed
         ? "bg-[#eef1f7] border-[#c7d1e3] text-[#1B2B4B]"
         : order.attachCount > 0
@@ -7664,7 +7672,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   </button>
 
   <div className="relative inline-block shrink-0">
-    <TransportStatusBadge order={order} onClick={openReqModal} flat compact />
+    <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
     {isRecentlyEditedByShipper && !isEditRequested && (
       <span title="화주사가 오더 정보를 수정했습니다"
         className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
@@ -8804,35 +8812,49 @@ const handleAssignClick = () => {
           </div>
         </div>
       </div>
-      {/* 화물/차량/배차 정보 — 칩 형태로 가볍게 요약 (아래 운임 정보와 시각적으로 구분) */}
-      {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부 || order.배차방식 || order.지급방식) && (
-        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 border-t border-gray-100 bg-gray-50/60">
+      {/* 화물/차량 정보 — 아이콘+라벨+값 칩으로 표시해 처음 보는 사람도 무슨 항목인지 알 수 있게 함 */}
+      {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
+        <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.5 pb-1.5 border-t border-gray-100 bg-gray-50/60">
           {(order.차량톤수 || order.톤수) && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">
-              <Scale className="w-3 h-3 text-gray-400" />
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
+              <Scale className="w-3 h-3 text-gray-400 shrink-0" />
+              <span className="text-gray-400 font-normal">톤수</span>
               {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
             </span>
           )}
           {(order.차량종류 || order.차종) && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">
-              <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-3 h-3 text-gray-400" />
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
+              <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-3 h-3 text-gray-400 shrink-0" />
+              <span className="text-gray-400 font-normal">차종</span>
               {order.차량종류 || order.차종}
             </span>
           )}
           {order.화물내용 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">
-              <Package className="w-3 h-3 text-gray-400" />
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
+              <Package className="w-3 h-3 text-gray-400 shrink-0" />
+              <span className="text-gray-400 font-normal">화물</span>
               {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
             </span>
           )}
           {order.혼적여부 && order.혼적여부 !== "독차" && (
-            <span className="text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-2 py-1">{order.혼적여부}</span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
+              <span className="text-gray-400 font-normal">혼적</span>{order.혼적여부}
+            </span>
           )}
+        </div>
+      )}
+      {/* 배차방식/지급방식 — 화물 정보와 별도 그룹으로 구분 */}
+      {(order.배차방식 || order.지급방식) && (
+        <div className={`flex flex-wrap items-center gap-1.5 px-4 pt-1 pb-2.5 bg-gray-50/60`}>
           {order.배차방식 && (
-            <span className={`text-[11px] font-bold rounded-full px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>{order.배차방식}</span>
+            <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>
+              <span className={`font-normal ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-400"}`}>배차방식</span>{order.배차방식}
+            </span>
           )}
           {order.지급방식 && (
-            <span className={`text-[11px] font-bold rounded-full px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>{order.지급방식}</span>
+            <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>
+              <span className={`font-normal ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-400"}`}>지급방식</span>{order.지급방식}
+            </span>
           )}
         </div>
       )}
@@ -11224,9 +11246,11 @@ const pickDrop = (c) => {
               <input
                 className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
                 placeholder="예: 1"
+                inputMode={톤수타입 ? "decimal" : "text"}
                 value={톤수값}
                 onChange={(e) => {
-                  const v = e.target.value;
+                  // 단위(톤/kg)를 선택했을 때는 숫자(및 소수점)만 입력 가능 — "없음"일 때만 자유 입력 허용
+                  const v = 톤수타입 ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value;
                   set톤수값(v);
                   update("톤수", 톤수타입 ? `${v}${톤수타입}` : v);
                 }}
@@ -11256,9 +11280,11 @@ const pickDrop = (c) => {
               <input
                 className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
                 placeholder="예: 3"
+                inputMode={화물타입 ? "decimal" : "text"}
                 value={화물수량}
                 onChange={(e) => {
-                  const v = e.target.value;
+                  // 단위(파레트/박스/통/롤)를 선택했을 때는 숫자(및 소수점)만 입력 가능 — "없음"일 때만 자유 입력 허용
+                  const v = 화물타입 ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value;
                   set화물수량(v);
                   update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
                 }}
@@ -11292,7 +11318,10 @@ const pickDrop = (c) => {
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
-                    placeholder="수량 (예: 2)" value={mCargoAddQty} onChange={e => setMCargoAddQty(e.target.value)} autoFocus />
+                    placeholder="수량 (예: 2)" inputMode={mCargoAddType ? "decimal" : "text"}
+                    value={mCargoAddQty}
+                    onChange={e => setMCargoAddQty(mCargoAddType ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)}
+                    autoFocus />
                   <select className="w-[82px] border-0 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
                     value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
                     <option value="">없음</option>
@@ -12620,8 +12649,13 @@ const pickDrop = (c) => {
               <input
                 className="flex-1 px-3 py-2 text-sm outline-none"
                 placeholder="화물내용 (예: 3)"
+                inputMode={stop.화물타입 ? "decimal" : "text"}
                 value={stop.화물내용 || ""}
-                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 화물내용: e.target.value } : s))}
+                onChange={e => {
+                  // 단위를 선택했을 때는 숫자(및 소수점)만 입력 가능 — "없음"일 때만 자유 입력 허용
+                  const v = stop.화물타입 ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value;
+                  setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 화물내용: v } : s));
+                }}
               />
               <select
                 className="px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
@@ -12639,8 +12673,13 @@ const pickDrop = (c) => {
               <input
                 className="flex-1 px-3 py-2 text-sm outline-none"
                 placeholder="톤수 (예: 1)"
+                inputMode={stop.톤수타입 ? "decimal" : "text"}
                 value={stop.톤수값 || ""}
-                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 톤수값: e.target.value } : s))}
+                onChange={e => {
+                  // 단위를 선택했을 때는 숫자(및 소수점)만 입력 가능 — "없음"일 때만 자유 입력 허용
+                  const v = stop.톤수타입 ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value;
+                  setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 톤수값: v } : s));
+                }}
               />
               <select
                 className="px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
