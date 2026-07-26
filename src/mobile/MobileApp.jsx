@@ -6317,6 +6317,7 @@ const summary = useMemo(() => {
                     <option value="냉동탑">냉동탑</option>
                     <option value="냉장/냉동탑">냉장/냉동탑</option>
                     <option value="냉장/냉동윙">냉장/냉동윙</option>
+                    <option value="리프트">리프트</option>
                     <option value="오토바이">오토바이</option>
                   </select>
                   <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
@@ -7519,12 +7520,15 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
 
           {/* 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임. 일반 휴대폰 화면(380px~)에서는 한
               줄로 나란히 정렬해 높이를 맞추고, 그보다 좁은 화면(폴더블 커버 등)에서는 화물정보와
-              운임 두 줄로 내려 겹치거나 뒤섞이지 않게 한다. 청구/기사는 항상 세로로 줄바꿈해서 표시. */}
+              운임 두 줄로 내려 겹치거나 뒤섞이지 않게 한다. 청구/기사는 항상 세로로 줄바꿈해서 표시.
+              가로 폭만으로는 "좁은 휴대폰"과 "분할화면(가로폭은 좁지만 세로는 그대로인 창)"을
+              구분할 수 없으므로, 가로세로 비율이 세로로 매우 긴 창(분할화면 등)이면 폭이 380px를
+              넘더라도 강제로 세로 배치를 유지한다. */}
           <div
-            className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
+            className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between [@media(max-aspect-ratio:2/5)]:!flex-col [@media(max-aspect-ratio:2/5)]:!items-stretch gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
             style={{ border: `1px solid ${statusRing}` }}
           >
-            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 text-[0.88em] leading-relaxed">
+            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 [@media(max-aspect-ratio:2/5)]:!flex-none text-[0.88em] leading-relaxed">
               {cargo && (
                 <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
                   <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
@@ -7733,17 +7737,23 @@ const dt = new Date(y, m - 1, d, hh, mm);
         )}
       </div>
 
-      {/* 경유지 요약 */}
+      {/* 경유지 요약 — 상/하차 행과 동일한 형태(색상 배지 + 굵은 업체명)로 표시해 어색하게
+          붕 떠 보이지 않고 상/하차 사이의 자연스러운 흐름처럼 보이도록 한다. */}
       {(() => {
         const pStops = validStops(order.경유상차목록 || order.경유지_상차);
         const dStops = validStops(order.경유하차목록 || order.경유지_하차);
         const all = [...pStops, ...dStops];
         if (all.length === 0) return null;
-        const names = all.map(s => s.업체명 || "-").join(" → ");
         return (
-          <div className="flex items-center gap-1.5 mt-0.5 pl-0.5">
-            <span className="px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 text-[10px] font-bold shrink-0">경유</span>
-            <div className="flex-1 truncate text-[0.78em] text-gray-500">{names}</div>
+          <div className="mt-1 space-y-1">
+            {all.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="px-1.5 py-0.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold shrink-0">
+                  경유
+                </span>
+                <div className="flex-1 truncate text-[0.85em] font-semibold text-gray-700">{s.업체명 || "-"}</div>
+              </div>
+            ))}
           </div>
         );
       })()}
@@ -7775,9 +7785,11 @@ const dt = new Date(y, m - 1, d, hh, mm);
       </div>
 
       {/* ▶ 하단 정보 — 일반 휴대폰 화면(380px~)에서는 화물정보와 청구/기사 운임을 한 줄로,
-          폴더블 커버 같은 좁은 화면에서는 두 줄로 내려 겹치지 않게 한다. 청구/기사는 세로 줄바꿈. */}
-      <div className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 text-[0.8em] leading-relaxed">
+          폴더블 커버 같은 좁은 화면에서는 두 줄로 내려 겹치지 않게 한다. 청구/기사는 세로 줄바꿈.
+          가로 폭만으로는 "좁은 휴대폰"과 "분할화면(폭은 좁지만 세로는 그대로인 창)"을 구분할 수
+          없으므로, 세로로 매우 긴 비율(분할화면 등)이면 폭이 380px를 넘어도 세로 배치를 유지한다. */}
+      <div className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between [@media(max-aspect-ratio:2/5)]:!flex-col [@media(max-aspect-ratio:2/5)]:!items-stretch gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 [@media(max-aspect-ratio:2/5)]:!flex-none text-[0.8em] leading-relaxed">
           {cargo && (
             <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
               <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
@@ -11233,6 +11245,7 @@ const pickDrop = (c) => {
               <option value="냉동윙">냉동윙</option>
               <option value="냉장/냉동탑">냉장/냉동탑</option>
               <option value="냉장/냉동윙">냉장/냉동윙</option>
+              <option value="리프트">리프트</option>
               <option value="오토바이">오토바이</option>
               <option value="기타">기타</option>
             </select>

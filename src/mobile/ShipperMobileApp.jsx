@@ -44,6 +44,18 @@ const getMonthEnd = (offset = 0) => {
 
 const fmtMoney = (v) => `${Number(v || 0).toLocaleString("ko-KR")}원`;
 
+// 날짜 헤더: 2025-11-24 → 11.24(월) (운송사 배차내역과 동일한 표기)
+const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
+const formatHistoryDateHeader = (dateStr) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const w = WEEKDAY_KR[d.getDay()] ?? "";
+  return `${m}.${day}(${w})`;
+};
+
 const getViaListM = (v) => (Array.isArray(v) ? v.filter(s => s && (s.업체명 || s.주소)) : []);
 
 const getPalletSummary = (o) => {
@@ -205,7 +217,7 @@ function StatusBadge({ order, className = "" }) {
   const { label, blink, dot, text, ring } = getStatusBadge(order);
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide whitespace-nowrap ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold tracking-wide whitespace-nowrap ${className}`}
       style={{
         background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
         color: text,
@@ -1039,8 +1051,10 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
   const copyFrom = (src) => {
     setForm(prev => ({
       ...prev,
+      // 복사할 오더 자체에는 운송사코드가 비어있어도, 같은 운송사명으로 등록된 코드가
+      // 있으면(운송사 목록) 그 코드를 자동으로 채워준다.
       운송사명: fixedTransport?.name || src.운송사명 || "",
-      운송사코드: fixedTransport?.code || src.운송사코드 || "",
+      운송사코드: fixedTransport?.code || src.운송사코드 || transportList.find(t => t.name === src.운송사명)?.code || "",
       상차지명: src.상차지명 || "", 상차지주소: src.상차지주소 || "",
       상차지담당자: src.상차지담당자 || src.상차담당자명 || "",
       상차지담당자번호: src.상차지담당자번호 || src.상차담당자번호 || "",
@@ -1546,17 +1560,32 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user, minAllowedDat
         return true;
       })
       .sort((a, b) => {
-        const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
-        if (tierDiff !== 0) return tierDiff;
-        // 같은 상태 안에서는 상차일(날짜)로 먼저 묶고, 같은 날짜 안에서만
-        // 배차완료 시각 등 세부 시각으로 정렬한다 (날짜가 섞여 보이지 않도록).
+        // 운송내역은 실시간 현황과 달리 "기록 조회"가 목적이므로 상태 우선순위보다
+        // 상차일(날짜)을 최우선 기준으로 정렬해, 날짜별로 깔끔하게 묶여 보이도록 한다.
         const dateDiff = String(b.상차일 || "").localeCompare(String(a.상차일 || ""));
         if (dateDiff !== 0) return dateDiff;
+        const tierDiff = getOrderSortTier(a) - getOrderSortTier(b);
+        if (tierDiff !== 0) return tierDiff;
         return getOrderSortTime(b) - getOrderSortTime(a);
       });
   }, [orders, startDate, endDate, keyword, searchType, statusFilter]);
 
   const totalAmount = useMemo(() => filtered.reduce((sum, o) => sum + Number(o.청구운임 || 0), 0), [filtered]);
+
+  // 날짜별 섹션으로 묶기 (이미 상차일 내림차순으로 정렬돼 있으므로 순서대로 묶기만 하면 됨)
+  const dateGroups = useMemo(() => {
+    const groups = [];
+    let current = null;
+    filtered.forEach((o) => {
+      const d = String(o.상차일 || "").slice(0, 10) || "미정";
+      if (!current || current.date !== d) {
+        current = { date: d, items: [] };
+        groups.push(current);
+      }
+      current.items.push(o);
+    });
+    return groups;
+  }, [filtered]);
 
   return (
     <div className="px-4 py-4 space-y-3">
@@ -1632,11 +1661,25 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user, minAllowedDat
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {dateGroups.length === 0 ? (
         <div className="text-center text-gray-400 text-sm py-10">조회된 내역이 없습니다.</div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} onEdit={onEdit} user={user} />)}
+        <div className="space-y-4">
+          {dateGroups.map((g) => (
+            <div key={g.date}>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <div className="text-[13px] font-bold text-[#1B2B4B] tracking-tight">
+                  {formatHistoryDateHeader(g.date)}
+                </div>
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold border border-[#1B2B4B]/10">
+                  {g.items.length}건
+                </span>
+              </div>
+              <div className="space-y-2">
+                {g.items.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} onEdit={onEdit} user={user} />)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -2649,23 +2692,53 @@ function OrderCard({ order, onSelect, onEdit, user }) {
       onTouchCancel={cancelLongPress}
       onContextMenu={(e) => { e.preventDefault(); if (!isCanceled) setShowActionSheet(true); }}
     >
-      <div className="flex justify-between items-start mb-1">
-        <div className="text-sm font-semibold text-gray-800 truncate flex-1">
-          {order.상차지명 || "-"} → {order.하차지명 || "-"}
+      <div className="flex items-center justify-between mb-2.5">
+        <StatusBadge order={order} />
+        <span className="text-[11px] text-gray-400 font-semibold tabular-nums">{order.상차일 || "-"}</span>
+      </div>
+
+      <div className="flex items-stretch gap-2.5">
+        <div className="flex flex-col items-center shrink-0 pt-1">
+          <div className="w-2 h-2 rounded-full bg-[#1B2B4B] shrink-0" />
+          <div className="w-px flex-1 min-h-[16px] bg-gray-200 my-0.5" />
+          <div className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
         </div>
-        <StatusBadge order={order} className="ml-2" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[14px] font-bold text-gray-900 truncate">{order.상차지명 || "-"}</span>
+            <span className="text-[11px] text-gray-400 tabular-nums shrink-0 whitespace-nowrap">
+              {order.상차시간 ? fmt12(order.상차시간) : ""}
+              {order.상차시간구분 && order.상차시간구분 !== "정각" ? ` ${order.상차시간구분}` : ""}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[14px] font-bold text-gray-900 truncate">{order.하차지명 || "-"}</span>
+            <span className="text-[11px] text-gray-400 tabular-nums shrink-0 whitespace-nowrap">
+              {order.하차시간 ? fmt12(order.하차시간) : ""}
+              {order.하차시간구분 && order.하차시간구분 !== "정각" ? ` ${order.하차시간구분}` : ""}
+            </span>
+          </div>
+        </div>
       </div>
-      <div className="text-xs text-gray-500">
-        {order.상차일 || "-"} {order.상차시간 ? fmt12(order.상차시간) : ""}
-        {order.상차시간구분 && order.상차시간구분 !== "정각" ? ` ${order.상차시간구분}` : ""}
-        {order.차량톤수 && ` · ${order.차량톤수}`}
-        {order.차량종류 && ` ${order.차량종류}`}
-      </div>
-      {(order.청구운임 > 0) && (
-        <div className="text-xs text-blue-600 font-semibold mt-0.5">{fmtMoney(order.청구운임)}</div>
-      )}
-      {(order.attachCount > 0) && (
-        <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">사진 {order.attachCount}장</div>
+
+      {(order.차량톤수 || order.차량종류 || order.화물내용 || order.청구운임 > 0 || order.attachCount > 0) && (
+        <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2.5 border-t border-gray-50">
+          {order.차량톤수 && (
+            <span className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded">{order.차량톤수}</span>
+          )}
+          {order.차량종류 && (
+            <span className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded">{order.차량종류}</span>
+          )}
+          {order.화물내용 && (
+            <span className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded truncate max-w-[110px]">{order.화물내용}</span>
+          )}
+          {order.attachCount > 0 && (
+            <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">사진 {order.attachCount}장</span>
+          )}
+          {order.청구운임 > 0 && (
+            <span className="ml-auto text-[13px] font-bold text-[#1B2B4B]">{fmtMoney(order.청구운임)}</span>
+          )}
+        </div>
       )}
       {isRecentlyEditedByTransport && (
         <div className="mt-0.5">

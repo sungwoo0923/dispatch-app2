@@ -430,8 +430,11 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     ...copyTarget,
     _id: newId,
     화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
-    상차일: todayStr(),
-    하차일: todayStr(),
+    // 복사/수정 패널에서 상차일/하차일을 수정했다면 그 값을 그대로 존중한다 — 무조건
+    // 오늘 날짜로 덮어쓰면 사용자가 다른 날짜로 바꿔서 등록해도 조용히 오늘로 저장되어
+    // 화주사(연동 사본)와 운송사 원본이 모두 의도한 날짜와 다르게 등록되는 문제가 있었다.
+    상차일: copyTarget.상차일 || todayStr(),
+    하차일: copyTarget.하차일 || todayStr(),
     등록일: todayStr(),
     createdAt: Date.now(),
     updatedAt: Date.now(),

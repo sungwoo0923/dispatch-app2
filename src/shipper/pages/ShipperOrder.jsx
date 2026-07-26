@@ -619,7 +619,10 @@ export default function ShipperOrder({ editData, onClose }) {
       상차방법: item.상차방법 || "", 하차방법: item.하차방법 || "",
       지급방식: item.지급방식 || "", 화물내용: "",
       화물단위: "파레트",
-      운송사명: item.운송사명 || "", 운송사코드: item.운송사코드 || "",
+      // 복사할 오더 자체에는 운송사코드가 비어있어도, 같은 운송사명으로 등록된 코드가
+      // 있으면(운송사 목록) 그 코드를 자동으로 채워준다.
+      운송사명: item.운송사명 || "",
+      운송사코드: item.운송사코드 || transportList.find(t => t.name === item.운송사명)?.code || "",
       경유상차목록: Array.isArray(item.경유상차목록) ? item.경유상차목록 : [],
       경유하차목록: Array.isArray(item.경유하차목록) ? item.경유하차목록 : [],
     }));
