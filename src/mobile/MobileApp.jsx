@@ -2825,6 +2825,11 @@ const groupedByDate = useMemo(() => {
         id: form._editId,
       });
 
+      // ★ 화주사 전송사본 동기화 — 기사배정/취소 등 일부 액션에서만 사본에 반영되고
+      // 이 수정폼(전체 편집) 저장 시에는 반영되지 않아, 상차일 등을 여기서 고쳐도
+      // 화주사 화면(사본)에는 예전 값이 그대로 남아있던 버그가 있었다.
+      syncShipperMirrorMobile(selectedOrder, docData).catch(() => {});
+
       // ★ PC 거래처관리(places) 동기화
       await syncPlaceFromOrder(docData);
 
