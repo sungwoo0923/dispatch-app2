@@ -6,6 +6,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // 비로그인 상태(기사)가 업로드 페이지에서 건드릴 수 있는 필드는 이 3개뿐이다.
+    // 업로드토큰은 절대 포함하지 않는다 — 그건 로그인한 운송사 앱만 발급할 수 있어야
+    // 링크 잠금/재발급 로직이 실제로 의미가 있다.
+    function isPublicOrderUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['attachCount', '위치공유중', '업로드잠금']);
+    }
+
     // ────────────────────────────────────────────────────────────
     // 로그인 없이 접근하는 공개 배차/기사 관련 문서
     // (기사에게 문자/카톡으로 전달되는 인수증 업로드 링크, 통합 업로드 검색 링크)
@@ -16,13 +24,13 @@ service cloud.firestore {
       // list는 열려 있어야 한다. 이 경로를 서버(Vercel 함수)로 옮기기 전까지는
       // "그 날짜의 전체 오더 목록이 링크 소지자에게 노출될 수 있다"는 제한된 리스크가 남는다.
       allow list: if true;
-      allow update: if isSignedIn() || true; // 기사 업로드 완료 시 attachCount/위치공유중 갱신
+      allow update: if isSignedIn() || isPublicOrderUpdate();
       allow create, delete: if isSignedIn();
     }
     match /dispatch/{id} {
       allow get: if true;
       allow list: if true;
-      allow update: if isSignedIn() || true;
+      allow update: if isSignedIn() || isPublicOrderUpdate();
       allow create, delete: if isSignedIn();
     }
     match /dispatch_test/{id} {
@@ -32,7 +40,7 @@ service cloud.firestore {
     match /fixedClients/{id} {
       allow get: if true;
       allow list: if true; // /driver-upload?source=fixed 검색용
-      allow update: if isSignedIn() || true;
+      allow update: if isSignedIn() || isPublicOrderUpdate();
       allow create, delete: if isSignedIn();
     }
 
