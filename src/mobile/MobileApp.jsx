@@ -2726,6 +2726,20 @@ const groupedByDate = useMemo(() => {
   const clientNameInputRef = useRef(null);
   const [clientNameError, setClientNameError] = useState(false);
 
+  // PC 배차관리와 동일한 "여러 건 등록" + "날짜별 개별 지정" 기능
+  const [multiCount, setMultiCount] = useState(1);
+  const [useSeparateDates, setUseSeparateDates] = useState(false);
+  const [orderDates, setOrderDates] = useState([]);
+  const [orderDropDates, setOrderDropDates] = useState([]);
+  useEffect(() => {
+    if (multiCount <= 1) { setUseSeparateDates(false); return; }
+    setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
+    setOrderDropDates(Array.from({ length: multiCount }, () => form.하차일 || form.상차일 || ""));
+  }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 등록 완료 후 간단한 요약 팝업에 띄울 정보
+  const [registeredSummary, setRegisteredSummary] = useState(null);
+
   // --------------------------------------------------
   // 5. 저장 / 수정
   // --------------------------------------------------
@@ -2870,42 +2884,58 @@ const groupedByDate = useMemo(() => {
     }
 
 
-    // 🔹 신규 등록
+    // 🔹 신규 등록 — PC 배차관리와 동일하게 수량(multiCount)만큼 등록하고,
+    // "날짜 개별 설정"이 켜져 있으면 건별로 지정한 상/하차일을 사용한다.
+    const saveCount = multiCount > 1 ? multiCount : 1;
     try {
-      const ref = await addDoc(collection(db, collName), {
-        ...docData,
-        _id: "",    // 임시
-        id: "",     // 임시
-        등록일: today,
-        createdAt: serverTimestamp(),
-      });
+      const saveOne = async (i) => {
+        const dateForOrder = (useSeparateDates && orderDates[i]) ? orderDates[i] : docData.상차일;
+        const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? orderDropDates[i] : (docData.하차일 || dateForOrder);
+        const rowData = { ...docData, 상차일: dateForOrder, 하차일: dropDateForOrder };
 
-      // 🔥 Firestore 문서 고유 ID 확정 저장
-      await updateDoc(doc(db, collName, ref.id), {
-        _id: ref.id,
-        id: ref.id,
-      });
+        const ref = await addDoc(collection(db, collName), {
+          ...rowData,
+          _id: "",    // 임시
+          id: "",     // 임시
+          등록일: today,
+          createdAt: serverTimestamp(),
+        });
 
-      // ★ PC 거래처관리(places) 동기화
-      await syncPlaceFromOrder(docData);
+        // 🔥 Firestore 문서 고유 ID 확정 저장
+        await updateDoc(doc(db, collName, ref.id), {
+          _id: ref.id,
+          id: ref.id,
+        });
 
-      // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (PC와 동일)
-      let matchedShipper = approvedShippers.find(
-        (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
-      );
-      if (!matchedShipper) {
-        // approvedShippers는 onSnapshot으로 비동기 로딩되는 state라, 앱을 켠 직후 목록이
-        // 채워지기 전 등록하면 여기서 빈 배열이라 매칭이 실패한다 — 실시간으로 한 번 더 확인.
-        const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
-        matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, docData.거래처명);
-      }
-      if (matchedShipper) {
-        autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
-          console.error("자동 화주사 전송 실패:", e)
+        // ★ PC 거래처관리(places) 동기화
+        await syncPlaceFromOrder(rowData);
+
+        // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (PC와 동일)
+        let matchedShipper = approvedShippers.find(
+          (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(rowData.거래처명)
         );
+        if (!matchedShipper) {
+          // approvedShippers는 onSnapshot으로 비동기 로딩되는 state라, 앱을 켠 직후 목록이
+          // 채워지기 전 등록하면 여기서 빈 배열이라 매칭이 실패한다 — 실시간으로 한 번 더 확인.
+          const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+          matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, rowData.거래처명);
+        }
+        if (matchedShipper) {
+          autoTransmitToShipperMobile({ ...rowData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
+            console.error("자동 화주사 전송 실패:", e)
+          );
+        }
+        return rowData;
+      };
+
+      const saved = [];
+      for (let i = 0; i < saveCount; i++) {
+        saved.push(await saveOne(i));
       }
 
-      showSuccess("등록 완료");
+      setRegisteredSummary(saved);
+      setMultiCount(1);
+      setUseSeparateDates(false);
       setPage("list");
 
     } catch (e) {
@@ -4699,7 +4729,53 @@ setOpenMemo={setOpenMemo}
             clientNameInputRef={clientNameInputRef}
             clientNameError={clientNameError}
             setClientNameError={setClientNameError}
+            multiCount={multiCount}
+            setMultiCount={setMultiCount}
+            useSeparateDates={useSeparateDates}
+            setUseSeparateDates={setUseSeparateDates}
+            orderDates={orderDates}
+            setOrderDates={setOrderDates}
+            orderDropDates={orderDropDates}
+            setOrderDropDates={setOrderDropDates}
           />
+        )}
+
+        {/* ===== 등록 완료 요약 팝업 ===== */}
+        {registeredSummary && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] px-6" onClick={() => setRegisteredSummary(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="bg-[#1B2B4B] px-5 py-4 flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                <h3 className="text-white font-bold text-[15px]">
+                  {registeredSummary.length > 1 ? `${registeredSummary.length}건 등록 완료` : "등록 완료"}
+                </h3>
+              </div>
+              <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100">
+                {registeredSummary.map((o, i) => (
+                  <div key={i} className="px-5 py-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-bold text-gray-800 truncate">{o.상차지명} → {o.하차지명}</span>
+                      <span className="text-[11px] text-gray-400 shrink-0 ml-2">{o.상차일}</span>
+                    </div>
+                    <div className="text-[12px] text-gray-500 truncate">
+                      {o.거래처명 || "-"}{o.차량톤수 ? ` · ${o.차량톤수}` : ""}{o.차량종류 ? ` · ${o.차량종류}` : ""}
+                    </div>
+                    {o.청구운임 > 0 && (
+                      <div className="text-[12px] font-semibold text-[#1B2B4B]">{fmtMoney(o.청구운임)}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-4">
+                <button
+                  onClick={() => setRegisteredSummary(null)}
+                  className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-[14px]"
+                >
+                  확인
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {page === "detail" && selectedOrder && (
@@ -7567,7 +7643,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 </span>
               )}
               {carType && (
-                <span className="font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 whitespace-nowrap inline-flex items-center gap-1 px-1.5 py-0.5 rounded">
+                <span className="font-bold text-[#1B2B4B] whitespace-nowrap inline-flex items-center gap-1">
                   <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-[#1B2B4B] shrink-0" /> {carType}
                 </span>
               )}
@@ -10776,7 +10852,7 @@ const pickDrop = (c) => {
           깔끔한 라인 아이콘 버튼으로 모아둔다. 프로그램 색감(A스타일=파란색,
           B스타일=네이비)에 맞춰 단색으로 통일하고, 아이콘과 글씨가 겹치지 않게
           충분한 여백을 둔다. */}
-      <div className="flex items-center justify-end gap-2 flex-wrap">
+      <div className="flex items-stretch gap-1.5">
         {[
           !isLockedShipperEdit && (window.SpeechRecognition || window.webkitSpeechRecognition) && {
             key: "voice", Icon: Mic, label: "음성등록",
@@ -10818,12 +10894,12 @@ const pickDrop = (c) => {
             key={key}
             type="button"
             onClick={onClick}
-            className={`flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-2xl shadow-sm active:scale-95 transition ${
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl shadow-sm active:scale-95 transition ${
               cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
             }`}
           >
-            <Icon className="w-5 h-5 text-white shrink-0" strokeWidth={2.2} />
-            <span className="text-white text-[10px] font-bold leading-none whitespace-nowrap">{label}</span>
+            <Icon className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={2.2} />
+            <span className="text-white text-[9px] font-bold leading-none whitespace-nowrap">{label}</span>
           </button>
         ))}
       </div>
