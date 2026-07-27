@@ -3661,7 +3661,7 @@ return (
 
       {/* ---------------- 화면 렌더링 ---------------- */}
       <main className={`rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
-        <div style={{ display: menu === "HOME" ? "block" : "none" }}>
+        {menu === "HOME" && (
           <HomeDashboard
             role={role}
             user={user}
@@ -3673,9 +3673,9 @@ return (
             dispatchData={dispatchDataFiltered}
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
           />
-        </div>
+        )}
 
-        <div style={{ display: menu === "배차관리" ? "block" : "none" }}>
+        {menu === "배차관리" && (
           <DispatchManagement
           menu={menu}
             dispatchData={dispatchDataFiltered}
@@ -3699,7 +3699,7 @@ return (
             markEditRequestSeen={markEditRequestSeen}
             approvedShippers={approvedShippers}
           />
-        </div>
+        )}
 
         {menu === "실시간배차현황" && (
           <RealtimeStatus
@@ -3794,7 +3794,8 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) ? "block" : "none" }}>
+        {menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
+          <>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["하차지거래처", "기본거래처", "고정거래처관리", "고정노선관리"].map(tab => (
               <button key={tab} onClick={() => set거래처관리Tab(tab)}
@@ -3830,7 +3831,8 @@ return (
               <DeliverySignaturePage />
             </div>
           )}
-        </div>
+          </>
+        )}
 
         {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
           <div>
@@ -3915,7 +3917,8 @@ return (
           )
         )}
 
-        <div style={{ display: menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer) ? "block" : "none" }}>
+        {menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer) && (
+          <>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["거래처정산", "지급관리"].map(tab => (
               <button key={tab} onClick={() => set정산관리Tab(tab)}
@@ -3928,7 +3931,7 @@ return (
               </button>
             ))}
           </div>
-          <div style={{ display: 정산관리Tab === "거래처정산" ? "block" : "none" }}>
+          {정산관리Tab === "거래처정산" && (
             <ClientSettlement
               dispatchData={dispatchDataFiltered}
               setDispatchData={setDispatchData}
@@ -3943,7 +3946,7 @@ return (
               setCardImageUploading={setCardImageUploading}
               isViewer={isViewer}
             />
-          </div>
+          )}
           {정산관리Tab === "지급관리" && (
             <div className="p-4">
               <PaymentManagement
@@ -3952,7 +3955,8 @@ return (
               />
             </div>
           )}
-        </div>
+          </>
+        )}
 
         {menu === "운임조회" && <FreightRateInquiry />}
 
