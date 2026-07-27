@@ -11112,6 +11112,7 @@ const pickDrop = (c) => {
   {/* 🔵 상차지 */}
   <RowLabelInput
     label="상차지"
+    labelClassName={cardVersionB ? "!bg-[#1B2B4B] !text-white font-bold justify-center text-center" : ""}
     input={
       <div className="space-y-1">
 
@@ -11249,6 +11250,7 @@ const pickDrop = (c) => {
   {/* 하차지 */}
   <RowLabelInput
     label="하차지"
+    labelClassName={cardVersionB ? "!bg-[#1B2B4B] !text-white font-bold justify-center text-center" : ""}
     input={
       <div className="space-y-1">
 
@@ -13809,10 +13811,10 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
 // ======================================================================
 // 공통 RowLabelInput
 // ======================================================================
-function RowLabelInput({ label, input, right }) {
+function RowLabelInput({ label, input, right, labelClassName = "" }) {
   return (
     <div className="flex border-b last:border-b-0 overflow-hidden">
-      <div className={`${right ? "w-[104px]" : "w-[88px]"} shrink-0 px-2 py-2 text-[11px] text-gray-600 bg-gray-50 flex items-center justify-between gap-1`}>
+      <div className={`${right ? "w-[104px]" : "w-[88px]"} shrink-0 px-2 py-2 text-[11px] text-gray-600 bg-gray-50 flex items-center justify-between gap-1 ${labelClassName}`}>
         <span className="whitespace-nowrap truncate">{label}</span>
         {right && <span className="ml-1 shrink-0 whitespace-nowrap [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">{right}</span>}
       </div>
