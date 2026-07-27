@@ -16651,14 +16651,22 @@ React.useEffect(() => {
       // 전체 목록을 다시 스캔하며 버벅이던 원인 중 하나였다.
       const prevIds = new Set(prev.map((p) => p._id));
 
+      // dispatchData의 원본 행 참조가 지난번과 동일하면(=그 오더는 실제로 안 바뀜)
+      // 새 객체를 만들지 않고 기존 참조를 그대로 재사용한다. 예전에는 여기서 매번
+      // 모든 행을 새 객체로 spread해서, 배차 하나만 바뀌어도(배차완료/저장 등)
+      // 아래 waypoint 가공(useMemo)이 목록 전체를 다시 계산하며 그때마다 화면이
+      // 버벅이던 원인이었다 — 배차완료 배너가 뜰 때, 수정패널 저장 후 특히 심했다.
       const kept = prev
         .filter((r) => map.has(r._id))
-        .map((r) => ({
-          ...r,
-          ...map.get(r._id),
-        }));
+        .map((r) => {
+          const next = map.get(r._id);
+          if (r.__raw === next) return r;
+          return { ...r, ...next, __raw: next };
+        });
 
-      const newOnes = base.filter((r) => !prevIds.has(r._id));
+      const newOnes = base
+        .filter((r) => !prevIds.has(r._id))
+        .map((r) => ({ ...r, __raw: r }));
 
       const merged = [...kept, ...newOnes];
 
@@ -17349,6 +17357,12 @@ const driverPanelCallbackRef = React.useRef(null);
   const [filterConditions, setFilterConditions] = React.useState([]);
   const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
 
+  // 경유지 가공(dedup) 결과 캐시 — 행 객체 참조가 이전과 동일하면(=그 오더는 안 바뀜)
+  // 다시 계산하지 않고 재사용한다. rows의 행 참조가 안정적으로 유지되므로
+  // (위 Firestore → rows 반영 useEffect 참고) 배차 하나만 바뀌어도 목록 전체를
+  // 다시 가공하며 버벅이던 문제를 줄여준다.
+  const waypointCacheRef = React.useRef(new WeakMap());
+
   // ------------------------
   // 📌 필터 + 검색 + 정렬
   // ------------------------
@@ -17448,11 +17462,17 @@ if (sortKey) {
         return arr.findIndex(x => (x.업체명||x.주소||JSON.stringify(x)) === key) === i;
       });
 
-    return data.map(r => ({
-      ...r,
-      __pickupStops: dedup([...safeParse(r.경유상차목록), ...safeParse(r.경유지_상차), ...safeParse(r.경유지상차)]),
-      __dropStops:   dedup([...safeParse(r.경유하차목록), ...safeParse(r.경유지_하차), ...safeParse(r.경유지하차)]),
-    }));
+    return data.map(r => {
+      const cached = waypointCacheRef.current.get(r);
+      if (cached) return cached;
+      const withStops = {
+        ...r,
+        __pickupStops: dedup([...safeParse(r.경유상차목록), ...safeParse(r.경유지_상차), ...safeParse(r.경유지상차)]),
+        __dropStops:   dedup([...safeParse(r.경유하차목록), ...safeParse(r.경유지_하차), ...safeParse(r.경유지하차)]),
+      };
+      waypointCacheRef.current.set(r, withStops);
+      return withStops;
+    });
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
   // =========================
   // 📊 상태 요약 (추가 위치)
