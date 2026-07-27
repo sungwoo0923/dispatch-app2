@@ -10941,8 +10941,8 @@ const pickDrop = (c) => {
       </div>
 
       {/* 수정/등록 입력 전체를 하나의 카드로 묶는다 — 각 항목마다 따로 테두리를
-          두르지 않고, 굵은 테두리 카드 한 장 안에 얇은 구분선으로만 항목을 나눈다 */}
-      <div className={`bg-white rounded-2xl border-2 overflow-hidden ${cardVersionB ? "border-[#1B2B4B]" : "border-blue-500"}`}>
+          두르지 않고, 카드 한 장 안에 얇은 구분선으로만 항목을 나눈다 */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
       <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
       {/* 상차/하차 일시 */}
       <div>
