@@ -9068,12 +9068,6 @@ const handleAssignClick = () => {
     {/* 기사 배차 */}
     <div className="px-4 py-3 border-b border-gray-100">
       <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">기사 배차</div>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[12px] text-gray-500">현재 상태</span>
-        <span className={`text-[12px] font-bold ${carNo ? (cardVersionB ? "text-[#1B2B4B]" : "text-blue-600") : "text-gray-500"}`}>
-          {carNo ? "배차완료" : "배차중"}
-        </span>
-      </div>
       {state !== "배차완료" && (
         <>
           <div className="text-[11px] font-semibold text-gray-500 mb-1.5">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
@@ -10927,7 +10921,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 총운임 / 기사운임 */}
-      <div className={`grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm ${cardBorderCls}`}>
+      <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
         <div className="border-r px-3 py-2">
           <div className="text-xs text-gray-500 mb-1">
             총운임(청구운임)
@@ -10946,9 +10940,12 @@ const pickDrop = (c) => {
         </div>
       </div>
 
+      {/* 수정/등록 입력 전체를 하나의 카드로 묶는다 — 각 항목마다 따로 테두리를
+          두르지 않고, 굵은 테두리 카드 한 장 안에 얇은 구분선으로만 항목을 나눈다 */}
+      <div className={`bg-white rounded-2xl border-2 overflow-hidden ${cardVersionB ? "border-[#1B2B4B]" : "border-blue-500"}`}>
       <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
       {/* 상차/하차 일시 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div>
         <RowLabelInput
   label="상차일시"
   input={
@@ -11036,7 +11033,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 거래처명 */}
-<div className={`bg-white rounded-lg border shadow-sm px-3 py-2 ${cardBorderCls}`}>
+<div className="px-3 py-2 border-t border-gray-100">
   <div className="text-[11px] text-gray-500 mb-1">거래처명</div>
   <div className="flex gap-2">
     <div className="relative flex-1 min-w-0">
@@ -11110,7 +11107,7 @@ const pickDrop = (c) => {
 
 
       {/* 상차/하차 + 주소 + 자동완성 */}
-<div className={`bg-white rounded-lg border shadow-sm p-3 space-y-3 ${cardBorderCls}`}>
+<div className="p-3 space-y-3 border-t border-gray-100">
 
   {/* 🔵 상차지 */}
   <RowLabelInput
@@ -11381,7 +11378,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 차량종류 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="차량종류"
           input={
@@ -11520,7 +11517,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 상/하차방법 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="상/하차방법"
           input={
@@ -11558,7 +11555,7 @@ const pickDrop = (c) => {
 
       {/* 지급/배차방식 + 혼적/독차 */}
       {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="지급/배차방식"
           input={
@@ -11667,7 +11664,7 @@ const pickDrop = (c) => {
       </fieldset>
 
       {/* 금액 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="청구운임"
           input={
@@ -11707,7 +11704,7 @@ const pickDrop = (c) => {
       </div>
 
 {/* 기사 스마트검색 */}
-      <div className={`bg-white rounded-lg border shadow-sm p-3 ${cardBorderCls}`}>
+      <div className="border-t border-gray-100 p-3">
         <div className="text-[11px] text-gray-500 font-semibold mb-1.5">기사 검색 (차량번호/이름/번호 입력)</div>
         <div className="relative">
           <SmartTextarea textareaRef={formSmartRef} onSearch={handleFormSmartSearch} />
@@ -11747,7 +11744,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 차량번호 / 기사명 / 연락처 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="차량번호"
           input={
@@ -11788,7 +11785,7 @@ const pickDrop = (c) => {
         />
       </div>
 
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="기사명"
           input={
@@ -11801,7 +11798,7 @@ const pickDrop = (c) => {
         />
       </div>
 
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="연락처"
           input={
@@ -11833,7 +11830,7 @@ const pickDrop = (c) => {
       )}
 
       {/* 적요 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="적요"
           input={
@@ -11848,7 +11845,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 전달사항 */}
-      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
+      <div className="border-t border-gray-100">
         <RowLabelInput
           label="전달사항"
           right={
@@ -11871,7 +11868,7 @@ const pickDrop = (c) => {
 
       {/* PC 배차관리와 동일한 여러 건 등록 + 날짜 개별 지정 (신규 등록 시에만) */}
       {!form._editId && (
-        <div className={`bg-white rounded-lg border shadow-sm p-3 space-y-2 ${cardBorderCls}`}>
+        <div className="border-t border-gray-100 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[12px] font-bold text-gray-600">등록 수량</span>
             <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1 border border-gray-200">
@@ -11944,6 +11941,7 @@ const pickDrop = (c) => {
           )}
         </div>
       )}
+      </div>
 
       <div className="mt-4 mb-8 space-y-2">
         <button
@@ -13810,9 +13808,9 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
 function RowLabelInput({ label, input, right }) {
   return (
     <div className="flex border-b last:border-b-0 overflow-hidden">
-      <div className="w-[88px] shrink-0 px-2 py-2 text-[11px] text-gray-600 bg-gray-50 flex items-center justify-between">
-        <span className="whitespace-nowrap">{label}</span>
-        {right && <span className="ml-1">{right}</span>}
+      <div className={`${right ? "w-[104px]" : "w-[88px]"} shrink-0 px-2 py-2 text-[11px] text-gray-600 bg-gray-50 flex items-center justify-between gap-1`}>
+        <span className="whitespace-nowrap truncate">{label}</span>
+        {right && <span className="ml-1 shrink-0 whitespace-nowrap [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">{right}</span>}
       </div>
       <div className="flex-1 min-w-0 px-2 py-2 overflow-hidden">{input}</div>
     </div>
