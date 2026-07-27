@@ -7429,36 +7429,35 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         style={{ borderLeft: `4px solid ${statusDot}`, "--glow-c": statusRing }}
         onClick={onSelect}
       >
-        {/* 상단 정보 바 */}
+        {/* 상단 정보 바 — 왼쪽: 날짜/거래처명/첨부, 오른쪽: 냉장탑/배차상태 */}
         <div className="px-3 py-1.5 flex items-center justify-between" style={{ background: `linear-gradient(90deg, ${statusWash}, transparent)` }}>
-          <div className="flex items-center gap-1.5">
-            <div className="relative inline-block shrink-0">
-              <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
-              {isRecentlyEditedByShipper && !isEditRequested && (
-                <span title="화주사가 오더 정보를 수정했습니다"
-                  className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
-              )}
-            </div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[0.68em] text-gray-400 tabular-nums shrink-0">{String(order.상차일 || "").slice(5)}</span>
             {order.거래처명 && (
               <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
             )}
-            {isCold && (
-              <span className="text-[0.68em] text-[#1B2B4B] font-bold bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 px-1.5 py-0.5 rounded">
-                {(() => {
-                  const vt = String(order.차량종류 || order.차종 || "");
-                  const hasCold = vt.includes("냉장") && vt.includes("냉동");
-                  return hasCold ? "냉장/냉동" : vt.includes("냉동") ? "냉동" : "냉장";
-                })()}
-              </span>
-            )}
+            <button
+              style={{ touchAction: "manipulation" }}
+              onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
+              className={`flex items-center gap-0.5 text-[0.68em] font-semibold tabular-nums shrink-0 ${
+                order.attachViewed
+                  ? "text-[#1B2B4B]"
+                  : order.attachCount > 0
+                  ? "text-emerald-600"
+                  : "text-gray-300"
+              }`}
+            >
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              {(order.attachCount > 0) ? order.attachCount : "-"}
+            </button>
             {isUrgentOrder(order) && (
-              <span className="text-[0.68em] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">긴급</span>
+              <span className="text-[0.68em] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded shrink-0">긴급</span>
             )}
             {String(order.운행유형 || "").trim() === "왕복" && (
-              <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded">왕복</span>
+              <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded shrink-0">왕복</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {activeRequestType && (
               <button
                 onClick={openRequestModal}
@@ -7471,20 +7470,6 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 요청
               </button>
             )}
-            <button
-              style={{ touchAction: "manipulation" }}
-              onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-              className={`flex items-center gap-0.5 text-[0.68em] font-semibold tabular-nums ${
-                order.attachViewed
-                  ? "text-[#1B2B4B]"
-                  : order.attachCount > 0
-                  ? "text-emerald-600"
-                  : "text-gray-300"
-              }`}
-            >
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              {(order.attachCount > 0) ? order.attachCount : "-"}
-            </button>
             {(order.메모 || order.적요) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
@@ -7493,7 +7478,22 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 메모
               </button>
             )}
-            <span className="text-[0.68em] text-gray-400 tabular-nums">{String(order.상차일 || "").slice(5)}</span>
+            {isCold && (
+              <span className="text-[0.68em] text-[#1B2B4B] font-bold bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 px-1.5 py-0.5 rounded">
+                {(() => {
+                  const vt = String(order.차량종류 || order.차종 || "");
+                  const hasCold = vt.includes("냉장") && vt.includes("냉동");
+                  return hasCold ? "냉장/냉동" : vt.includes("냉동") ? "냉동" : "냉장";
+                })()}
+              </span>
+            )}
+            <div className="relative inline-block shrink-0">
+              <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
+              {isRecentlyEditedByShipper && !isEditRequested && (
+                <span title="화주사가 오더 정보를 수정했습니다"
+                  className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
+              )}
+            </div>
           </div>
         </div>
 
@@ -7567,8 +7567,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 </span>
               )}
               {carType && (
-                <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-                  <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
+                <span className="font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 whitespace-nowrap inline-flex items-center gap-1 px-1.5 py-0.5 rounded">
+                  <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-[#1B2B4B] shrink-0" /> {carType}
                 </span>
               )}
               {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
@@ -7690,16 +7690,16 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   <button
     style={{ touchAction: "manipulation" }}
     onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-    className={`inline-flex items-center leading-none gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold border ${
+    className={`inline-flex items-center leading-none gap-0.5 text-[10px] font-bold ${
       order.attachViewed
-        ? "bg-[#eef1f7] border-[#c7d1e3] text-[#1B2B4B]"
+        ? "text-[#1B2B4B]"
         : order.attachCount > 0
-        ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-        : "bg-white border-dashed border-gray-200 text-gray-300"
+        ? "text-emerald-600"
+        : "text-gray-300"
     }`}
   >
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-    {(order.attachCount > 0) ? order.attachCount : "없음"}
+    {(order.attachCount > 0) ? order.attachCount : "-"}
   </button>
 
   <div className="relative inline-block shrink-0">
