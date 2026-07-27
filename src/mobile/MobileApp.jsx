@@ -9,7 +9,7 @@ import PalletSimulator from "../PalletSimulator";
 import southKorea from "@svg-maps/south-korea";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
-import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift } from "lucide-react";
+import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -10213,6 +10213,8 @@ const chooseClient = (c) => {
 
 const [showNewDriver, setShowNewDriver] = useState(false);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
+const [showClientPickerModal, setShowClientPickerModal] = useState(false);
+const [clientPickerSearch, setClientPickerSearch] = useState("");
 const [contactPopup, setContactPopup] = useState(null);
 const [contactQueue, setContactQueue] = useState([]);
 const [stopSheet, setStopSheet] = useState(null); // null | "pickup" | "drop"
@@ -10770,43 +10772,60 @@ const pickDrop = (c) => {
         </div>
       )}
 
-      {/* 빠른 입력 버튼 — 음성등록/오더분석/불러오기를 상단 오른쪽에 이모지 버튼으로 모아둔다.
-          프로그램 색감(A스타일=파란색, B스타일=네이비)에 맞춰 단색으로 통일. */}
-      <div className="flex items-center justify-end gap-2">
-        {!isLockedShipperEdit && (window.SpeechRecognition || window.webkitSpeechRecognition) && (
+      {/* 빠른 입력 버튼 — 음성등록/오더분석/불러오기/초기화/거래처 조회를 상단 오른쪽에
+          깔끔한 라인 아이콘 버튼으로 모아둔다. 프로그램 색감(A스타일=파란색,
+          B스타일=네이비)에 맞춰 단색으로 통일하고, 아이콘과 글씨가 겹치지 않게
+          충분한 여백을 둔다. */}
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        {[
+          !isLockedShipperEdit && (window.SpeechRecognition || window.webkitSpeechRecognition) && {
+            key: "voice", Icon: Mic, label: "음성등록",
+            onClick: () => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); },
+          },
+          !isLockedShipperEdit && {
+            key: "smart", Icon: Sparkles, label: "오더분석",
+            onClick: () => setShowSmartParser(true),
+          },
+          {
+            key: "copy", Icon: Download, label: "불러오기",
+            onClick: () => { setOrderCopySearch(""); setShowOrderCopyModal(true); },
+          },
+          {
+            key: "client", Icon: Building2, label: "거래처",
+            onClick: () => { setClientPickerSearch(""); setShowClientPickerModal(true); },
+          },
+          {
+            key: "reset", Icon: RotateCcw, label: "초기화",
+            onClick: () => {
+              if (!window.confirm("입력한 내용을 모두 초기화하시겠습니까?")) return;
+              setForm(prev => ({
+                거래처명: "", 상차일: todayKST(), 상차시간: "", 하차일: todayKST(), 하차시간: "",
+                상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
+                하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "",
+                톤수: "", 차종: "", 화물내용: "", 상차방법: "", 하차방법: "",
+                지급방식: "", 배차방식: "", 청구운임: 0, 기사운임: 0, 수수료: 0, 산재보험료: 0,
+                차량번호: "", 기사명: "", 전화번호: "", 혼적여부: "독차",
+                적요: "", 전달사항: "", 전달사항고정: false,
+                상차시간기준: null, 하차시간기준: null,
+                경유상차목록: [], 경유하차목록: [],
+                _editId: prev._editId, _returnToDetail: prev._returnToDetail,
+              }));
+              showToast("입력값이 초기화되었습니다");
+            },
+          },
+        ].filter(Boolean).map(({ key, Icon, label, onClick }) => (
           <button
+            key={key}
             type="button"
-            onClick={() => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); }}
-            className={`flex flex-col items-center justify-center gap-0.5 w-14 h-14 rounded-xl shadow-sm active:scale-95 transition ${
+            onClick={onClick}
+            className={`flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-2xl shadow-sm active:scale-95 transition ${
               cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
             }`}
           >
-            <span className="text-[18px] leading-none">🎙️</span>
-            <span className="text-white text-[10px] font-bold leading-none">음성등록</span>
+            <Icon className="w-5 h-5 text-white shrink-0" strokeWidth={2.2} />
+            <span className="text-white text-[10px] font-bold leading-none whitespace-nowrap">{label}</span>
           </button>
-        )}
-        {!isLockedShipperEdit && (
-          <button
-            type="button"
-            onClick={() => setShowSmartParser(true)}
-            className={`flex flex-col items-center justify-center gap-0.5 w-14 h-14 rounded-xl shadow-sm active:scale-95 transition ${
-              cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
-            }`}
-          >
-            <span className="text-[18px] leading-none">🧠</span>
-            <span className="text-white text-[10px] font-bold leading-none">오더분석</span>
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => { setOrderCopySearch(""); setShowOrderCopyModal(true); }}
-          className={`flex flex-col items-center justify-center gap-0.5 w-14 h-14 rounded-xl shadow-sm active:scale-95 transition ${
-            cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
-          }`}
-        >
-          <span className="text-[18px] leading-none">📥</span>
-          <span className="text-white text-[10px] font-bold leading-none">불러오기</span>
-        </button>
+        ))}
       </div>
 
       {/* 총운임 / 기사운임 */}
@@ -10823,13 +10842,9 @@ const pickDrop = (c) => {
           <div className="text-xs text-gray-500 mb-1">
             기사운임
           </div>
-          <input
-            className="w-full border rounded px-2 py-1 text-right text-sm"
-            value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
-            onChange={(e) =>
-              updateMoney("기사운임", e.target.value.replace(/[^\d]/g, ""))
-            }
-          />
+          <div className="text-base font-semibold">
+            {fmtMoney(form.기사운임)}
+          </div>
         </div>
       </div>
 
@@ -11002,15 +11017,6 @@ const pickDrop = (c) => {
   {/* 🔵 상차지 */}
   <RowLabelInput
     label="상차지"
-      right={
-    <button
-      type="button"
-      onClick={handleSwapPickupDrop}
-      className="ml-1 w-6 h-6 rounded-full bg-blue-50 border border-blue-300 text-blue-600 flex items-center justify-center text-[11px] active:scale-95"
-    >
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-    </button>
-  }
     input={
       <div className="space-y-1">
 
@@ -11131,6 +11137,20 @@ const pickDrop = (c) => {
       </div>
     }
   />
+
+  {/* 상/하차지 맞바꾸기 */}
+  <div className="flex justify-center -my-1">
+    <button
+      type="button"
+      onClick={handleSwapPickupDrop}
+      className={`w-7 h-7 rounded-full flex items-center justify-center active:scale-90 transition ${
+        cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
+      }`}
+    >
+      <ArrowUpDown className="w-3.5 h-3.5 text-white" strokeWidth={2.4} />
+    </button>
+  </div>
+
   {/* 하차지 */}
   <RowLabelInput
     label="하차지"
@@ -11752,33 +11772,6 @@ const pickDrop = (c) => {
       </div>
 
       <div className="mt-4 mb-8 space-y-2">
-        <button
-          type="button"
-          onClick={() => {
-            if (!window.confirm("입력한 내용을 모두 초기화하시겠습니까?")) return;
-            setForm(prev => ({
-              거래처명: "", 상차일: todayKST(), 상차시간: "", 하차일: todayKST(), 하차시간: "",
-              상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
-              하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "",
-              톤수: "", 차종: "", 화물내용: "", 상차방법: "", 하차방법: "",
-              지급방식: "", 배차방식: "", 청구운임: 0, 기사운임: 0, 수수료: 0, 산재보험료: 0,
-              차량번호: "", 기사명: "", 전화번호: "", 혼적여부: "독차",
-              적요: "", 전달사항: "", 전달사항고정: false,
-              상차시간기준: null, 하차시간기준: null,
-              경유상차목록: [], 경유하차목록: [],
-              _editId: prev._editId, _returnToDetail: prev._returnToDetail,
-            }));
-            showToast("입력값이 초기화되었습니다");
-          }}
-          className={`w-full py-2.5 rounded-lg text-sm font-semibold border transition ${
-            cardVersionB
-              ? "border-gray-300 text-gray-500 bg-white hover:bg-gray-50"
-              : "border-gray-300 text-gray-600 bg-white hover:bg-gray-50"
-          }`}
-        >
-          초기화
-        </button>
-
         <button
           onClick={onSave}
           className={`w-full py-3 rounded-lg text-white text-base font-semibold shadow ${
@@ -12994,6 +12987,57 @@ const pickDrop = (c) => {
         {orders.filter(o => o.상차지명 || o.하차지명).length === 0 && (
           <div className="text-center text-gray-400 text-[13px] py-8">오더 데이터가 없습니다</div>
         )}
+      </div>
+    </div>
+  </div>
+)}
+
+{/* 거래처 조회 모달 — 하차지거래처 + 기본거래처를 업체명/주소로 검색 */}
+{showClientPickerModal && (
+  <div className="fixed inset-0 bg-black/50 flex flex-col justify-end z-[9999]" onClick={() => setShowClientPickerModal(false)}>
+    <div className="bg-white rounded-t-2xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="flex items-center justify-between px-4 py-3 border-b">
+        <span className="font-bold text-[15px] text-[#1B2B4B]">거래처 조회</span>
+        <button onClick={() => setShowClientPickerModal(false)} className="text-gray-400 text-xl">✕</button>
+      </div>
+      <div className="px-4 py-2 border-b">
+        <input
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+          placeholder="업체명 또는 주소로 검색"
+          value={clientPickerSearch}
+          onChange={e => setClientPickerSearch(e.target.value)}
+          autoFocus
+        />
+      </div>
+      <div className="overflow-y-auto flex-1 px-4 py-2 space-y-2">
+        {(() => {
+          const q = clientPickerSearch.trim().toLowerCase();
+          const list = (clients || [])
+            .filter(c => c.거래처명 || c.업체명)
+            .filter(c => {
+              if (!q) return true;
+              const name = String(c.거래처명 || c.업체명 || "").toLowerCase();
+              const addr = String(c.주소 || "").toLowerCase();
+              return name.includes(q) || addr.includes(q);
+            })
+            .slice(0, 50);
+          if (list.length === 0) {
+            return <div className="text-center text-gray-400 text-[13px] py-8">검색된 거래처가 없습니다</div>;
+          }
+          return list.map((c, i) => (
+            <button
+              key={c.id || `${c.거래처명 || c.업체명}-${i}`}
+              className="w-full text-left bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 active:scale-[0.99] transition"
+              onClick={() => {
+                setShowClientPickerModal(false);
+                chooseClient({ ...c, 거래처명: c.거래처명 || c.업체명 });
+              }}
+            >
+              <div className="text-[13px] font-semibold text-gray-800 truncate">{c.거래처명 || c.업체명}</div>
+              {c.주소 && <div className="text-[11px] text-gray-500 truncate mt-0.5">{c.주소}</div>}
+            </button>
+          ));
+        })()}
       </div>
     </div>
   </div>
