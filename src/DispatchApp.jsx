@@ -16137,7 +16137,23 @@ const dropStopsTextD = hasDropStopsD
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
   }).join("\n\n")
   : "";
-const uploadUrl = `${window.location.origin}/upload?id=${r._id}`;
+// 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
+// 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
+// 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
+const uploadUrl = (() => {
+  let token = r.업로드토큰;
+  if (!token || r.업로드잠금) {
+    token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const patch = { 업로드토큰: token, 업로드잠금: false };
+    updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
+    if (r._transmittedOrderId) {
+      updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
+    } else if (r.originCol && r.originId) {
+      updateDoc(doc(db, r.originCol, r.originId), patch).catch(() => {});
+    }
+  }
+  return `${window.location.origin}/upload?id=${r._id}&t=${token}`;
+})();
 
 const noticeBlock = isBanchan
   ? `[반찬단지 주의사항]
@@ -26094,7 +26110,23 @@ const DRIVER_NOTICE = isBanchan
             ? `\n\n📢 전달사항\n${driverNote.trim()}`
             : "";
 
-          const uploadUrl = `${window.location.origin}/upload?id=${r._id}`;
+          // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
+          // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
+          // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
+          const uploadUrl = (() => {
+            let token = r.업로드토큰;
+            if (!token || r.업로드잠금) {
+              token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+              const patch = { 업로드토큰: token, 업로드잠금: false };
+              updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
+              if (r._transmittedOrderId) {
+                updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
+              } else if (r.originCol && r.originId) {
+                updateDoc(doc(db, r.originCol, r.originId), patch).catch(() => {});
+              }
+            }
+            return `${window.location.origin}/upload?id=${r._id}&t=${token}`;
+          })();
 
 const noticeBlock = isBanchan
   ? `[반찬단지 주의사항]

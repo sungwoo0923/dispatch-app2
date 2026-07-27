@@ -25,8 +25,9 @@ import {
 export default function UploadPage() {
   const [orderId, setOrderId]     = useState(null);
   const [order, setOrder]         = useState(null);
-  const [status, setStatus]       = useState("loading"); // loading | ready | done | error
+  const [status, setStatus]       = useState("loading"); // loading | ready | done | error | locked
   const [isManual, setIsManual]   = useState(false);
+  const [confirmPopup, setConfirmPopup] = useState(false);
 
   // 수동 모드 입력 필드
   const [manualDate, setManualDate] = useState("");
@@ -115,6 +116,7 @@ export default function UploadPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
+    const token = params.get("t");
 
     if (!id) {
       // 수동 모드 — URL 파라미터에서 초기값 읽기
@@ -142,8 +144,20 @@ export default function UploadPage() {
           snap = await getDoc(doc(db, "fixedClients", id));
         }
         if (snap.exists()) {
+          const data = snap.data();
+          // 링크에 토큰이 발급되어 있는 오더는, 그 링크에 담긴 토큰이 현재
+          // 유효한 토큰과 일치할 때만 접근을 허용한다 — 업로드 완료 후 새 링크가
+          // 발급되면 예전에 전달된 링크(구 토큰)는 영구적으로 막힌다.
+          if (data.업로드토큰 && data.업로드토큰 !== token) {
+            setStatus("locked");
+            return;
+          }
+          if (data.업로드잠금) {
+            setStatus("locked");
+            return;
+          }
           setOrderId(id);
-          setOrder({ _id: id, _col: snap.ref.parent.id, ...snap.data() });
+          setOrder({ _id: id, _col: snap.ref.parent.id, ...data });
           setStatus("ready");
         } else {
           setStatus("error");
@@ -421,6 +435,16 @@ export default function UploadPage() {
         const parentRef = doc(db, targetCol, targetId);
         await updateDoc(parentRef, { attachCount: increment(results.length) });
       } catch(e) { console.error("카운트 업데이트 실패:", e); }
+
+      // 안내 팝업에서 "등록"을 눌러 업로드가 완료되면, 이 링크(토큰)로는 다시
+      // 접속할 수 없도록 잠근다 — 재업로드가 필요하면 운송사가 새 링크를 발급해야 한다.
+      try {
+        const parentRef = doc(db, targetCol, targetId);
+        await updateDoc(parentRef, { 업로드잠금: true });
+        if (mirrorTarget) {
+          await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 업로드잠금: true }).catch(() => {});
+        }
+      } catch (e) { console.error("업로드 잠금 처리 실패:", e); }
     }
 
     const failedCount = files.length - results.length;
@@ -480,6 +504,19 @@ export default function UploadPage() {
           </div>
         )}
 
+        {/* ── 이미 업로드 완료되어 재접속이 막힌 링크 ── */}
+        {status === "locked" && (
+          <div style={cardStyle}>
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#ef4444" }}>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>이미 업로드가 완료된 링크입니다</div>
+              <div style={{ color: "#9ca3af", fontSize: 13 }}>
+                이 링크로는 다시 접속하거나 재업로드할 수 없습니다.<br />
+                재업로드가 필요하면 배차 담당자에게 새 링크를 요청해주세요.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── 업로드 완료 ── */}
         {status === "done" && (
           <div style={cardStyle}>
@@ -518,12 +555,14 @@ export default function UploadPage() {
                 </div>
               ))}
             </div>
-            <button
-              onClick={() => { setStatus("ready"); setUploaded([]); }}
-              style={{ ...btnOutline, width: "100%", textAlign: "center" }}
-            >
-              추가 업로드
-            </button>
+            {isManual && (
+              <button
+                onClick={() => { setStatus("ready"); setUploaded([]); }}
+                style={{ ...btnOutline, width: "100%", textAlign: "center" }}
+              >
+                추가 업로드
+              </button>
+            )}
           </div>
         )}
 
@@ -1003,7 +1042,7 @@ export default function UploadPage() {
 
               {files.length > 0 && (
                 <button
-                  onClick={handleUpload}
+                  onClick={() => setConfirmPopup(true)}
                   disabled={uploading}
                   style={{
                     width: "100%",
@@ -1027,6 +1066,36 @@ export default function UploadPage() {
           </>
           )}
           </>
+        )}
+
+        {/* ── 업로드 등록 확인 팝업 ── */}
+        {confirmPopup && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99999, padding: 20 }}>
+            <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 400, padding: "24px 20px", boxShadow: "0 12px 40px rgba(0,0,0,0.25)" }}>
+              <div style={{ fontWeight: 900, fontSize: 16, color: "#1B2B4B", marginBottom: 10 }}>업로드 등록 안내</div>
+              <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, marginBottom: 20 }}>
+                <b>{!isManual && order ? (order.거래처명 || order.상차지명 || "이 오더") : (manualCar || "입력하신 정보")}</b>
+                {!isManual && order?.상차일 ? ` (${order.상차일})` : ""} 건에 서류/사진 <b>{files.length}장</b>을 업로드합니다.
+                <br /><br />
+                등록 후에는 <b>이 링크로 다시 접속하거나 재업로드할 수 없습니다.</b><br />
+                사진을 다시 한 번 확인한 후 등록해주세요.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setConfirmPopup(false)}
+                  style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid #e2e8f0", background: "white", color: "#6b7280", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => { setConfirmPopup(false); handleUpload(); }}
+                  style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
+                >
+                  등록
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

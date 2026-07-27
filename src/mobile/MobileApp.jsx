@@ -13422,7 +13422,25 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
         ? `[반찬단지 주의사항]\n- 안전화 착용 필수 (슬리퍼/크록스 금지)\n- 입차 시 지게차 기사님께 하차지명 말씀\n- 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`
         : "";
 
-      const uploadUrl = `${window.location.origin}/upload?id=${order._id || order.id}`;
+      // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
+      // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
+      // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
+      const uploadUrl = (() => {
+        const oid = order._id || order.id;
+        const col = order.__col || order._col || "dispatch";
+        let token = order.업로드토큰;
+        if (!token || order.업로드잠금) {
+          token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+          const patch = { 업로드토큰: token, 업로드잠금: false };
+          updateDoc(doc(db, col, oid), patch).catch(() => {});
+          if (order._transmittedOrderId) {
+            updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch(() => {});
+          } else if (order.originCol && order.originId) {
+            updateDoc(doc(db, order.originCol, order.originId), patch).catch(() => {});
+          }
+        }
+        return `${window.location.origin}/upload?id=${oid}&t=${token}`;
+      })();
 
       const pm = (n, p) => (!n && !p) ? "" : p ? `담당자 : ${n || ""} (${p})` : `담당자 : ${n}`;
 
