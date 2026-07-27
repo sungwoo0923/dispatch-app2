@@ -10769,34 +10769,45 @@ const pickDrop = (c) => {
           화주사가 등록한 오더입니다. 배차 관련 정보(차량/기사/운임)만 수정할 수 있으며, 주소·시간·화물 정보는 변경할 수 없습니다.
         </div>
       )}
-      {!isLockedShipperEdit && (
-        <>
-      {/* 음성 등록 버튼 */}
-      {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
+
+      {/* 빠른 입력 버튼 — 음성등록/오더분석/불러오기를 상단 오른쪽에 이모지 버튼으로 모아둔다.
+          프로그램 색감(A스타일=파란색, B스타일=네이비)에 맞춰 단색으로 통일. */}
+      <div className="flex items-center justify-end gap-2">
+        {!isLockedShipperEdit && (window.SpeechRecognition || window.webkitSpeechRecognition) && (
+          <button
+            type="button"
+            onClick={() => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); }}
+            className={`flex flex-col items-center justify-center gap-0.5 w-14 h-14 rounded-xl shadow-sm active:scale-95 transition ${
+              cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
+            }`}
+          >
+            <span className="text-[18px] leading-none">🎙️</span>
+            <span className="text-white text-[10px] font-bold leading-none">음성등록</span>
+          </button>
+        )}
+        {!isLockedShipperEdit && (
+          <button
+            type="button"
+            onClick={() => setShowSmartParser(true)}
+            className={`flex flex-col items-center justify-center gap-0.5 w-14 h-14 rounded-xl shadow-sm active:scale-95 transition ${
+              cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
+            }`}
+          >
+            <span className="text-[18px] leading-none">🧠</span>
+            <span className="text-white text-[10px] font-bold leading-none">오더분석</span>
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); }}
-          className="w-full py-3 rounded-xl border-2 border-dashed border-[#1B2B4B]/40 bg-white flex items-center justify-center gap-2 text-[#1B2B4B] font-semibold text-sm active:bg-gray-50"
+          onClick={() => { setOrderCopySearch(""); setShowOrderCopyModal(true); }}
+          className={`flex flex-col items-center justify-center gap-0.5 w-14 h-14 rounded-xl shadow-sm active:scale-95 transition ${
+            cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
+          }`}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-          음성으로 입력
+          <span className="text-[18px] leading-none">📥</span>
+          <span className="text-white text-[10px] font-bold leading-none">불러오기</span>
         </button>
-      )}
-
-      {/* 스마트 분석 버튼 */}
-      <button
-        type="button"
-        onClick={() => setShowSmartParser(true)}
-        className="w-full mb-4 py-2.5 rounded-2xl border border-gray-200 bg-white text-[12px] font-semibold text-gray-600 flex items-center justify-center gap-2 active:bg-gray-50"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-        </svg>
-        스마트 오더 분석
-      </button>
-        </>
-      )}
+      </div>
 
       {/* 총운임 / 기사운임 */}
       <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
@@ -10984,15 +10995,6 @@ const pickDrop = (c) => {
   </div>
 </div>
 
-
-{/* 오더 복사 버튼 */}
-      <button
-        type="button"
-        onClick={() => { setOrderCopySearch(""); setShowOrderCopyModal(true); }}
-        className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#1B2B4B]/30 text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B]/5 transition"
-      >
-        기존 오더 불러오기
-      </button>
 
       {/* 상차/하차 + 주소 + 자동완성 */}
 <div className="bg-white rounded-lg border shadow-sm p-3 space-y-3">
@@ -11750,6 +11752,33 @@ const pickDrop = (c) => {
       </div>
 
       <div className="mt-4 mb-8 space-y-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (!window.confirm("입력한 내용을 모두 초기화하시겠습니까?")) return;
+            setForm(prev => ({
+              거래처명: "", 상차일: todayKST(), 상차시간: "", 하차일: todayKST(), 하차시간: "",
+              상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
+              하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "",
+              톤수: "", 차종: "", 화물내용: "", 상차방법: "", 하차방법: "",
+              지급방식: "", 배차방식: "", 청구운임: 0, 기사운임: 0, 수수료: 0, 산재보험료: 0,
+              차량번호: "", 기사명: "", 전화번호: "", 혼적여부: "독차",
+              적요: "", 전달사항: "", 전달사항고정: false,
+              상차시간기준: null, 하차시간기준: null,
+              경유상차목록: [], 경유하차목록: [],
+              _editId: prev._editId, _returnToDetail: prev._returnToDetail,
+            }));
+            showToast("입력값이 초기화되었습니다");
+          }}
+          className={`w-full py-2.5 rounded-lg text-sm font-semibold border transition ${
+            cardVersionB
+              ? "border-gray-300 text-gray-500 bg-white hover:bg-gray-50"
+              : "border-gray-300 text-gray-600 bg-white hover:bg-gray-50"
+          }`}
+        >
+          초기화
+        </button>
+
         <button
           onClick={onSave}
           className={`w-full py-3 rounded-lg text-white text-base font-semibold shadow ${
