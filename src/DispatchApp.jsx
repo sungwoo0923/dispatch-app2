@@ -5661,7 +5661,6 @@ const filterPlaces = (q) => {
     const cargoInputRef = React.useRef(null);
     const tonInputRef = React.useRef(null);
     const payTypeRef = React.useRef(null);
-    const dispatchTypeRef = React.useRef(null);
     // 필수값 미입력 필드를 빨간 테두리로 깜빡여 알려주기 위한 상태
     const [requiredErrors, setRequiredErrors] = React.useState(new Set());
     const [form, setForm] = React.useState(() => {
@@ -6668,11 +6667,13 @@ const [clientAlert, setClientAlert] = React.useState(null);
 const checkClientGrade = (name, nextFocusId = null) => {
   if (!name) return;
   // 하차지거래처(placeRows)뿐 아니라 기본거래처(clients)에만 등록된 업체의
-  // 블랙/주의 등급·메모도 동일하게 경고가 뜨도록 두 컬렉션 모두 확인한다
+  // 블랙/주의 등급·메모도 동일하게 경고가 뜨도록 두 컬렉션 모두 확인한다.
+  // 등급이 "일반"이라도 메모가 등록돼 있으면 참고할 수 있도록 같이 띄운다.
+  const hasNote = (v) => v?.메모 && String(v.메모).trim();
   const target = (placeRows || []).find(
-    (p) => (p.업체명 || "") === name.trim() && (p.등급 === "블랙" || p.등급 === "주의")
+    (p) => (p.업체명 || "") === name.trim() && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
   ) || (clients || []).find(
-    (c) => (c.업체명 || c.거래처명 || "") === name.trim() && (c.등급 === "블랙" || c.등급 === "주의")
+    (c) => (c.업체명 || c.거래처명 || "") === name.trim() && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
   );
   if (target) {
     setClientAlert({ ...target, 업체명: target.업체명 || target.거래처명 || name.trim(), _nextFocusId: nextFocusId });
@@ -6978,11 +6979,10 @@ function checkDuplicateDispatch(form, dispatchData) {
       if (!String(f.화물내용 || "").trim()) { miss.push("화물내용"); missKeys.push("화물내용"); }
       if (!String(f.차량톤수 || "").trim()) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
       if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
-      if (!f.배차방식) { miss.push("배차방식"); missKeys.push("배차방식"); }
       if (miss.length) {
         setRequiredErrors(new Set(missKeys));
         setTimeout(() => setRequiredErrors(new Set()), 2500);
-        const refMap = { 화물내용: cargoInputRef, 차량톤수: tonInputRef, 지급방식: payTypeRef, 배차방식: dispatchTypeRef };
+        const refMap = { 화물내용: cargoInputRef, 차량톤수: tonInputRef, 지급방식: payTypeRef };
         const firstRefKey = missKeys.find(k => refMap[k]?.current);
         if (firstRefKey) {
           refMap[firstRefKey].current.focus?.();
@@ -7953,13 +7953,13 @@ setCopyOpen(false);
     setCopyDateHint(null);
   }
 
-  // 🚫 복사된 오더 거래처 등급 체크
+  // 🚫 복사된 오더 거래처 등급 체크 — 등급이 "일반"이라도 메모가 있으면 함께 안내한다.
   const namesToCheck = [keep.거래처명, keep.상차지명, keep.하차지명]
     .filter(Boolean)
     .filter((v, i, arr) => arr.indexOf(v) === i); // 중복 제거
   for (const n of namesToCheck) {
     const found = (placeRows || []).find(
-      p => (p.업체명 || "") === n.trim() && (p.등급 === "블랙" || p.등급 === "주의")
+      p => (p.업체명 || "") === n.trim() && (p.등급 === "블랙" || p.등급 === "주의" || (p.메모 && String(p.메모).trim()))
     );
     if (found) { setClientAlert(found); break; }
   }
@@ -10428,8 +10428,8 @@ className={`
   </div>
 
   <div>
-    <label className={labelCls}>배차방식 {reqStar}</label>
-    <select ref={dispatchTypeRef} className={`${inputCls}${requiredErrors.has("배차방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+    <label className={labelCls}>배차방식</label>
+    <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
       {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
     </select>
@@ -11673,18 +11673,31 @@ setTimeout(() => {
     }}
   >
     <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden">
-      <div className={`px-6 py-4 flex items-center gap-3 ${clientAlert.등급 === "블랙" ? "bg-gray-900" : "bg-orange-500"}`}>
-        <span className="text-2xl">{clientAlert.등급 === "블랙" ? "🚫" : "⚠️"}</span>
+      {(() => {
+        const isBlack = clientAlert.등급 === "블랙";
+        const isCaution = clientAlert.등급 === "주의";
+        // 등급이 "일반"이라도 메모가 등록돼 있으면 참고할 수 있도록 같은 방식으로 안내한다.
+        const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-[#1B2B4B]";
+        const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
+        const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
+        const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+        const badgeCls = isBlack ? "bg-gray-900 text-white" : isCaution ? "bg-orange-500 text-white" : "bg-[#1B2B4B] text-white";
+        const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : "text-[#1B2B4B]";
+        const footTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-500" : "text-[#1B2B4B]";
+        return (
+      <>
+      <div className={`px-6 py-4 flex items-center gap-3 ${headerCls}`}>
+        <span className="text-2xl">{icon}</span>
         <h3 className="text-white text-lg font-bold">
-          {clientAlert.등급 === "블랙" ? "블랙 거래처 알림" : "주의 거래처 알림"}
+          {title}
         </h3>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1.5 ${clientAlert.등급 === "블랙" ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200"}`}>
+        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1.5 ${boxCls}`}>
           <div><span className="text-gray-500">거래처명</span> <b className="ml-2">{clientAlert.업체명}</b></div>
           <div><span className="text-gray-500">등급</span>
-            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${clientAlert.등급 === "블랙" ? "bg-gray-900 text-white" : "bg-orange-500 text-white"}`}>
-              {clientAlert.등급}
+            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${badgeCls}`}>
+              {clientAlert.등급 || "일반"}
             </span>
           </div>
           {clientAlert.등급변경일 && (
@@ -11694,15 +11707,17 @@ setTimeout(() => {
             <div><span className="text-gray-500">주소</span> <span className="ml-2 text-gray-700">{clientAlert.주소}</span></div>
           )}
           {clientAlert.메모 && (
-            <div><span className="text-gray-500">메모</span> <span className={`ml-2 font-semibold ${clientAlert.등급 === "블랙" ? "text-red-600" : "text-orange-600"}`}>{clientAlert.메모}</span></div>
+            <div><span className="text-gray-500">메모</span> <span className={`ml-2 font-semibold ${memoTextCls}`}>{clientAlert.메모}</span></div>
           )}
         </div>
         <p className="text-sm text-gray-600 text-center font-semibold">
-          해당 거래처는 <span className={`font-bold ${clientAlert.등급 === "블랙" ? "text-red-600" : "text-orange-500"}`}>{clientAlert.등급}</span> 등급으로 지정된 거래처입니다.
+          {isBlack || isCaution
+            ? <>해당 거래처는 <span className={`font-bold ${footTextCls}`}>{clientAlert.등급}</span> 등급으로 지정된 거래처입니다.</>
+            : "해당 거래처에 등록된 메모를 확인해주세요."}
         </p>
       </div>
       <div className="px-6 pb-5">
-        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${clientAlert.등급 === "블랙" ? "bg-gray-900" : "bg-orange-500"}`}
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-[#1B2B4B]"}`}
           onClick={() => {
 const nextId = clientAlert._nextFocusId || getNextFocusIdFromForm(form);
 setClientAlert(null);
@@ -11713,6 +11728,9 @@ setTimeout(() => {
 
           }}>확인</button>
       </div>
+      </>
+        );
+      })()}
     </div>
   </div>
 )}
