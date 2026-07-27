@@ -4,6 +4,10 @@
       "maxDuration": 10,
       "regions": ["icn1"]
     },
+    "api/upload-page.js": {
+      "maxDuration": 10,
+      "regions": ["icn1"]
+    },
     "api/send-email.js": {
       "maxDuration": 30,
       "regions": ["icn1"]
@@ -32,6 +36,14 @@
     {
       "src": "/favicon.ico",
       "dest": "/favicon.ico"
+    },
+    {
+      "src": "/upload",
+      "dest": "/api/upload-page"
+    },
+    {
+      "src": "/driver-upload",
+      "dest": "/api/upload-page"
     },
     {
       "handle": "filesystem"
