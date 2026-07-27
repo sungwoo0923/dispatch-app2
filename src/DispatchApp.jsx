@@ -23453,7 +23453,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
                   <div key={r._id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
                       <div className="font-bold text-[#1B2B4B]">{idx+1}. {r.거래처명||"-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태==="배차완료"?"bg-emerald-100 text-emerald-700":"bg-amber-100 text-amber-700"}`}>{r.배차상태}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태==="배차완료"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
                     </div>
                     <div className="space-y-1 text-gray-700 text-[13px]">
                       <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
@@ -23461,9 +23461,9 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
                       <div><b>차량</b> {r.차량번호||"-"} / {r.이름||"-"}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-3 text-center text-[12px]">
-                      <div className="bg-white border rounded-lg p-2"><div className="text-gray-400 text-[10px]">청구</div><div className="font-bold text-blue-600">{Number(sale).toLocaleString()}원</div></div>
-                      <div className="bg-white border rounded-lg p-2"><div className="text-gray-400 text-[10px]">기사</div><div className="font-bold text-emerald-600">{Number(drv).toLocaleString()}원</div></div>
-                      <div className="bg-white border rounded-lg p-2"><div className="text-gray-400 text-[10px]">수수료</div><div className={`font-bold ${fee<0?"text-red-600":"text-orange-600"}`}>{fee.toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">수수료</div><div className={`font-bold ${fee<0?"text-red-600":"text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
                     </div>
                   </div>
                 );
@@ -31128,7 +31128,7 @@ setCopyPlaceOptions(list);
                   <div key={id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
                       <div className="font-bold text-[#1B2B4B]">{idx + 1}. {r.거래처명 || "-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{r.배차상태}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
                     </div>
                     <div className="space-y-1 text-gray-700 text-[13px]">
                       <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
@@ -31136,9 +31136,9 @@ setCopyPlaceOptions(list);
                       <div><b>차량</b> {r.차량번호 || "-"} / {r.이름 || "-"}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-3 text-center text-[12px]">
-                      <div className="bg-white border rounded-lg p-2"><div className="text-gray-400 text-[10px]">청구</div><div className="font-bold text-blue-600">{Number(sale).toLocaleString()}원</div></div>
-                      <div className="bg-white border rounded-lg p-2"><div className="text-gray-400 text-[10px]">기사</div><div className="font-bold text-emerald-600">{Number(drv).toLocaleString()}원</div></div>
-                      <div className="bg-white border rounded-lg p-2"><div className="text-gray-400 text-[10px]">수수료</div><div className={`font-bold ${fee < 0 ? "text-red-600" : "text-orange-600"}`}>{fee.toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">수수료</div><div className={`font-bold ${fee < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
                     </div>
                   </div>
                 );
@@ -36709,7 +36709,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   <div key={id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
                       <div className="font-bold text-[#1B2B4B] text-[13px]">{idx + 1}. {r.거래처명 || "-"}</div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">{r.배차상태 || "배차중"}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>{r.배차상태 || "배차중"}</span>
                     </div>
                     <div className="space-y-1 text-gray-700 text-[12px]">
                       <div><span className="font-semibold text-gray-500 w-10 inline-block">상차</span>{r.상차일 || "-"} · {r.상차지명 || "-"}</div>

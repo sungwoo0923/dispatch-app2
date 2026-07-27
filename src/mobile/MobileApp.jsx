@@ -8927,50 +8927,37 @@ const handleAssignClick = () => {
           </div>
         </div>
       </div>
-      {/* 화물/차량 정보 — 아이콘+라벨+값 칩으로 표시해 처음 보는 사람도 무슨 항목인지 알 수 있게 함 */}
+      {/* 화물/차량 정보 — 아이콘 + 값만 흘려서 표시, 배차/지급방식과는 점선으로 구분 */}
       {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
-        <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.5 pb-1.5 border-t border-gray-100 bg-gray-50/60">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-2.5 pb-2 border-t border-gray-100 bg-gray-50/60 text-[11px] font-semibold text-gray-700">
           {(order.차량톤수 || order.톤수) && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
+            <span className="inline-flex items-center gap-1">
               <Scale className="w-3 h-3 text-gray-400 shrink-0" />
-              <span className="text-gray-400 font-normal">톤수</span>
               {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
             </span>
           )}
           {(order.차량종류 || order.차종) && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
+            <span className="inline-flex items-center gap-1">
               <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-3 h-3 text-gray-400 shrink-0" />
-              <span className="text-gray-400 font-normal">차종</span>
               {order.차량종류 || order.차종}
             </span>
           )}
           {order.화물내용 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
+            <span className="inline-flex items-center gap-1">
               <Package className="w-3 h-3 text-gray-400 shrink-0" />
-              <span className="text-gray-400 font-normal">화물</span>
               {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
             </span>
           )}
           {order.혼적여부 && order.혼적여부 !== "독차" && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1">
-              <span className="text-gray-400 font-normal">혼적</span>{order.혼적여부}
-            </span>
+            <span className="text-gray-500">{order.혼적여부}</span>
           )}
         </div>
       )}
-      {/* 배차방식/지급방식 — 화물 정보와 별도 그룹으로 구분 */}
+      {/* 배차방식/지급방식 — 화물 정보와 점선 구분선으로 분리된 별도 그룹 */}
       {(order.배차방식 || order.지급방식) && (
-        <div className={`flex flex-wrap items-center gap-1.5 px-4 pt-1 pb-2.5 bg-gray-50/60`}>
-          {order.배차방식 && (
-            <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>
-              <span className={`font-normal ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-400"}`}>배차방식</span>{order.배차방식}
-            </span>
-          )}
-          {order.지급방식 && (
-            <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded px-2 py-1 ${cardVersionB ? "text-[#1B2B4B] bg-[#1B2B4B]/5 border border-[#1B2B4B]/20" : "text-blue-700 bg-blue-50 border border-blue-200"}`}>
-              <span className={`font-normal ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-400"}`}>지급방식</span>{order.지급방식}
-            </span>
-          )}
+        <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-1.5 pb-2.5 border-t border-dashed bg-gray-50/60 text-[11px] font-bold ${cardVersionB ? "border-[#1B2B4B]/15 text-[#1B2B4B]" : "border-blue-100 text-blue-700"}`}>
+          {order.배차방식 && <span>{order.배차방식}</span>}
+          {order.지급방식 && <span>{order.지급방식}</span>}
         </div>
       )}
     </div>
