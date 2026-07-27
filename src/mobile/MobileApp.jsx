@@ -9,7 +9,7 @@ import PalletSimulator from "../PalletSimulator";
 import southKorea from "@svg-maps/south-korea";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
-import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown } from "lucide-react";
+import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -1010,10 +1010,14 @@ function TransportStatusBadge({ order, className = "", onClick, flat = false, co
     );
   }
 
+  // Tailwind는 클래스가 나중에 적혀도 항상 이기지 않는다(스타일시트 등록 순서로
+  // 우선순위가 정해짐) — 그래서 className으로 px-2/text-[11px]를 덮어쓰려 하면
+  // 옆의 다른 뱃지와 크기/높이가 안 맞는 문제가 있었다. compact 값 자체로
+  // 크기를 분기해서 절대 충돌이 나지 않게 한다.
   return (
     <span
       onClick={clickable ? onClick : undefined}
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide whitespace-nowrap ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${className}`}
+      className={`inline-flex items-center ${compact ? "gap-1 px-1.5 py-0.5 text-[0.68em]" : "gap-1.5 px-2 py-0.5 text-[11px]"} rounded-full font-bold tracking-wide whitespace-nowrap ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${className}`}
       style={{
         background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
         color: text,
@@ -7564,7 +7568,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               </span>
             )}
             <div className="relative inline-block shrink-0">
-              <TransportStatusBadge order={order} className="text-[0.68em] px-1.5 py-0.5" onClick={openReqModal} />
+              <TransportStatusBadge order={order} compact onClick={openReqModal} />
               {isRecentlyEditedByShipper && !isEditRequested && (
                 <span title="화주사가 오더 정보를 수정했습니다"
                   className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
@@ -8116,7 +8120,8 @@ function MobileOrderDetail({
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
   const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
-  const [expandMemo, setExpandMemo] = useState(false);
+  const [showMemoPopup, setShowMemoPopup] = useState(false);
+  const [showNoticePopup, setShowNoticePopup] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [smartMatched, setSmartMatched] = useState([]);
@@ -8771,45 +8776,54 @@ const handleAssignClick = () => {
   {/* ── 통합 카드 ── */}
   <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
 
-    {/* 상단: 거래처 + 수정/삭제 + 메모 */}
+    {/* 상단: 거래처 + 수정/삭제 + 메모/전달사항/수정이력 */}
     <div className="px-4 pt-4 pb-3 border-b border-gray-100">
       <div className="flex items-center justify-between mb-2">
-        <div className="min-w-0">
-          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">거래처명</div>
-          <span className="text-[13px] font-bold text-gray-700 truncate">{order.거래처명 || "-"}</span>
+        <div className="min-w-0 flex items-center gap-2.5">
+          <div className="min-w-0">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">거래처명</div>
+            <span className="text-[13px] font-bold text-gray-700 truncate">{order.거래처명 || "-"}</span>
+          </div>
+          <div className={`flex items-center gap-2 shrink-0 ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>
+            {(order.메모 || order.적요) && (
+              <button onClick={() => setShowMemoPopup(true)}>
+                <StickyNote className="w-[15px] h-[15px]" strokeWidth={2} />
+              </button>
+            )}
+            {order.전달사항?.trim() && (
+              <button onClick={() => setShowNoticePopup(true)}>
+                <MessageSquare className="w-[15px] h-[15px]" strokeWidth={2} />
+              </button>
+            )}
+            {Array.isArray(order.history) && order.history.length > 0 && (
+              <button onClick={() => setShowHistory(true)}>
+                <History className="w-[15px] h-[15px]" strokeWidth={2} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
           <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500">삭제</button>
         </div>
       </div>
-      {(order.메모 || order.적요) && (
-        <div className="bg-gray-50 rounded-xl px-3 py-2 cursor-pointer" onClick={() => setExpandMemo(v => !v)}>
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[11px] font-bold text-gray-500">메모</span>
-            <span className="text-[11px] text-gray-400">{expandMemo ? "접기" : "펼치기"}</span>
-          </div>
-          <div className={`text-[12px] text-gray-700 whitespace-pre-wrap leading-relaxed ${expandMemo ? "" : "line-clamp-2"}`}>
-            {order.메모 || order.적요}
+      {showMemoPopup && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-6" onClick={() => setShowMemoPopup(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[13px] font-bold text-gray-800 mb-2">메모</div>
+            <div className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed max-h-[50vh] overflow-y-auto">{order.메모 || order.적요}</div>
+            <button onClick={() => setShowMemoPopup(false)} className={`mt-4 w-full py-2 rounded-xl text-white text-[13px] font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>닫기</button>
           </div>
         </div>
       )}
-      {order.전달사항?.trim() && (
-        <div className="bg-gray-50 rounded-xl px-3 py-2 mt-2">
-          <div className="text-[11px] font-bold text-gray-500 mb-0.5">전달사항</div>
-          <div className="text-[12px] text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {order.전달사항}
+      {showNoticePopup && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-6" onClick={() => setShowNoticePopup(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[13px] font-bold text-gray-800 mb-2">전달사항</div>
+            <div className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed max-h-[50vh] overflow-y-auto">{order.전달사항}</div>
+            <button onClick={() => setShowNoticePopup(false)} className={`mt-4 w-full py-2 rounded-xl text-white text-[13px] font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>닫기</button>
           </div>
         </div>
-      )}
-      {Array.isArray(order.history) && order.history.length > 0 && (
-        <button
-          onClick={() => setShowHistory(true)}
-          className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 mt-2 text-[12px] font-bold text-gray-500"
-        >
-          <span>수정이력 ({order.history.length})</span>
-          <span className="text-gray-400">보기 &gt;</span>
-        </button>
       )}
       {showHistory && (
         <HistoryViewerModal history={order.history} onClose={() => setShowHistory(false)} />
@@ -8927,37 +8941,43 @@ const handleAssignClick = () => {
           </div>
         </div>
       </div>
-      {/* 화물/차량 정보 — 아이콘 + 값만 흘려서 표시, 배차/지급방식과는 점선으로 구분 */}
+      {/* 화물정보 — 톤수/화물내용/차량종류 */}
       {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-2.5 pb-2 border-t border-gray-100 bg-gray-50/60 text-[11px] font-semibold text-gray-700">
-          {(order.차량톤수 || order.톤수) && (
-            <span className="inline-flex items-center gap-1">
-              <Scale className="w-3 h-3 text-gray-400 shrink-0" />
-              {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
-            </span>
-          )}
-          {(order.차량종류 || order.차종) && (
-            <span className="inline-flex items-center gap-1">
-              <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-3 h-3 text-gray-400 shrink-0" />
-              {order.차량종류 || order.차종}
-            </span>
-          )}
-          {order.화물내용 && (
-            <span className="inline-flex items-center gap-1">
-              <Package className="w-3 h-3 text-gray-400 shrink-0" />
-              {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
-            </span>
-          )}
-          {order.혼적여부 && order.혼적여부 !== "독차" && (
-            <span className="text-gray-500">{order.혼적여부}</span>
-          )}
+        <div className="px-4 pt-2.5 pb-2 border-t border-gray-100 bg-gray-50/60">
+          <div className="text-[10px] font-bold text-gray-400 mb-1">화물정보</div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-gray-700">
+            {(order.차량톤수 || order.톤수) && (
+              <span className="inline-flex items-center gap-1">
+                <Scale className="w-3 h-3 text-gray-400 shrink-0" />
+                {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
+              </span>
+            )}
+            {order.화물내용 && (
+              <span className="inline-flex items-center gap-1">
+                <Package className="w-3 h-3 text-gray-400 shrink-0" />
+                {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
+              </span>
+            )}
+            {(order.차량종류 || order.차종) && (
+              <span className="inline-flex items-center gap-1">
+                <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-3 h-3 text-gray-400 shrink-0" />
+                {order.차량종류 || order.차종}
+              </span>
+            )}
+            {order.혼적여부 && order.혼적여부 !== "독차" && (
+              <span className="text-gray-500">{order.혼적여부}</span>
+            )}
+          </div>
         </div>
       )}
-      {/* 배차방식/지급방식 — 화물 정보와 점선 구분선으로 분리된 별도 그룹 */}
+      {/* 배차/지급방식 — 화물정보와 구분되는 별도 그룹 */}
       {(order.배차방식 || order.지급방식) && (
-        <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-1.5 pb-2.5 border-t border-dashed bg-gray-50/60 text-[11px] font-bold ${cardVersionB ? "border-[#1B2B4B]/15 text-[#1B2B4B]" : "border-blue-100 text-blue-700"}`}>
-          {order.배차방식 && <span>{order.배차방식}</span>}
-          {order.지급방식 && <span>{order.지급방식}</span>}
+        <div className={`px-4 pt-2 pb-2.5 border-t bg-gray-50/60 ${cardVersionB ? "border-[#1B2B4B]/10" : "border-blue-100"}`}>
+          <div className={`text-[10px] font-bold mb-1 ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-300"}`}>배차/지급방식</div>
+          <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+            {order.지급방식 && <span>{order.지급방식}</span>}
+            {order.배차방식 && <span>{order.배차방식}</span>}
+          </div>
         </div>
       )}
     </div>
