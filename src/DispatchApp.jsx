@@ -6961,6 +6961,13 @@ function checkDuplicateDispatch(form, dispatchData) {
         showAlert(`⛔ 날짜가 입력되지 않았습니다.\n[ ${miss.join(", ")} ] 은(는) 반드시 입력해야 합니다.`);
         return false;
       }
+
+      // 하차일이 상차일보다 앞설 수 없다 (예: 상차 7/27, 하차 7/21처럼 거꾸로 입력된 경우)
+      if (f.하차일 < f.상차일) {
+        showAlert(`⛔ 하차일(${f.하차일})이 상차일(${f.상차일})보다 앞설 수 없습니다.\n날짜를 다시 확인해주세요.`);
+        return false;
+      }
+
       return true;
     };
 
@@ -25469,6 +25476,11 @@ const handleSearch = () => {
     return;
   }
 
+  if (startDate > endDate) {
+    showAlert("⚠️ 조회 시작일이 종료일보다 늦을 수 없습니다.\n날짜를 다시 확인해주세요.");
+    return;
+  }
+
   if (role !== "totalMaster") {
     const diff = getMonthDiff(startDate, endDate);
     if (diff > 2) {
@@ -27607,7 +27619,24 @@ return (
           다음 ▶
         </button>
 
-{/* 검색창 (통합) */}
+{/* 날짜 — 시작일/종료일을 다 고른 뒤 "조회"를 눌러야 실제로 필터가 적용된다.
+            (예전에는 날짜를 하나만 골라도 바로 필터링되어, 시작일만 고르고 종료일을
+            고르는 중에도 목록이 계속 바뀌어 보였다.) */}
+        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
+        <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
+        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
+        <button
+          onClick={handleSearch}
+          className={`h-[26px] px-3 rounded-lg text-white text-[11px] font-bold whitespace-nowrap flex-shrink-0 transition ${
+            startDate && endDate && (startDate !== appliedStartDate || endDate !== appliedEndDate)
+              ? "bg-[#1B2B4B] animate-pulse"
+              : "bg-[#1B2B4B] hover:bg-[#243a60]"
+          }`}
+        >
+          조회
+        </button>
+
+        {/* 검색창 (통합) */}
         <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
           <select className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
             value={searchType} onChange={(e)=>{setSearchType(e.target.value);setQ("");setQInput("");setPage(0);}}>
@@ -27625,11 +27654,6 @@ return (
             onKeyDown={(e)=>{ if(e.key==="Enter"){ setQ(qInput); setPage(0); } }} />
           <button onClick={()=>{ setQ(qInput); setPage(0); }} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition">조회</button>
         </div>
-
-        {/* 날짜 */}
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>{const v=e.target.value;setStartDate(v);setAppliedStartDate(v);if(endDate)localStorage.setItem("dispatchDateState",JSON.stringify({startDate:v,endDate,appliedStartDate:v,appliedEndDate:endDate}));}} />
-        <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>{const v=e.target.value;setEndDate(v);setAppliedEndDate(v);if(startDate)localStorage.setItem("dispatchDateState",JSON.stringify({startDate,endDate:v,appliedStartDate:startDate,appliedEndDate:v}));}} />
 
         {/* 날짜 버튼들 */}
         <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
