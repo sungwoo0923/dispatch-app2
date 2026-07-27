@@ -11112,7 +11112,7 @@ const pickDrop = (c) => {
   {/* 🔵 상차지 */}
   <RowLabelInput
     label="상차지"
-    labelClassName={cardVersionB ? "!bg-[#1B2B4B] !text-white font-bold justify-center text-center" : ""}
+    labelClassName="font-bold justify-center text-center"
     input={
       <div className="space-y-1">
 
@@ -11250,7 +11250,7 @@ const pickDrop = (c) => {
   {/* 하차지 */}
   <RowLabelInput
     label="하차지"
-    labelClassName={cardVersionB ? "!bg-[#1B2B4B] !text-white font-bold justify-center text-center" : ""}
+    labelClassName="font-bold justify-center text-center"
     input={
       <div className="space-y-1">
 
@@ -11423,19 +11423,22 @@ const pickDrop = (c) => {
                   update("톤수", 톤수타입 ? `${v}${톤수타입}` : v);
                 }}
               />
-              <select
-                className={`w-[62px] shrink-0 border-0 border-l px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
-                value={톤수타입}
-                onChange={(e) => {
-                  const t = e.target.value;
-                  set톤수타입(t);
-                  update("톤수", t ? `${톤수값}${t}` : 톤수값);
-                }}
-              >
-                <option value="">없음</option>
-                <option value="톤">톤</option>
-                <option value="kg">kg</option>
-              </select>
+              <div className="relative shrink-0">
+                <select
+                  className={`appearance-none w-[62px] border-0 border-l px-1 pr-4 py-1.5 text-[12px] font-bold text-white outline-none rounded-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
+                  value={톤수타입}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    set톤수타입(t);
+                    update("톤수", t ? `${톤수값}${t}` : 톤수값);
+                  }}
+                >
+                  <option value="">없음</option>
+                  <option value="톤">톤</option>
+                  <option value="kg">kg</option>
+                </select>
+                <IconChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
+              </div>
             </div>
           }
         />
@@ -11460,21 +11463,24 @@ const pickDrop = (c) => {
                     update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
                   }}
                 />
-                <select
-                  className={`w-[76px] shrink-0 border-0 border-l px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
-                  value={화물타입}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    set화물타입(t);
-                    update("화물내용", t ? `${화물수량}${t}` : 화물수량);
-                  }}
-                >
-                  <option value="">없음</option>
-                  <option value="파레트">파레트</option>
-                  <option value="박스">박스</option>
-                  <option value="통">통</option>
-                  <option value="롤">롤</option>
-                </select>
+                <div className="relative shrink-0">
+                  <select
+                    className={`appearance-none w-[76px] border-0 border-l px-1 pr-4 py-1.5 text-[12px] font-bold text-white outline-none rounded-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
+                    value={화물타입}
+                    onChange={(e) => {
+                      const t = e.target.value;
+                      set화물타입(t);
+                      update("화물내용", t ? `${화물수량}${t}` : 화물수량);
+                    }}
+                  >
+                    <option value="">없음</option>
+                    <option value="파레트">파레트</option>
+                    <option value="박스">박스</option>
+                    <option value="통">통</option>
+                    <option value="롤">롤</option>
+                  </select>
+                  <IconChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
+                </div>
               </div>
             </div>
           }
@@ -11494,14 +11500,17 @@ const pickDrop = (c) => {
                     value={mCargoAddQty}
                     onChange={e => setMCargoAddQty(mCargoAddType ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)}
                     autoFocus />
-                  <select className={`w-[82px] border-0 rounded-lg px-2 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
-                    value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
-                    <option value="">없음</option>
-                    <option value="파레트">파레트</option>
-                    <option value="박스">박스</option>
-                    <option value="통">통</option>
-                    <option value="롤">롤</option>
-                  </select>
+                  <div className="relative w-[82px] shrink-0">
+                    <select className={`appearance-none w-full border-0 rounded-lg px-2 pr-5 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
+                      value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
+                      <option value="">없음</option>
+                      <option value="파레트">파레트</option>
+                      <option value="박스">박스</option>
+                      <option value="통">통</option>
+                      <option value="롤">롤</option>
+                    </select>
+                    <IconChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
