@@ -1142,8 +1142,12 @@ function CancelOrSwapRequestModal({ type, order, onApprove, onReject, onClose })
 }
 
 // 수정이력 뷰어 (PC DispatchApp.jsx와 동일한 history 배열 포맷을 사용)
+// 경유지 필드는 값이 배열/객체라 "[object Object]" 형태로 이력에 남고, 두 필드명을
+// 서로 동기화하는 내부 로직 때문에 실제 변경이 없어도 이력이 남는 경우가 있어
+// (과거에 이미 이렇게 저장된 오더도 있으므로) 화면에 표시할 때도 걸러낸다.
+const HISTORY_HIDDEN_FIELDS = new Set(["경유상차목록", "경유하차목록", "경유지_상차", "경유지_하차", "경유지상차", "경유지하차"]);
 function HistoryViewerModal({ history = [], onClose }) {
-  const items = [...history].filter(h => h && h.field).reverse();
+  const items = [...history].filter(h => h && h.field && !HISTORY_HIDDEN_FIELDS.has(h.field)).reverse();
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
@@ -10220,6 +10224,9 @@ function MobileOrderForm({
   // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
   // 하차지명이 거래처 드롭다운에 함께 뜬다.
   const basicClientsOnly = basicClients || clients;
+    // 입력 카드들이 흐릿한 기본 회색 테두리라 카드 느낌이 안 나던 것을,
+    // 스타일에 맞는 색(A=블루/B=네이비) 테두리로 통일한다.
+    const cardBorderCls = cardVersionB ? "border-[#1B2B4B]/25" : "border-blue-200";
     const isLockedShipperEdit = !!form._editId &&
       (form.source === "shipper" || form.source === "shipper_mobile");
     const handleSwapPickupDrop = () => {
@@ -10920,7 +10927,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 총운임 / 기사운임 */}
-      <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
+      <div className={`grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm ${cardBorderCls}`}>
         <div className="border-r px-3 py-2">
           <div className="text-xs text-gray-500 mb-1">
             총운임(청구운임)
@@ -10941,7 +10948,7 @@ const pickDrop = (c) => {
 
       <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
       {/* 상차/하차 일시 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
   label="상차일시"
   input={
@@ -11029,7 +11036,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 거래처명 */}
-<div className="bg-white rounded-lg border shadow-sm px-3 py-2">
+<div className={`bg-white rounded-lg border shadow-sm px-3 py-2 ${cardBorderCls}`}>
   <div className="text-[11px] text-gray-500 mb-1">거래처명</div>
   <div className="flex gap-2">
     <div className="relative flex-1 min-w-0">
@@ -11103,7 +11110,7 @@ const pickDrop = (c) => {
 
 
       {/* 상차/하차 + 주소 + 자동완성 */}
-<div className="bg-white rounded-lg border shadow-sm p-3 space-y-3">
+<div className={`bg-white rounded-lg border shadow-sm p-3 space-y-3 ${cardBorderCls}`}>
 
   {/* 🔵 상차지 */}
   <RowLabelInput
@@ -11374,7 +11381,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 차량종류 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="차량종류"
           input={
@@ -11418,7 +11425,7 @@ const pickDrop = (c) => {
                 }}
               />
               <select
-                className="w-[62px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+                className={`w-[62px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                 value={톤수타입}
                 onChange={(e) => {
                   const t = e.target.value;
@@ -11436,7 +11443,7 @@ const pickDrop = (c) => {
         {/* 화물내용 */}
         <RowLabelInput
           label="화물내용"
-          right={<button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white" onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>}
+          right={<button type="button" className={`px-1.5 py-0.5 text-[10px] font-bold rounded text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`} onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>}
           input={
             <div className="flex items-center gap-2">
               <input
@@ -11452,7 +11459,7 @@ const pickDrop = (c) => {
                 }}
               />
               <select
-                className="w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+                className={`w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                 value={화물타입}
                 onChange={(e) => {
                   const t = e.target.value;
@@ -11484,7 +11491,7 @@ const pickDrop = (c) => {
                     value={mCargoAddQty}
                     onChange={e => setMCargoAddQty(mCargoAddType ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)}
                     autoFocus />
-                  <select className="w-[82px] border-0 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
+                  <select className={`w-[82px] border-0 rounded-lg px-2 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                     value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
                     <option value="">없음</option>
                     <option value="파레트">파레트</option>
@@ -11496,7 +11503,7 @@ const pickDrop = (c) => {
                 <div className="flex gap-2">
                   <button className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
                     onClick={() => setMCargoAddPopup(false)}>취소</button>
-                  <button className="flex-1 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold"
+                  <button className={`flex-1 py-2 rounded-xl text-white text-[13px] font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                     onClick={() => {
                       const item = mCargoAddType ? `${mCargoAddQty}${mCargoAddType}` : mCargoAddQty;
                       if (item.trim()) {
@@ -11513,7 +11520,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 상/하차방법 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="상/하차방법"
           input={
@@ -11551,7 +11558,7 @@ const pickDrop = (c) => {
 
       {/* 지급/배차방식 + 혼적/독차 */}
       {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="지급/배차방식"
           input={
@@ -11622,7 +11629,7 @@ const pickDrop = (c) => {
         <button
           type="button"
           onClick={() => setShowFareHistory(true)}
-          className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-[#1B2B4B] text-white shadow-sm active:opacity-80"
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-white shadow-sm active:opacity-80 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
         >
           <div className="flex items-center gap-2.5">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -11660,7 +11667,7 @@ const pickDrop = (c) => {
       </fieldset>
 
       {/* 금액 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="청구운임"
           input={
@@ -11700,7 +11707,7 @@ const pickDrop = (c) => {
       </div>
 
 {/* 기사 스마트검색 */}
-      <div className="bg-white rounded-lg border shadow-sm p-3">
+      <div className={`bg-white rounded-lg border shadow-sm p-3 ${cardBorderCls}`}>
         <div className="text-[11px] text-gray-500 font-semibold mb-1.5">기사 검색 (차량번호/이름/번호 입력)</div>
         <div className="relative">
           <SmartTextarea textareaRef={formSmartRef} onSearch={handleFormSmartSearch} />
@@ -11740,7 +11747,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 차량번호 / 기사명 / 연락처 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="차량번호"
           input={
@@ -11781,7 +11788,7 @@ const pickDrop = (c) => {
         />
       </div>
 
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="기사명"
           input={
@@ -11794,7 +11801,7 @@ const pickDrop = (c) => {
         />
       </div>
 
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="연락처"
           input={
@@ -11826,7 +11833,7 @@ const pickDrop = (c) => {
       )}
 
       {/* 적요 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="적요"
           input={
@@ -11841,7 +11848,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* 전달사항 */}
-      <div className="bg-white rounded-lg border shadow-sm">
+      <div className={`bg-white rounded-lg border shadow-sm ${cardBorderCls}`}>
         <RowLabelInput
           label="전달사항"
           right={
@@ -11864,7 +11871,7 @@ const pickDrop = (c) => {
 
       {/* PC 배차관리와 동일한 여러 건 등록 + 날짜 개별 지정 (신규 등록 시에만) */}
       {!form._editId && (
-        <div className="bg-white rounded-lg border shadow-sm p-3 space-y-2">
+        <div className={`bg-white rounded-lg border shadow-sm p-3 space-y-2 ${cardBorderCls}`}>
           <div className="flex items-center justify-between">
             <span className="text-[12px] font-bold text-gray-600">등록 수량</span>
             <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1 border border-gray-200">
