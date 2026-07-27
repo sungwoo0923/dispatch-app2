@@ -15095,6 +15095,440 @@ function StickyHScrollbar({ targetRef }) {
   );
 }
 
+// 실시간배차현황 표의 행(1건) — React.memo로 감싸, 이 오더와 관련 없는 다른 오더가
+// 바뀌어도(배차완료/저장 등) 이 행은 다시 렌더링되지 않도록 한다. 배차 건수가 많을 때
+// 오더 하나만 바뀌어도 표 전체(수십~수백 행)가 매번 다시 그려지며 생기던 렉의 원인이었다.
+// 비교 함수(realtimeRowPropsEqual)에 없는 prop(콜백 함수들)은 매 렌더마다 새로 만들어지지만,
+// 그 값 자체가 outer state(예: r._id 자체, edited 등)에 의존하지 않는 "그 행 전용" 클로저라
+// 이 행이 실제로 다시 렌더링될 때 항상 최신 값으로 갱신되므로 안전하다.
+function RealtimeRowBase({
+  r, idx,
+  isSelected, isFading, isHighlighted, isDark, selectedEditMode,
+  editedForRow,
+  toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, formatKstDateTime, getCreatorLabel,
+  editableInput, renderAddrCell, canEdit, handleEditChange,
+  dispatchData, placeRows, timeOptions, patchDispatch,
+  setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
+  driverConfirmOpen, memoAlert, blackAlert,
+  setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
+  flashRow, setAttachViewer, setLiveLocViewer, setDeliveryConfirm,
+}) {
+  const sale = toInt(editedForRow?.청구운임 ?? r.청구운임);
+  const drv = toInt(editedForRow?.기사운임 ?? r.기사운임);
+  const fee = sale - drv;
+
+  const cell = isDark
+    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
+    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
+
+  const addrCell = isDark
+    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[160px]"
+    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[160px]";
+
+  return (
+  <tr
+    key={r._id || r.id || `idx-${idx}`}
+    id={`row-${r._id}`}
+    onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenu({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
+
+onDoubleClick={(e) => {
+  if (e.target.closest("input")) return;
+
+  const latest = dispatchData.find(d => d._id === r._id);
+
+  const rawCargo = String(latest?.화물내용 || "");
+
+  // ✅ suffix 기반 분리만 수행 (base만 파싱)
+  const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
+  let cargoQty = "", cargoType = "";
+  const rawCargoBase = rawCargo.split("+")[0];
+  for (const s of KNOWN_SUFFIXES) {
+    if (rawCargoBase.endsWith(s)) {
+      cargoQty = rawCargoBase.slice(0, -s.length).trim();
+      cargoType = s;
+      break;
+    }
+  }
+  // ✅ suffix 매칭 안 되면 → base를 화물수량에 보존
+  if (!cargoType) {
+    cargoQty = rawCargoBase;
+    cargoType = "";
+  }
+
+  const rawTon = String(latest?.차량톤수 || "");
+  const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+
+  setCopyTarget({
+    ...latest,
+    화물내용: rawCargo,     // ✅ 원본 보존
+    화물수량: cargoQty,     // ✅ "케이스" → "케이스" (기존: "")
+    화물타입: cargoType,    // ✅ ""
+    톤수값: tonMatch ? tonMatch[1] : "",
+    톤수타입: tonMatch ? tonMatch[2] : "",
+  });
+
+  setCopyPanelOpen(true);
+}}
+
+
+    className={`
+cursor-pointer transition-[background-color,border-color,opacity] duration-300
+${isFading ? "opacity-0" : "opacity-100"}
+${
+  r.긴급 === true &&
+  r.배차상태 === "배차중" &&
+  (!r.차량번호 || String(r.차량번호).trim() === "")
+    ? isDark
+      ? "bg-red-900/30 border-l-2 border-l-red-500 hover:bg-red-900/50"
+      : "bg-red-50 border-l-2 border-l-red-400 hover:bg-red-100"
+    : isSelected
+    ? isDark ? "bg-blue-900/40" : "bg-blue-50"
+    : idx % 2
+    ? isDark ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-50 hover:bg-blue-50/60"
+    : isDark ? "bg-gray-900 hover:bg-gray-700" : "bg-white hover:bg-blue-50/60"
+}
+${isHighlighted ? "animate-pulse bg-blue-100" : ""}
+`}
+    style={String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}}
+  >
+
+                  <td className={cell}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(r._id)}
+                    />
+                  </td>
+
+                  <td className={cell}>{idx + 1}</td>
+  <td className={`${cell} overflow-visible`}>
+  <div className="relative inline-block group">
+    <span className="underline decoration-dotted underline-offset-2 cursor-default">
+      {displayRegDate(r) || "-"}
+    </span>
+
+    <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
+      <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
+        <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
+        <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
+        <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
+      </div>
+    </div>
+  </div>
+</td>
+
+                  <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
+                  <td className={cell}>
+  {r.상차시간
+    ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분)
+    : "즉시"}
+</td>
+
+                  <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
+                 <td className={cell}>
+  {r.하차시간
+    ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분)
+    : "즉시"}
+</td>
+
+                  <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
+                  <td className={cell}>
+  <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
+    <span>{r.상차지명}</span>
+    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+
+{r.__pickupStops?.length > 0 && (
+  <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
+    placeRows={placeRows} timeOptions={timeOptions}
+    onEdit={newList => patchDispatch(r._id, { 경유상차목록: newList, 경유지_상차: newList, 경유지상차: newList })}
+  />
+)}
+
+  </div>
+</td>
+
+                  <td className={addrCell}>
+                    {renderAddrCell("상차지주소", r.상차지주소, r._id)}
+                  </td>
+
+                                  <td className={cell}>
+  <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
+    <span>{r.하차지명}</span>
+
+{r.__dropStops?.length > 0 && (
+  <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
+    placeRows={placeRows} timeOptions={timeOptions}
+    onEdit={newList => patchDispatch(r._id, { 경유하차목록: newList, 경유지_하차: newList, 경유지하차: newList })}
+  />
+)}
+
+  </div>
+</td>
+
+                  <td className={addrCell}>
+                    {renderAddrCell("하차지주소", r.하차지주소, r._id)}
+                  </td>
+
+                  <td className={cell}>{canEdit("화물내용", r._id) ? editableInput("화물내용", r.화물내용, r._id) : (mergeViaCargoText(r.화물내용, [r.__pickupStops, r.__dropStops]) || r.화물내용 || "")}</td>
+                  <td className={cell}>
+                    {editableInput(
+                      "차량종류",
+                      editedForRow?.차량종류 ?? r.차량종류,
+                      r._id
+                    )}
+                  </td>
+                  <td className={cell}>{canEdit("차량톤수", r._id) ? editableInput("차량톤수", r.차량톤수, r._id) : (mergeViaTonnage(r.차량톤수, [r.__pickupStops, r.__dropStops]) || r.차량톤수 || "")}</td>
+                  <td className={`${cell} text-center`}>
+                    {r.혼적 ? "Y" : ""}
+                  </td>
+
+
+                  {/* 차량번호 */}
+                  <td className={cell}>
+                    <input
+                      name="차량번호"
+                      data-id={r._id}
+                      type="text"
+                      value={r.차량번호 || ""}
+                      className="border p-0.5 rounded w-[120px] min-w-[100px] text-[14px] font-medium"
+                      onChange={(e) => {
+  const v = e.target.value;
+  const isEmpty = v.trim() === "";
+  setRows(prev =>
+    prev.map(row =>
+      row._id === r._id
+        ? {
+          ...row,
+          차량번호: v,
+          이름: isEmpty ? "" : row.이름,
+          전화번호: isEmpty ? "" : row.전화번호,
+          배차상태: isEmpty ? "배차중" : row.배차상태,
+        }
+        : row
+    )
+  );
+}}
+                      onFocus={(e) => { e.currentTarget.dataset.origVal = e.currentTarget.value; }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleCarInput(r._id, e.currentTarget.value, e);
+                      }}
+                      onBlur={(e) => {
+                        // 팝업 열려있으면 blur로 재트리거 방지
+                        if (driverConfirmOpen || memoAlert || blackAlert) return;
+                        // 값이 변경되지 않았으면 스킵
+                        if (e.currentTarget.value === (e.currentTarget.dataset.origVal ?? "")) return;
+                        handleCarInput(r._id, e.currentTarget.value);
+                      }}
+                    />
+
+
+                  </td>
+
+                  <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden text-ellipsis`}>
+                    {r.이름}
+                  </td>
+
+                  <td className={cell}>{formatPhone(r.전화번호)}</td>
+
+                 <td className={cell}>
+                  <div className="relative inline-block">
+                    {r.화주사확인대기 ? (
+                      <button
+                        type="button"
+                        title="클릭 시 배차중으로 전환"
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
+                        style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // rows는 dispatchData 변경 → useEffect → startTransition 을 거쳐야 반영되는
+                          // 별도 로컬 상태라, patchDispatch의 낙관적 업데이트만으로는 뱃지가 즉시
+                          // 바뀌지 않고 그 체인이 다 끝날 때까지 지연되어 보였다 — 여기서 직접
+                          // rows를 갱신해 클릭 즉시 배지가 바뀌도록 한다.
+                          setRows(prev => prev.map(x => x._id === r._id ? { ...x, 화주사확인대기: false, 배차중전환일시: Date.now() } : x));
+                          patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
+                        }}
+                      >
+                        {isRecentShipperEdit(r) ? "수정" : "배차요청"}
+                      </button>
+                    ) : r.취소요청 && r.배차상태 !== "배차취소" ? (
+                      <button
+                        type="button"
+                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
+                        style={{
+                          background: "linear-gradient(135deg,#f87171,#b91c1c)",
+                          boxShadow: "0 2px 5px rgba(185,28,28,0.5), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 3px rgba(0,0,0,0.25)",
+                          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+                        }}
+                        onClick={(e) => { e.stopPropagation(); setCancelReqPopup(r); }}
+                      >
+                        취소요청
+                      </button>
+                    ) : (r.수정요청 || isRecentShipperEdit(r)) ? (
+                      <button
+                        type="button"
+                        title={r.수정요청 ? "화주사가 수정을 요청했습니다 — 클릭하여 승인/거절" : "화주사가 오더를 직접 수정했습니다 — 클릭하여 확인"}
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
+                        style={{
+                          background: "linear-gradient(135deg,#3b5998,#0f2151)",
+                          boxShadow: "0 2px 5px rgba(15,33,81,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.3)",
+                          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
+                        }}
+                        onClick={(e) => { e.stopPropagation(); if (r.수정요청) markEditRequestSeen(r); setEditReqPopup(r); }}
+                      >
+                        수정
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
+                        className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
+                          r.긴급 && r.배차상태 !== "배차완료"
+                            ? "bg-red-500 text-white"
+                            : r.배차상태 === "배차완료"
+                            ? "bg-[#1B2B4B] text-white"
+                            : r.배차상태 === "배차취소"
+                            ? "bg-red-600 text-white"
+                            : "bg-amber-500 text-white"
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (r.배차상태 === "배차완료") {
+                            setConfirmChange({ rowId: r._id, key: "배차상태", before: "배차완료", after: "배차중" });
+                            return;
+                          }
+                          // 화주사 오더가 배차중인 경우 — 승인 전(화주사확인대기)이 아니라면
+                          // (예: 승인 후 기사취소로 배차중이 된 경우) 배차요청으로 되돌릴 수 없다.
+                        }}
+                      >
+                        {r.배차상태}
+                      </button>
+                    )}
+                  </div>
+                  </td>
+                  {/* 청구운임 */}
+                  <td className={cell}>
+                    {canEdit("청구운임", r._id) ? (
+                      <input
+                        type="text"
+                        className="border p-1 rounded w-full"
+                        defaultValue={r.청구운임 || ""}
+                        onChange={(e) =>
+                          handleEditChange(r._id, "청구운임", e.target.value)
+                        }
+                      />
+                    ) : (
+                      formatComma(r.청구운임)
+                    )}
+                  </td>
+
+                  {/* 기사운임 */}
+                  <td className={cell}>
+                    {canEdit("기사운임", r._id) ? (
+                      <input
+                        type="text"
+                        className="border p-1 rounded w-full"
+                        defaultValue={r.기사운임 || ""}
+                        onChange={(e) =>
+                          handleEditChange(r._id, "기사운임", e.target.value)
+                        }
+                      />
+                    ) : (
+                      formatComma(r.기사운임)
+                    )}
+                  </td>
+
+                  {/* 수수료 */}
+                  <td className={`${cell} text-right pr-2`}>
+                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
+                      {formatComma(fee)}
+                    </span>
+                  </td>
+
+                  <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
+                  <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("배차방식", r.배차방식, r._id)}</td>
+                  <td className={cell}>
+                    {canEdit("메모", r._id)
+                      ? editableInput("메모", r.메모, r._id)
+                      : <MemoIconCell text={r.메모} urgency={r.메모중요도} />}
+                  </td>
+
+                  {/* 전달사항 */}
+                  <td className={cell}>
+                    <NoteIconCell
+                      value={editedForRow?.전달사항 ?? r.전달사항 ?? ""}
+                      onSave={(val) => {
+                        const patch = { 전달사항: val, updatedAt: Date.now() };
+                        patchDispatch(r._id, patch).catch(console.error);
+                        setRows(prev => prev.map(x => x._id === r._id ? { ...x, ...patch } : x));
+                        flashRow(r._id);
+                      }}
+                    />
+                  </td>
+                  {/* 첨부 */}
+                  <td className={cell}>
+                    <button
+                      onClick={() => { setAttachViewer(r); if (!r.attachViewed) { setRows(prev => prev.map(x => x._id === r._id ? { ...x, attachViewed: true } : x)); } updateDoc(doc(db, r.__col || "orders", r._id), { attachViewed: true }).catch(() => {}); }}
+                      className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                      title="첨부파일 보기"
+                    >
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke={r.attachViewed ? "#1B2B4B" : (r.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                      {(r.attachCount || 0) > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                          {r.attachCount}
+                        </span>
+                      )}
+                    </button>
+                    {r.차량번호 && (
+                      <button
+                        onClick={() => setLiveLocViewer(r)}
+                        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                        title="실시간 위치 보기"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                          stroke={r.위치공유중 ? "#10b981" : "#cbd5e1"}
+                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                          <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                      </button>
+                    )}
+                  </td>
+                  {/* 전달상태 */}
+                  <td className={cell}>
+                    <DeliveryStatusBadge
+                      row={r}
+                      onConfirm={setDeliveryConfirm}
+                    />
+                  </td>
+
+  </tr>
+  );
+}
+
+function realtimeRowPropsEqual(prev, next) {
+  return (
+    prev.r === next.r &&
+    prev.idx === next.idx &&
+    prev.isSelected === next.isSelected &&
+    prev.isFading === next.isFading &&
+    prev.isHighlighted === next.isHighlighted &&
+    prev.isDark === next.isDark &&
+    prev.selectedEditMode === next.selectedEditMode &&
+    prev.editedForRow === next.editedForRow &&
+    prev.driverConfirmOpen === next.driverConfirmOpen &&
+    prev.memoAlert === next.memoAlert &&
+    prev.blackAlert === next.blackAlert
+  );
+}
+
+const RealtimeRow = React.memo(RealtimeRowBase, realtimeRowPropsEqual);
+
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -19109,396 +19543,51 @@ const head = isDark
                 </td>
               </tr>
             )}
-            {filtered.map((r, idx) => {
-              const sale = toInt(edited[r._id]?.청구운임 ?? r.청구운임);
-              const drv = toInt(edited[r._id]?.기사운임 ?? r.기사운임);
-              const fee = sale - drv;
-
-              return (
-  <tr
-    key={r._id || r.id || `idx-${idx}`}
-    id={`row-${r._id}`}
-    onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenu({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
-
-onDoubleClick={(e) => {
-  if (e.target.closest("input")) return;
-
-  const latest = dispatchData.find(d => d._id === r._id);
-
-  const rawCargo = String(latest?.화물내용 || "");
-
-  // ✅ suffix 기반 분리만 수행 (base만 파싱)
-  const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
-  let cargoQty = "", cargoType = "";
-  const rawCargoBase = rawCargo.split("+")[0];
-  for (const s of KNOWN_SUFFIXES) {
-    if (rawCargoBase.endsWith(s)) {
-      cargoQty = rawCargoBase.slice(0, -s.length).trim();
-      cargoType = s;
-      break;
-    }
-  }
-  // ✅ suffix 매칭 안 되면 → base를 화물수량에 보존
-  if (!cargoType) {
-    cargoQty = rawCargoBase;
-    cargoType = "";
-  }
-
-  const rawTon = String(latest?.차량톤수 || "");
-  const tonMatch = rawTon.match(/([\d.]+)(.*)/);
-
-  setCopyTarget({
-    ...latest,
-    화물내용: rawCargo,     // ✅ 원본 보존
-    화물수량: cargoQty,     // ✅ "케이스" → "케이스" (기존: "")
-    화물타입: cargoType,    // ✅ ""
-    톤수값: tonMatch ? tonMatch[1] : "",
-    톤수타입: tonMatch ? tonMatch[2] : "",
-  });
-
-  setCopyPanelOpen(true);
-}}
-
-
-    className={`
-cursor-pointer transition-[background-color,border-color,opacity] duration-300
-${fadingIds.has(r._id) ? "opacity-0" : "opacity-100"}
-${
-  r.긴급 === true &&
-  r.배차상태 === "배차중" &&
-  (!r.차량번호 || String(r.차량번호).trim() === "")
-    ? isDark
-      ? "bg-red-900/30 border-l-2 border-l-red-500 hover:bg-red-900/50"
-      : "bg-red-50 border-l-2 border-l-red-400 hover:bg-red-100"
-    : selected.includes(r._id)
-    ? isDark ? "bg-blue-900/40" : "bg-blue-50"
-    : idx % 2
-    ? isDark ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-50 hover:bg-blue-50/60"
-    : isDark ? "bg-gray-900 hover:bg-gray-700" : "bg-white hover:bg-blue-50/60"
-}
-${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
-`}
-    style={String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}}
-  >
-
-                  <td className={cell}>
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(r._id)}
-                      onChange={() => toggleSelect(r._id)}
-                    />
-                  </td>
-
-                  <td className={cell}>{idx + 1}</td>
-  <td className={`${cell} overflow-visible`}>
-  <div className="relative inline-block group">
-    <span className="underline decoration-dotted underline-offset-2 cursor-default">
-      {displayRegDate(r) || "-"}
-    </span>
-
-    <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
-      <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
-        <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
-        <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
-        <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
-      </div>
-    </div>
-  </div>
-</td>
-
-                  <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
-                  <td className={cell}>
-  {r.상차시간
-    ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분)
-    : "즉시"}
-</td>
-
-                  <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
-                 <td className={cell}>
-  {r.하차시간
-    ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분)
-    : "즉시"}
-</td>
-
-                  <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
-                  <td className={cell}>
-  <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
-    <span>{r.상차지명}</span>
-    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
-
-{r.__pickupStops?.length > 0 && (
-  <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
-    placeRows={placeRows} timeOptions={timeOptions}
-    onEdit={newList => patchDispatch(r._id, { 경유상차목록: newList, 경유지_상차: newList, 경유지상차: newList })}
-  />
-)}
-
-  </div>
-</td>
-
-                  <td className={addrCell}>
-                    {renderAddrCell("상차지주소", r.상차지주소, r._id)}
-                  </td>
-
-                                  <td className={cell}>
-  <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
-    <span>{r.하차지명}</span>
-
-{r.__dropStops?.length > 0 && (
-  <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
-    placeRows={placeRows} timeOptions={timeOptions}
-    onEdit={newList => patchDispatch(r._id, { 경유하차목록: newList, 경유지_하차: newList, 경유지하차: newList })}
-  />
-)}
-
-  </div>
-</td>
-
-                  <td className={addrCell}>
-                    {renderAddrCell("하차지주소", r.하차지주소, r._id)}
-                  </td>
-
-                  <td className={cell}>{canEdit("화물내용", r._id) ? editableInput("화물내용", r.화물내용, r._id) : (mergeViaCargoText(r.화물내용, [r.__pickupStops, r.__dropStops]) || r.화물내용 || "")}</td>
-                  <td className={cell}>
-                    {editableInput(
-                      "차량종류",
-                      edited[r._id]?.차량종류 ?? r.차량종류,
-                      r._id
-                    )}
-                  </td>
-                  <td className={cell}>{canEdit("차량톤수", r._id) ? editableInput("차량톤수", r.차량톤수, r._id) : (mergeViaTonnage(r.차량톤수, [r.__pickupStops, r.__dropStops]) || r.차량톤수 || "")}</td>
-                  <td className={`${cell} text-center`}>
-                    {r.혼적 ? "Y" : ""}
-                  </td>
-
-
-                  {/* 차량번호 */}
-                  <td className={cell}>
-                    <input
-                      name="차량번호"
-                      data-id={r._id}
-                      type="text"
-                      value={r.차량번호 || ""}
-                      className="border p-0.5 rounded w-[120px] min-w-[100px] text-[14px] font-medium"
-                      onChange={(e) => {
-  const v = e.target.value;
-  const isEmpty = v.trim() === "";
-  setRows(prev =>
-    prev.map(row =>
-      row._id === r._id
-        ? {
-          ...row,
-          차량번호: v,
-          이름: isEmpty ? "" : row.이름,
-          전화번호: isEmpty ? "" : row.전화번호,
-          배차상태: isEmpty ? "배차중" : row.배차상태,
-        }
-        : row
-    )
-  );
-}}
-                      onFocus={(e) => { e.currentTarget.dataset.origVal = e.currentTarget.value; }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleCarInput(r._id, e.currentTarget.value, e);
-                      }}
-                      onBlur={(e) => {
-                        // 팝업 열려있으면 blur로 재트리거 방지
-                        if (driverConfirmOpen || memoAlert || blackAlert) return;
-                        // 값이 변경되지 않았으면 스킵
-                        if (e.currentTarget.value === (e.currentTarget.dataset.origVal ?? "")) return;
-                        handleCarInput(r._id, e.currentTarget.value);
-                      }}
-                    />
-
-
-                  </td>
-
-                  <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden text-ellipsis`}>
-                    {r.이름}
-                  </td>
-
-                  <td className={cell}>{formatPhone(r.전화번호)}</td>
-
-                 <td className={cell}>
-                  <div className="relative inline-block">
-                    {r.화주사확인대기 ? (
-                      <button
-                        type="button"
-                        title="클릭 시 배차중으로 전환"
-                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
-                        style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // rows는 dispatchData 변경 → useEffect → startTransition 을 거쳐야 반영되는
-                          // 별도 로컬 상태라, patchDispatch의 낙관적 업데이트만으로는 뱃지가 즉시
-                          // 바뀌지 않고 그 체인이 다 끝날 때까지 지연되어 보였다 — 여기서 직접
-                          // rows를 갱신해 클릭 즉시 배지가 바뀌도록 한다.
-                          setRows(prev => prev.map(x => x._id === r._id ? { ...x, 화주사확인대기: false, 배차중전환일시: Date.now() } : x));
-                          patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
-                        }}
-                      >
-                        {isRecentShipperEdit(r) ? "수정" : "배차요청"}
-                      </button>
-                    ) : r.취소요청 && r.배차상태 !== "배차취소" ? (
-                      <button
-                        type="button"
-                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
-                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
-                        style={{
-                          background: "linear-gradient(135deg,#f87171,#b91c1c)",
-                          boxShadow: "0 2px 5px rgba(185,28,28,0.5), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 3px rgba(0,0,0,0.25)",
-                          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
-                        }}
-                        onClick={(e) => { e.stopPropagation(); setCancelReqPopup(r); }}
-                      >
-                        취소요청
-                      </button>
-                    ) : (r.수정요청 || isRecentShipperEdit(r)) ? (
-                      <button
-                        type="button"
-                        title={r.수정요청 ? "화주사가 수정을 요청했습니다 — 클릭하여 승인/거절" : "화주사가 오더를 직접 수정했습니다 — 클릭하여 확인"}
-                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
-                        style={{
-                          background: "linear-gradient(135deg,#3b5998,#0f2151)",
-                          boxShadow: "0 2px 5px rgba(15,33,81,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.3)",
-                          animation: "statusUrgentBlink 0.9s ease-in-out infinite",
-                        }}
-                        onClick={(e) => { e.stopPropagation(); if (r.수정요청) markEditRequestSeen(r); setEditReqPopup(r); }}
-                      >
-                        수정
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
-                        className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
-                          r.긴급 && r.배차상태 !== "배차완료"
-                            ? "bg-red-500 text-white"
-                            : r.배차상태 === "배차완료"
-                            ? "bg-[#1B2B4B] text-white"
-                            : r.배차상태 === "배차취소"
-                            ? "bg-red-600 text-white"
-                            : "bg-amber-500 text-white"
-                        }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (r.배차상태 === "배차완료") {
-                            setConfirmChange({ rowId: r._id, key: "배차상태", before: "배차완료", after: "배차중" });
-                            return;
-                          }
-                          // 화주사 오더가 배차중인 경우 — 승인 전(화주사확인대기)이 아니라면
-                          // (예: 승인 후 기사취소로 배차중이 된 경우) 배차요청으로 되돌릴 수 없다.
-                        }}
-                      >
-                        {r.배차상태}
-                      </button>
-                    )}
-                  </div>
-                  </td>
-                  {/* 청구운임 */}
-                  <td className={cell}>
-                    {canEdit("청구운임", r._id) ? (
-                      <input
-                        type="text"
-                        className="border p-1 rounded w-full"
-                        defaultValue={r.청구운임 || ""}
-                        onChange={(e) =>
-                          handleEditChange(r._id, "청구운임", e.target.value)
-                        }
-                      />
-                    ) : (
-                      formatComma(r.청구운임)
-                    )}
-                  </td>
-
-                  {/* 기사운임 */}
-                  <td className={cell}>
-                    {canEdit("기사운임", r._id) ? (
-                      <input
-                        type="text"
-                        className="border p-1 rounded w-full"
-                        defaultValue={r.기사운임 || ""}
-                        onChange={(e) =>
-                          handleEditChange(r._id, "기사운임", e.target.value)
-                        }
-                      />
-                    ) : (
-                      formatComma(r.기사운임)
-                    )}
-                  </td>
-
-                  {/* 수수료 */}
-                  <td className={`${cell} text-right pr-2`}>
-                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
-                      {formatComma(fee)}
-                    </span>
-                  </td>
-
-                  <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
-                  <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("배차방식", r.배차방식, r._id)}</td>
-                  <td className={cell}>
-                    {canEdit("메모", r._id)
-                      ? editableInput("메모", r.메모, r._id)
-                      : <MemoIconCell text={r.메모} urgency={r.메모중요도} />}
-                  </td>
-
-                  {/* 전달사항 */}
-                  <td className={cell}>
-                    <NoteIconCell
-                      value={edited[r._id]?.전달사항 ?? r.전달사항 ?? ""}
-                      onSave={(val) => {
-                        const patch = { 전달사항: val, updatedAt: Date.now() };
-                        patchDispatch(r._id, patch).catch(console.error);
-                        setRows(prev => prev.map(x => x._id === r._id ? { ...x, ...patch } : x));
-                        flashRow(r._id);
-                      }}
-                    />
-                  </td>
-                  {/* 첨부 */}
-                  <td className={cell}>
-                    <button
-                      onClick={() => { setAttachViewer(r); if (!r.attachViewed) { setRows(prev => prev.map(x => x._id === r._id ? { ...x, attachViewed: true } : x)); } updateDoc(doc(db, r.__col || "orders", r._id), { attachViewed: true }).catch(() => {}); }}
-                      className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
-                      title="첨부파일 보기"
-                    >
-                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={r.attachViewed ? "#1B2B4B" : (r.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
-                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                      {(r.attachCount || 0) > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                          {r.attachCount}
-                        </span>
-                      )}
-                    </button>
-                    {r.차량번호 && (
-                      <button
-                        onClick={() => setLiveLocViewer(r)}
-                        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
-                        title="실시간 위치 보기"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                          stroke={r.위치공유중 ? "#10b981" : "#cbd5e1"}
-                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                          <circle cx="12" cy="10" r="3"/>
-                        </svg>
-                      </button>
-                    )}
-                  </td>
-                  {/* 전달상태 */}
-                  <td className={cell}>
-                    <DeliveryStatusBadge
-                      row={r}
-                      onConfirm={setDeliveryConfirm}
-                    />
-                  </td>
-
-                </tr>
-              );
-            })}
+            {filtered.map((r, idx) => (
+              <RealtimeRow
+                key={r._id || r.id || `idx-${idx}`}
+                r={r}
+                idx={idx}
+                isSelected={selected.includes(r._id)}
+                isFading={fadingIds.has(r._id)}
+                isHighlighted={highlightIds.has(r._id)}
+                isDark={isDark}
+                selectedEditMode={selectedEditMode}
+                editedForRow={edited[r._id]}
+                toInt={toInt}
+                formatComma={formatComma}
+                formatPhone={formatPhone}
+                getCreatedMs={getCreatedMs}
+                getUpdatedMs={getUpdatedMs}
+                formatKstDateTime={formatKstDateTime}
+                getCreatorLabel={getCreatorLabel}
+                editableInput={editableInput}
+                renderAddrCell={renderAddrCell}
+                canEdit={canEdit}
+                handleEditChange={handleEditChange}
+                dispatchData={dispatchData}
+                placeRows={placeRows}
+                timeOptions={timeOptions}
+                patchDispatch={patchDispatch}
+                setRows={setRows}
+                setContextMenu={setContextMenu}
+                setCopyTarget={setCopyTarget}
+                setCopyPanelOpen={setCopyPanelOpen}
+                toggleSelect={toggleSelect}
+                handleCarInput={handleCarInput}
+                driverConfirmOpen={driverConfirmOpen}
+                memoAlert={memoAlert}
+                blackAlert={blackAlert}
+                setCancelReqPopup={setCancelReqPopup}
+                markEditRequestSeen={markEditRequestSeen}
+                setEditReqPopup={setEditReqPopup}
+                setConfirmChange={setConfirmChange}
+                flashRow={flashRow}
+                setAttachViewer={setAttachViewer}
+                setLiveLocViewer={setLiveLocViewer}
+                setDeliveryConfirm={setDeliveryConfirm}
+              />
+            ))}
           </tbody>
         </table>
       </div>
