@@ -11408,9 +11408,9 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="톤수"
           input={
-            <div className="flex items-center gap-2">
+            <div className="flex items-stretch border border-gray-300 rounded-lg overflow-hidden focus-within:border-[#1B2B4B]">
               <input
-                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
+                className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
                 placeholder="예: 1"
                 inputMode={톤수타입 ? "decimal" : "text"}
                 value={톤수값}
@@ -11422,7 +11422,7 @@ const pickDrop = (c) => {
                 }}
               />
               <select
-                className={`w-[62px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
+                className={`w-[62px] shrink-0 border-0 border-l px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                 value={톤수타입}
                 onChange={(e) => {
                   const t = e.target.value;
@@ -11440,36 +11440,40 @@ const pickDrop = (c) => {
         {/* 화물내용 */}
         <RowLabelInput
           label="화물내용"
-          right={<button type="button" className={`px-1.5 py-0.5 text-[10px] font-bold rounded text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`} onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>}
           input={
-            <div className="flex items-center gap-2">
-              <input
-                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
-                placeholder="예: 3"
-                inputMode={화물타입 ? "decimal" : "text"}
-                value={화물수량}
-                onChange={(e) => {
-                  // 단위(파레트/박스/통/롤)를 선택했을 때는 숫자(및 소수점)만 입력 가능 — "없음"일 때만 자유 입력 허용
-                  const v = 화물타입 ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value;
-                  set화물수량(v);
-                  update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
-                }}
-              />
-              <select
-                className={`w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
-                value={화물타입}
-                onChange={(e) => {
-                  const t = e.target.value;
-                  set화물타입(t);
-                  update("화물내용", t ? `${화물수량}${t}` : 화물수량);
-                }}
-              >
-                <option value="">없음</option>
-                <option value="파레트">파레트</option>
-                <option value="박스">박스</option>
-                <option value="통">통</option>
-                <option value="롤">롤</option>
-              </select>
+            <div className="space-y-1">
+              <div className="flex justify-end">
+                <button type="button" className={`px-1.5 py-0.5 text-[10px] font-bold rounded text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`} onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>
+              </div>
+              <div className="flex items-stretch border border-gray-300 rounded-lg overflow-hidden focus-within:border-[#1B2B4B]">
+                <input
+                  className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
+                  placeholder="예: 3"
+                  inputMode={화물타입 ? "decimal" : "text"}
+                  value={화물수량}
+                  onChange={(e) => {
+                    // 단위(파레트/박스/통/롤)를 선택했을 때는 숫자(및 소수점)만 입력 가능 — "없음"일 때만 자유 입력 허용
+                    const v = 화물타입 ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value;
+                    set화물수량(v);
+                    update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
+                  }}
+                />
+                <select
+                  className={`w-[76px] shrink-0 border-0 border-l px-1 py-1.5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
+                  value={화물타입}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    set화물타입(t);
+                    update("화물내용", t ? `${화물수량}${t}` : 화물수량);
+                  }}
+                >
+                  <option value="">없음</option>
+                  <option value="파레트">파레트</option>
+                  <option value="박스">박스</option>
+                  <option value="통">통</option>
+                  <option value="롤">롤</option>
+                </select>
+              </div>
             </div>
           }
         />
