@@ -1960,7 +1960,18 @@ function ToastProvider({ children }) {
 
   const showToast = (message, type = "success", meta = null) => {
     const id = crypto.randomUUID();
-    setToasts((prev) => [...prev, { id, message, type, meta, createdAt: Date.now() }]);
+    setToasts((prev) => {
+      // 같은 오더에 대한 같은 내용의 알림이 이미 떠 있으면 중복으로 추가하지 않는다.
+      // Firestore 리스너가 로컬 낙관적 갱신과 서버 확정 스냅샷을 짧은 간격으로 두 번
+      // 감지하는 등의 이유로, 배차완료 배너가 같은 오더에 대해 2번 뜨던 문제가 있었다.
+      const isDuplicate = prev.some(t =>
+        t.type === type &&
+        t.message === message &&
+        (meta?.orderId ? t.meta?.orderId === meta.orderId : true)
+      );
+      if (isDuplicate) return prev;
+      return [...prev, { id, message, type, meta, createdAt: Date.now() }];
+    });
 
     // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
     const duration = (type === "editRequest" || type === "cancelRequest") ? 8000 : 3000;
@@ -5671,6 +5682,12 @@ React.useEffect(() => {
 
   if (!confirmOpen || !form?.상차지주소 || !form?.하차지주소) return;
 
+  // 지오코딩 API를 여러 번 순차 호출(주소 정제/축소 재시도 포함)하다 보니 확인 팝업을
+  // 닫은 뒤에도 요청이 계속 진행돼, 팝업이 닫히거나 다음 오더로 바뀐 뒤에 뒤늦게
+  // 지도를 그리며(마커/폴리라인 생성) 불필요한 렉을 유발하던 문제가 있었다 —
+  // effect가 다시 실행되거나 언마운트되면 이후 작업을 모두 건너뛴다.
+  let cancelled = false;
+
   const renderTmap = async () => {
 
     try {
@@ -5678,7 +5695,7 @@ React.useEffect(() => {
       console.log("📍 지도 렌더 시작");
 
       const mapDiv = await waitMapDiv();
-      if (!mapDiv) return;
+      if (!mapDiv || cancelled) return;
 
       // ⭐ 주소 → 좌표 변환 (도로명 주소 대응 강화)
       const getCoords = async (addr) => {
@@ -5810,7 +5827,9 @@ React.useEffect(() => {
       };
 
       const start = await getCoords(form.상차지주소);
+      if (cancelled) return;
       const end = await getCoords(form.하차지주소);
+      if (cancelled) return;
 
       if (!start || !end) {
         console.warn("❌ 출발/도착 좌표 획득 실패");
@@ -5865,6 +5884,8 @@ const routeRes = await fetch(`${API_BASE}/api/route`, {
   })
 });
 
+if (cancelled) return;
+
 let routeData = null;
 
 try {
@@ -5879,6 +5900,8 @@ try {
 
   return;
 }
+
+if (cancelled) return;
 
 // =========================
 // 🔥 1차 방어 (핵심)
@@ -5991,7 +6014,9 @@ if (markerStart && markerEnd) {
 // ✅ 경유 상차지 마커 (초록색)
 const pickupVia = (form.경유상차목록 || []).filter(s => s.주소?.trim());
 for (let vi = 0; vi < pickupVia.length; vi++) {
+  if (cancelled) return;
   const vCoord = await getCoords(pickupVia[vi].주소);
+  if (cancelled) return;
   if (vCoord) {
     new window.Tmapv2.Marker({
       position: new window.Tmapv2.LatLng(vCoord.lat, vCoord.lon),
@@ -6006,7 +6031,9 @@ for (let vi = 0; vi < pickupVia.length; vi++) {
 // ✅ 경유 하차지 마커 (보라색)
 const dropVia = (form.경유하차목록 || []).filter(s => s.주소?.trim());
 for (let vi = 0; vi < dropVia.length; vi++) {
+  if (cancelled) return;
   const vCoord = await getCoords(dropVia[vi].주소);
+  if (cancelled) return;
   if (vCoord) {
     new window.Tmapv2.Marker({
       position: new window.Tmapv2.LatLng(vCoord.lat, vCoord.lon),
@@ -6025,6 +6052,7 @@ for (let vi = 0; vi < dropVia.length; vi++) {
 
 renderTmap();
 
+return () => { cancelled = true; };
 }, [confirmOpen, form?.상차지주소, form?.하차지주소, form?.경유상차목록, form?.경유하차목록]);
 // ===============================
 // 💡 주소/조건 기반 자동 운임 가이드
@@ -25502,6 +25530,8 @@ localStorage.setItem(
   })
 );
 
+// 조회 버튼을 날짜/검색어 공용으로 합쳐서, 누르는 순간 검색어도 함께 적용한다.
+setQ(qInput);
 setPage(0);
 setLoaded(true);
 };
@@ -27619,24 +27649,16 @@ return (
           다음 ▶
         </button>
 
-{/* 날짜 — 시작일/종료일을 다 고른 뒤 "조회"를 눌러야 실제로 필터가 적용된다.
-            (예전에는 날짜를 하나만 골라도 바로 필터링되어, 시작일만 고르고 종료일을
-            고르는 중에도 목록이 계속 바뀌어 보였다.) */}
+{/* 날짜 — 시작일/종료일을 다 고른 뒤 검색창의 "조회"를 눌러야 실제로 필터가
+            적용된다. (예전에는 날짜를 하나만 골라도 바로 필터링되어, 시작일만
+            고르고 종료일을 고르는 중에도 목록이 계속 바뀌어 보였다. 조회 버튼이
+            날짜용/검색어용 2개로 따로 있던 것도 혼란스러워 하나로 합쳤다.) */}
         <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
         <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
         <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
-        <button
-          onClick={handleSearch}
-          className={`h-[26px] px-3 rounded-lg text-white text-[11px] font-bold whitespace-nowrap flex-shrink-0 transition ${
-            startDate && endDate && (startDate !== appliedStartDate || endDate !== appliedEndDate)
-              ? "bg-[#1B2B4B] animate-pulse"
-              : "bg-[#1B2B4B] hover:bg-[#243a60]"
-          }`}
-        >
-          조회
-        </button>
 
-        {/* 검색창 (통합) */}
+        {/* 검색창 (통합) — 조회 버튼이 날짜/검색어 공용이라, 날짜만 바꾸고 아직
+            조회를 누르지 않은 상태면 천천히 깜빡여 클릭을 유도한다. */}
         <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
           <select className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
             value={searchType} onChange={(e)=>{setSearchType(e.target.value);setQ("");setQInput("");setPage(0);}}>
@@ -27651,8 +27673,17 @@ return (
           </select>
           <input className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
             value={loaded?qInput:""} onChange={(e)=>{setQInput(e.target.value);}}
-            onKeyDown={(e)=>{ if(e.key==="Enter"){ setQ(qInput); setPage(0); } }} />
-          <button onClick={()=>{ setQ(qInput); setPage(0); }} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition">조회</button>
+            onKeyDown={(e)=>{ if(e.key==="Enter"){ handleSearch(); } }} />
+          <button
+            onClick={handleSearch}
+            className={`h-full px-2 text-white text-[11px] font-bold transition ${
+              startDate && endDate && (startDate !== appliedStartDate || endDate !== appliedEndDate)
+                ? "bg-[#1B2B4B] animate-pulse"
+                : "bg-[#1B2B4B] hover:bg-[#243a60]"
+            }`}
+          >
+            조회
+          </button>
         </div>
 
         {/* 날짜 버튼들 */}
