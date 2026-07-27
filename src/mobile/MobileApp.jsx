@@ -10200,6 +10200,14 @@ function MobileOrderForm({
   clientNameInputRef,
   clientNameError,
   setClientNameError,
+  multiCount,
+  setMultiCount,
+  useSeparateDates,
+  setUseSeparateDates,
+  orderDates,
+  setOrderDates,
+  orderDropDates,
+  setOrderDropDates,
 }) {
   // 거래처명 자동완성은 기본거래처만 대상으로 한다 — clients prop은 상/하차지 주소
   // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
@@ -11847,6 +11855,82 @@ const pickDrop = (c) => {
         />
       </div>
 
+      {/* PC 배차관리와 동일한 여러 건 등록 + 날짜 개별 지정 (신규 등록 시에만) */}
+      {!form._editId && (
+        <div className="bg-white rounded-lg border shadow-sm p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-bold text-gray-600">등록 수량</span>
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1 border border-gray-200">
+              <button type="button" onClick={() => setMultiCount(v => Math.max(1, v - 1))}
+                className="w-6 h-6 rounded bg-white border border-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center active:bg-gray-100">−</button>
+              <span className="text-[13px] font-bold text-gray-800 min-w-[20px] text-center">{multiCount}</span>
+              <button type="button" onClick={() => setMultiCount(v => Math.min(10, v + 1))}
+                className="w-6 h-6 rounded bg-white border border-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center active:bg-gray-100">+</button>
+            </div>
+          </div>
+          {multiCount > 1 && (
+            <>
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                <div>
+                  <span className="text-[12px] font-bold text-[#1B2B4B]">날짜 개별 설정</span>
+                  <span className="text-[10px] text-gray-400 ml-1.5">{multiCount}건 상/하차일 개별 지정</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUseSeparateDates(v => !v)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    useSeparateDates ? "bg-[#1B2B4B]" : "bg-gray-200"
+                  }`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+                    useSeparateDates ? "translate-x-4" : "translate-x-0.5"
+                  }`}/>
+                </button>
+              </div>
+              {useSeparateDates && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 shrink-0" />
+                    <span className="flex-1 text-[10px] font-bold text-gray-400 text-center">상차일</span>
+                    <span className="flex-1 text-[10px] font-bold text-gray-400 text-center">하차일</span>
+                  </div>
+                  {Array.from({ length: multiCount }, (_, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
+                      <input
+                        type="date"
+                        value={orderDates[i] || form.상차일 || ""}
+                        onChange={e => {
+                          const next = [...orderDates];
+                          next[i] = e.target.value;
+                          setOrderDates(next);
+                          if (!orderDropDates[i] || orderDropDates[i] === (orderDates[i] || form.상차일 || "")) {
+                            const nd = [...orderDropDates];
+                            nd[i] = e.target.value;
+                            setOrderDropDates(nd);
+                          }
+                        }}
+                        className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
+                      />
+                      <input
+                        type="date"
+                        value={orderDropDates[i] || orderDates[i] || form.상차일 || ""}
+                        onChange={e => {
+                          const nd = [...orderDropDates];
+                          nd[i] = e.target.value;
+                          setOrderDropDates(nd);
+                        }}
+                        className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 mb-8 space-y-2">
         <button
           onClick={onSave}
@@ -11854,7 +11938,7 @@ const pickDrop = (c) => {
             cardVersionB ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-blue-500"
           }`}
         >
-          {form._editId ? "수정하기" : "등록하기"}
+          {form._editId ? "수정하기" : multiCount > 1 ? `${multiCount}건 등록하기` : "등록하기"}
         </button>
 
         {form._editId && (
