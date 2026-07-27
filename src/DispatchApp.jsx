@@ -5659,6 +5659,11 @@ const filterPlaces = (q) => {
       
     };
     const cargoInputRef = React.useRef(null);
+    const tonInputRef = React.useRef(null);
+    const payTypeRef = React.useRef(null);
+    const dispatchTypeRef = React.useRef(null);
+    // 필수값 미입력 필드를 빨간 테두리로 깜빡여 알려주기 위한 상태
+    const [requiredErrors, setRequiredErrors] = React.useState(new Set());
     const [form, setForm] = React.useState(() => {
       
   try {
@@ -6963,13 +6968,26 @@ function checkDuplicateDispatch(form, dispatchData) {
   });
 }
 
-    // ✅ 필수값(거래처/상차지명/하차지명) 검증
+    // ✅ 필수값(거래처/상차지명/하차지명/화물내용/차량톤수/지급방식/배차방식) 검증
     const validateRequired = (f) => {
       const miss = [];
-      if (!f.거래처명?.trim()) miss.push("거래처");
-      if (!f.상차지명?.trim()) miss.push("상차지명");
-      if (!f.하차지명?.trim()) miss.push("하차지명");
+      const missKeys = [];
+      if (!f.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
+      if (!f.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
+      if (!f.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
+      if (!String(f.화물내용 || "").trim()) { miss.push("화물내용"); missKeys.push("화물내용"); }
+      if (!String(f.차량톤수 || "").trim()) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
+      if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
+      if (!f.배차방식) { miss.push("배차방식"); missKeys.push("배차방식"); }
       if (miss.length) {
+        setRequiredErrors(new Set(missKeys));
+        setTimeout(() => setRequiredErrors(new Set()), 2500);
+        const refMap = { 화물내용: cargoInputRef, 차량톤수: tonInputRef, 지급방식: payTypeRef, 배차방식: dispatchTypeRef };
+        const firstRefKey = missKeys.find(k => refMap[k]?.current);
+        if (firstRefKey) {
+          refMap[firstRefKey].current.focus?.();
+          refMap[firstRefKey].current.scrollIntoView?.({ behavior: "smooth", block: "center" });
+        }
         showAlert(`필수 항목 누락: ${miss.join(", ")}\n(*) 표시된 항목을 모두 입력하세요.`);
         return false;
       }
@@ -9265,7 +9283,7 @@ className={`
 
 <div className="relative">
   <label className={labelCls + " flex items-center gap-1 flex-wrap"}>
-    화물내용
+    화물내용 {reqStar}
     <button type="button"
       className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
       onClick={() => setCargoAddPopup({ initialValue: form.화물내용||"", onCommit: (v) => onChange("화물내용", v) })}>
@@ -9279,7 +9297,7 @@ className={`
     {/* 입력 */}
     <input
       ref={cargoInputRef}
-      className={`${inputCls} pr-[62px] text-base`}
+      className={`${inputCls} pr-[62px] text-base${requiredErrors.has("화물내용") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`}
       placeholder={form.화물타입 ? "숫자만 입력" : "예: 2 또는 변압기"}
       value={form.화물타입
         ? String((form.화물내용 || "").split("+")[0]).replace(/(파레트|파렛트|박스|통)$/, "").trim()
@@ -9441,13 +9459,14 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls}>차량톤수</label>
+  <label className={labelCls}>차량톤수 {reqStar}</label>
 
   <div className="relative">
 
     {/* 입력 */}
     <input
-      className={`${inputCls} pr-[52px] text-base`}
+      ref={tonInputRef}
+      className={`${inputCls} pr-[52px] text-base${requiredErrors.has("차량톤수") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`}
       placeholder={form.톤수타입 ? "예: 1" : "예: 5톤 또는 소형"}
       inputMode={form.톤수타입 ? "decimal" : "text"}
       value={form.톤수타입 ? (form.톤수값 || "") : (form.차량톤수 || "")}
@@ -10393,8 +10412,8 @@ className={`
 
   {/* 결제 */}
   <div>
-    <label className={labelCls}>지급방식</label>
-   <select className={inputCls} value={form.지급방식} onChange={(e) => {
+    <label className={labelCls}>지급방식 {reqStar}</label>
+   <select ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(e) => {
   const v = e.target.value;
   onChange("지급방식", v);
  if (v === "취소") {
@@ -10409,8 +10428,8 @@ className={`
   </div>
 
   <div>
-    <label className={labelCls}>배차방식</label>
-    <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+    <label className={labelCls}>배차방식 {reqStar}</label>
+    <select ref={dispatchTypeRef} className={`${inputCls}${requiredErrors.has("배차방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
       {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
     </select>

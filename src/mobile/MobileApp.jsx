@@ -4696,6 +4696,9 @@ setOpenMemo={setOpenMemo}
             orders={orders}
             cardVersionB={cardVersionB}
             role={role}
+            clientNameInputRef={clientNameInputRef}
+            clientNameError={clientNameError}
+            setClientNameError={setClientNameError}
           />
         )}
 
@@ -10118,6 +10121,9 @@ function MobileOrderForm({
   orders = [],
   cardVersionB = false,
   role,
+  clientNameInputRef,
+  clientNameError,
+  setClientNameError,
 }) {
   // 거래처명 자동완성은 기본거래처만 대상으로 한다 — clients prop은 상/하차지 주소
   // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
