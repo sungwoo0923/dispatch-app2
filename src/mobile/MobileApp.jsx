@@ -2722,6 +2722,10 @@ const groupedByDate = useMemo(() => {
     );
   };
 
+  // 거래처명 미입력 시 빨간 테두리로 깜빡이며 포커스를 옮겨 알려주기 위한 상태
+  const clientNameInputRef = useRef(null);
+  const [clientNameError, setClientNameError] = useState(false);
+
   // --------------------------------------------------
   // 5. 저장 / 수정
   // --------------------------------------------------
@@ -2730,6 +2734,21 @@ const groupedByDate = useMemo(() => {
     // 필수값 체크
     if (!form.상차지명 || !form.하차지명) {
       alert("상차지 / 하차지는 필수입니다.");
+      return;
+    }
+
+    if (!form.거래처명 || !form.거래처명.trim()) {
+      setClientNameError(true);
+      clientNameInputRef.current?.focus();
+      clientNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => setClientNameError(false), 2000);
+      alert("거래처명을 입력해주세요.");
+      return;
+    }
+
+    // 하차일이 상차일보다 앞설 수 없다 (역순 입력 방지)
+    if (form.상차일 && form.하차일 && form.하차일 < form.상차일) {
+      alert(`⛔ 하차일(${form.하차일})이 상차일(${form.상차일})보다 앞설 수 없습니다.\n날짜를 다시 확인해주세요.`);
       return;
     }
 
@@ -10586,7 +10605,9 @@ const dropOptions = useMemo(() => {
 }, [clients, queryDrop]);
 
 const pickPickup = (c) => {
-    update("거래처명", c.거래처명 || "");
+    // 상차지 선택은 상차지 관련 필드만 채워야 한다 — 예전에는 거래처명까지 함께
+    // 덮어써서, "기존 오더 불러오기"로 거래처명을 이미 불러온 뒤 상차지명만
+    // 고쳐도 거래처명이 그 상차지 이름으로 조용히 바뀌어버리는 문제가 있었다.
     update("상차지명", c.거래처명 || "");
     update("상차지주소", c.주소 || "");
 
@@ -10771,7 +10792,7 @@ const pickDrop = (c) => {
         </>
       )}
 
-      {/* 총운임 / 산재 */}
+      {/* 총운임 / 기사운임 */}
       <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
         <div className="border-r px-3 py-2">
           <div className="text-xs text-gray-500 mb-1">
@@ -10783,13 +10804,13 @@ const pickDrop = (c) => {
         </div>
         <div className="px-3 py-2">
           <div className="text-xs text-gray-500 mb-1">
-            산재보험료
+            기사운임
           </div>
           <input
             className="w-full border rounded px-2 py-1 text-right text-sm"
-            value={form.산재보험료 || ""}
+            value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
             onChange={(e) =>
-              updateMoney("산재보험료", e.target.value)
+              updateMoney("기사운임", e.target.value.replace(/[^\d]/g, ""))
             }
           />
         </div>
@@ -10890,12 +10911,16 @@ const pickDrop = (c) => {
   <div className="flex gap-2">
     <div className="relative flex-1 min-w-0">
       <input
-        className="w-full border rounded px-2 py-1.5 text-[13px]"
+        ref={clientNameInputRef}
+        className={`w-full border rounded px-2 py-1.5 text-[13px] transition ${
+          clientNameError ? "border-red-500 ring-2 ring-red-300 animate-pulse" : ""
+        }`}
         value={form.거래처명}
         onChange={(e) => {
           const val = e.target.value;
           update("거래처명", val);
           setClientQuery(val);
+          if (val.trim()) setClientNameError(false);
           if (!val.trim()) { setMatchedClients([]); return; }
           searchClient(val);
         }}
@@ -12900,6 +12925,11 @@ const pickDrop = (c) => {
                   하차지주소: o.하차지주소 || "",
                   하차지담당자: o.하차지담당자 || "",
                   하차지담당자번호: o.하차지담당자번호 || "",
+                  // 상/하차시간도 원본 오더와 동일하게 불러온다.
+                  상차시간: o.상차시간 || "",
+                  상차시간기준: o.상차시간기준 || null,
+                  하차시간: o.하차시간 || "",
+                  하차시간기준: o.하차시간기준 || null,
                   톤수: o.톤수 || o.차량톤수 || "",
                   차종: o.차종 || o.차량종류 || "",
                   화물내용: o.화물내용 || "",
@@ -12907,7 +12937,8 @@ const pickDrop = (c) => {
                   하차방법: o.하차방법 || "",
                   지급방식: o.지급방식 || "",
                   배차방식: o.배차방식 || "",
-                  청구운임: o.청구운임 || 0,
+                  // 청구운임은 새로 등록하는 오더이므로 이전 오더 값을 그대로
+                  // 가져오면 안 되고, 사용자가 직접 새로 입력해야 한다.
                   혼적여부: o.혼적여부 || "독차",
                 }));
                 setShowOrderCopyModal(false);
