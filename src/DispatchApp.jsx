@@ -19830,6 +19830,43 @@ const head = isDark
     </div>
   </div>
 )}
+{/* ===== 거래처 주소 불일치 팝업 (3파트 배차관리와 동일) ===== */}
+{placeConflictOpen && placeConflictQueue.length > 0 && (() => {
+  const item = placeConflictQueue[0];
+  const dismiss = () => {
+    setPlaceConflictQueue(q => q.slice(1));
+    if (placeConflictQueue.length <= 1) setPlaceConflictOpen(false);
+  };
+  const resolve = (resolution) => {
+    if (resolution === "update") {
+      savePlaceSmart(item.name, item.addr, item.manager, item.phone, item.placeId, "update");
+    } else if (resolution === "keep") {
+      savePlaceSmart(item.name, item.addr, item.manager, item.phone, null, "keep_new");
+    }
+    dismiss();
+  };
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+      <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden border">
+        <div className="bg-[#1B2B4B] px-6 py-4">
+          <h3 className="text-white font-bold text-[15px]">거래처 주소 불일치</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">'{item.name}' 거래처의 기존 주소와 다릅니다</p>
+        </div>
+        <div className="px-6 py-4 space-y-3 text-[13px]">
+          <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+            <div><span className="text-gray-500">거래처명</span> <b className="ml-2">{item.name}</b></div>
+            <div><span className="text-gray-500">기존 주소</span> <span className="ml-2 text-blue-700">{item.existingAddr || "-"}</span></div>
+            <div><span className="text-gray-500">새 주소</span> <span className="ml-2 text-orange-600">{item.addr}</span></div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button onClick={() => resolve("update")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">새 주소로 업데이트</button>
+            <button onClick={() => resolve("keep")} className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]">기존 주소 유지 (별도 저장)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
   <div
@@ -24753,6 +24790,68 @@ const mergedClients = React.useMemo(() => {
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
+
+// ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
+// 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
+// 기존 거래처와 주소가 다르면 그냥 덮어쓰지 않고 "새 주소로 업데이트 / 기존 주소
+// 유지(별도 저장)"를 사용자에게 먼저 물어본다 (3파트 배차관리와 동일한 UX).
+const [placeConflictQueue, setPlaceConflictQueue] = React.useState([]);
+const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
+const dsNormalizeKey = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
+const dsNormalizeAddr = (a = "") => String(a).trim().replace(/\s+/g, "").replace(/[-./]/g, "").toLowerCase();
+const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
+  if (!name) return;
+
+  if (_conflictResolution === "keep_new") {
+    const uniqueKey = makePlaceKey(name) + "_" + Date.now().toString(36);
+    const contacts = manager?.trim() ? [{ name: manager.trim(), phone: phone?.trim() || "", isPrimary: true }] : [];
+    await upsertPlace({ _id: uniqueKey, 업체명: name, 주소: addr || "", contacts, _forceNew: true }).catch(() => {});
+    return;
+  }
+
+  const key = placeId || makePlaceKey(name);
+  const existingByName = mergedClients.find(p => dsNormalizeKey(p.업체명) === dsNormalizeKey(name));
+
+  if (existingByName && addr?.trim() && existingByName.주소?.trim() &&
+      dsNormalizeAddr(existingByName.주소) !== dsNormalizeAddr(addr) &&
+      _conflictResolution !== "update" && _conflictResolution !== "keep") {
+    setPlaceConflictQueue(q => [...q, {
+      type: "addrMismatch",
+      name, addr, manager, phone, placeId,
+      existingAddr: existingByName.주소,
+      existingId: existingByName._id,
+    }]);
+    setPlaceConflictOpen(true);
+    return;
+  }
+
+  const existing = existingByName;
+  let contacts = existing?.contacts ? [...existing.contacts] : [];
+  const resolvedManager = manager?.trim() || "";
+  const resolvedPhone = phone?.trim() || "";
+  if (resolvedManager) {
+    const sameNameIdx = contacts.findIndex(c => c.name?.trim() === resolvedManager);
+    if (sameNameIdx >= 0) {
+      contacts = contacts.map((c, i) => ({ ...c, phone: i === sameNameIdx ? (resolvedPhone || c.phone) : c.phone, isPrimary: i === sameNameIdx }));
+    } else {
+      contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+      contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true });
+    }
+  } else if (resolvedPhone && contacts.length === 0) {
+    contacts = [{ name: "", phone: resolvedPhone, isPrimary: true }];
+  }
+
+  const finalAddr = _conflictResolution === "keep" ? (existing?.주소 || addr || "") : (addr || existing?.주소 || "");
+
+  await upsertPlace({
+    _id: existing?._id || key,
+    업체명: name,
+    주소: finalAddr,
+    contacts,
+    등급: existing?.등급 || "일반",
+    메모: existing?.메모 || "",
+  }).catch(() => {});
+};
 
 const renderTimeText = (time, cond) => {
   
