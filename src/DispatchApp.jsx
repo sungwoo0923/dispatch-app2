@@ -182,6 +182,10 @@ function normalizeClient(row) {
     이메일: row.이메일 || row.email || "",
     등급: row.등급 || "일반",
     팝업표시: row.팝업표시 !== undefined ? row.팝업표시 : true,
+    // 담당자가 여러 명인 기본거래처를 지원하려면 contacts 배열이 왕복(read-back)돼야
+    // 한다 — 이게 빠지면 매 저장마다 "기존 담당자 목록"을 못 읽어와서 새 담당자를
+    // 추가하는 대신 항상 덮어써버리고, 선택 팝업도 뜨지 않는다.
+    contacts: Array.isArray(row.contacts) ? row.contacts : undefined,
   };
 }
 function normalizeClients(arr) {
@@ -205,6 +209,7 @@ function normalizeClients(arr) {
       오더메모: c.오더메모 || "",
       등급: c.등급 || "일반",
       팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
+      contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
     }));
 }
 // 화주사 수정요청 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
@@ -782,7 +787,10 @@ const sixMonthsAgo = getSixMonthsAgo();
               "order",
               { orderId: id, source: d.source }
             );
-          } else if ((d.상차지명 || d.거래처명) && d.작성자 && user?.email && d.작성자 === user.email) {
+          } else if ((d.상차지명 || d.거래처명) && d.작성자 && user?.email && d.작성자 === user.email && d.source !== "transport_transmit") {
+            // transport_transmit(화주사 연동 자동전송 사본)은 addDispatch가 만든 원본과
+            // 별개 문서로 동시에 생성되며 작성자도 동일해서, 제외하지 않으면 오더 등록
+            // 배너가 원본+사본으로 두 번 뜬다.
             const isNowDoneAtAdd = (d.배차상태 || "").trim() === "배차완료" && (d.차량번호 || "").trim();
             if (isNowDoneAtAdd) {
               sflowToast(
