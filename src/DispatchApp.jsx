@@ -38483,7 +38483,11 @@ const [arReportClients, setArReportClients] = useState(new Set());
 const [arReportClientQ, setArReportClientQ] = useState("");
 
   // ── 일괄정산 모달용 사전 계산 (렌더마다 재계산 방지)
+  // 모달이 닫혀 있을 땐 계산할 필요가 없다 — 거래처×기간×전체 오더를 훑는 무거운
+  // 계산이라, 이 가드가 없으면 정산관리 화면에 들어오기만 해도(모달을 열지 않아도)
+  // 매번 실행되어 거래처정산 탭 진입이 느려지는 원인이었다.
   const batchUnsettledMap = useMemo(() => {
+    if (!batchModalOpen) return new Map();
     const map = new Map();
     const nowMM = new Date().getMonth() + 1;
     const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
@@ -38515,7 +38519,7 @@ const [arReportClientQ, setArReportClientQ] = useState("");
       map.set(name, count);
     });
     return map;
-  }, [dispatchData, clientOptions8, THIS_YEAR, batchFromYear, batchFromMM, batchToYear, batchToMM]);
+  }, [batchModalOpen, dispatchData, clientOptions8, THIS_YEAR, batchFromYear, batchFromMM, batchToYear, batchToMM]);
 
   // 미수금 있는 업체만
   const batchEligibleClients = useMemo(() =>
