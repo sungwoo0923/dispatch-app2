@@ -160,6 +160,10 @@ function normalizeClient(row) {
   if (!row) return null;
   if (typeof row === "string") return { 거래처명: row, 사업자번호: "", 사업자명: "", 메모: "" };
   return {
+    // ⚠️ 실제 Firestore 문서 id를 여기서 빠뜨리면, 아래 normalizeClients가
+    // 항상 거래처명으로 id를 재계산하게 되어 문서명(거래처명)이 실제 doc id와
+    // 다른 경우(레거시/가져오기 등) 수정이 엉뚱한 새 문서에 저장되는 원인이 된다.
+    id: row.id || row._id || "",
     거래처명: row.거래처명 || row.name || row.상호 || row.회사명 || row.title || "",
     사업자번호: row.사업자번호 || row.사업자등록증 || row.사업자등록번호 || "",
     사업자명: row.사업자명 || row.대표자 || row.대표자명 || row.ceo || "",
@@ -171,6 +175,8 @@ function normalizeClient(row) {
     담당자: row.담당자 || "",
     연락처: row.연락처 || "",
     이메일: row.이메일 || row.email || "",
+    등급: row.등급 || "일반",
+    팝업표시: row.팝업표시 !== undefined ? row.팝업표시 : true,
   };
 }
 function normalizeClients(arr) {
@@ -1453,7 +1459,11 @@ const markEditRequestSeen = async (order) => {
   const removeDriver = async (id) => deleteDoc(doc(db, COLL.drivers, id));
 
   const upsertClient = async (client) => {
-    const id = client.거래처명 || client.id || crypto.randomUUID();
+    // ⚠️ 거래처명을 id보다 먼저 쓰면, 이미 존재하는 문서를 수정(특히 거래처명 자체를
+    // 바꾸는 경우)할 때마다 원래 문서 대신 "새 거래처명" 이름의 새 문서를 만들게 된다
+    // (하차지거래처 upsertPlace는 _id를 그대로 존중하는데 여기만 예외였다) — 전달된
+    // id가 있으면 그것을 최우선으로 쓴다.
+    const id = client.id || client.거래처명 || crypto.randomUUID();
     const viewCompany = role === "totalMaster"
       ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
       : (userCompany || localStorage.getItem("userCompany") || "돌캐");
