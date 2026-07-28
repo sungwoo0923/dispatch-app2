@@ -3829,6 +3829,7 @@ return (
             patchDispatch={patchDispatchSafe}
             removeDispatch={removeDispatchSafe}
             upsertDriver={upsertDriver}
+            upsertClient={upsertClient}
             darkMode={darkMode}
             isViewer={isViewer}
             setCargoAddPopup={setCargoAddPopup}
@@ -3872,6 +3873,7 @@ return (
                 rejectEditRequest={rejectEditRequestSafe}
                 markEditRequestSeen={markEditRequestSeen}
                 upsertDriver={upsertDriver}
+                upsertClient={upsertClient}
                 focusOrderId={focusOrderId}
                 clearFocusOrder={() => setFocusOrderId(null)}
                 isViewer={isViewer}
@@ -5487,6 +5489,40 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     // upsertPlace의 업체명 기반 안전장치(existing 문서로 병합)를 타면 안 된다.
     await upsertPlace({ _id: uniqueKey, 업체명: name, 주소: addr || "", contacts, _forceNew: true }).catch(() => {});
     return;
+  }
+
+  // 기본거래처(clients)에 이미 등록된 업체명이면 하차지거래처(places)에 별도 사본을
+  // 만들지 않고 기본거래처 쪽을 갱신한다 — 기본거래처가 있는데 같은 업체명으로
+  // 하차지거래처까지 매번 자동 생성되어 둘이 항상 중복되던 문제를 막기 위함.
+  // placeId가 명시적으로 주어졌다면(실제 하차지거래처 문서를 직접 선택/편집 중인
+  // 경우) 그 의도를 존중해 하차지거래처를 그대로 갱신한다.
+  if (!placeId) {
+    const clientMatch = (clients || []).find(
+      c => normalizeKey(c.업체명 || c.거래처명) === normalizeKey(name)
+    );
+    if (clientMatch) {
+      let cContacts = Array.isArray(clientMatch.contacts) ? [...clientMatch.contacts]
+        : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []);
+      const cManager = manager?.trim() || "";
+      const cPhone = phone?.trim() || "";
+      if (cManager) {
+        const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
+        if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
+        else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
+      } else if (cPhone && cContacts.length === 0) {
+        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      }
+      const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      await upsertClient?.({
+        id: clientMatch.id,
+        거래처명: clientMatch.거래처명 || name,
+        주소: addr || clientMatch.주소 || "",
+        담당자: cPrimary?.name || clientMatch.담당자 || "",
+        연락처: cPrimary?.phone || clientMatch.연락처 || "",
+        contacts: cContacts,
+      }).catch(() => {});
+      return;
+    }
   }
 
   const key = placeId || makePlaceKey(name);
@@ -13555,6 +13591,7 @@ setConfirmChange(null);
       patchDispatch={patchDispatchSafe}
       removeDispatch={removeDispatchSafe}
       upsertDriver={upsertDriver}
+      upsertClient={upsertClient}
       filterType={filterType}
       filterValue={filterValue}
       setConfirmChange={setConfirmChange}
@@ -15810,6 +15847,36 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     const contacts = manager?.trim() ? [{ name: manager.trim(), phone: phone?.trim() || "", isPrimary: true }] : [];
     await upsertPlace({ _id: uniqueKey, 업체명: name, 주소: addr || "", contacts, _forceNew: true }).catch(() => {});
     return;
+  }
+
+  // 기본거래처(clients)에 이미 있는 업체명이면 하차지거래처 사본을 만들지 않고
+  // 기본거래처를 갱신한다 (placeId가 명시적으로 있으면 실제 하차지거래처 문서를
+  // 직접 다루는 의도이므로 그대로 진행).
+  if (!placeId) {
+    const clientMatch = (clients || []).find(c => rtNormalizeKey(c.업체명 || c.거래처명) === rtNormalizeKey(name));
+    if (clientMatch) {
+      let cContacts = Array.isArray(clientMatch.contacts) ? [...clientMatch.contacts]
+        : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []);
+      const cManager = manager?.trim() || "";
+      const cPhone = phone?.trim() || "";
+      if (cManager) {
+        const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
+        if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
+        else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
+      } else if (cPhone && cContacts.length === 0) {
+        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      }
+      const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      await upsertClient?.({
+        id: clientMatch.id,
+        거래처명: clientMatch.거래처명 || name,
+        주소: addr || clientMatch.주소 || "",
+        담당자: cPrimary?.name || clientMatch.담당자 || "",
+        연락처: cPrimary?.phone || clientMatch.연락처 || "",
+        contacts: cContacts,
+      }).catch(() => {});
+      return;
+    }
   }
 
   const key = placeId || makePlaceKey(name);
@@ -24887,6 +24954,7 @@ function DispatchStatus({
   rejectEditRequest,
   markEditRequestSeen = () => {},
   upsertDriver,
+  upsertClient,
   isViewer = false,
   setCargoAddPopup = () => {},
   approvedShippers = [],
@@ -24931,6 +24999,36 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     const contacts = manager?.trim() ? [{ name: manager.trim(), phone: phone?.trim() || "", isPrimary: true }] : [];
     await upsertPlace({ _id: uniqueKey, 업체명: name, 주소: addr || "", contacts, _forceNew: true }).catch(() => {});
     return;
+  }
+
+  // 기본거래처(clients)에 이미 있는 업체명이면 하차지거래처 사본을 만들지 않고
+  // 기본거래처를 갱신한다 (placeId가 명시적으로 있으면 실제 하차지거래처 문서를
+  // 직접 다루는 의도이므로 그대로 진행).
+  if (!placeId) {
+    const clientMatch = (clients || []).find(c => dsNormalizeKey(c.업체명 || c.거래처명) === dsNormalizeKey(name));
+    if (clientMatch) {
+      let cContacts = Array.isArray(clientMatch.contacts) ? [...clientMatch.contacts]
+        : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []);
+      const cManager = manager?.trim() || "";
+      const cPhone = phone?.trim() || "";
+      if (cManager) {
+        const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
+        if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
+        else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
+      } else if (cPhone && cContacts.length === 0) {
+        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      }
+      const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      await upsertClient?.({
+        id: clientMatch.id,
+        거래처명: clientMatch.거래처명 || name,
+        주소: addr || clientMatch.주소 || "",
+        담당자: cPrimary?.name || clientMatch.담당자 || "",
+        연락처: cPrimary?.phone || clientMatch.연락처 || "",
+        contacts: cContacts,
+      }).catch(() => {});
+      return;
+    }
   }
 
   const key = placeId || makePlaceKey(name);
