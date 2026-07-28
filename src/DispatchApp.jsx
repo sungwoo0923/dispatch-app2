@@ -43581,6 +43581,71 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const importDropRef = React.useRef(null);
   const importItemRefs = React.useRef([]);
 
+  // ═══════════════════════════════════════════════════
+  // 기본거래처 ↔ 하차지거래처 중복 정리 (거래처명+주소가 완전히 같은 것만 대상)
+  // ═══════════════════════════════════════════════════
+  const [showDedupPopup, setShowDedupPopup] = React.useState(false);
+  const [dedupSelected, setDedupSelected] = React.useState(new Set());
+  const [dedupRunning, setDedupRunning] = React.useState(false);
+  const dedupMatches = React.useMemo(() => {
+    const list = [];
+    rows.forEach(c => {
+      const cName = norm(c.거래처명 || "");
+      const cAddr = normalizePlace(c.주소 || "");
+      if (!cName || !cAddr) return;
+      const place = placeRows.find(p => norm(p.업체명 || "") === cName && normalizePlace(p.주소 || "") === cAddr);
+      if (place) list.push({ client: c, place });
+    });
+    return list;
+  }, [rows, placeRows]);
+
+  const runDedupCleanup = async () => {
+    const targets = dedupMatches.filter(m => dedupSelected.has(m.place.id));
+    if (!targets.length) return;
+    setDedupRunning(true);
+    let ok = 0;
+    for (const { client, place } of targets) {
+      try {
+        // 담당자 병합: 기본거래처의 기존 담당자(대표)를 유지하고, 하차지거래처에만
+        // 있던 담당자들을 이름이 겹치지 않을 때만 추가로 합친다.
+        const baseContacts = Array.isArray(client.contacts) && client.contacts.length
+          ? [...client.contacts]
+          : (client.담당자 ? [{ name: client.담당자, phone: client.연락처 || "", isPrimary: true }] : []);
+        const placeContacts = Array.isArray(place.contacts) ? place.contacts
+          : (Array.isArray(place._rawContacts) ? place._rawContacts : []);
+        const existingNames = new Set(baseContacts.map(c => (c.name || "").trim()).filter(Boolean));
+        const mergedContacts = [...baseContacts];
+        placeContacts.forEach(pc => {
+          const nm = (pc.name || "").trim();
+          if (nm && !existingNames.has(nm)) {
+            existingNames.add(nm);
+            mergedContacts.push({ name: nm, phone: pc.phone || "", isPrimary: false });
+          } else if (!nm && (pc.phone || "").trim() && !mergedContacts.some(c => (c.phone || "") === pc.phone)) {
+            mergedContacts.push({ name: "", phone: pc.phone, isPrimary: false });
+          }
+        });
+        if (!mergedContacts.some(c => c.isPrimary) && mergedContacts.length) mergedContacts[0].isPrimary = true;
+
+        const mergedOrderMemo = (client.오더메모 || "").trim() ? client.오더메모 : (place.메모 || "");
+
+        await upsertClient?.({
+          id: client.id,
+          거래처명: client.거래처명,
+          오더메모: mergedOrderMemo,
+          contacts: mergedContacts,
+        });
+        await removePlace(place.id);
+        ok++;
+      } catch (e) {
+        console.error("중복 정리 실패:", client.거래처명, e);
+      }
+    }
+    setDedupRunning(false);
+    setDedupSelected(new Set());
+    setShowDedupPopup(false);
+    showAlert(`${ok}건 정리 완료 (하차지거래처 중복 삭제, 메모/담당자는 기본거래처로 이관)`);
+  };
+
 React.useEffect(() => {
     setRows(prev => {
       const prevMap = new Map(prev.map(r => [r.id || r.거래처명, r]));
@@ -44433,6 +44498,10 @@ React.useEffect(() => {
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
                 하차지에서 불러오기
               </button>
+              <button onClick={() => { setDedupSelected(new Set(dedupMatches.map(m => m.place.id))); setShowDedupPopup(true); }}
+                className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
+                중복 정리{dedupMatches.length > 0 && ` (${dedupMatches.length})`}
+              </button>
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
                 <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
@@ -44805,6 +44874,67 @@ React.useEffect(() => {
                 className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition">취소</button>
               <button onClick={saveEditPlace}
                 className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold hover:bg-[#243a60] transition">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════ 기본거래처 ↔ 하차지거래처 중복 정리 팝업 ══════ */}
+      {showDedupPopup && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">중복 정리 — 기본거래처 ↔ 하차지거래처</h3>
+                <p className="text-white/55 text-[12px] mt-0.5">거래처명·주소가 완전히 같은 항목만 대상입니다. 하차지거래처의 메모는 기본거래처의 오더메모로, 담당자 목록은 병합되어 이관되고, 하차지거래처 쪽 항목은 삭제됩니다.</p>
+              </div>
+              <button onClick={() => setShowDedupPopup(false)}
+                className="text-white/60 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <span className="text-[12px] text-gray-500">{dedupMatches.length}건 발견 · {dedupSelected.size}건 선택됨</span>
+              <button
+                onClick={() => setDedupSelected(prev => prev.size === dedupMatches.length ? new Set() : new Set(dedupMatches.map(m => m.place.id)))}
+                className="text-[12px] text-[#1B2B4B] font-semibold underline">
+                {dedupSelected.size === dedupMatches.length ? "전체 해제" : "전체 선택"}
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {dedupMatches.length === 0 ? (
+                <div className="text-center text-gray-400 text-sm py-10">거래처명·주소가 완전히 같은 중복 항목이 없습니다.</div>
+              ) : (
+                <div className="space-y-2">
+                  {dedupMatches.map(({ client, place }) => {
+                    const contactCount = Array.isArray(place.contacts) ? place.contacts.filter(c => c.name?.trim() || c.phone?.trim()).length : (place._rawContacts?.length || 0);
+                    return (
+                      <label key={place.id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" className="mt-1" checked={dedupSelected.has(place.id)}
+                          onChange={() => setDedupSelected(prev => {
+                            const n = new Set(prev);
+                            n.has(place.id) ? n.delete(place.id) : n.add(place.id);
+                            return n;
+                          })} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-bold text-gray-800">{client.거래처명}</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">{client.주소}</div>
+                          <div className="flex gap-3 mt-1 text-[11px] text-gray-400">
+                            {place.메모?.trim() && <span className="text-[#1B2B4B]">하차지 메모 있음</span>}
+                            {contactCount > 0 && <span>담당자 {contactCount}명</span>}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex gap-3 shrink-0">
+              <button onClick={() => setShowDedupPopup(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+              <button onClick={runDedupCleanup} disabled={dedupRunning || dedupSelected.size === 0}
+                className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-bold transition">
+                {dedupRunning ? "정리 중..." : `선택 항목 정리 (${dedupSelected.size})`}
+              </button>
             </div>
           </div>
         </div>
