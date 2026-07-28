@@ -1497,7 +1497,28 @@ const upsertPlace = async (place) => {
     } else {
       // _id 제공된 경우 기존 데이터 로드
       const existSnap = await getDoc(doc(db, "places", key));
-      if (existSnap.exists()) existingData = existSnap.data();
+      if (existSnap.exists()) {
+        existingData = existSnap.data();
+      } else if (!place._forceNew) {
+        // ⚠️ 넘겨받은 _id로 문서를 찾지 못한 경우(예: 오더복사로 채워진 값이라 실제
+        // 거래처 문서 id와 다른 값을 들고 있는 경우) — 그대로 새 문서를 만들면 같은
+        // 업체명이 중복 생성된다. 확정 짓기 전에 업체명으로 기존 문서를 한 번 더
+        // 찾아, 있으면 그 문서에 덮어쓴다(주소가 같은 문서를 우선 선택).
+        // _forceNew가 true면(사용자가 "별도로 새로 만들기"를 직접 선택한 경우)
+        // 이 안전장치를 건너뛰고 요청한 대로 새 문서를 만든다.
+        const legacySnap = await getDocs(
+          query(collection(db, "places"), where("업체명", "==", name))
+        );
+        if (!legacySnap.empty) {
+          const sameAddrDoc = legacySnap.docs.find(d => {
+            const existAddr = (d.data().주소 || "").trim().toLowerCase().replace(/\s+/g, "");
+            return existAddr === normAddr;
+          });
+          const picked = sameAddrDoc || legacySnap.docs[0];
+          key = picked.id;
+          existingData = picked.data();
+        }
+      }
     }
 
     const ref = doc(db, "places", key);
@@ -5378,7 +5399,9 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
   if (_conflictResolution === "keep_new") {
     const uniqueKey = makePlaceKey(name) + "_" + Date.now().toString(36);
     const contacts = manager?.trim() ? [{name: manager.trim(), phone: phone?.trim() || "", isPrimary: true}] : [];
-    await upsertPlace({ _id: uniqueKey, 업체명: name, 주소: addr || "", contacts }).catch(() => {});
+    // _forceNew: 사용자가 팝업에서 "별도로 새로 만들기"를 직접 선택한 경우라
+    // upsertPlace의 업체명 기반 안전장치(existing 문서로 병합)를 타면 안 된다.
+    await upsertPlace({ _id: uniqueKey, 업체명: name, 주소: addr || "", contacts, _forceNew: true }).catch(() => {});
     return;
   }
 
