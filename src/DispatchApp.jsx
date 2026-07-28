@@ -938,15 +938,23 @@ const sixMonthsAgo = getSixMonthsAgo();
           }
         }
 
-        // 배차 등록과 동시에 기사/차량이 이미 채워져 배차완료 상태로 들어오는 경우
-        // (등록 직후 바로 "modified"가 아닌 "added"로 도착) — 예전엔 여기서 아예
-        // 배너를 안 띄웠지만, 이제 본인 계정 한정으로만 보이므로 띄워도 무방하다.
-        if (ch.type === "added" && isNowDone && isOwnDispatchAction) {
-          sflowToast(
-            `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
-            "dispatch",
-            { orderId: id }
-          );
+        // 오더 등록(added) — 예전엔 여기서 아예 배너를 안 띄웠지만, 이제 본인 계정
+        // 한정으로만 보이므로 띄워도 무방하다. 등록과 동시에 기사/차량까지 채워진
+        // 경우엔 "배차완료" 문구로, 아니면 "오더 등록" 문구로 보여준다.
+        if (ch.type === "added" && isOwnDispatchAction) {
+          if (isNowDone) {
+            sflowToast(
+              `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
+              "dispatch",
+              { orderId: id }
+            );
+          } else if (d.상차지명 || d.거래처명) {
+            sflowToast(
+              `[오더 등록] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "order",
+              { orderId: id }
+            );
+          }
         }
 
         if (ch.type === "removed") {
