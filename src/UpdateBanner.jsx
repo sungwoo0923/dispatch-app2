@@ -1,6 +1,11 @@
 // src/UpdateBanner.jsx
 import React from "react";
 
+// 배포를 자주 하는 동안 "새 버전이 준비되었습니다" 배너가 계속 뜨는 게 번거로울 때
+// 이 값을 false로 꺼두면 배너는 안 뜨지만, 서비스워커 업데이트 자체는 그대로 백그라운드에서
+// 진행되어 다음 새로고침 시 자동으로 최신 버전이 반영된다. 다시 배너를 켜려면 true로.
+const SHOW_UPDATE_BANNER = false;
+
 // 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
 // 새 배포와 꼬여있는 경우(구버전 SW가 새 index.html은 네트워크로 받아오면서도
 // 그 안에서 참조하는 새 JS 청크는 아직 캐시에 없다는 이유로 못 받아오는 등) 계속
@@ -28,7 +33,7 @@ export default function UpdateBanner() {
     if (!("serviceWorker" in navigator)) return;
 
     const activateUpdate = () => {
-      setVisible(true);
+      if (SHOW_UPDATE_BANNER) setVisible(true);
       window.dispatchEvent(new Event("appUpdateAvailable"));
     };
 
