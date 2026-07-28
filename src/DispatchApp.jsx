@@ -190,7 +190,9 @@ function normalizeClients(arr) {
       담당자: c.담당자 || "",
       연락처: c.연락처 || "",
       이메일: c.이메일 || "",
-      메모: c.메모 || ""
+      메모: c.메모 || "",
+      등급: c.등급 || "일반",
+      팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
     }));
 }
 // 화주사 수정요청 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
@@ -558,6 +560,12 @@ function useRealtimeCollections(user, userCompany, role) {
   const [dispatchData, setDispatchData] = useState(() => safeLoad("dispatchData", []));
   const [drivers, setDrivers] = useState(() => safeLoad("drivers", []));
   const [clients, setClients] = useState(() => safeLoad("clients", []));
+  // 🔔 위 캐시(dispatchData)는 이전 세션의 오래된 스냅샷이라, orders/dispatch 두
+  // 컬렉션 모두에서 "진짜" 첫 응답을 받기 전까지는 attachCount 등을 비교해 알림을
+  // 띄우는 화면들이 캐시값을 기준선으로 잘못 학습해선 안 된다(PC를 꺼둔 사이 쌓인
+  // 변경사항이 재실행 시 한꺼번에 알림으로 쏟아지던 원인). 두 리스너 모두 첫 실응답을
+  // 받은 시점을 하위 화면에 알려주기 위한 플래그.
+  const [liveDataReady, setLiveDataReady] = useState(false);
   let ordersCache = [];
 let dispatchCache = [];
   // ⚡ localStorage 저장은 오프라인 캐시 용도일 뿐 화면 표시와 무관하므로,
@@ -629,6 +637,14 @@ const getSixMonthsAgo = () => {
 };
 
 const sixMonthsAgo = getSixMonthsAgo();
+  // orders/dispatch 두 리스너 모두 "캐시가 아닌 진짜" 첫 응답을 받으면 liveDataReady를 켠다.
+  let ordersRealFirstDone = false;
+  let dispatchRealFirstDone = false;
+  const markRealFirstLoadDone = (which) => {
+    if (which === "orders") ordersRealFirstDone = true;
+    else dispatchRealFirstDone = true;
+    if (ordersRealFirstDone && dispatchRealFirstDone) setLiveDataReady(true);
+  };
       // ✅ 1️⃣ orders (화주 + 신규) + 알림 감지
   let ordersFirstLoad = true;
   const ordersPrev = new Map();
@@ -724,6 +740,7 @@ const sixMonthsAgo = getSixMonthsAgo();
       // 🔔 최초 로드: prevMap 구축만
       if (ordersFirstLoad) {
         ordersFirstLoad = false;
+        markRealFirstLoadDone("orders");
         arr.forEach(r => {
           ordersPrev.set(r._id, {
             car: (r.차량번호 || "").trim(),
@@ -762,7 +779,9 @@ const sixMonthsAgo = getSixMonthsAgo();
           // "transport_transmit" 사본은 운송사가 방금 dispatch 컬렉션에서 직접
           // 배차완료 처리한 건의 미러 카피라, dispatch 리스너에서 이미 같은 내용의
           // 배차완료 토스트를 띄운다 — 여기서 또 띄우면 동일 알림이 2번 뜬다.
-          if (wasNotDone && isNowDone && d.source !== "transport_transmit") {
+          // 배차완료 처리를 실제로 수행한 계정(작성자) 본인에게만 노출한다.
+          const isOwnOrderAction = !!(d.작성자 && user?.email && d.작성자 === user.email);
+          if (wasNotDone && isNowDone && d.source !== "transport_transmit" && isOwnOrderAction) {
             sflowToast(
               `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
               "dispatch",
@@ -885,6 +904,7 @@ const sixMonthsAgo = getSixMonthsAgo();
       // 🔔 최초 로드: prevMap 구축만
       if (dispatchFirstLoad) {
         dispatchFirstLoad = false;
+        markRealFirstLoadDone("dispatch");
         arr2.forEach(r => {
           dispatchPrev.set(r._id, {
             car: (r.차량번호 || "").trim(),
@@ -899,22 +919,34 @@ const sixMonthsAgo = getSixMonthsAgo();
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
 
-        // "dispatch" 컬렉션은 운송사 자신의 등록(PC/모바일)만 들어오는 컬렉션이라
-        // 여기서 새 오더 배너를 띄우면 항상 "내가 방금 등록한 오더" 자기 알림이 되어
-        // 불필요하고, 등록 직후 표 렌더링과 겹쳐 끊김만 유발했다 — 배너를 띄우지 않는다.
+        // "dispatch" 컬렉션은 운송사 자신의 등록(PC/모바일)만 들어오는 컬렉션이라, 이 배너는
+        // 이 변경을 실제로 발생시킨 계정(작성자) 본인에게만 보여준다 — 같은 회사의 다른 계정이
+        // 등록/배차한 것까지 내 화면에 뜨는 걸 막아 달라는 요청에 따른 것.
+        const isOwnDispatchAction = !!(d.작성자 && user?.email && d.작성자 === user.email);
+        const isNowDone = (d.배차상태 || "").trim() === "배차완료" && (d.차량번호 || "").trim();
 
         if (ch.type === "modified") {
           const prev = dispatchPrev.get(id);
           const wasNotDone = prev && prev.status !== "배차완료";
-          const isNowDone = (d.배차상태 || "").trim() === "배차완료" && (d.차량번호 || "").trim();
 
-          if (wasNotDone && isNowDone) {
+          if (wasNotDone && isNowDone && isOwnDispatchAction) {
             sflowToast(
               `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
               "dispatch",
               { orderId: id }
             );
           }
+        }
+
+        // 배차 등록과 동시에 기사/차량이 이미 채워져 배차완료 상태로 들어오는 경우
+        // (등록 직후 바로 "modified"가 아닌 "added"로 도착) — 예전엔 여기서 아예
+        // 배너를 안 띄웠지만, 이제 본인 계정 한정으로만 보이므로 띄워도 무방하다.
+        if (ch.type === "added" && isNowDone && isOwnDispatchAction) {
+          sflowToast(
+            `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
+            "dispatch",
+            { orderId: id }
+          );
         }
 
         if (ch.type === "removed") {
@@ -1429,6 +1461,7 @@ const markEditRequestSeen = async (order) => {
   return {
     dispatchData,
     setDispatchData,   // ★ 추가
+    liveDataReady,
     drivers,
     clients,
     places,
@@ -3033,6 +3066,7 @@ useEffect(() => {
   const {
     dispatchData,
     setDispatchData,   // ★ 추가
+    liveDataReady,
     drivers,
     clients,
     places,
@@ -3722,6 +3756,7 @@ return (
           <DispatchManagement
           menu={menu}
             dispatchData={dispatchDataFiltered}
+            liveDataReady={liveDataReady}
             drivers={drivers}
             clients={clients}
             addDispatch={addDispatchSafe}
@@ -3749,6 +3784,7 @@ return (
             role={role}
             menu={menu}
             dispatchData={dispatchDataFiltered}
+            liveDataReady={liveDataReady}
             timeOptions={timeOptions}
             tonOptions={tonOptions}
             drivers={drivers}
@@ -4567,7 +4603,7 @@ return (
 });
 
  function DispatchManagement({
-    dispatchData, drivers, clients, menu, timeOptions, tonOptions,
+    dispatchData, liveDataReady = true, drivers, clients, menu, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
     patchDispatch, removeDispatch,
     placeRows = [],
@@ -13473,6 +13509,7 @@ setConfirmChange(null);
       role={role}
       menu={menu}
       dispatchData={dispatchData}
+      liveDataReady={liveDataReady}
       drivers={drivers}
       clients={clients}
       placeRows={placeRows}
@@ -15679,6 +15716,7 @@ const RealtimeRow = React.memo(RealtimeRowBase, realtimeRowPropsEqual);
 
 function RealtimeStatus({
   dispatchData,
+  liveDataReady = true,
   drivers,
   clients,
   placeRows,
@@ -17362,8 +17400,18 @@ React.useEffect(() => {
 }, [edited]);
   // ========================
   // 🔔 파일 업로드 감지
+  // liveDataReady가 false인 동안(=아직 localStorage 캐시로 그려진 화면일 뿐, orders/dispatch
+  // 리스너의 진짜 첫 응답을 못 받은 상태)에는 prevAttachRef를 절대 건드리지 않는다.
+  // 캐시값을 기준선으로 학습해버리면, 꺼둔 PC를 다시 켰을 때 그 사이 쌓인 실제 업로드
+  // 전부가 "방금 새로 늘어난 것"으로 오인되어 알림이 한꺼번에 쏟아진다.
+  const liveAlertBaselineSetRef = React.useRef(false);
   React.useEffect(() => {
+    if (!liveDataReady) return;
     if (!rows.length) return;
+
+    // liveDataReady가 막 true가 된 뒤 첫 실행: 알림 없이 기준선만 세운다.
+    const isFirstRealPass = !liveAlertBaselineSetRef.current;
+    liveAlertBaselineSetRef.current = true;
 
     const newAlerts = [];
 
@@ -17373,8 +17421,8 @@ React.useEffect(() => {
       const prev = prevAttachRef.current[id] ?? cur; // 첫 로드 시 현재값으로 초기화
       const viewed = viewedAttachRef.current[id] || 0;
 
-      // 이전보다 증가 + 아직 열어보지 않은 개수
-      if (cur > prev && cur > viewed) {
+      // 이전보다 증가 + 아직 열어보지 않은 개수 (기준선을 막 세우는 첫 실행에는 알리지 않는다)
+      if (!isFirstRealPass && cur > prev && cur > viewed) {
         newAlerts.push({
           id,
           date: r.상차일,
@@ -17401,7 +17449,7 @@ React.useEffect(() => {
         setUploadAlerts(prev => prev.filter(a => Date.now() - a.time < 10000));
       }, 10000);
     }
-  }, [rows]);
+  }, [rows, liveDataReady]);
 // ------------------------
 // 오전/오후 → 24시간 변환
 // ------------------------
@@ -43121,6 +43169,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       등급: d.등급 || "일반",
       등급변경일: d.등급변경일 || null,
       메모: d.메모 || "",
+      팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
       updatedAt: d.updatedAt || null,
       // 담당자가 2명 이상인 문서를 수정 팝업에서 저장할 때, 대표(주 담당자)를
       // 정확히 교체하려면 원본 contacts 배열이 필요해 별도로 보관해둔다
@@ -43225,6 +43274,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // 기본 거래처
   // ═══════════════════════════════════════════════════
   const [q, setQ] = React.useState("");
+  const [showAllClients, setShowAllClients] = React.useState(false);
   const [rows, setRows] = React.useState(() => (clients || []).map((c) => ({ ...c })));
   const [selected, setSelected] = React.useState(new Set());
   const [newForm, setNewForm] = React.useState({
@@ -43261,13 +43311,16 @@ React.useEffect(() => {
   }, [clients]);
 
   const filtered = React.useMemo(() => {
-    if (!q.trim()) return rows;
-    const nq = norm(q);
-    return rows.filter((r) =>
-      ["거래처명","사업자번호","대표자","주소","담당자","연락처","메모"]
-        .some((k) => norm(r[k] || "").includes(nq))
-    );
-  }, [rows, q]);
+    if (q.trim()) {
+      const nq = norm(q);
+      return rows.filter((r) =>
+        ["거래처명","사업자번호","대표자","주소","담당자","연락처","메모"]
+          .some((k) => norm(r[k] || "").includes(nq))
+      );
+    }
+    if (showAllClients) return rows;
+    return [];
+  }, [rows, q, showAllClients]);
 
   const toggleOne = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = () => {
@@ -44084,6 +44137,11 @@ React.useEffect(() => {
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <span className="text-sm text-gray-400">{filtered.length}건</span>
+            <button
+              onClick={() => { setShowAllClients(v => !v); setQ(""); }}
+              className={`h-[34px] px-4 rounded-lg text-sm font-semibold transition ${showAllClients ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+              {showAllClients ? "전체보기 닫기" : "전체보기"}
+            </button>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
@@ -44372,7 +44430,7 @@ React.useEffect(() => {
             </div>
           ) : (
             <div className="bg-white rounded-xl border text-center py-14 text-gray-400 text-sm">
-              {q ? "검색 결과가 없습니다" : "등록된 거래처가 없습니다"}
+              {q ? "검색 결과가 없습니다" : (showAllClients ? "등록된 거래처가 없습니다" : "검색어를 입력하거나 전체보기 버튼을 누르세요.")}
             </div>
           )}
         </div>
