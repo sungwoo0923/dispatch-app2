@@ -5630,20 +5630,25 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
 const mergedClients = React.useMemo(() => {
   const map = new Map();
+  // 이름만으로 키를 잡으면, 같은 업체명이라도 주소가 다른 기본거래처/하차지거래처가
+  // 있을 때 하나가 다른 하나를 가려버려서 자동완성 드롭다운에 1개만 뜬다(주소가
+  // 다르면 서로 다른 거래처로 취급해야 한다) — 이름+주소 조합으로 키를 잡아 둘 다
+  // 살아남게 한다.
+  const mkKey = (n, a) => `${normalizeKey(n)}|${normalizeAddr(a || "")}`;
 
   // ✅ 1️⃣ placeList를 먼저 넣는다 (주소/담당자 기준)
   placeList.forEach(p => {
-    const key = normalizeKey(p.업체명);
-    if (key) map.set(key, p);
+    const key = mkKey(p.업체명, p.주소);
+    if (normalizeKey(p.업체명)) map.set(key, p);
   });
 
   // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용 (clients 컬렉션은 거래처명 필드 사용)
   clients.forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
-    const key = normalizeKey(name);
-    if (!key) return;
+    const key = mkKey(name, c.주소);
+    if (!normalizeKey(name)) return;
 
-    // placeList에 없을 때만 추가
+    // 완전히 동일한 이름+주소가 아닐 때만 추가 (진짜 중복만 걸러낸다)
     if (!map.has(key)) {
       map.set(key, {
         업체명: name,
@@ -15862,11 +15867,15 @@ function RealtimeStatus({
 const rtTableWrapRef = React.useRef(null);
 const mergedClients = React.useMemo(() => {
   const map = new Map();
-  (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
+  // 이름만으로 키를 잡으면 주소가 다른 기본거래처/하차지거래처가 있을 때 하나가
+  // 다른 하나를 가려버린다 — 이름+주소 조합으로 키를 잡아 둘 다 살아남게 한다.
+  const mkKey = (n, a) => `${(n||"").toLowerCase().replace(/\s+/g,"")}|${(a||"").toLowerCase().replace(/\s+/g,"")}`;
+  (placeRows || []).forEach(p => { if ((p.업체명||"").trim()) map.set(mkKey(p.업체명, p.주소), p); });
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
-    const k = name.toLowerCase().replace(/\s+/g,"");
-    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    if (!name.trim()) return;
+    const k = mkKey(name, c.주소);
+    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -16195,7 +16204,9 @@ return [...map.values()];
 
     const nq = normalizeKey(q);
 
-    return (placeRows || [])
+    // 하차지거래처(placeRows)뿐 아니라 기본거래처로만 등록된 업체도 이 패널의
+    // 상/하차지명 자동완성에 나오도록 mergedClients(기본거래처+하차지거래처 통합)를 쓴다.
+    return (mergedClients || [])
       .map((p) => {
         const nk = normalizeKey(p.업체명);
         let score = 0;
@@ -25037,11 +25048,15 @@ React.useEffect(() => {
 }, [userCompany]);
 const mergedClients = React.useMemo(() => {
   const map = new Map();
-  (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
+  // 이름만으로 키를 잡으면 주소가 다른 기본거래처/하차지거래처가 있을 때 하나가
+  // 다른 하나를 가려버린다 — 이름+주소 조합으로 키를 잡아 둘 다 살아남게 한다.
+  const mkKey = (n, a) => `${(n||"").toLowerCase().replace(/\s+/g,"")}|${(a||"").toLowerCase().replace(/\s+/g,"")}`;
+  (placeRows || []).forEach(p => { if ((p.업체명||"").trim()) map.set(mkKey(p.업체명, p.주소), p); });
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
-    const k = name.toLowerCase().replace(/\s+/g,"");
-    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    if (!name.trim()) return;
+    const k = mkKey(name, c.주소);
+    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
