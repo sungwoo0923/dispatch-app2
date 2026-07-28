@@ -5656,8 +5656,10 @@ const mergedClients = React.useMemo(() => {
         담당자: c.담당자 || "",
         담당자번호: c.연락처 || c.담당자번호 || "",
         메모: c.메모 || "",
+        오더메모: c.오더메모 || "",
         등급: c.등급 || "일반",
         등급변경일: c.등급변경일 || null,
+        팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
         // 하차지거래처와 달리 기본거래처는 원래 contacts 배열이 없었지만, savePlaceSmart가
         // 이제 기본거래처에도 여러 담당자를 contacts로 저장한다 — 여기서 빠뜨리면
         // 담당자가 여러 명이어도 항상 대표 담당자 1명만 적용되고 선택 팝업이 안 뜬다.
@@ -6853,6 +6855,17 @@ const findClientAlertTarget = (name) => {
   // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
   return { ...clientTarget, 메모: clientTarget.오더메모 || "" };
 };
+// 드롭다운에서 "특정 항목"을 직접 선택한 경우 전용 — 같은 업체명이라도 기본거래처와
+// 하차지거래처, 혹은 주소가 다른 하차지거래처가 각각 따로 존재할 수 있으므로, 이름으로
+// 다시 검색하지 않고 사용자가 실제로 고른 그 객체 자신의 등급/메모(오더메모)만 본다.
+const getAlertTargetForSelectedPlace = (place) => {
+  if (!place || place.팝업표시 === false) return null;
+  const isPlaceRecord = !!place._id; // 하차지거래처(mergedClients)는 real _id를 갖고, 기본거래처 파생 항목은 없다
+  const note = isPlaceRecord ? place.메모 : place.오더메모;
+  const hasNote = note && String(note).trim();
+  if (place.등급 !== "블랙" && place.등급 !== "주의" && !hasNote) return null;
+  return { ...place, 메모: note || "" };
+};
 // 하위호환용 — 기존 호출부에서 그대로 쓸 수 있도록 남겨둠 (단일 대상만 체크)
 const checkClientGrade = (name, nextFocusId = null) => {
   const target = findClientAlertTarget(name);
@@ -6936,7 +6949,7 @@ const applyPlaceToForm = (place, type, nextFocusId = null) => {
     }));
   }
 
-  const alertTarget = findClientAlertTarget(place.업체명);
+  const alertTarget = getAlertTargetForSelectedPlace(place);
   const contactItems = uniqueContacts.length > 1 ? [{ type, place, contacts: uniqueContacts }] : [];
   // 직접입력(상/하차지명 자동완성)으로 채운 경우 — 팝업이 하나라도 뜨면 그 필드로,
   // 아무 팝업도 없으면 포커스를 건드리지 않는다(사용자 이동에 맡김).
@@ -15875,7 +15888,7 @@ const mergedClients = React.useMemo(() => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -16236,20 +16249,24 @@ const checkWarningStatus = (name, type) => {
   const now = Date.now();
   if (lastWarnedRef.current?.name === name && now - lastWarnedRef.current.time < 3000) return;
     const foundClient = (clients || []).find(c => c.거래처명 === name);
-    if (foundClient) {
+    if (foundClient && foundClient.팝업표시 !== false) {
       const status = foundClient.업체상태 || foundClient.등급;
-      if (status === "블랙" || status === "주의") {
+      const note = foundClient.오더메모;
+      if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
-        setWarningPopup({ name, status, type, info: foundClient });
+        const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
         return;
       }
     }
     const foundPlace = (placeRows || []).find(p => p.업체명 === name);
-    if (foundPlace) {
+    if (foundPlace && foundPlace.팝업표시 !== false) {
       const status = foundPlace.업체상태 || foundPlace.등급;
-      if (status === "블랙" || status === "주의") {
+      const note = foundPlace.메모;
+      if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
-        setWarningPopup({ name, status, type, info: foundPlace });
+        const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+        setWarningPopup({ name, status: gradeStatus, type, info: foundPlace });
       }
     }
   };
@@ -20264,8 +20281,8 @@ flashRow(savedId);
   >긴급</button>
 </div>
 {/* ================= 거래처 정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm">
+  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
   <div className="p-6">
 
   <Field label="거래처명">
@@ -21396,16 +21413,15 @@ value={copyTarget?.화물수량 || ""}
 />
 
 {clientApplyPopup && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-
-    <div className="bg-white p-6 rounded-xl shadow-lg w-[300px] text-center">
-
-      <h3 className="font-bold mb-4">거래처 적용</h3>
-
-      <div className="flex flex-col gap-2">
-
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden border">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-white font-bold text-[15px]">거래처 적용</h3>
+        <p className="text-white/60 text-[12px] mt-0.5">'{clientApplyPopup.거래처명}'을(를) 어디에 적용할까요?</p>
+      </div>
+      <div className="px-6 py-4 flex flex-col gap-2">
         <button
-          className="bg-blue-500 text-white py-2 rounded"
+          className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]"
           onClick={() => {
             setCopyTarget(p => ({
               ...p,
@@ -21422,7 +21438,7 @@ value={copyTarget?.화물수량 || ""}
         </button>
 
         <button
-          className="bg-green-500 text-white py-2 rounded"
+          className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]"
           onClick={() => {
             setCopyTarget(p => ({
               ...p,
@@ -21439,12 +21455,11 @@ value={copyTarget?.화물수량 || ""}
         </button>
 
         <button
-          className="bg-gray-400 text-white py-2 rounded"
+          className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]"
           onClick={() => setClientApplyPopup(null)}
         >
           선택안함
         </button>
-
       </div>
     </div>
   </div>
@@ -24728,28 +24743,37 @@ setConfirmChange(null);
           }}
         >
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-
+          {(() => {
+            const isBlack = warningPopup.status === "블랙";
+            const isCaution = warningPopup.status === "주의";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-[#1B2B4B]";
+            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
+            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-yellow-600" : "text-[#1B2B4B]";
+            return (
+              <>
             {/* 헤더 */}
-            <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
-              <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
-              <h3 className="text-white text-lg font-bold">
-                {warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림
-              </h3>
+            <div className={`px-6 py-4 flex items-center gap-3 ${headerCls}`}>
+              <span className="text-2xl">{icon}</span>
+              <h3 className="text-white text-lg font-bold">{title}</h3>
             </div>
 
             {/* 내용 */}
             <div className="px-6 py-5 space-y-3">
-              <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
+              <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${boxCls}`}>
                 <div>
                   <span className="text-gray-500">거래처명</span>
                   <b className="ml-2">{warningPopup.name}</b>
                 </div>
-                <div className="flex items-center">
-                  <span className="text-gray-500">등급</span>
-                  <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
-                    {warningPopup.status}
-                  </span>
-                </div>
+                {warningPopup.status && (
+                  <div className="flex items-center">
+                    <span className="text-gray-500">등급</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : "bg-orange-400"}`}>
+                      {warningPopup.status}
+                    </span>
+                  </div>
+                )}
                 {warningPopup.info?.지정일 && (
                   <div>
                     <span className="text-gray-500">지정일</span>
@@ -24765,7 +24789,7 @@ setConfirmChange(null);
                 {warningPopup.info?.메모 && (
                   <div>
                     <span className="text-gray-500">메모</span>
-                    <span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>
+                    <span className={`ml-2 font-semibold ${memoTextCls}`}>
                       {warningPopup.info.메모}
                     </span>
                   </div>
@@ -24773,21 +24797,23 @@ setConfirmChange(null);
               </div>
 
               <p className="text-sm text-gray-600 text-center font-semibold">
-                해당 거래처는{" "}
-                <span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>
-                  {warningPopup.status} 등급
-                </span>으로 지정된 거래처입니다.
+                {warningPopup.status
+                  ? <>해당 거래처는 <span className={`font-bold ${isBlack ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</>
+                  : "해당 거래처에 등록된 메모를 확인해주세요."}
               </p>
             </div>
 
             <div className="px-6 pb-5">
               <button
-                className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}
+                className={`w-full py-3 text-white rounded-xl font-bold text-sm ${headerCls}`}
                 onClick={() => setWarningPopup(null)}
               >
                 확인
               </button>
             </div>
+              </>
+            );
+          })()}
           </div>
         </div>
       )}
@@ -25056,7 +25082,7 @@ const mergedClients = React.useMemo(() => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -25296,11 +25322,13 @@ const checkWarningStatus = (name, type) => {
 
   // 거래처 목록 체크
   const foundClient = (clients || []).find(c => c.거래처명 === name);
-  if (foundClient) {
+  if (foundClient && foundClient.팝업표시 !== false) {
     const status = foundClient.업체상태 || foundClient.등급;
-    if (status === "블랙" || status === "주의") {
+    const note = foundClient.오더메모;
+    if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
-      setWarningPopup({ name, status, type, info: foundClient });
+      const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
       return;
     }
   }
@@ -25308,11 +25336,13 @@ const checkWarningStatus = (name, type) => {
   // places + placeRows 둘 다 체크
   const allPlaces = [...(places || []), ...(placeRows || [])];
   const foundPlace = allPlaces.find(p => (p.업체명 || p.name) === name);
-  if (foundPlace) {
+  if (foundPlace && foundPlace.팝업표시 !== false) {
     const status = foundPlace.업체상태 || foundPlace.등급;
-    if (status === "블랙" || status === "주의") {
+    const note = foundPlace.메모;
+    if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
-      setWarningPopup({ name, status, type, info: foundPlace });
+      const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: foundPlace });
     }
   }
 };
@@ -30142,8 +30172,8 @@ return (
   >긴급</button>
 </div>
 {/* ================= 거래처 정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm">
+  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
   <div className="p-6">
 
   <Field label="거래처명">
@@ -32361,21 +32391,31 @@ setCopyPlaceOptions(list);
           }}
         >
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-            <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
-              <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
-              <h3 className="text-white text-lg font-bold">
-                {warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림
-              </h3>
+          {(() => {
+            const isBlack = warningPopup.status === "블랙";
+            const isCaution = warningPopup.status === "주의";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-[#1B2B4B]";
+            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
+            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : "text-[#1B2B4B]";
+            return (
+              <>
+            <div className={`px-6 py-4 flex items-center gap-3 ${headerCls}`}>
+              <span className="text-2xl">{icon}</span>
+              <h3 className="text-white text-lg font-bold">{title}</h3>
             </div>
             <div className="px-6 py-5 space-y-3">
-              <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
+              <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${boxCls}`}>
                 <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
-                <div className="flex items-center">
-                  <span className="text-gray-500">등급</span>
-                  <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
-                    {warningPopup.status}
-                  </span>
-                </div>
+                {warningPopup.status && (
+                  <div className="flex items-center">
+                    <span className="text-gray-500">등급</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : "bg-orange-400"}`}>
+                      {warningPopup.status}
+                    </span>
+                  </div>
+                )}
                 {warningPopup.info?.지정일 && (
                   <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
                 )}
@@ -32383,21 +32423,26 @@ setCopyPlaceOptions(list);
                   <div><span className="text-gray-500">주소</span><span className="ml-2">{warningPopup.info.주소}</span></div>
                 )}
                 {warningPopup.info?.메모 && (
-                  <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-orange-600"}`}>{warningPopup.info.메모}</span></div>
+                  <div><span className="text-gray-500">메모</span><span className={`ml-2 font-semibold ${memoTextCls}`}>{warningPopup.info.메모}</span></div>
                 )}
               </div>
               <p className="text-sm text-gray-600 text-center font-semibold">
-                해당 거래처는 <span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-orange-500"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.
+                {warningPopup.status
+                  ? <>해당 거래처는 <span className={`font-bold ${isBlack ? "text-red-600" : "text-orange-500"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</>
+                  : "해당 거래처에 등록된 메모를 확인해주세요."}
               </p>
             </div>
             <div className="px-6 pb-5">
               <button
-                className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}
+                className={`w-full py-3 text-white rounded-xl font-bold text-sm ${headerCls}`}
                 onClick={() => setWarningPopup(null)}
               >
                 확인
               </button>
             </div>
+              </>
+            );
+          })()}
           </div>
         </div>
       )}
