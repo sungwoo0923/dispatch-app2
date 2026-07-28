@@ -2528,6 +2528,9 @@ const undeliveredOrders = useMemo(() => {
       if (!pickupDate) return false;
       if (pickupDate < today) return false;
       if (o.업체전달상태 === "전달완료") return false;
+      // 배차 전(차량번호 없음)인 오더는 미배차현황에만 있어야 하고, 정보미전달은
+      // 배차는 됐지만 아직 업체에 정보 전달이 안 된 것만 대상이어야 한다.
+      if (!String(o.차량번호 || "").trim()) return false;
 
       return true;
     })
@@ -16803,7 +16806,7 @@ return (
         onClose={() => setLongPressOrder(null)}
         onEdit={() => { setQuickEditOrder(longPressOrder); setLongPressOrder(null); }}
         onOrderInfo={() => { setOrderInfoOrder(longPressOrder); setLongPressOrder(null); }}
-        onCopyDriver={() => { onCopyDriver?.(longPressOrder); setLongPressOrder(null); }}
+        onCopyDriver={() => { setCopyModalOrder(longPressOrder); setLongPressOrder(null); }}
         onCopyOrder={() => { onCopyOrder?.(longPressOrder); setLongPressOrder(null); }}
         onDelete={() => { setDeleteConfirmOrder(longPressOrder); setLongPressOrder(null); }}
         onUploadLink={() => { handleSingleUploadLink(longPressOrder); setLongPressOrder(null); }}
