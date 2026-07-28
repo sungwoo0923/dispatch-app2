@@ -167,7 +167,12 @@ function normalizeClient(row) {
     거래처명: row.거래처명 || row.name || row.상호 || row.회사명 || row.title || "",
     사업자번호: row.사업자번호 || row.사업자등록증 || row.사업자등록번호 || "",
     사업자명: row.사업자명 || row.대표자 || row.대표자명 || row.ceo || "",
+    // 메모(일반메모): 담당자가 참고용으로 자유롭게 적어두는 메모. 등록/입력 시 팝업을
+    // 띄우는 데는 쓰이지 않는다 — 그 용도는 아래 오더메모가 대신한다.
     메모: row.메모 || row.memo || "",
+    // 오더메모: 이 거래처명을 어디서(배차관리 상/하차지명·거래처명 등) 입력하든
+    // 팝업표시가 켜져 있으면 메모 팝업으로 안내되는 메모.
+    오더메모: row.오더메모 || "",
     대표자: row.대표자 || row.사업자명 || "",
     업태: row.업태 || "",
     종목: row.종목 || "",
@@ -197,6 +202,7 @@ function normalizeClients(arr) {
       연락처: c.연락처 || "",
       이메일: c.이메일 || "",
       메모: c.메모 || "",
+      오더메모: c.오더메모 || "",
       등급: c.등급 || "일반",
       팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
     }));
@@ -6824,15 +6830,23 @@ const [clientAlert, setClientAlert] = React.useState(null);
 // 거래처관리에서 해당 거래처의 "팝업표시"를 꺼둔 경우(기본값: 켜짐)에는 띄우지 않는다.
 const findClientAlertTarget = (name) => {
   if (!name) return null;
-  const hasNote = (v) => v?.메모 && String(v.메모).trim();
   const trimmed = name.trim();
-  const target = (placeRows || []).find(
-    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
-  ) || (clients || []).find(
-    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
+  // 하차지거래처(placeRows)는 기존과 동일하게 메모 필드로 판단한다.
+  const placeHasNote = (v) => v?.메모 && String(v.메모).trim();
+  const placeTarget = (placeRows || []).find(
+    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || placeHasNote(p))
   );
-  if (!target || target.팝업표시 === false) return null;
-  return target;
+  if (placeTarget) {
+    return placeTarget.팝업표시 === false ? null : placeTarget;
+  }
+  // 기본거래처(clients)는 "일반메모"가 아니라 "오더메모"가 있을 때만 팝업 대상이다.
+  const clientHasNote = (v) => v?.오더메모 && String(v.오더메모).trim();
+  const clientTarget = (clients || []).find(
+    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || clientHasNote(c))
+  );
+  if (!clientTarget || clientTarget.팝업표시 === false) return null;
+  // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
+  return { ...clientTarget, 메모: clientTarget.오더메모 || "" };
 };
 // 하위호환용 — 기존 호출부에서 그대로 쓸 수 있도록 남겨둠 (단일 대상만 체크)
 const checkClientGrade = (name, nextFocusId = null) => {
@@ -43479,7 +43493,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [selected, setSelected] = React.useState(new Set());
   const [newForm, setNewForm] = React.useState({
     거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "",
-    주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "", 등급: "일반",
+    주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "", 오더메모: "", 등급: "일반",
   });
   const [showNewClientModal, setShowNewClientModal] = React.useState(false);
   const [editingClientId, setEditingClientId] = React.useState(null);
@@ -43514,7 +43528,7 @@ React.useEffect(() => {
     if (q.trim()) {
       const nq = norm(q);
       return rows.filter((r) =>
-        ["거래처명","사업자번호","대표자","주소","담당자","연락처","메모"]
+        ["거래처명","사업자번호","대표자","주소","담당자","연락처","메모","오더메모"]
           .some((k) => norm(r[k] || "").includes(nq))
       );
     }
@@ -43639,7 +43653,8 @@ React.useEffect(() => {
             담당자: String(r.담당자 || "").trim(),
             연락처: String(r.연락처 || r["전화번호"] || "").trim(),
             이메일: String(r.이메일 || r["email"] || "").trim(),
-            메모: String(r.메모 || "").trim(),
+            메모: String(r.메모 || r["일반메모"] || "").trim(),
+            오더메모: String(r.오더메모 || "").trim(),
             id: 거래처명,
           });
           ok++;
@@ -43656,7 +43671,7 @@ React.useEffect(() => {
     const ws = XLSX.utils.json_to_sheet(data.map(r => ({
       거래처명: r.거래처명||"", 사업자번호: r.사업자번호||"", 대표자: r.대표자||"",
       업태: r.업태||"", 종목: r.종목||"", 주소: r.주소||"",
-      담당자: r.담당자||"", 연락처: r.연락처||"", 이메일: r.이메일||"", 메모: r.메모||"",
+      담당자: r.담당자||"", 연락처: r.연락처||"", 이메일: r.이메일||"", 일반메모: r.메모||"", 오더메모: r.오더메모||"",
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "거래처");
@@ -43746,7 +43761,10 @@ React.useEffect(() => {
         주소: p.주소 || "",
         담당자: p.담당자 || "",
         연락처: p.담당자번호 || "",
-        메모: p.메모 || "",
+        // 하차지거래처의 메모는 곧 등록 시 팝업을 띄우던 메모였으므로, 기본거래처로
+        // 옮긴 뒤에도 동일하게 동작하도록 오더메모로 이관한다.
+        오더메모: p.메모 || existing?.오더메모 || "",
+        메모: existing?.메모 || "",
         사업자번호: existing?.사업자번호 || "",
         대표자: existing?.대표자 || "",
         업태: existing?.업태 || "",
@@ -44410,10 +44428,17 @@ React.useEffect(() => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
                     <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={newForm.메모||""}
                       onChange={(e) => setNewForm(p => ({ ...p, 메모: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
+                      value={newForm.오더메모||""}
+                      onChange={(e) => setNewForm(p => ({ ...p, 오더메모: e.target.value }))} />
                   </div>
                 </div>
                 <div className="px-6 pb-5 flex gap-3">
@@ -44461,16 +44486,23 @@ React.useEffect(() => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
                     <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 메모: e.target.value }))} />
                   </div>
-                  {(editClientModal.메모?.trim() || (editClientModal.등급 && editClientModal.등급 !== "일반")) && (
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
+                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
+                      value={editClientModal.오더메모||""}
+                      onChange={(e) => setEditClientModal(p => ({ ...p, 오더메모: e.target.value }))} />
+                  </div>
+                  {(editClientModal.오더메모?.trim() || (editClientModal.등급 && editClientModal.등급 !== "일반")) && (
                     <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                       <div>
-                        <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 메모·등급 안내 팝업이 뜨지 않습니다</div>
+                        <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
                       </div>
                       <button type="button"
                         onClick={() => setEditClientModal(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
@@ -44566,7 +44598,7 @@ React.useEffect(() => {
                         <input type="checkbox" onChange={toggleAll}
                           checked={filtered.length > 0 && selected.size === filtered.length} />
                       </th>
-                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","메모"].map(h => (
+                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","일반메모","오더메모"].map(h => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -44619,6 +44651,16 @@ React.useEffect(() => {
                               </span>
                             ) : (
                               <span className="text-[13px] text-gray-500">{r.메모 || ""}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2.5 text-center max-w-[160px]">
+                            {(r.오더메모 || "").length > 18 ? (
+                              <span className="text-[13px] text-gray-500">
+                                {(r.오더메모 || "").slice(0, 18)}…
+                                <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r.오더메모); }}>더보기</button>
+                              </span>
+                            ) : (
+                              <span className="text-[13px] text-gray-500">{r.오더메모 || ""}</span>
                             )}
                           </td>
                         </tr>
