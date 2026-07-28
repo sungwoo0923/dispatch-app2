@@ -4542,24 +4542,39 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
 
   // 🔹 유가 로드
 React.useEffect(() => {
+  let cancelled = false;
   setLoading(true);
   const timer = setTimeout(() => setLoading(false), 8000); // 8초 타임아웃
+  // 서버리스 함수 콜드스타트/일시적 타임아웃(504) 등으로 첫 시도가 실패해도, 한 번은
+  // 재시도해서 "유가 정보 없음"으로 넘어가기 전에 회복할 기회를 준다.
+  async function fetchOnce() {
+    const res = await fetch(`/api/fuel?area=${area || "01"}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
+    if (!oil.length) throw new Error("empty OIL");
+    return oil;
+  }
   async function loadFuel() {
     try {
-      const res = await fetch(`/api/fuel?area=${area || "01"}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
-      setPrices(oil);
-    } catch (e) {
-      console.warn("유가 조회 실패:", e);
-      setPrices([]);
+      const oil = await fetchOnce();
+      if (!cancelled) setPrices(oil);
+    } catch (e1) {
+      try {
+        await new Promise(r => setTimeout(r, 1200));
+        const oil = await fetchOnce();
+        if (!cancelled) setPrices(oil);
+      } catch (e2) {
+        console.warn("유가 조회 실패:", e2);
+        if (!cancelled) setPrices([]);
+      }
     } finally {
       clearTimeout(timer);
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
   }
   loadFuel();
+  return () => { cancelled = true; clearTimeout(timer); };
 }, [area]);
 
 // 🔹 유가 정리 (안정 버전)
@@ -43484,7 +43499,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const PLACES_COLL = "places";
   const removePlace = async (id) => { if (!id) return; await deleteDoc(doc(db, PLACES_COLL, id)); };
   const [placeRows, setPlaceRows] = React.useState(() => placesProp.map(normalizePlaceRow));
+  // 아래 몇 개 메모는 전부 "하차지거래처" 탭에서만 쓰인다 — "기본거래처" 탭으로
+  // 마운트될 때도 계산되면 탭 전환마다 낭비되는 작업이라 subTab으로 가드한다.
   const placeDupGroups = React.useMemo(() => {
+    if (subTab !== "하차지") return [];
     const map = new Map();
     placeRows.forEach(p => {
       const key = (p.업체명 || "").trim().toLowerCase().replace(/\s+/g, "");
@@ -43493,10 +43511,11 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       map.get(key).push(p);
     });
     return [...map.values()].filter(g => g.length >= 2).sort((a, b) => b.length - a.length);
-  }, [placeRows]);
+  }, [placeRows, subTab]);
 
   // 업체명+주소 기준 중복 그룹 (같은 곳에 담당자만 다른 경우)
   const placeAddrDupGroups = React.useMemo(() => {
+    if (subTab !== "하차지") return [];
     const map = new Map();
     placeRows.forEach(p => {
       const name = (p.업체명 || "").trim().toLowerCase().replace(/\s+/g, "");
@@ -43507,10 +43526,11 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       map.get(key).push(p);
     });
     return [...map.values()].filter(g => g.length >= 2);
-  }, [placeRows]);
+  }, [placeRows, subTab]);
 
   // 동일 업체명+주소 병합 처리된 placeRows
   const mergedPlaceRows = React.useMemo(() => {
+    if (subTab !== "하차지") return placeRows;
     const addrDupMap = new Map();
     placeAddrDupGroups.forEach(group => {
       const name = (group[0].업체명 || "").trim().toLowerCase().replace(/\s+/g, "");
@@ -43533,7 +43553,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       }
       return p;
     }).filter(Boolean);
-  }, [placeRows, placeAddrDupGroups]);
+  }, [placeRows, placeAddrDupGroups, subTab]);
   const [placeQ, setPlaceQ] = React.useState("");
   const [placeSearched, setPlaceSearched] = React.useState(false);
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
@@ -43588,6 +43608,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [dedupSelected, setDedupSelected] = React.useState(new Set());
   const [dedupRunning, setDedupRunning] = React.useState(false);
   const dedupMatches = React.useMemo(() => {
+    // "기본거래처" 탭의 "중복 정리" 버튼에서만 쓰인다 — "하차지거래처" 탭으로
+    // 마운트될 때도 계산하면 탭 전환마다 낭비되는 작업이라 subTab으로 가드한다.
+    if (subTab !== "기본") return [];
     const list = [];
     rows.forEach(c => {
       const cName = norm(c.거래처명 || "");
@@ -43597,7 +43620,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       if (place) list.push({ client: c, place });
     });
     return list;
-  }, [rows, placeRows]);
+  }, [rows, placeRows, subTab]);
 
   const runDedupCleanup = async () => {
     const targets = dedupMatches.filter(m => dedupSelected.has(m.place.id));
@@ -43918,12 +43941,14 @@ React.useEffect(() => {
   // 하차지 거래처 함수들
   // ═══════════════════════════════════════════════════
   const gradeStats = React.useMemo(() => {
+    if (subTab !== "하차지") return { 전체: 0, 일반: 0, 블랙: 0, 주의: 0, 이탈: 0 };
     const stats = { 전체: mergedPlaceRows.length, 일반: 0, 블랙: 0, 주의: 0, 이탈: 0 };
     mergedPlaceRows.forEach(r => { const g = r.등급 || "일반"; if (stats[g] !== undefined) stats[g]++; });
     return stats;
-  }, [mergedPlaceRows]);
+  }, [mergedPlaceRows, subTab]);
 
   const filteredPlaces = React.useMemo(() => {
+    if (subTab !== "하차지") return [];
     let list = mergedPlaceRows;
     if (placeGradeFilter !== "전체") list = list.filter(r => (r.등급 || "일반") === placeGradeFilter);
     if (!placeSearched || !placeQ.trim()) return placeGradeFilter !== "전체" ? list : [];
@@ -43931,7 +43956,7 @@ React.useEffect(() => {
     if (placeFilterType === "업체명") return list.filter((r) => norm(r.업체명 || "").includes(nq));
     if (placeFilterType === "주소") return list.filter((r) => norm(r.주소 || "").includes(nq));
     return list;
-  }, [mergedPlaceRows, placeQ, placeSearched, placeFilterType, placeGradeFilter]);
+  }, [mergedPlaceRows, placeQ, placeSearched, placeFilterType, placeGradeFilter, subTab]);
 
   const togglePlaceOne = (id) => setPlaceSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const togglePlaceAll = () => {
@@ -43966,24 +43991,42 @@ React.useEffect(() => {
   };
 
   const duplicatePlaceGroups = React.useMemo(() => {
-    const used = new Set(); const groups = [];
+    // 이 값은 "하차지거래처" 탭에서만 쓰인다 — "기본거래처" 탭으로 마운트될 때도
+    // 계산해버리면(전체 O(n²) 비교) 탭을 오갈 때마다 불필요하게 무거운 계산이 반복돼
+    // 렉의 주 원인이 됐다.
+    if (subTab !== "하차지") return [];
     const normAddr = (s = "") => normalizePlace(s).replace(/(대한민국|한국|경기도|서울특별시)/g, "").replace(/[^\w가-힣]/g, "");
-    for (let i = 0; i < placeRows.length; i++) {
-      const a = placeRows[i];
-      if (!a?.주소 || used.has(a.id)) continue;
-      const aAddr = normAddr(a.주소); const aName = normalizeCompanyName(a.업체명 || "");
-      const group = [a];
-      for (let j = i + 1; j < placeRows.length; j++) {
-        const b = placeRows[j];
-        if (!b?.주소 || used.has(b.id)) continue;
-        if (normalizeCompanyName(b.업체명 || "") !== aName) continue;
-        const bAddr = normAddr(b.주소);
-        if (aAddr === bAddr || aAddr.includes(bAddr) || bAddr.includes(aAddr)) { group.push(b); used.add(b.id); }
+    // 예전엔 전체 목록을 O(n²)로 통째로 비교했다 — 업체명이 다르면 애초에 그룹이 될 수
+    // 없으므로, 먼저 업체명으로 O(n) 묶은 뒤 같은 이름끼리(보통 소수)만 주소 퍼지매칭
+    // 비교를 한다. 결과는 기존 로직과 동일, 비교 횟수만 크게 줄어든다.
+    const byName = new Map();
+    placeRows.forEach(p => {
+      if (!p?.주소) return;
+      const key = normalizeCompanyName(p.업체명 || "");
+      if (!key) return;
+      if (!byName.has(key)) byName.set(key, []);
+      byName.get(key).push(p);
+    });
+    const groups = [];
+    byName.forEach(candidates => {
+      if (candidates.length < 2) return;
+      const used = new Set();
+      for (let i = 0; i < candidates.length; i++) {
+        const a = candidates[i];
+        if (used.has(a.id)) continue;
+        const aAddr = normAddr(a.주소);
+        const group = [a];
+        for (let j = i + 1; j < candidates.length; j++) {
+          const b = candidates[j];
+          if (used.has(b.id)) continue;
+          const bAddr = normAddr(b.주소);
+          if (aAddr === bAddr || aAddr.includes(bAddr) || bAddr.includes(aAddr)) { group.push(b); used.add(b.id); }
+        }
+        if (group.length > 1) { group.forEach((p) => used.add(p.id)); group.sort((a, b) => (b.주소||"").length - (a.주소||"").length); groups.push(group); }
       }
-      if (group.length > 1) { group.forEach((p) => used.add(p.id)); group.sort((a, b) => (b.주소||"").length - (a.주소||"").length); groups.push(group); }
-    }
+    });
     return groups;
-  }, [placeRows]);
+  }, [placeRows, subTab]);
 
   const removeDuplicatePlaces = async () => {
     if (dupSelected.size === 0) return showAlert("삭제할 중복 항목을 선택하세요.");
