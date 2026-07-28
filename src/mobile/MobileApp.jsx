@@ -13716,19 +13716,18 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
           <div className="p-5">
             <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
               오더 내용이 복사되었습니다.<br />
-              <span className="font-semibold text-[#1B2B4B]">{smsConfirm.phone}</span> 으로 문자 앱을 여시겠습니까?<br />
-              <span className="text-gray-500">(문자 내용란에 붙여넣기 해주세요 — 길어서 자동입력 시 일부가 잘릴 수 있습니다)</span>
+              <span className="font-semibold text-[#1B2B4B]">{smsConfirm.phone}</span> 으로 문자를 보내시겠습니까?
             </div>
             <div className="flex gap-2">
               <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600" onClick={() => { setSmsConfirm(null); }}>취소</button>
               <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold"
                 onClick={() => {
-                  window.location.href = `sms:${smsConfirm.phone}`;
+                  window.location.href = `sms:${smsConfirm.phone}?body=${encodeURIComponent(smsConfirm.body)}`;
                   setSmsConfirm(null);
                   onCopySuccess?.("기사 문자 복사 완료");
                   (onAfterDriverCopy ?? onAfterFullCopy)?.();
                 }}
-              >문자 앱 열기</button>
+              >문자 보내기</button>
             </div>
           </div>
         </div>
