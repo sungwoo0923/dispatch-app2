@@ -1563,6 +1563,8 @@ const upsertPlace = async (place) => {
       등급: place.등급 || existingData?.등급 || "일반",
       등급변경일: place.등급변경일 || existingData?.등급변경일 || null,
       메모: place.메모 !== undefined ? place.메모 : (existingData?.메모 || ""),
+      // 메모/등급 안내 팝업 노출 여부 — 기본값은 켜짐(true). 거래처관리에서 끈 경우에만 false로 저장된다.
+      팝업표시: place.팝업표시 !== undefined ? place.팝업표시 : (existingData?.팝업표시 !== undefined ? existingData.팝업표시 : true),
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
       companyName: place.companyName || existingData?.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
@@ -2208,15 +2210,17 @@ const useToast = () => React.useContext(ToastContext);
 // ===================== TOAST SYSTEM END =====================
 // ===================== 커스텀 Alert 모달 =====================
 function CustomAlert({ message, onClose }) {
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === "Enter") onClose(); };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
+  // ⚠️ window 전체에 keydown을 걸면, 이 알림 밑에 다른 팝업(담당자 선택/거래처 메모 등)이
+  // 동시에 떠 있을 때 Enter 한 번에 이 알림과 그 팝업이 동시에 닫혀버린다. 이 알림
+  // 자신의 DOM에 포커스가 가 있을 때만 반응하도록 로컬 onKeyDown으로 범위를 좁힌다 —
+  // 그래야 "지금 맨 위에 있는 팝업만" Enter에 반응하고, 확인 후에야 뒤에 있던 팝업이 보인다.
   if (!message) return null;
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]"
+      tabIndex={-1}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onClose(); } }}
+    >
       <div className="bg-[#1e2530] border border-gray-600 rounded-xl shadow-2xl p-6 w-[320px] text-center">
         <p className="text-white text-[15px] mb-5 whitespace-pre-line">{message}</p>
         <button
@@ -3285,7 +3289,16 @@ useEffect(() => {
   }, []);
 
 const [alertMsg, setAlertMsg] = useState(null);
-const showAlert = (msg) => setAlertMsg(msg);
+// 이 알림 밑에 다른 팝업(담당자 선택/거래처 메모 안내 등)을 이어서 띄워야 할 때,
+// 알림을 "확인"한 뒤에만 그 팝업이 나타나도록 하기 위한 콜백 저장소.
+const alertThenRef = React.useRef(null);
+const showAlert = (msg, then) => { alertThenRef.current = then || null; setAlertMsg(msg); };
+const closeAlert = () => {
+  setAlertMsg(null);
+  const cb = alertThenRef.current;
+  alertThenRef.current = null;
+  if (cb) setTimeout(cb, 50);
+};
 // 매출관리 비밀번호 게이트
 const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
 const [revenuePassInput, setRevenuePassInput] = React.useState("");
@@ -3412,7 +3425,7 @@ React.useEffect(() => {
   // ---------------- 메뉴 UI ----------------
 return (
     <ToastProvider>
-      <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
+      <CustomAlert message={alertMsg} onClose={closeAlert} />
       {weekendCheckPopup && (
         <div className="fixed inset-0 bg-black/40 z-[999999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -6487,18 +6500,6 @@ const focusById = (id) => {
   return true;
 };
 
-const getNextFocusIdFromForm = (f) => {
-  // 상차지
-  if (!String(f.상차지담당자 || "").trim()) return "pickup-manager";
-  if (!String(f.상차지담당자번호 || "").trim()) return "pickup-phone";
-
-  // 하차지
-  if (!String(f.하차지명 || "").trim()) return "drop-place-input";
-  if (!String(f.하차지담당자 || "").trim()) return "drop-manager";
-  if (!String(f.하차지담당자번호 || "").trim()) return "drop-phone";
-
-  return null;
-};
 // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
   // 하차지거래처(placeList)뿐 아니라 기본거래처(clients)에만 있는 업체도
@@ -6530,29 +6531,24 @@ function applyClientSelect(name) {
 
   setClientQuery(name);
   setIsClientOpen(false);
-// p는 위에서 찾은 placeList의 업체(없을 수도 있음)
-const nextDraft = {
-  ...form,
-  거래처명: p?.업체명 || name,
-  상차지명: p?.업체명 || name,
-  상차지주소: p?.주소 || "",
-  상차지담당자: p?.담당자 || "",
-  상차지담당자번호: p?.담당자번호 || "",
-};
-
-const nextId = getNextFocusIdFromForm(nextDraft);
-checkClientGrade(name, nextId);
  // 자동매칭 뱃지 상태 초기화
   setAutoPickMatched(!!p);
 
-  // 담당자 복수 선택 팝업
+  // 거래처명에 입력/선택한 뒤에는 뜬 팝업(메모/등급 안내, 담당자 선택)이 있든 없든
+  // 항상 상차지명으로 포커스가 돌아온다(하차지로 건너뛰지 않음).
+  const alertTarget = findClientAlertTarget(name);
+  const contactItems = [];
   if (p) {
     const contacts = (p.contacts || []).filter(c => c.name?.trim());
     const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
     if (uniqueContacts.length > 1) {
-      openContactPopup([{ type: "pickup", place: p, contacts: uniqueContacts }]);
+      contactItems.push({ type: "pickup", place: p, contacts: uniqueContacts });
     }
   }
+  showClientAlertChain(
+    alertTarget ? [{ ...alertTarget, 업체명: alertTarget.업체명 || alertTarget.거래처명 || name }] : [],
+    { contactItems, finalFocusId: "pickup-place-input", alwaysFocus: true }
+  );
 }
 // ⭐ 상차지에 적용
 function applyToPickup(place) {
@@ -6695,22 +6691,78 @@ const [editingContactIdx, setEditingContactIdx] = React.useState(null);
 const [editContactData, setEditContactData] = React.useState({ name: "", phone: "" });
 const [clientAlert, setClientAlert] = React.useState(null);
 
-// 🚫 거래처/상하차지 등급 체크 함수
-const checkClientGrade = (name, nextFocusId = null) => {
-  if (!name) return;
-  // 하차지거래처(placeRows)뿐 아니라 기본거래처(clients)에만 등록된 업체의
-  // 블랙/주의 등급·메모도 동일하게 경고가 뜨도록 두 컬렉션 모두 확인한다.
-  // 등급이 "일반"이라도 메모가 등록돼 있으면 참고할 수 있도록 같이 띄운다.
+// 🚫 거래처/상하차지 등급·메모 알림 대상 찾기
+// 하차지거래처(placeRows)뿐 아니라 기본거래처(clients)에만 등록된 업체의
+// 블랙/주의 등급·메모도 동일하게 경고가 뜨도록 두 컬렉션 모두 확인한다.
+// 등급이 "일반"이라도 메모가 등록돼 있으면 참고할 수 있도록 같이 띄운다.
+// 거래처관리에서 해당 거래처의 "팝업표시"를 꺼둔 경우(기본값: 켜짐)에는 띄우지 않는다.
+const findClientAlertTarget = (name) => {
+  if (!name) return null;
   const hasNote = (v) => v?.메모 && String(v.메모).trim();
+  const trimmed = name.trim();
   const target = (placeRows || []).find(
-    (p) => (p.업체명 || "") === name.trim() && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
+    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
   ) || (clients || []).find(
-    (c) => (c.업체명 || c.거래처명 || "") === name.trim() && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
+    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
   );
+  if (!target || target.팝업표시 === false) return null;
+  return target;
+};
+// 하위호환용 — 기존 호출부에서 그대로 쓸 수 있도록 남겨둠 (단일 대상만 체크)
+const checkClientGrade = (name, nextFocusId = null) => {
+  const target = findClientAlertTarget(name);
   if (target) {
-    setClientAlert({ ...target, 업체명: target.업체명 || target.거래처명 || name.trim(), _nextFocusId: nextFocusId });
+    showClientAlertChain([{ ...target, 업체명: target.업체명 || target.거래처명 || name.trim() }], { finalFocusId: nextFocusId });
   }
 };
+
+// ===== 팝업 체인: 거래처 메모/등급 알림(들) → 담당자 선택(들) → 최종 포커스 이동 =====
+// 상차지·하차지 양쪽 다 안내가 필요한 경우(오더복사 등) 전부 순서대로 보여주고,
+// 모든 팝업이 끝난 뒤에만 지정된 위치로 포커스를 옮긴다. 아무 팝업도 뜨지 않는 경우
+// alwaysFocus가 아니면 포커스를 건드리지 않고 사용자 이동에 맡긴다.
+const clientAlertQueueRef = React.useRef([]);
+// 오더복사 직후 뜨는 "복사되었습니다" 알림이 맨 위에 먼저 뜨고, 그걸 확인해야만
+// 뒤에 있는 메모/등급/담당자 선택 팝업이 이어서 나타나도록 시작을 미뤄둔다.
+const pendingCopyChainRef = React.useRef(null);
+const pendingContactItemsRef = React.useRef([]);
+const pendingFinalFocusRef = React.useRef(null);
+
+const advancePopupChain = () => {
+  if (clientAlertQueueRef.current.length > 0) {
+    const next = clientAlertQueueRef.current[0];
+    clientAlertQueueRef.current = clientAlertQueueRef.current.slice(1);
+    setClientAlert(next);
+    return;
+  }
+  if (pendingContactItemsRef.current.length > 0) {
+    const items = pendingContactItemsRef.current;
+    pendingContactItemsRef.current = [];
+    openContactPopup(items);
+    return;
+  }
+  if (pendingFinalFocusRef.current) {
+    const id = pendingFinalFocusRef.current;
+    pendingFinalFocusRef.current = null;
+    setTimeout(() => focusById(id), 50);
+  }
+};
+
+const showClientAlertChain = (targets, { contactItems = [], finalFocusId = null, alwaysFocus = false } = {}) => {
+  const list = (targets || []).filter(Boolean);
+  const hasAnything = list.length > 0 || contactItems.length > 0;
+  clientAlertQueueRef.current = list.slice(1);
+  pendingContactItemsRef.current = contactItems;
+  pendingFinalFocusRef.current = (hasAnything || alwaysFocus) ? finalFocusId : null;
+  if (list.length > 0) {
+    setClientAlert(list[0]);
+  } else if (contactItems.length > 0) {
+    pendingContactItemsRef.current = [];
+    openContactPopup(contactItems);
+  } else if (alwaysFocus && finalFocusId) {
+    setTimeout(() => focusById(finalFocusId), 50);
+  }
+};
+
 const applyPlaceToForm = (place, type, nextFocusId = null) => {
   const contacts = (place.contacts || []).filter(c => c.name?.trim());
   const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
@@ -6739,11 +6791,14 @@ const applyPlaceToForm = (place, type, nextFocusId = null) => {
     }));
   }
 
-  if (!clientAlert) checkClientGrade(place.업체명, nextFocusId);
-
-if (uniqueContacts.length > 1) {
-    openContactPopup([{ type, place, contacts: uniqueContacts }]);
-  }
+  const alertTarget = findClientAlertTarget(place.업체명);
+  const contactItems = uniqueContacts.length > 1 ? [{ type, place, contacts: uniqueContacts }] : [];
+  // 직접입력(상/하차지명 자동완성)으로 채운 경우 — 팝업이 하나라도 뜨면 그 필드로,
+  // 아무 팝업도 없으면 포커스를 건드리지 않는다(사용자 이동에 맡김).
+  showClientAlertChain(
+    alertTarget ? [{ ...alertTarget, 업체명: alertTarget.업체명 || alertTarget.거래처명 || place.업체명 }] : [],
+    { contactItems, finalFocusId: nextFocusId }
+  );
 };
 
 const openContactPopup = (items) => {
@@ -6755,8 +6810,6 @@ const openContactPopup = (items) => {
 };
 
 const closeContactPopup = (selectedContact) => {
-  const currentType = contactPopup?.type;
-
   if (selectedContact && contactPopup) {
     const field = contactPopup.type === "pickup"
       ? { 상차지담당자: selectedContact.name || "", 상차지담당자번호: selectedContact.phone || "" }
@@ -6772,17 +6825,8 @@ const closeContactPopup = (selectedContact) => {
     return;
   }
 
-  // 큐 없으면 포커스 이동
-  setTimeout(() => {
-    if (currentType === "pickup") {
-      // 상차지 담당자 선택 후 → 하차지명으로
-      focusById("drop-place-input");
-    } else {
-      // 하차지 담당자 선택 후 → 화물내용으로
-      const cargoInput = document.querySelector('input[placeholder="예: 2 또는 변압기"]');
-      if (cargoInput) cargoInput.focus();
-    }
-  }, 60);
+  // 대기 중인 팝업 큐가 남아있으면(체인 방식) 이어서 진행, 없으면 지정된 포커스로 이동
+  setTimeout(() => { advancePopupChain(); }, 60);
 };
 
 const updateContactInPlace = async (placeId, newContacts) => {
@@ -7985,18 +8029,17 @@ setCopyOpen(false);
     setCopyDateHint(null);
   }
 
-  // 🚫 복사된 오더 거래처 등급 체크 — 등급이 "일반"이라도 메모가 있으면 함께 안내한다.
+  // 🚫 복사된 오더 거래처 등급/메모 체크 — 상차지·하차지 양쪽 다 해당되면 둘 다
+  // 순서대로 안내한다(예전에는 먼저 찾은 것 하나만 뜨고 나머지는 무시됐음).
   const namesToCheck = [keep.거래처명, keep.상차지명, keep.하차지명]
     .filter(Boolean)
     .filter((v, i, arr) => arr.indexOf(v) === i); // 중복 제거
-  for (const n of namesToCheck) {
-    const found = (placeRows || []).find(
-      p => (p.업체명 || "") === n.trim() && (p.등급 === "블랙" || p.등급 === "주의" || (p.메모 && String(p.메모).trim()))
-    );
-    if (found) { setClientAlert(found); break; }
-  }
+  const alertTargets = namesToCheck
+    .map(n => findClientAlertTarget(n))
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.findIndex(x => (x.업체명 || x.거래처명) === (v.업체명 || v.거래처명)) === i);
 
-  // 담당자 복수 선택 팝업 (오더복사)
+  // 담당자 복수 선택 팝업 (오더복사) — 메모/등급 안내 뒤에 이어서 보여준다.
   const popupItems = [];
   const checkCopyContact = (place, type) => {
     if (!place) return;
@@ -8006,7 +8049,13 @@ setCopyOpen(false);
   };
   checkCopyContact(pickupPlace, "pickup");
   checkCopyContact(dropPlace, "drop");
-  if (popupItems.length > 0) openContactPopup(popupItems);
+
+  // 오더복사는 상/하차지 중 어느 쪽 안내든 전부 확인한 뒤에는 항상 상차지명으로
+  // 포커스가 돌아온다. "복사되었습니다" 알림을 먼저 확인해야 이 체인이 시작되도록
+  // 여기서는 바로 띄우지 않고 저장해둔다 (호출부에서 showAlert(msg, then)으로 실행).
+  pendingCopyChainRef.current = () => {
+    showClientAlertChain(alertTargets, { contactItems: popupItems, finalFocusId: "pickup-place-input", alwaysFocus: true });
+  };
 };
 
     // ------------------ 초기화 ------------------
@@ -9034,6 +9083,7 @@ const similar = placeList.filter(p => {
 </label>
 
     <input
+      id="pickup-place-input"
       className={inputCls}
       placeholder="상차지 검색"
       value={form.상차지명}
@@ -9053,9 +9103,7 @@ const similar = placeList.filter(p => {
         if (e.key === "Enter") {
           const p = list[pickupActive];
           if (!p) return;
-          applyPlaceToForm(p, "pickup",
-            p.담당자 && p.담당자번호 ? "drop-place-input" : p.담당자 ? "pickup-phone" : "pickup-manager"
-          );
+          applyPlaceToForm(p, "pickup", "pickup-place-input");
           setShowPickupDropdown(false);
         } else if (e.key === "ArrowDown") {
           setPickupActive((i) => Math.min(i + 1, list.length - 1));
@@ -9075,9 +9123,7 @@ const similar = placeList.filter(p => {
           i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
         }`}
         onMouseDown={() => {
-          applyPlaceToForm(p, "pickup",
-            p.담당자 && p.담당자번호 ? "drop-place-input" : p.담당자 ? "pickup-phone" : "pickup-manager"
-          );
+          applyPlaceToForm(p, "pickup", "pickup-place-input");
           setShowPickupDropdown(false);
         }}
       >
@@ -9193,9 +9239,7 @@ className={`
       if (e.key === "Enter") {
         const p = list[placeActive]
         if (!p) return
-        applyPlaceToForm(p, "drop",
-          !p.담당자 ? "drop-manager" : !p.담당자번호 ? "drop-phone" : null
-        );
+        applyPlaceToForm(p, "drop", "drop-place-input");
         setShowPlaceDropdown(false);
       } else if (e.key === "ArrowDown") {
         setPlaceActive((i) => Math.min(i + 1, list.length - 1))
@@ -9216,9 +9260,7 @@ className={`
           }`}
           onMouseEnter={() => setPlaceActive(i)}
           onMouseDown={() => {
-            applyPlaceToForm(p, "drop",
-              !p.담당자 ? "drop-manager" : !p.담당자번호 ? "drop-phone" : null
-            );
+            applyPlaceToForm(p, "drop", "drop-place-input");
             setShowPlaceDropdown(false);
           }}
         >
@@ -11200,7 +11242,10 @@ className={`
                       }));
                       setIsCopyMode(true);
                       setCopyOpen(false);
-                      showAlert("오더 내용이 입력창에 복사되었습니다!");
+                      showAlert("오더 내용이 입력창에 복사되었습니다!", () => {
+                        pendingCopyChainRef.current?.();
+                        pendingCopyChainRef.current = null;
+                      });
                     }}
                   >
                     복사
@@ -11267,7 +11312,10 @@ className={`
     }));
     setIsCopyMode(true);
     setCopyOpen(false);
-    showAlert("오더 내용이 입력창에 복사되었습니다!");
+    showAlert("오더 내용이 입력창에 복사되었습니다!", () => {
+      pendingCopyChainRef.current?.();
+      pendingCopyChainRef.current = null;
+    });
   }}
 >
                           <td className="px-3 py-3 text-center">
@@ -11694,13 +11742,10 @@ className={`
     ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
    onKeyDown={(e) => {
       if (e.key === "Enter" || e.key === "Escape") {
-const nextId = clientAlert._nextFocusId || getNextFocusIdFromForm(form);
-setClientAlert(null);
-setTimeout(() => {
-  // 못 찾으면 drop-place-input 같은 기본값을 한 번 더 시도해도 됨
-  focusById(nextId) || focusById("drop-place-input");
-}, 50);
-
+        e.preventDefault();
+        e.stopPropagation();
+        setClientAlert(null);
+        setTimeout(() => { advancePopupChain(); }, 50);
       }
     }}
   >
@@ -11751,13 +11796,8 @@ setTimeout(() => {
       <div className="px-6 pb-5">
         <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-[#1B2B4B]"}`}
           onClick={() => {
-const nextId = clientAlert._nextFocusId || getNextFocusIdFromForm(form);
-setClientAlert(null);
-setTimeout(() => {
-  // 못 찾으면 drop-place-input 같은 기본값을 한 번 더 시도해도 됨
-  focusById(nextId) || focusById("drop-place-input");
-}, 50);
-
+            setClientAlert(null);
+            setTimeout(() => { advancePopupChain(); }, 50);
           }}>확인</button>
       </div>
       </>
@@ -44166,6 +44206,19 @@ React.useEffect(() => {
                       value={editClientModal.메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 메모: e.target.value }))} />
                   </div>
+                  {(editClientModal.메모?.trim() || (editClientModal.등급 && editClientModal.등급 !== "일반")) && (
+                    <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                      <div>
+                        <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 메모·등급 안내 팝업이 뜨지 않습니다</div>
+                      </div>
+                      <button type="button"
+                        onClick={() => setEditClientModal(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editClientModal.팝업표시 === false ? "bg-gray-300" : "bg-[#1B2B4B]"}`}>
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editClientModal.팝업표시 === false ? "translate-x-1" : "translate-x-6"}`} />
+                      </button>
+                    </div>
+                  )}
 
                   {/* 파일/이미지 업로드 */}
                   <div className="col-span-2">
@@ -44363,6 +44416,19 @@ React.useEffect(() => {
                   value={editPlaceModal.메모||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 메모: e.target.value }))} />
               </div>
+              {(editPlaceModal.메모?.trim() || (editPlaceModal.등급 && editPlaceModal.등급 !== "일반")) && (
+                <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                  <div>
+                    <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 메모·등급 안내 팝업이 뜨지 않습니다</div>
+                  </div>
+                  <button type="button"
+                    onClick={() => setEditPlaceModal(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editPlaceModal.팝업표시 === false ? "bg-gray-300" : "bg-[#1B2B4B]"}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editPlaceModal.팝업표시 === false ? "translate-x-1" : "translate-x-6"}`} />
+                  </button>
+                </div>
+              )}
             </div>
             <div className="px-6 pb-5 flex gap-3">
               <button onClick={() => setEditPlaceModal(null)}
