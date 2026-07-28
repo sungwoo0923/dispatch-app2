@@ -1466,6 +1466,12 @@ const markEditRequestSeen = async (order) => {
     const normPlate = (s="") => String(s).replace(/\s+/g, "").toUpperCase();
     const existing = drivers.find(d => normPlate(d.차량번호) === normPlate(driver.차량번호));
     if (existing?.id) id = existing.id;
+    // 로컬 drivers state에 아직 없는 차량번호라면(신규 기사이거나, 방금 다른 곳에서
+    // upsertDriver를 호출했는데 realtime 리스너가 아직 그 결과를 반영하지 못한 경우)
+    // crypto.randomUUID()로 매번 새 문서를 만들면, 짧은 시간에 같은 차량번호로 여러 번
+    // 호출될 때(연속 오더 등록 등) 서로의 존재를 모른 채 완전히 동일한 내용의 문서가
+    // 여러 개 생긴다 — 차량번호 자체를 문서 id로 써서 항상 같은 문서로 수렴하게 한다.
+    else id = normPlate(driver.차량번호);
   }
   if (!id) id = crypto.randomUUID();
 
