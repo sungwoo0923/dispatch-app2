@@ -764,9 +764,11 @@ const sixMonthsAgo = getSixMonthsAgo();
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
 
-        // 운송사 자신이 방금 등록한 오더까지 "신규 오더 등록" 배너가 떠서 불필요하고
-        // 등록 직후 표 렌더링과 겹쳐 끊김만 유발했다 — 화주사가 실제로 새로 보낸
-        // 배차요청일 때만("source"가 shipper 계열일 때만) 배너를 띄운다.
+        // ⚠️ addDispatch가 실제로 쓰는 컬렉션은 COLL.dispatch="orders"다 — 즉 운송사
+        // 자신의 오더 등록/수기입력/오더복사도 전부 여기(orders 리스너)로 들어온다.
+        // (문자 그대로의 "dispatch" 컬렉션은 별도이며 이 등록 흐름과 무관하다.)
+        // 화주사가 보낸 배차요청은 회사 전체에 보여야 하므로 그대로 두고, 운송사
+        // 본인의 등록은 본인 계정에게만 등록 확인 배너를 띄운다.
         if (ch.type === "added" && !ordersPrev.has(id)) {
           if ((d.상차지명 || d.거래처명) && (d.source === "shipper" || d.source === "shipper_mobile")) {
             sflowToast(
@@ -774,6 +776,21 @@ const sixMonthsAgo = getSixMonthsAgo();
               "order",
               { orderId: id, source: d.source }
             );
+          } else if ((d.상차지명 || d.거래처명) && d.작성자 && user?.email && d.작성자 === user.email) {
+            const isNowDoneAtAdd = (d.배차상태 || "").trim() === "배차완료" && (d.차량번호 || "").trim();
+            if (isNowDoneAtAdd) {
+              sflowToast(
+                `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
+                "dispatch",
+                { orderId: id }
+              );
+            } else {
+              sflowToast(
+                `[오더 등록] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+                "order",
+                { orderId: id }
+              );
+            }
           }
         }
 
@@ -9413,6 +9430,7 @@ className={`
   <label className={labelCls + " flex items-center gap-1 flex-wrap"}>
     화물내용 {reqStar}
     <button type="button"
+      tabIndex={-1}
       className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
       onClick={() => setCargoAddPopup({ initialValue: form.화물내용||"", onCommit: (v) => onChange("화물내용", v) })}>
       + 추가
@@ -20770,7 +20788,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
 </Field>
 
-    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
+    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -22091,7 +22109,7 @@ value={copyTarget?.화물수량 || ""}
             {/* 🔵 화물내용 */}
             {/* ------------------------------------------------ */}
             <label className="flex items-center gap-1 flex-wrap">화물내용
-              <button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer"
+              <button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer"
                 onClick={() => setCargoAddPopup({ initialValue: editTarget?.화물내용||"", onCommit: (v) => setEditTarget(p=>({...p,화물내용:v})) })}>+ 추가</button>
               <CargoExtraChips value={editTarget?.화물내용} />
             </label>
@@ -29123,7 +29141,7 @@ return (
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
-<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: editTarget?.화물내용||"", onCommit: (v) => setEditTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={editTarget?.화물내용} /></span>}>
+<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: editTarget?.화물내용||"", onCommit: (v) => setEditTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={editTarget?.화물내용} /></span>}>
   <div className="relative w-full">
 
     <input
@@ -30555,7 +30573,7 @@ setCopyPlaceOptions(list);
 
 </Field>
 
-<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
+<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -37640,7 +37658,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </select>
                       </div>
                     </Field>
-                    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
+                    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                         <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
