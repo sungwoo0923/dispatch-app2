@@ -787,7 +787,7 @@ const sixMonthsAgo = getSixMonthsAgo();
             } else {
               sflowToast(
                 `[오더 등록] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
-                "order",
+                "orderRegistered",
                 { orderId: id }
               );
             }
@@ -974,7 +974,7 @@ const sixMonthsAgo = getSixMonthsAgo();
           } else if (d.상차지명 || d.거래처명) {
             sflowToast(
               `[오더 등록] ${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
-              "order",
+              "orderRegistered",
               { orderId: id }
             );
           }
@@ -2161,7 +2161,7 @@ function ToastProvider({ children }) {
             key={t.id}
             className="toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
             style={{
-              background: t.type === "dispatch"
+              background: t.type === "dispatch" || t.type === "orderRegistered"
                 ? "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)"
                 : t.type === "order"
                 ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
@@ -2179,7 +2179,7 @@ function ToastProvider({ children }) {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   {t.type === "dispatch" ? (
                     <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
-                  ) : t.type === "order" ? (
+                  ) : t.type === "order" || t.type === "orderRegistered" ? (
                     <><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v9"/></>
                   ) : t.type === "shipperEdit" ? (
                     <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>
@@ -2194,7 +2194,7 @@ function ToastProvider({ children }) {
               {/* 내용 */}
               <div className="flex-1 min-w-0">
                 <div className="text-white text-[13px] font-bold leading-snug">
-                  {t.type === "dispatch" ? "배차 완료" : t.type === "order" ? "신규 오더 등록" : t.type === "shipperEdit" ? "화주사 수정" : t.type === "cancel" ? "오더 취소" : "알림"}
+                  {t.type === "dispatch" ? "배차 완료" : t.type === "orderRegistered" ? "오더 등록" : t.type === "order" ? "신규 오더 등록" : t.type === "shipperEdit" ? "화주사 수정" : t.type === "cancel" ? "오더 취소" : "알림"}
                 </div>
                 <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed break-words">
                   {t.message}
@@ -5501,6 +5501,20 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
       c => normalizeKey(c.업체명 || c.거래처명) === normalizeKey(name)
     );
     if (clientMatch) {
+      // 하차지거래처와 동일하게, 기존 주소와 다르면 덮어쓸지/별도 저장할지 먼저 물어본다.
+      if (addr?.trim() && clientMatch.주소?.trim() &&
+          normalizeAddr(clientMatch.주소) !== normalizeAddr(addr) &&
+          _conflictResolution !== "update" && _conflictResolution !== "keep") {
+        setPlaceConflictQueue(q => [...q, {
+          type: "addrMismatch",
+          name, addr, manager, phone, placeId,
+          existingAddr: clientMatch.주소,
+          existingId: clientMatch.id,
+        }]);
+        setPlaceConflictOpen(true);
+        return;
+      }
+
       let cContacts = Array.isArray(clientMatch.contacts) ? [...clientMatch.contacts]
         : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []);
       const cManager = manager?.trim() || "";
@@ -5513,10 +5527,11 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
       await upsertClient?.({
         id: clientMatch.id,
         거래처명: clientMatch.거래처명 || name,
-        주소: addr || clientMatch.주소 || "",
+        주소: cFinalAddr,
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
@@ -5632,6 +5647,10 @@ const mergedClients = React.useMemo(() => {
         메모: c.메모 || "",
         등급: c.등급 || "일반",
         등급변경일: c.등급변경일 || null,
+        // 하차지거래처와 달리 기본거래처는 원래 contacts 배열이 없었지만, savePlaceSmart가
+        // 이제 기본거래처에도 여러 담당자를 contacts로 저장한다 — 여기서 빠뜨리면
+        // 담당자가 여러 명이어도 항상 대표 담당자 1명만 적용되고 선택 팝업이 안 뜬다.
+        contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
       });
     }
   });
@@ -6936,10 +6955,25 @@ const closeContactPopup = (selectedContact) => {
   setTimeout(() => { advancePopupChain(); }, 60);
 };
 
-const updateContactInPlace = async (placeId, newContacts) => {
-  if (!placeId) return;
+// place._id가 있으면(진짜 하차지거래처 문서) 그 문서를 갱신하고, 없으면(기본거래처에서
+// 병합되어 들어온 항목) 같은 업체명의 기본거래처 문서를 갱신한다.
+const updateContactInPlace = async (place, newContacts) => {
+  if (!place?.업체명) return;
   try {
-    await updateDoc(doc(db, "places", placeId), { contacts: newContacts });
+    if (place._id) {
+      await updateDoc(doc(db, "places", place._id), { contacts: newContacts });
+    } else {
+      const primary = newContacts.find(c => c.isPrimary) || newContacts[0];
+      const clientMatch = (clients || []).find(c => normalizeKey(c.업체명 || c.거래처명) === normalizeKey(place.업체명));
+      await upsertClient?.({
+        id: clientMatch?.id || place.업체명,
+        거래처명: clientMatch?.거래처명 || place.업체명,
+        주소: clientMatch?.주소 || place.주소 || "",
+        담당자: primary?.name || "",
+        연락처: primary?.phone || "",
+        contacts: newContacts,
+      });
+    }
     setContactPopup(prev => prev ? { ...prev, contacts: newContacts } : null);
   } catch (e) {
    showAlert("저장 실패: " + e.message);
@@ -11728,7 +11762,7 @@ className={`
                       const updated = contactPopup.contacts.map((x, idx) =>
                         idx === i ? { ...x, name: editContactData.name.trim(), phone: editContactData.phone.trim() } : x
                       );
-                      await updateContactInPlace(contactPopup.place._id, updated);
+                      await updateContactInPlace(contactPopup.place, updated);
                       setEditingContactIdx(null);
                     }}
                   >저장</button>
@@ -11770,7 +11804,7 @@ className={`
                       // 삭제 후 primary 재지정
                       const hasPrimary = updated.some(x => x.isPrimary);
                       const final = hasPrimary ? updated : updated.map((x, idx) => ({ ...x, isPrimary: idx === 0 }));
-                      await updateContactInPlace(contactPopup.place._id, final);
+                      await updateContactInPlace(contactPopup.place, final);
                     }}
                   >삭제</button>
                 </div>
@@ -15818,7 +15852,7 @@ const mergedClients = React.useMemo(() => {
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     const k = name.toLowerCase().replace(/\s+/g,"");
-    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "" });
+    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -15855,6 +15889,20 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
   if (!placeId) {
     const clientMatch = (clients || []).find(c => rtNormalizeKey(c.업체명 || c.거래처명) === rtNormalizeKey(name));
     if (clientMatch) {
+      // 하차지거래처와 동일하게, 기존 주소와 다르면 덮어쓸지/별도 저장할지 먼저 물어본다.
+      if (addr?.trim() && clientMatch.주소?.trim() &&
+          rtNormalizeAddr(clientMatch.주소) !== rtNormalizeAddr(addr) &&
+          _conflictResolution !== "update" && _conflictResolution !== "keep") {
+        setPlaceConflictQueue(q => [...q, {
+          type: "addrMismatch",
+          name, addr, manager, phone, placeId,
+          existingAddr: clientMatch.주소,
+          existingId: clientMatch.id,
+        }]);
+        setPlaceConflictOpen(true);
+        return;
+      }
+
       let cContacts = Array.isArray(clientMatch.contacts) ? [...clientMatch.contacts]
         : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []);
       const cManager = manager?.trim() || "";
@@ -15867,10 +15915,11 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
       await upsertClient?.({
         id: clientMatch.id,
         거래처명: clientMatch.거래처명 || name,
-        주소: addr || clientMatch.주소 || "",
+        주소: cFinalAddr,
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
@@ -24978,7 +25027,7 @@ const mergedClients = React.useMemo(() => {
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     const k = name.toLowerCase().replace(/\s+/g,"");
-    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "" });
+    if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -25007,6 +25056,20 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
   if (!placeId) {
     const clientMatch = (clients || []).find(c => dsNormalizeKey(c.업체명 || c.거래처명) === dsNormalizeKey(name));
     if (clientMatch) {
+      // 하차지거래처와 동일하게, 기존 주소와 다르면 덮어쓸지/별도 저장할지 먼저 물어본다.
+      if (addr?.trim() && clientMatch.주소?.trim() &&
+          dsNormalizeAddr(clientMatch.주소) !== dsNormalizeAddr(addr) &&
+          _conflictResolution !== "update" && _conflictResolution !== "keep") {
+        setPlaceConflictQueue(q => [...q, {
+          type: "addrMismatch",
+          name, addr, manager, phone, placeId,
+          existingAddr: clientMatch.주소,
+          existingId: clientMatch.id,
+        }]);
+        setPlaceConflictOpen(true);
+        return;
+      }
+
       let cContacts = Array.isArray(clientMatch.contacts) ? [...clientMatch.contacts]
         : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []);
       const cManager = manager?.trim() || "";
@@ -25019,10 +25082,11 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
       await upsertClient?.({
         id: clientMatch.id,
         거래처명: clientMatch.거래처명 || name,
-        주소: addr || clientMatch.주소 || "",
+        주소: cFinalAddr,
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
@@ -36735,7 +36799,7 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
     (clients || []).forEach(c => {
       const name = c.업체명 || c.거래처명 || "";
       const k = name.toLowerCase().replace(/\s+/g, "");
-      if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "" });
+      if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
     });
     return Array.from(map.values()).filter(p => String(p.업체명 || "").toLowerCase().includes(v));
   };
