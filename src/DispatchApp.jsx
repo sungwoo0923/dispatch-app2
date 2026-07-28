@@ -23953,9 +23953,8 @@ setConfirmChange(null);
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
-                오더 내용이 복사되었습니다.<br />
-                <span className="font-semibold text-[#1B2B4B]">{smsConfirm4.phone || "번호 없음"}</span> 으로 문자 앱을 여시겠습니까?<br />
-                <span className="text-gray-500">(문자 내용란에 붙여넣기 해주세요 — 길어서 자동입력 시 일부가 잘릴 수 있습니다)</span>
+                <span className="font-semibold text-[#1B2B4B]">{smsConfirm4.phone || "번호 없음"}</span><br />
+                으로 문자를 전송하시겠습니까?
               </div>
               <div className="flex gap-2">
                 <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setSmsConfirm4(null)}>취소</button>
@@ -23963,10 +23962,10 @@ setConfirmChange(null);
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
                   onClick={() => {
                     const phone = smsConfirm4.phone.replace(/[^\d]/g, "");
-                    window.location.href = `sms:${phone}`;
+                    window.location.href = `sms:${phone}?body=${encodeURIComponent(smsConfirm4.body)}`;
                     setSmsConfirm4(null);
                   }}
-                >문자 앱 열기</button>
+                >문자 보내기</button>
               </div>
             </div>
           </div>
@@ -31577,9 +31576,8 @@ setCopyPlaceOptions(list);
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
-                오더 내용이 복사되었습니다.<br />
-                <span className="font-semibold text-[#1B2B4B]">{smsConfirm5.phone || "번호 없음"}</span> 으로 문자 앱을 여시겠습니까?<br />
-                <span className="text-gray-500">(문자 내용란에 붙여넣기 해주세요 — 길어서 자동입력 시 일부가 잘릴 수 있습니다)</span>
+                <span className="font-semibold text-[#1B2B4B]">{smsConfirm5.phone || "번호 없음"}</span><br />
+                으로 문자를 전송하시겠습니까?
               </div>
               <div className="flex gap-2">
                 <button
@@ -31589,11 +31587,11 @@ setCopyPlaceOptions(list);
                 <button
                   onClick={() => {
                     const phone = smsConfirm5.phone.replace(/[^\d]/g, "");
-                    window.location.href = `sms:${phone}`;
+                    window.location.href = `sms:${phone}?body=${encodeURIComponent(smsConfirm5.body)}`;
                     setSmsConfirm5(null);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-medium"
-                >문자 앱 열기</button>
+                >문자 보내기</button>
               </div>
             </div>
           </div>
