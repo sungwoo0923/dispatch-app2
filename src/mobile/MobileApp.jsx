@@ -6124,6 +6124,30 @@ function MobileOrderList({
     if (docId) updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
   };
   const [selectedIds, setSelectedIds] = useState(new Set());
+  // ── 오더필터(일반오더/오토바이/냉장·냉동) — 기존 차종선택(vehicleFilter)과 별개로,
+  // 차량종류를 3개 큰 분류로 묶어 필터링한다. 아무것도 선택 안 하면 전체 표시.
+  const [orderTypeFilterOpen, setOrderTypeFilterOpen] = useState(false);
+  const [orderTypeFilter, setOrderTypeFilter] = useState(() => new Set());
+  const classifyOrderType = (o) => {
+    const t = String(o?.차량종류 || o?.차종 || "");
+    if (/오토바이/.test(t)) return "오토바이";
+    if (/냉장|냉동/.test(t)) return "냉장냉동";
+    return "일반";
+  };
+  // 아래 dates/statusCount/summary/allVisibleOrders 등 이 함수 전체가 groupedByDate를
+  // 그대로 참조하므로, 여기서 같은 이름으로 다시 선언해 필터링된 결과로 가려버린다
+  // (한 곳만 고치면 전체에 일관되게 반영됨).
+  const groupedByDateRaw = groupedByDate;
+  groupedByDate = orderTypeFilter.size === 0
+    ? groupedByDateRaw
+    : (() => {
+        const next = new Map();
+        groupedByDateRaw.forEach((list, key) => {
+          const filtered = list.filter(o => orderTypeFilter.has(classifyOrderType(o)));
+          if (filtered.length) next.set(key, filtered);
+        });
+        return next;
+      })();
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
   const [copyModalOrder, setCopyModalOrder] = useState(null);
@@ -6494,18 +6518,32 @@ const summary = useMemo(() => {
             <span className="ml-1.5 font-bold text-[#1B2B4B]">· {selectedIds.size}개 선택</span>
           )}
         </span>
-        <button
-          onClick={() => multiSelectMode ? exitMultiSelect() : setMultiSelectMode(true)}
-          className={`text-[12px] font-semibold border transition-colors ${
-            multiSelectMode
-              ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-              : cardVersionB
-                ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
-                : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-          } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
-        >
-          {multiSelectMode ? "선택 취소" : "다중선택"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setOrderTypeFilterOpen(true)}
+            className={`text-[12px] font-semibold border transition-colors ${
+              orderTypeFilter.size > 0
+                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                : cardVersionB
+                  ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                  : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+            } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
+          >
+            오더필터{orderTypeFilter.size > 0 && ` (${orderTypeFilter.size})`}
+          </button>
+          <button
+            onClick={() => multiSelectMode ? exitMultiSelect() : setMultiSelectMode(true)}
+            className={`text-[12px] font-semibold border transition-colors ${
+              multiSelectMode
+                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                : cardVersionB
+                  ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                  : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+            } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
+          >
+            {multiSelectMode ? "선택 취소" : "다중선택"}
+          </button>
+        </div>
       </div>
 
       {/* 카드 목록 */}
@@ -6686,6 +6724,68 @@ const summary = useMemo(() => {
               }}
             >
               삭제
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── 오더필터 (일반오더/오토바이/냉장·냉동) ── */}
+    {orderTypeFilterOpen && (
+      <div className="fixed inset-0 z-[9999] flex items-end justify-center" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setOrderTypeFilterOpen(false)}>
+        <div
+          className="w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
+          <div className="flex items-center justify-between mb-4">
+            <span className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>오더필터</span>
+            <button onClick={() => setOrderTypeFilterOpen(false)} className="text-gray-400 text-xl leading-none">&times;</button>
+          </div>
+          <div className="space-y-2 mb-5">
+            {[
+              { key: "일반", label: "일반오더", desc: "라보/라보스, 윙, 카고, 탑 등 (오토바이·냉장·냉동 제외)" },
+              { key: "오토바이", label: "오토바이", desc: "차량종류에 오토바이가 포함된 오더" },
+              { key: "냉장냉동", label: "냉장/냉동", desc: "차량종류에 냉장 또는 냉동이 포함된 오더" },
+            ].map(opt => {
+              const checked = orderTypeFilter.has(opt.key);
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setOrderTypeFilter(prev => {
+                    const next = new Set(prev);
+                    checked ? next.delete(opt.key) : next.add(opt.key);
+                    return next;
+                  })}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors ${
+                    checked ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-white"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${checked ? "bg-[#1B2B4B] border-[#1B2B4B]" : "border-gray-300"}`}>
+                    {checked && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className={`text-[13px] font-bold ${checked ? "text-[#1B2B4B]" : "text-gray-800"}`}>{opt.label}</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">{opt.desc}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-3">
+            <button
+              className="flex-1 py-3 rounded-xl text-[14px] font-semibold border border-gray-300 text-gray-600 bg-white"
+              onClick={() => setOrderTypeFilter(new Set())}
+            >
+              초기화
+            </button>
+            <button
+              className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-[#1B2B4B] text-white"
+              onClick={() => setOrderTypeFilterOpen(false)}
+            >
+              적용
             </button>
           </div>
         </div>

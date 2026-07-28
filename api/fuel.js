@@ -9,10 +9,14 @@ export default async function handler(req, res) {
     `https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${key}`,
   ];
 
+  // vercel.json의 maxDuration이 10초라, endpoint 3개를 순서대로 시도하면서 각각 6초씩
+  // 기다리면(최악의 경우 최대 18초) 하드코딩 폴백에 도달하기도 전에 Vercel이 함수를
+  // 강제 종료해 504가 나고, 프런트엔드는 이를 "유가 정보 없음"으로 표시하게 된다.
+  // 3개 endpoint를 다 시도해도 여유가 남도록 endpoint당 제한시간을 줄인다.
   for (const url of endpoints) {
     try {
       const ctrl = new AbortController();
-      const tid  = setTimeout(() => ctrl.abort(), 6000);
+      const tid  = setTimeout(() => ctrl.abort(), 2500);
       const response = await fetch(url, { signal: ctrl.signal });
       clearTimeout(tid);
       if (!response.ok) continue;
