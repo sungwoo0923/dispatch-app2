@@ -8247,6 +8247,28 @@ function MobileOrderDetail({
     setName(order.기사명 || "");
     setPhone(order.전화번호 || "");
   }, [order.차량번호, order.기사명, order.전화번호]);
+
+  // 상/하차지 예상 이동거리·시간 — 상세보기를 열 때만 조회한다(목록 카드에서는 호출 안 함).
+  const [routeInfo, setRouteInfo] = useState(null); // { distanceKm, durationText } | "loading" | "error"
+  useEffect(() => {
+    if (!order?.상차지주소 || !order?.하차지주소) { setRouteInfo(null); return; }
+    let cancelled = false;
+    setRouteInfo("loading");
+    fetch(`${(import.meta.env.VITE_API_BASE || "")}/api/route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromAddr: order.상차지주소, toAddr: order.하차지주소 }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled) return;
+        const km = Number(data?.distanceKm);
+        if (!km) { setRouteInfo("error"); return; }
+        setRouteInfo({ distanceKm: km, durationText: data?.durationText || (data?.durationMin ? `${data.durationMin}분` : "-") });
+      })
+      .catch(() => { if (!cancelled) setRouteInfo("error"); });
+    return () => { cancelled = true; };
+  }, [order?.상차지주소, order?.하차지주소]);
   const [isNewDriver, setIsNewDriver] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
   const [attachItems, setAttachItems] = useState([]);
@@ -9074,13 +9096,33 @@ const handleAssignClick = () => {
           </div>
         </div>
       )}
-      {/* 배차/지급방식 — 화물정보와 구분되는 별도 그룹 */}
-      {(order.배차방식 || order.지급방식) && (
+      {/* 배차방식/지급방식/이동거리·시간 — 화물정보와 구분되는 별도 그룹 */}
+      {(order.배차방식 || order.지급방식 || order.상차지주소) && (
         <div className={`px-4 pt-2 pb-2.5 border-t bg-gray-50/60 ${cardVersionB ? "border-[#1B2B4B]/10" : "border-blue-100"}`}>
-          <div className={`text-[10px] font-bold mb-1 ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-300"}`}>배차/지급방식</div>
-          <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
-            {order.지급방식 && <span>{order.지급방식}</span>}
-            {order.배차방식 && <span>{order.배차방식}</span>}
+          <div className="grid grid-cols-2 gap-x-3">
+            <div>
+              <div className={`text-[10px] font-bold mb-1 ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-300"}`}>배차/지급방식</div>
+              <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+                {order.배차방식 && <span>{order.배차방식}</span>}
+                {order.지급방식 && <span>{order.지급방식}</span>}
+                {!order.배차방식 && !order.지급방식 && <span className="text-gray-300 font-normal">-</span>}
+              </div>
+            </div>
+            <div className="border-l border-gray-200 pl-3">
+              <div className={`text-[10px] font-bold mb-1 ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-300"}`}>이동거리·시간</div>
+              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+                {routeInfo === "loading" ? (
+                  <span className="text-gray-300 font-normal">조회 중...</span>
+                ) : routeInfo === "error" || !routeInfo ? (
+                  <span className="text-gray-300 font-normal">-</span>
+                ) : (
+                  <>
+                    <span>{routeInfo.distanceKm.toFixed(1)}km</span>
+                    <span>{routeInfo.durationText}</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

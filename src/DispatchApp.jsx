@@ -1955,6 +1955,31 @@ function mergeViaTonnage(mainTon, waypointLists) {
 
 // ===================== 오더정보 모달 =====================
 function OrderInfoModal({ row, onClose }) {
+  const [routeInfo, setRouteInfo] = React.useState(null); // { distanceKm, durationText } | "loading" | "error"
+  React.useEffect(() => {
+    if (!row?.상차지주소 || !row?.하차지주소) { setRouteInfo(null); return; }
+    let cancelled = false;
+    setRouteInfo("loading");
+    const viaPoints = [
+      ..._parseWaypointList(row.경유상차목록 || row.경유지_상차),
+      ..._parseWaypointList(row.경유하차목록 || row.경유지_하차),
+    ].map(s => s.주소).filter(Boolean);
+    fetch(`${(import.meta.env.VITE_API_BASE || "")}/api/route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromAddr: row.상차지주소, toAddr: row.하차지주소, viaPoints }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled) return;
+        const km = Number(data?.distanceKm);
+        if (!km) { setRouteInfo("error"); return; }
+        setRouteInfo({ distanceKm: km, durationText: data?.durationText || (data?.durationMin ? `${data.durationMin}분` : "-") });
+      })
+      .catch(() => { if (!cancelled) setRouteInfo("error"); });
+    return () => { cancelled = true; };
+  }, [row?.상차지주소, row?.하차지주소, row?.경유상차목록, row?.경유지_상차, row?.경유하차목록, row?.경유지_하차]);
+
   if (!row) return null;
   const _s = (v) => _parseWaypointList(v);
   const pickupStops = [..._s(row.경유상차목록), ..._s(row.경유지_상차), ..._s(row.경유지상차)]
@@ -2026,6 +2051,20 @@ function OrderInfoModal({ row, onClose }) {
                   {s.방법 && <Row label="하차방법" value={s.방법} />}
                 </div>
               ))}
+            </Section>
+          )}
+          {row.상차지주소 && row.하차지주소 && (
+            <Section title="이동 정보">
+              {routeInfo === "loading" ? (
+                <div className="text-[13px] text-gray-400">거리·시간 조회 중...</div>
+              ) : routeInfo === "error" || !routeInfo ? (
+                <div className="text-[13px] text-gray-400">거리·시간 정보를 가져올 수 없습니다</div>
+              ) : (
+                <>
+                  <Row label="예상거리" value={`${routeInfo.distanceKm.toFixed(1)} km`} />
+                  <Row label="예상시간" value={routeInfo.durationText} />
+                </>
+              )}
             </Section>
           )}
           <Section title="화물 정보">
