@@ -607,6 +607,70 @@ function shouldShowDriverMemoAlert(d) {
   return !!(d && d.메모 && String(d.메모).trim() && d.팝업표시 === true);
 }
 
+// 거래처/하차지 수정 팝업에서 담당자가 여러 명일 때 목록으로 보고 수정/삭제할 수 있게
+// 하는 공용 컴포넌트. contacts: [{name, phone, isPrimary}], onChange(nextContacts)
+function ContactListEditor({ contacts, onChange }) {
+  const [editingIdx, setEditingIdx] = React.useState(null);
+  const [draft, setDraft] = React.useState({ name: "", phone: "" });
+  const list = Array.isArray(contacts) ? contacts : [];
+
+  const startEdit = (i) => { setEditingIdx(i); setDraft({ name: list[i].name || "", phone: list[i].phone || "" }); };
+  const saveEdit = () => {
+    onChange(list.map((c, i) => i === editingIdx ? { ...c, name: draft.name.trim(), phone: draft.phone.trim() } : c));
+    setEditingIdx(null);
+  };
+  const removeAt = (i) => {
+    let next = list.filter((_, idx) => idx !== i);
+    if (next.length && !next.some(c => c.isPrimary)) next = next.map((c, idx) => idx === 0 ? { ...c, isPrimary: true } : c);
+    onChange(next);
+    if (editingIdx === i) setEditingIdx(null);
+  };
+  const makePrimary = (i) => onChange(list.map((c, idx) => ({ ...c, isPrimary: idx === i })));
+  const addContact = () => {
+    onChange([...list, { name: "", phone: "", isPrimary: list.length === 0 }]);
+    setEditingIdx(list.length);
+    setDraft({ name: "", phone: "" });
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+      {list.length === 0 && (
+        <div className="px-3 py-3 text-[12px] text-gray-400 text-center">등록된 담당자가 없습니다</div>
+      )}
+      {list.map((c, i) => (
+        <div key={i} className="px-3 py-2">
+          {editingIdx === i ? (
+            <div className="flex items-center gap-2">
+              <input autoFocus className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
+                placeholder="이름" value={draft.name} onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} />
+              <input className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
+                placeholder="전화번호" value={draft.phone} onChange={e => setDraft(p => ({ ...p, phone: e.target.value }))} />
+              <button onClick={saveEdit} className="shrink-0 px-2 py-1 rounded bg-[#1B2B4B] text-white text-[11px] font-bold">저장</button>
+              <button onClick={() => setEditingIdx(null)} className="shrink-0 px-2 py-1 rounded bg-gray-100 text-gray-600 text-[11px] font-semibold">취소</button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {c.isPrimary && <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white">대표</span>}
+                <span className="text-[13px] font-semibold text-gray-800 truncate">{c.name || "(이름 없음)"}</span>
+                <span className="text-[12px] text-gray-500 truncate">{c.phone || "-"}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {!c.isPrimary && (
+                  <button onClick={() => makePrimary(i)} className="text-[11px] text-[#1B2B4B] font-semibold hover:underline">대표로</button>
+                )}
+                <button onClick={() => startEdit(i)} className="text-[11px] text-gray-500 font-semibold hover:underline">수정</button>
+                <button onClick={() => removeAt(i)} className="text-[11px] text-red-500 font-semibold hover:underline">삭제</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={addContact} className="w-full px-3 py-2 text-[12px] text-[#1B2B4B] font-semibold hover:bg-gray-50 transition">+ 담당자 추가</button>
+    </div>
+  );
+}
+
 // 첨부파일(이미지/PDF) 미리보기 — 확대/축소/회전/저장 지원
 function FilePreviewModal({ base64, type, name, onClose }) {
   const [zoom, setZoom] = React.useState(1);
@@ -43860,13 +43924,22 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     // "기본거래처" 탭의 "중복 정리" 버튼에서만 쓰인다 — "하차지거래처" 탭으로
     // 마운트될 때도 계산하면 탭 전환마다 낭비되는 작업이라 subTab으로 가드한다.
     if (subTab !== "기본") return [];
+    // ⚠️ 예전엔 거래처명+주소가 "완전히 같은" 것만 후보로 잡았는데, 그러면 도로명/지번
+    // 표기 차이처럼 같은 회사의 같은 곳인데 주소 문자열만 다른 하차지거래처는 후보에도
+    // 안 잡혀 계속 남아있게 된다 — 이런 문서가 상/하차지명 자동완성에 기본거래처와
+    // 별개의 항목으로 계속 떠서, 선택 시 주소 불일치 팝업이 뜨고, 잘못 삭제하면 그
+    // 문서에만 있던 담당자가 사라지는 원인이 됐다. 이제 이름만 같아도 후보로 잡되,
+    // 주소가 정확히 같은지(exact)는 별도로 표시해 사용자가 확인 후 정리하게 한다.
     const list = [];
     rows.forEach(c => {
       const cName = norm(c.거래처명 || "");
+      if (!cName) return;
       const cAddr = normalizePlace(c.주소 || "");
-      if (!cName || !cAddr) return;
-      const place = placeRows.find(p => norm(p.업체명 || "") === cName && normalizePlace(p.주소 || "") === cAddr);
-      if (place) list.push({ client: c, place });
+      placeRows.forEach(p => {
+        if (norm(p.업체명 || "") !== cName) return;
+        const pAddr = normalizePlace(p.주소 || "");
+        list.push({ client: c, place: p, exact: !!(cAddr && pAddr && cAddr === pAddr) });
+      });
     });
     return list;
   }, [rows, placeRows, subTab]);
@@ -44027,6 +44100,13 @@ React.useEffect(() => {
     const id = editClientModal.id || editClientModal.거래처명;
     if (!id) return;
     const { _dragOver, ...data } = editClientModal;
+    // 담당자 목록에서 대표(또는 첫 번째) 담당자를 평면 필드(담당자/연락처)에도 반영 —
+    // 여러 화면이 아직 이 평면 필드를 폴백으로 읽고 있어 계속 맞춰줘야 한다.
+    const contacts = Array.isArray(data.contacts) ? data.contacts.filter(c => c.name?.trim() || c.phone?.trim()) : [];
+    const primaryContact = contacts.find(c => c.isPrimary) || contacts[0] || null;
+    data.contacts = contacts;
+    data.담당자 = primaryContact?.name || "";
+    data.연락처 = primaryContact?.phone || "";
     try {
       await upsertClient?.({ ...data, id });
     } catch (e) {
@@ -44047,24 +44127,15 @@ React.useEffect(() => {
     // _id가 한 번도 전달되지 않았다. 그 결과 매번 업체명으로 문서를 다시 찾는 폴백
     // 경로를 타게 되어, 같은 업체명의 문서가 여러 개면 엉뚱한 문서를 수정/조회하게
     // 되고, 방금 수정한 문서는 그대로 남아 있다가 실시간 리스너로 되돌아와 보였다.
-    //
-    // 담당자가 2명 이상인 문서라면 upsertPlace의 이름-매칭 병합 로직은 바뀐 이름을
-    // "새 담당자 추가"로 오인해 기존 대표 담당자를 그대로 남겨버린다. 이 팝업은
-    // 대표 담당자 1명만 수정하는 화면이므로, contacts 배열을 직접 구성해 대표
-    // 담당자를 명시적으로 교체함으로써 그 모호함을 아예 없앤다.
-    const rawContacts = Array.isArray(editPlaceModal._rawContacts) ? editPlaceModal._rawContacts : [];
-    const newName = (editPlaceModal.담당자 || "").trim();
-    const newPhone = (editPlaceModal.담당자번호 || "").trim();
-    let contacts;
-    if (rawContacts.length === 0) {
-      contacts = newName ? [{ name: newName, phone: newPhone, isPrimary: true }] : [];
-    } else {
-      const primaryIdx = rawContacts.findIndex(c => c.isPrimary);
-      const idx = primaryIdx >= 0 ? primaryIdx : 0;
-      contacts = rawContacts.map((c, i) => i === idx ? { ...c, name: newName, phone: newPhone, isPrimary: true } : c);
-    }
-    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts });
-    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal } : r));
+    const contacts = Array.isArray(editPlaceModal.contacts)
+      ? editPlaceModal.contacts.filter(c => c.name?.trim() || c.phone?.trim())
+      : [];
+    if (contacts.length && !contacts.some(c => c.isPrimary)) contacts[0].isPrimary = true;
+    const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
+    const 담당자 = primary?.name || "";
+    const 담당자번호 = primary?.phone || "";
+    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts, 담당자, 담당자번호 });
+    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal, contacts, 담당자, 담당자번호 } : r));
     setEditPlaceModal(null);
     showAlert("수정 완료");
   };
@@ -44550,7 +44621,12 @@ React.useEffect(() => {
                       const grade = r.등급 || "일반";
                       return (
                         <tr key={id}
-                          onDoubleClick={() => setEditPlaceModal({ ...r })}
+                          onDoubleClick={() => setEditPlaceModal({
+                            ...r,
+                            contacts: Array.isArray(r._rawContacts) && r._rawContacts.length
+                              ? r._rawContacts
+                              : (r.담당자 ? [{ name: r.담당자, phone: r.담당자번호 || "", isPrimary: true }] : []),
+                          })}
                           className={`hover:bg-blue-50/60 transition border-b border-gray-100 cursor-pointer ${
                             grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
                           }`}>
@@ -44938,7 +45014,7 @@ React.useEffect(() => {
                   <button onClick={() => setEditClientModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
-                  {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["담당자","담당자"],["연락처","연락처"],["이메일","이메일"]].map(([label, key]) => (
+                  {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["이메일","이메일"]].map(([label, key]) => (
                     <div key={key}>
                       <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
                       <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
@@ -44951,6 +45027,13 @@ React.useEffect(() => {
                     <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.주소||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 주소: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자 목록</label>
+                    <ContactListEditor
+                      contacts={editClientModal.contacts}
+                      onChange={(next) => setEditClientModal(p => ({ ...p, contacts: next }))}
+                    />
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
@@ -45102,7 +45185,12 @@ React.useEffect(() => {
                       return (
                         <tr key={id}
                           className={`transition border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"} hover:bg-blue-50/30 cursor-pointer`}
-                          onDoubleClick={() => setEditClientModal({ ...r })}>
+                          onDoubleClick={() => setEditClientModal({
+                            ...r,
+                            contacts: Array.isArray(r.contacts) && r.contacts.length
+                              ? r.contacts
+                              : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []),
+                          })}>
                           <td className="px-3 py-2.5 text-center">
                             <input type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
                           </td>
@@ -45179,7 +45267,7 @@ React.useEffect(() => {
               <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
-              {[["업체명 *","업체명"],["담당자","담당자"],["담당자번호","담당자번호"]].map(([label, key]) => (
+              {[["업체명 *","업체명"]].map(([label, key]) => (
                 <div key={key}>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
                   <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
@@ -45187,6 +45275,13 @@ React.useEffect(() => {
                     onChange={(e) => setEditPlaceModal(p => ({ ...p, [key]: e.target.value }))} />
                 </div>
               ))}
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자 목록</label>
+                <ContactListEditor
+                  contacts={editPlaceModal.contacts}
+                  onChange={(next) => setEditPlaceModal(p => ({ ...p, contacts: next }))}
+                />
+              </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
                 <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
@@ -45241,7 +45336,7 @@ React.useEffect(() => {
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-white font-bold text-[15px]">중복 정리 — 기본거래처 ↔ 하차지거래처</h3>
-                <p className="text-white/55 text-[12px] mt-0.5">거래처명·주소가 완전히 같은 항목만 대상입니다. 하차지거래처의 메모는 기본거래처의 오더메모로, 담당자 목록은 병합되어 이관되고, 하차지거래처 쪽 항목은 삭제됩니다.</p>
+                <p className="text-white/55 text-[12px] mt-0.5">거래처명이 같은 하차지거래처가 대상입니다(주소 표기가 도로명/지번처럼 달라도 포함). 하차지거래처의 메모는 기본거래처의 오더메모로, 담당자 목록은 병합되어 이관되고, 하차지거래처 쪽 항목은 삭제됩니다.</p>
               </div>
               <button onClick={() => setShowDedupPopup(false)}
                 className="text-white/60 hover:text-white text-xl leading-none">×</button>
@@ -45256,10 +45351,10 @@ React.useEffect(() => {
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3">
               {dedupMatches.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-10">거래처명·주소가 완전히 같은 중복 항목이 없습니다.</div>
+                <div className="text-center text-gray-400 text-sm py-10">거래처명이 같은 하차지거래처 중복 항목이 없습니다.</div>
               ) : (
                 <div className="space-y-2">
-                  {dedupMatches.map(({ client, place }) => {
+                  {dedupMatches.map(({ client, place, exact }) => {
                     const contactCount = Array.isArray(place.contacts) ? place.contacts.filter(c => c.name?.trim() || c.phone?.trim()).length : (place._rawContacts?.length || 0);
                     return (
                       <label key={place.id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
@@ -45270,8 +45365,14 @@ React.useEffect(() => {
                             return n;
                           })} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-bold text-gray-800">{client.거래처명}</div>
-                          <div className="text-[12px] text-gray-500 mt-0.5">{client.주소}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-[13px] font-bold text-gray-800">{client.거래처명}</div>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${exact ? "bg-gray-100 text-gray-500" : "bg-orange-100 text-orange-700"}`}>
+                              {exact ? "주소 동일" : "주소 표기 다름 — 확인 필요"}
+                            </span>
+                          </div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">기본거래처 주소: {client.주소 || "-"}</div>
+                          {!exact && <div className="text-[12px] text-orange-600 mt-0.5">하차지거래처 주소: {place.주소 || "-"}</div>}
                           <div className="flex gap-3 mt-1 text-[11px] text-gray-400">
                             {place.메모?.trim() && <span className="text-[#1B2B4B]">하차지 메모 있음</span>}
                             {contactCount > 0 && <span>담당자 {contactCount}명</span>}
