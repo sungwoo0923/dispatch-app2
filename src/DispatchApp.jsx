@@ -743,7 +743,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
   }, [open, updateMenuRect]);
 
   return (
-    <div className="relative" ref={wrapRef}>
+    <div className="relative h-full" ref={wrapRef}>
       <button
         type="button"
         id={id}
@@ -769,7 +769,10 @@ const CustomSelect = React.forwardRef(function CustomSelect(
         }}
         className={`${className} text-left overflow-hidden text-ellipsis whitespace-nowrap`}
       >
-        {current ? current.label : (placeholder || "")}
+        <span className="pr-2.5">{current ? current.label : (placeholder || "")}</span>
+        <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
       </button>
       {open && menuRect && createPortal(
         <div
