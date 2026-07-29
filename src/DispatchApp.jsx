@@ -1712,6 +1712,7 @@ const markEditRequestSeen = async (order) => {
           if (client.연락처 !== undefined) syncFields.담당자번호 = client.연락처;
           if (client.메모 !== undefined) syncFields.메모 = client.메모;
           if (client.오더메모 !== undefined) syncFields.오더메모 = client.오더메모;
+          if (client.팝업표시 !== undefined) syncFields.팝업표시 = client.팝업표시;
           if (Object.keys(syncFields).length) {
             await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
           }
@@ -1888,6 +1889,7 @@ const upsertPlace = async (place) => {
           연락처: data.담당자번호,
           메모: data.메모,
           오더메모: data.오더메모,
+          팝업표시: data.팝업표시,
         }, { merge: true }).catch(() => {});
       }
     } catch {}
@@ -4183,6 +4185,7 @@ return (
                 clients={clients}
                 places={places}
                 upsertDriver={upsertDriver}
+                upsertClient={upsertClientSafe}
                 isViewer={isViewer}
                 setCargoAddPopup={setCargoAddPopup}
                 approvedShippers={approvedShippers}
@@ -20669,6 +20672,8 @@ flashRow(savedId);
     await submitCopyOrderPC(copyTarget, approvedShippers);
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
+    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null).catch(console.error);
+    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null).catch(console.error);
   }}
   className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
@@ -30570,6 +30575,8 @@ return (
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
+    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null).catch(console.error);
+    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null).catch(console.error);
 
   }}
     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
@@ -37186,7 +37193,55 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [] }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [] }) {
+  // 오더복사/수정 패널에서 담당자를 새로 입력해도 거래처관리(기본거래처/하차지거래처)에
+  // 반영되지 않던 문제 — DispatchManagement/RealtimeStatus/DispatchStatus의
+  // savePlaceSmart와 동일한 우선순위(기본거래처 우선)로 담당자를 병합 저장한다.
+  // 이 화면은 주소 충돌 팝업 인프라가 없어 단순 병합만 수행한다.
+  const syncPlaceContactSimple = async (name, addr, manager, phone) => {
+    const nm = (name || "").trim();
+    const resolvedManager = (manager || "").trim();
+    const resolvedPhone = (phone || "").trim();
+    if (!nm || (!resolvedManager && !resolvedPhone)) return;
+    const nk = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9가-힣]/g, "");
+    const nameKey = nk(nm);
+
+    const mergeContacts = (list) => {
+      let contacts = Array.isArray(list) ? [...list] : [];
+      if (resolvedManager) {
+        const idx = contacts.findIndex(c => c.name?.trim() === resolvedManager);
+        if (idx >= 0) contacts = contacts.map((c, i) => ({ ...c, phone: i === idx ? (resolvedPhone || c.phone) : c.phone, isPrimary: i === idx }));
+        else { contacts = contacts.map(c => ({ ...c, isPrimary: false })); contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true }); }
+      }
+      return contacts;
+    };
+
+    const clientMatch = (clients || []).find(c => nk(c.업체명 || c.거래처명 || "") === nameKey);
+    if (clientMatch && upsertClient) {
+      const cContacts = mergeContacts(Array.isArray(clientMatch.contacts) ? clientMatch.contacts
+        : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []));
+      const primary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      await upsertClient({
+        id: clientMatch.id,
+        거래처명: clientMatch.거래처명 || nm,
+        주소: addr || clientMatch.주소 || "",
+        담당자: primary?.name || clientMatch.담당자 || "",
+        연락처: primary?.phone || clientMatch.연락처 || "",
+        contacts: cContacts,
+      }).catch(() => {});
+      return;
+    }
+
+    const placeMatch = (places || []).find(p => nk(p.업체명 || "") === nameKey);
+    const pContacts = mergeContacts(placeMatch?.contacts);
+    await upsertPlace({
+      _id: placeMatch?._id,
+      업체명: nm,
+      주소: addr || placeMatch?.주소 || "",
+      contacts: pContacts,
+    }).catch(() => {});
+  };
+
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -37943,6 +37998,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       await patchDispatch(copyTarget._id, payload);
                       showToast("오더 수정 완료");
                       setCopyPanelOpen(false);
+                      if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
+                      if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
                     }}
                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
                   >
@@ -37956,6 +38013,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
                       showToast("복사 등록 완료");
                       setCopyPanelOpen(false);
+                      if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
+                      if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
                     }}
                     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
                   >
