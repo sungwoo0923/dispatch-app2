@@ -671,6 +671,70 @@ function ContactListEditor({ contacts, onChange }) {
   );
 }
 
+// 상/하차지명 라벨 옆 오더메모 아이콘 버튼 — 배차관리 등록 폼과 동일한 디자인을
+// 오더복사/수정 패널, 선택수정 패널에서도 재사용한다.
+function OrderMemoIconButton({ onClick, title = "오더메모" }) {
+  return (
+    <button type="button" tabIndex={-1} onClick={onClick}
+      className="text-[#1B2B4B] hover:opacity-70 transition" title={title}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+        <path d="M9 13h6" /><path d="M9 17h6" />
+      </svg>
+    </button>
+  );
+}
+
+// 상/하차지 오더메모 보기·수정 팝업 — 배차관리 등록 폼의 orderMemoPopup과 동일한
+// UI를 오더복사/수정 패널, 선택수정 패널에서도 재사용한다. 저장은 즉시 반영하지
+// 않고(onSave로 넘긴 값을 패널 자체의 상태에만 임시로 담아두고) 실제 오더가
+// 등록/수정되는 시점에만 함께 반영되도록, 호출하는 쪽에서 저장 시점을 결정한다.
+function OrderMemoModal({ type, name, memo, popupShow, onCancel, onSave }) {
+  const [localMemo, setLocalMemo] = React.useState(memo || "");
+  const [localShow, setLocalShow] = React.useState(popupShow !== false);
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-white text-[15px] font-bold">{type === "pickup" ? "상차지" : "하차지"} 오더메모</h3>
+            <p className="text-white/55 text-[12px] mt-0.5">{name}</p>
+          </div>
+          <button onClick={onCancel} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div className="px-6 py-5 space-y-3">
+          <textarea
+            autoFocus
+            rows={5}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+            placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
+            value={localMemo}
+            onChange={(e) => setLocalMemo(e.target.value)}
+          />
+          <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+            <div>
+              <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+            </div>
+            <button type="button"
+              onClick={() => setLocalShow(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${localShow ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${localShow ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+        <div className="px-6 pb-5 flex gap-3">
+          <button onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+          <button onClick={() => onSave(localMemo, localShow)}
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 첨부파일(이미지/PDF) 미리보기 — 확대/축소/회전/저장 지원
 function FilePreviewModal({ base64, type, name, onClose }) {
   const [zoom, setZoom] = React.useState(1);
@@ -16761,6 +16825,50 @@ const checkWarningStatus = (name, type) => {
   const [panelContactActive4, setPanelContactActive4] = React.useState(0);
   const [panelContactSearch4, setPanelContactSearch4] = React.useState("");
   React.useEffect(() => { setPanelContactSearch4(""); }, [panelContactPopup4]);
+
+  // 오더복사/수정 패널(copyTarget) 오더메모 팝업
+  const [panelMemoPopupC4, setPanelMemoPopupC4] = React.useState(null);
+  const openPanelMemoC4 = (type) => {
+    const name = (type === "pickup" ? copyTarget?.상차지명 : copyTarget?.하차지명) || "";
+    if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+    const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined) {
+      setPanelMemoPopupC4({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true });
+      return;
+    }
+    const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
+    setPanelMemoPopupC4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+  };
+  const savePanelMemoC4 = (memo, show) => {
+    if (!panelMemoPopupC4) return;
+    const memoKey = panelMemoPopupC4.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = panelMemoPopupC4.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+    setPanelMemoPopupC4(null);
+  };
+
+  // 선택수정 패널(editTarget) 오더메모 팝업
+  const [panelMemoPopupE4, setPanelMemoPopupE4] = React.useState(null);
+  const openPanelMemoE4 = (type) => {
+    const name = (type === "pickup" ? editTarget?.상차지명 : editTarget?.하차지명) || "";
+    if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+    const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined) {
+      setPanelMemoPopupE4({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true });
+      return;
+    }
+    const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
+    setPanelMemoPopupE4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+  };
+  const savePanelMemoE4 = (memo, show) => {
+    if (!panelMemoPopupE4) return;
+    const memoKey = panelMemoPopupE4.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = panelMemoPopupE4.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+    setPanelMemoPopupE4(null);
+  };
   // ==========================
   // 🔵 선택수정 거래처 자동완성 상태 (추가)
   // ==========================
@@ -20219,6 +20327,12 @@ const head = isDark
     </div>
   </div>
 )}
+{panelMemoPopupC4 && (
+  <OrderMemoModal {...panelMemoPopupC4} onCancel={() => setPanelMemoPopupC4(null)} onSave={savePanelMemoC4} />
+)}
+{panelMemoPopupE4 && (
+  <OrderMemoModal {...panelMemoPopupE4} onCancel={() => setPanelMemoPopupE4(null)} onSave={savePanelMemoE4} />
+)}
 {panelContactPopup4 && (() => {
   const q4 = panelContactSearch4.trim().toLowerCase();
   const visible4 = panelContactPopup4.contacts
@@ -20726,8 +20840,12 @@ flashRow(savedId);
     }, 400);
 
     patchDispatch(savedId, payload).catch(console.error);
-    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null).catch(console.error);
-    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null).catch(console.error);
+    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
+      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
+      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
@@ -20745,8 +20863,12 @@ flashRow(savedId);
     await submitCopyOrderPC(copyTarget, approvedShippers);
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
-    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null).catch(console.error);
-    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null).catch(console.error);
+    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
+      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
+      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
   }}
   className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
@@ -20914,7 +21036,7 @@ checkWarningStatus(c.거래처명, "거래처");
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
-      <Field label="상차지명">
+      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("pickup")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -21087,7 +21209,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <option value="크레인">크레인</option>
   </select>
 </Field>
-      <Field label="하차지명">
+      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("drop")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -22473,7 +22595,7 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             {/* ===================== 상차지 ===================== */}
             <div className="mb-3 relative">
-              <label>상차지명</label>
+              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("pickup")} /></label>
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
@@ -22619,7 +22741,7 @@ value={copyTarget?.화물수량 || ""}
 
             {/* ===================== 하차지 ===================== */}
             <div className="mb-3 relative">
-              <label>하차지명</label>
+              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("drop")} /></label>
 
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
@@ -23433,8 +23555,12 @@ patchDispatch(editTarget._id, payload).catch(console.error);
 if (editTarget.거래처명) {
   upsertClient?.({ 거래처명: editTarget.거래처명, 주소: editTarget.상차지주소||"", 담당자: editTarget.거래처담당자||"", 연락처: editTarget.거래처연락처||"", updatedAt: Date.now() }).catch(console.error);
 }
-if (editTarget.상차지명) savePlaceSmart(editTarget.상차지명, editTarget.상차지주소||"", editTarget.상차지담당자||"", editTarget.상차지담당자번호||"", null).catch(console.error);
-if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.하차지주소||"", editTarget.하차지담당자||"", editTarget.하차지담당자번호||"", null).catch(console.error);
+if (editTarget.상차지명) savePlaceSmart(editTarget.상차지명, editTarget.상차지주소||"", editTarget.상차지담당자||"", editTarget.상차지담당자번호||"", null, undefined,
+  (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시 } : undefined
+).catch(console.error);
+if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.하차지주소||"", editTarget.하차지담당자||"", editTarget.하차지담당자번호||"", null, undefined,
+  (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시 } : undefined
+).catch(console.error);
                 }}
               >
                 저장
@@ -26545,6 +26671,50 @@ const [panelContactPopup5, setPanelContactPopup5] = React.useState(null);
 const [panelContactActive5, setPanelContactActive5] = React.useState(0);
 const [panelContactSearch5, setPanelContactSearch5] = React.useState("");
 React.useEffect(() => { setPanelContactSearch5(""); }, [panelContactPopup5]);
+
+// 오더복사/수정 패널(copyTarget) 오더메모 팝업
+const [panelMemoPopupC5, setPanelMemoPopupC5] = React.useState(null);
+const openPanelMemoC5 = (type) => {
+  const name = (type === "pickup" ? copyTarget?.상차지명 : copyTarget?.하차지명) || "";
+  if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined) {
+    setPanelMemoPopupC5({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true });
+    return;
+  }
+  const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
+  setPanelMemoPopupC5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+};
+const savePanelMemoC5 = (memo, show) => {
+  if (!panelMemoPopupC5) return;
+  const memoKey = panelMemoPopupC5.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = panelMemoPopupC5.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+  setPanelMemoPopupC5(null);
+};
+
+// 선택수정 패널(editTarget) 오더메모 팝업
+const [panelMemoPopupE5, setPanelMemoPopupE5] = React.useState(null);
+const openPanelMemoE5 = (type) => {
+  const name = (type === "pickup" ? editTarget?.상차지명 : editTarget?.하차지명) || "";
+  if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined) {
+    setPanelMemoPopupE5({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true });
+    return;
+  }
+  const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
+  setPanelMemoPopupE5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+};
+const savePanelMemoE5 = (memo, show) => {
+  if (!panelMemoPopupE5) return;
+  const memoKey = panelMemoPopupE5.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = panelMemoPopupE5.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+  setPanelMemoPopupE5(null);
+};
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
@@ -28658,6 +28828,12 @@ return (
     </div>
   </div>
 )}
+{panelMemoPopupC5 && (
+  <OrderMemoModal {...panelMemoPopupC5} onCancel={() => setPanelMemoPopupC5(null)} onSave={savePanelMemoC5} />
+)}
+{panelMemoPopupE5 && (
+  <OrderMemoModal {...panelMemoPopupE5} onCancel={() => setPanelMemoPopupE5(null)} onSave={savePanelMemoE5} />
+)}
 {panelContactPopup5 && (() => {
   const q5 = panelContactSearch5.trim().toLowerCase();
   const visible5 = panelContactPopup5.contacts
@@ -29622,7 +29798,7 @@ return (
 
             {/* ================= 상차지명 ================= */}
             <div className="mb-3 relative">
-              <label>상차지명</label>
+              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("pickup")} /></label>
               <input
                 className="border p-2 rounded w-full"
                 value={editTarget.상차지명 || ""}
@@ -29773,7 +29949,7 @@ return (
 
             {/* ================= 하차지명 ================= */}
             <div className="mb-3 relative">
-              <label>하차지명</label>
+              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("drop")} /></label>
               <input
                 className="border p-2 rounded w-full"
                 value={editTarget.하차지명 || ""}
@@ -30535,8 +30711,12 @@ return (
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 400);
     patchDispatch(savedId, payload).catch(console.error);
-    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null).catch(console.error);
-    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null).catch(console.error);
+    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
+      (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
+      (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
     if (payload.차량번호 && payload.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
       if (!existingD) {
@@ -30664,8 +30844,12 @@ return (
 
     // ✅ 백그라운드 저장
     patchDispatch(id, payload).catch(console.error);
-    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null).catch(console.error);
-    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null).catch(console.error);
+    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
+      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
+      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
     const plate = normalizePlate(payload.차량번호 || "");
     if (plate) {
       const d = (drivers || []).find(x => normalizePlate(x.차량번호) === plate);
@@ -30694,8 +30878,12 @@ return (
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
-    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null).catch(console.error);
-    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null).catch(console.error);
+    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
+      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
+      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
 
   }}
     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
@@ -30863,7 +31051,7 @@ setCopyTarget(prev=>({
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
-      <Field label="상차지명">
+      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("pickup")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -31018,7 +31206,7 @@ setCopyPlaceOptions(list);
     <option value="크레인">크레인</option>
   </select>
 </Field>
-      <Field label="하차지명">
+      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
