@@ -6107,6 +6107,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     등급변경일: existing?.등급변경일 || null,
     메모: extraFields?.메모 || existing?.메모 || "",
     이메일: extraFields?.이메일 || existing?.이메일 || "",
+    오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
+    팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
   });
 };
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
@@ -16648,8 +16650,10 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     업체명: name,
     주소: finalAddr,
     contacts,
-    등급: existing?.등급 || "일반",
-    메모: existing?.메모 || "",
+    등급: extraFields?.등급 || existing?.등급 || "일반",
+    메모: extraFields?.메모 || existing?.메모 || "",
+    오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
+    팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
   }).catch(() => {});
 };
 
@@ -25948,8 +25952,10 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     업체명: name,
     주소: finalAddr,
     contacts,
-    등급: existing?.등급 || "일반",
-    메모: existing?.메모 || "",
+    등급: extraFields?.등급 || existing?.등급 || "일반",
+    메모: extraFields?.메모 || existing?.메모 || "",
+    오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
+    팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
   }).catch(() => {});
 };
 
