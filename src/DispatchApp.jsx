@@ -12167,7 +12167,7 @@ className={`
           onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
         />
       </div>
-      <div className="p-5 grid grid-flow-col grid-rows-5 auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
         {visible.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
         )}
@@ -20249,7 +20249,7 @@ const head = isDark
           onChange={e => { setPanelContactSearch4(e.target.value); setPanelContactActive4(0); }}
         />
       </div>
-      <div className="p-5 grid grid-flow-col grid-rows-5 auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
         {visible4.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
         )}
@@ -28171,10 +28171,16 @@ const filtered = React.useMemo(() => {
       return found ? [found] : [];
     }
 
-    let data = (dispatchData || []).map(d => {
-      const id = getId(d);
-      return localOverrides[id] ? { ...d, ...localOverrides[id] } : d;
-    });
+    // ⚡ localOverrides는 보통 비어있거나 극소수 건만 담고 있는데, 매번 전체
+    // dispatchData를 map()으로 새로 순회/복사하면 오더가 많아질수록(수천~수만 건)
+    // 그 자체로 무거워진다 — 실제로 override가 있을 때만 map을 수행한다.
+    const hasOverrides = Object.keys(localOverrides).length > 0;
+    let data = hasOverrides
+      ? (dispatchData || []).map(d => {
+          const id = getId(d);
+          return localOverrides[id] ? { ...d, ...localOverrides[id] } : d;
+        })
+      : (dispatchData || []);
 
   // 🔥 조회 버튼 누르기 전 → 전체
   if (!loaded) return data;
@@ -28384,7 +28390,12 @@ const save = {
   const [dsWarningExpanded, setDsWarningExpanded] = React.useState(false);
   const dsWarningList = React.useMemo(() => {
     const now = new Date();
+    // ⚡ 상차 2시간 이내인 오더만 대상이므로 상차일이 오늘이 아니면 볼 필요가 없다 —
+    // 누적 오더가 많아질수록(수천~수만 건) 매번 전체를 정규식/Date 파싱하던 게
+    // 무거워서, 값싼 날짜 문자열 비교로 먼저 걸러낸다.
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     return dispatchData.filter(r => {
+      if (r.상차일 !== todayStr) return false;
       if (r.차량번호 && String(r.차량번호).trim()) return false;
       if (!r.상차일 || !r.상차시간) return false;
       let s = String(r.상차시간).trim()
@@ -28677,7 +28688,7 @@ return (
           onChange={e => { setPanelContactSearch5(e.target.value); setPanelContactActive5(0); }}
         />
       </div>
-      <div className="p-5 grid grid-flow-col grid-rows-5 auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
         {visible5.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
         )}
