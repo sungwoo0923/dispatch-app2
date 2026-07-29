@@ -2,6 +2,7 @@
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
@@ -554,6 +555,50 @@ import {
 import { auth, db, storage } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
+
+/* -------------------------------------------------
+   가로 스크롤 테이블 안에서도 잘리지 않는 호버 툴팁
+   (position:fixed + portal로 body에 직접 그려서, 조상의
+   overflow-x-auto가 overflow-y까지 auto로 만들어 버리는 것을 피한다)
+--------------------------------------------------*/
+function HoverInfoTrigger({ label, tooltipRows, className }) {
+  const [pos, setPos] = React.useState(null);
+
+  // 툴팁이 떠 있는 동안 테이블을 스크롤하면(가로/세로 모두) 마우스는 그대로인데
+  // 내용만 밑으로 지나가버려 위치가 안 맞는 툴팁이 남을 수 있어, 스크롤 시 닫는다.
+  React.useEffect(() => {
+    if (!pos) return;
+    const close = () => setPos(null);
+    window.addEventListener("scroll", close, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", close, { capture: true });
+  }, [pos]);
+
+  return (
+    <>
+      <span
+        className={className}
+        onMouseEnter={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2 });
+        }}
+        onMouseLeave={() => setPos(null)}
+      >
+        {label}
+      </span>
+      {pos && createPortal(
+        <div
+          className="pointer-events-none fixed z-[99999] w-max"
+          style={{ top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
+        >
+          <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
+            {tooltipRows}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
 
 /* -------------------------------------------------
    Firestore 실시간 동기화 훅
@@ -15604,19 +15649,15 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   <td className={cell}>{idx + 1}</td>
   <td className={`${cell} overflow-visible`}>
-  <div className="relative inline-block group">
-    <span className="underline decoration-dotted underline-offset-2 cursor-default">
-      {displayRegDate(r) || "-"}
-    </span>
-
-    <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
-      <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
-        <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
-        <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
-        <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
-      </div>
-    </div>
-  </div>
+  <HoverInfoTrigger
+    className="underline decoration-dotted underline-offset-2 cursor-default"
+    label={displayRegDate(r) || "-"}
+    tooltipRows={<>
+      <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
+      <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
+      <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
+    </>}
+  />
 </td>
 
                   <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
@@ -28538,18 +28579,15 @@ return (
       </td>
 
       <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap overflow-visible">
-  <div className="relative inline-block group">
-    <span className="underline decoration-dotted underline-offset-2 cursor-default">
-      {displayRegDate(row) || "-"}
-    </span>
-    <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
-      <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
-        <div>등록시간: <span className="text-yellow-300">{_fmtKst(row.createdAt || row.등록일시 || row.등록시간 || (row.등록일 && `${row.등록일}T00:00:00`))}</span></div>
-        <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
-        <div>등록자: <span className="text-blue-300">{_creatorLabel(row)}</span></div>
-      </div>
-    </div>
-  </div>
+  <HoverInfoTrigger
+    className="underline decoration-dotted underline-offset-2 cursor-default"
+    label={displayRegDate(row) || "-"}
+    tooltipRows={<>
+      <div>등록시간: <span className="text-yellow-300">{_fmtKst(row.createdAt || row.등록일시 || row.등록시간 || (row.등록일 && `${row.등록일}T00:00:00`))}</span></div>
+      <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
+      <div>등록자: <span className="text-blue-300">{_creatorLabel(row)}</span></div>
+    </>}
+  />
 </td>
 
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
