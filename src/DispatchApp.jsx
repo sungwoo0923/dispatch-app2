@@ -44346,15 +44346,21 @@ React.useEffect(() => {
     // _id가 한 번도 전달되지 않았다. 그 결과 매번 업체명으로 문서를 다시 찾는 폴백
     // 경로를 타게 되어, 같은 업체명의 문서가 여러 개면 엉뚱한 문서를 수정/조회하게
     // 되고, 방금 수정한 문서는 그대로 남아 있다가 실시간 리스너로 되돌아와 보였다.
-    const contacts = Array.isArray(editPlaceModal.contacts)
+    let contacts = Array.isArray(editPlaceModal.contacts)
       ? editPlaceModal.contacts.filter(c => c.name?.trim() || c.phone?.trim())
       : [];
-    if (contacts.length && !contacts.some(c => c.isPrimary)) contacts[0].isPrimary = true;
+    if (contacts.length && !contacts.some(c => c.isPrimary)) {
+      contacts = contacts.map((c, i) => i === 0 ? { ...c, isPrimary: true } : c);
+    }
     const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
     const 담당자 = primary?.name || "";
     const 담당자번호 = primary?.phone || "";
     await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts, 담당자, 담당자번호 });
-    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal, contacts, 담당자, 담당자번호 } : r));
+    // ⚠️ 더블클릭으로 다시 열 때는 담당자 목록을 contacts가 아니라 _rawContacts에서 다시
+    // 채운다(위 주석 참고) — 여기서 _rawContacts도 함께 갱신하지 않으면, 저장 직후 실시간
+    // 리스너가 아직 새 데이터를 반영하기 전에 곧바로 다시 열었을 때 옛 담당자 목록(저장 전
+    // _rawContacts)이 그대로 보이는 문제가 있었다.
+    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal, contacts, 담당자, 담당자번호, _rawContacts: contacts } : r));
     setEditPlaceModal(null);
     showAlert("수정 완료");
   };
