@@ -7140,22 +7140,27 @@ const [clientAlert, setClientAlert] = React.useState(null);
 // 상/하차지 오더메모 버튼 — 상/하차지명에 입력된 거래처의 오더메모를 바로 보고
 // 수정할 수 있게 해준다. 저장하면 거래처관리(기본거래처/하차지거래처)에도
 // 그대로 반영된다(신규 업체명이면 기본거래처에 새로 만들어짐).
-const [orderMemoPopup, setOrderMemoPopup] = React.useState(null); // { type, name, memo }
+const [orderMemoPopup, setOrderMemoPopup] = React.useState(null); // { type, name, memo, 등급, 팝업표시 }
 const openOrderMemoEditor = (type) => {
   const name = (type === "pickup" ? form.상차지명 : form.하차지명 || "").trim();
   if (!name) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
   const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
-  setOrderMemoPopup({ type, name, memo: found?.오더메모 || "" });
+  setOrderMemoPopup({
+    type, name,
+    memo: found?.오더메모 || "",
+    등급: found?.등급 || "일반",
+    팝업표시: found?.팝업표시 !== undefined ? found.팝업표시 : true,
+  });
 };
-const saveOrderMemo = async (memo) => {
+const saveOrderMemo = async (memo, popupShow) => {
   if (!orderMemoPopup) return;
   const { name } = orderMemoPopup;
   const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
   if (found && found._id) {
-    await upsertPlace?.({ _id: found._id, 업체명: name, 오더메모: memo });
+    await upsertPlace?.({ _id: found._id, 업체명: name, 오더메모: memo, 팝업표시: popupShow });
   } else {
     const clientMatch = (clients || []).find(c => normalizeKey(c.업체명 || c.거래처명 || "") === normalizeKey(name));
-    await upsertClient?.({ id: clientMatch?.id || name, 거래처명: name, 오더메모: memo });
+    await upsertClient?.({ id: clientMatch?.id || name, 거래처명: name, 오더메모: memo, 팝업표시: popupShow });
   }
   setOrderMemoPopup(null);
   showAlert("오더메모가 저장되었습니다.");
@@ -12264,7 +12269,7 @@ className={`
         </div>
         <button onClick={() => setOrderMemoPopup(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
-      <div className="px-6 py-5">
+      <div className="px-6 py-5 space-y-3">
         <textarea
           autoFocus
           rows={5}
@@ -12273,11 +12278,22 @@ className={`
           value={orderMemoPopup.memo}
           onChange={(e) => setOrderMemoPopup(p => ({ ...p, memo: e.target.value }))}
         />
+        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+          </div>
+          <button type="button"
+            onClick={() => setOrderMemoPopup(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${orderMemoPopup.팝업표시 === false ? "bg-gray-300" : "bg-[#1B2B4B]"}`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${orderMemoPopup.팝업표시 === false ? "translate-x-1" : "translate-x-6"}`} />
+          </button>
+        </div>
       </div>
       <div className="px-6 pb-5 flex gap-3">
         <button onClick={() => setOrderMemoPopup(null)}
           className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-        <button onClick={() => saveOrderMemo(orderMemoPopup.memo)}
+        <button onClick={() => saveOrderMemo(orderMemoPopup.memo, orderMemoPopup.팝업표시)}
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
       </div>
     </div>
