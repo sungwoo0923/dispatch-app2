@@ -600,6 +600,300 @@ function HoverInfoTrigger({ label, tooltipRows, className }) {
   );
 }
 
+// 기사 메모 팝업 표시 여부. 블랙 등급은 별도의 blackAlert 팝업이 항상(무조건) 뜨므로
+// 여기서는 관여하지 않는다 — 일반/직영/지입 등급은 거래처관리와 달리 기본값이 꺼짐이라,
+// 사용자가 기사수정 팝업에서 명시적으로 켠(팝업표시 === true) 경우에만 메모 팝업을 띄운다.
+function shouldShowDriverMemoAlert(d) {
+  return !!(d && d.메모 && String(d.메모).trim() && d.팝업표시 === true);
+}
+
+// 거래처/하차지 수정 팝업에서 담당자가 여러 명일 때 목록으로 보고 수정/삭제할 수 있게
+// 하는 공용 컴포넌트. contacts: [{name, phone, isPrimary}], onChange(nextContacts)
+function ContactListEditor({ contacts, onChange }) {
+  const [editingIdx, setEditingIdx] = React.useState(null);
+  const [draft, setDraft] = React.useState({ name: "", phone: "" });
+  const list = Array.isArray(contacts) ? contacts : [];
+
+  const startEdit = (i) => { setEditingIdx(i); setDraft({ name: list[i].name || "", phone: list[i].phone || "" }); };
+  const saveEdit = () => {
+    onChange(list.map((c, i) => i === editingIdx ? { ...c, name: draft.name.trim(), phone: draft.phone.trim() } : c));
+    setEditingIdx(null);
+  };
+  const removeAt = (i) => {
+    let next = list.filter((_, idx) => idx !== i);
+    if (next.length && !next.some(c => c.isPrimary)) next = next.map((c, idx) => idx === 0 ? { ...c, isPrimary: true } : c);
+    onChange(next);
+    if (editingIdx === i) setEditingIdx(null);
+  };
+  const makePrimary = (i) => onChange(list.map((c, idx) => ({ ...c, isPrimary: idx === i })));
+  const addContact = () => {
+    onChange([...list, { name: "", phone: "", isPrimary: list.length === 0 }]);
+    setEditingIdx(list.length);
+    setDraft({ name: "", phone: "" });
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+      {list.length === 0 && (
+        <div className="px-3 py-3 text-[12px] text-gray-400 text-center">등록된 담당자가 없습니다</div>
+      )}
+      {list.map((c, i) => (
+        <div key={i} className="px-3 py-2">
+          {editingIdx === i ? (
+            <div className="flex items-center gap-2">
+              <input autoFocus className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
+                placeholder="이름" value={draft.name} onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} />
+              <input className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
+                placeholder="전화번호" value={draft.phone} onChange={e => setDraft(p => ({ ...p, phone: formatPhone(e.target.value) }))} />
+              <button onClick={saveEdit} className="shrink-0 px-2 py-1 rounded bg-[#1B2B4B] text-white text-[11px] font-bold">저장</button>
+              <button onClick={() => setEditingIdx(null)} className="shrink-0 px-2 py-1 rounded bg-gray-100 text-gray-600 text-[11px] font-semibold">취소</button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {c.isPrimary && <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white">대표</span>}
+                <span className="text-[13px] font-semibold text-gray-800 truncate">{c.name || "(이름 없음)"}</span>
+                <span className="text-[12px] text-gray-500 truncate">{c.phone || "-"}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {!c.isPrimary && (
+                  <button onClick={() => makePrimary(i)} className="text-[11px] text-[#1B2B4B] font-semibold hover:underline">대표로</button>
+                )}
+                <button onClick={() => startEdit(i)} className="text-[11px] text-gray-500 font-semibold hover:underline">수정</button>
+                <button onClick={() => removeAt(i)} className="text-[11px] text-red-500 font-semibold hover:underline">삭제</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={addContact} className="w-full px-3 py-2 text-[12px] text-[#1B2B4B] font-semibold hover:bg-gray-50 transition">+ 담당자 추가</button>
+    </div>
+  );
+}
+
+// 브라우저 기본 <select>의 옵션 목록은 OS/브라우저가 직접 그려서 CSS로 꾸밀 수
+// 없다 — 프로그램 전체 톤(네이비 강조, 둥근 모서리, 그림자)과 어울리도록 직접
+// 구현한 대체 드롭다운. <select>와 동일하게 value/onChange/className/children
+// (<option>)을 그대로 받아 기존 코드를 최소한만 바꿔도 되도록 만들었다 — onChange는
+// 네이티브 select와 똑같이 { target: { value } } 형태로 호출한다.
+const CustomSelect = React.forwardRef(function CustomSelect(
+  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name },
+  ref
+) {
+  const [open, setOpen] = React.useState(false);
+  const wrapRef = React.useRef(null);
+  const btnRef = React.useRef(null);
+  React.useImperativeHandle(ref, () => ({
+    focus: () => btnRef.current?.focus(),
+    scrollIntoView: (opts) => btnRef.current?.scrollIntoView(opts),
+    value,
+  }));
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDocDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [open]);
+
+  const options = React.Children.toArray(children)
+    .filter((c) => c && typeof c === "object" && c.type === "option")
+    .map((c) => ({
+      value: c.props.value !== undefined ? c.props.value : (typeof c.props.children === "string" ? c.props.children : ""),
+      label: c.props.children,
+      disabled: !!c.props.disabled,
+    }));
+  const current = options.find((o) => String(o.value) === String(value ?? ""));
+  const [activeIdx, setActiveIdx] = React.useState(-1);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        id={id}
+        name={name}
+        ref={btnRef}
+        disabled={disabled}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onClick={() => { if (disabled) return; setOpen((v) => !v); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); }}
+        onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (disabled || e.defaultPrevented) return;
+          if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(e.key)) e.preventDefault();
+          if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { setOpen(true); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); return; }
+          if (!open) return;
+          if (e.key === "ArrowDown") setActiveIdx((i) => Math.min(i + 1, options.length - 1));
+          else if (e.key === "ArrowUp") setActiveIdx((i) => Math.max(i - 1, 0));
+          else if (e.key === "Enter") {
+            const o = options[activeIdx];
+            if (o && !o.disabled) { onChange?.({ target: { value: o.value } }); }
+            setOpen(false);
+          } else if (e.key === "Escape") setOpen(false);
+        }}
+        className={`${className} flex items-center justify-between gap-1.5 text-left disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        <span className="truncate">{current ? current.label : (placeholder || "")}</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={`shrink-0 opacity-60 transition-transform ${open ? "rotate-180" : ""}`}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-[9999] mt-1 left-0 min-w-full w-max max-w-[320px] max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1">
+          {options.length === 0 && (
+            <div className="px-3 py-2 text-[13px] text-gray-400">항목 없음</div>
+          )}
+          {options.map((o, i) => (
+            <div
+              key={i}
+              onMouseEnter={() => setActiveIdx(i)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (o.disabled) return;
+                onChange?.({ target: { value: o.value } });
+                setOpen(false);
+              }}
+              className={`px-3 py-2 text-[13px] cursor-pointer whitespace-nowrap ${
+                o.disabled
+                  ? "text-gray-300 cursor-not-allowed"
+                  : String(o.value) === String(value ?? "")
+                  ? "bg-[#1B2B4B] text-white font-semibold"
+                  : i === activeIdx
+                  ? "bg-gray-100 text-gray-800"
+                  : "text-gray-700"
+              }`}
+            >
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// 상/하차지명 라벨 옆 오더메모 아이콘 버튼 — 배차관리 등록 폼과 동일한 디자인을
+// 오더복사/수정 패널, 선택수정 패널에서도 재사용한다.
+function OrderMemoIconButton({ onClick, title = "오더메모" }) {
+  return (
+    <button type="button" tabIndex={-1} onClick={onClick}
+      className="text-[#1B2B4B] hover:opacity-70 transition" title={title}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+        <path d="M9 13h6" /><path d="M9 17h6" />
+      </svg>
+    </button>
+  );
+}
+
+// 상/하차지 오더메모 보기·수정 팝업 — 배차관리 등록 폼의 orderMemoPopup과 동일한
+// UI를 오더복사/수정 패널, 선택수정 패널에서도 재사용한다. 저장은 즉시 반영하지
+// 않고(onSave로 넘긴 값을 패널 자체의 상태에만 임시로 담아두고) 실제 오더가
+// 등록/수정되는 시점에만 함께 반영되도록, 호출하는 쪽에서 저장 시점을 결정한다.
+function OrderMemoModal({ type, name, memo, popupShow, onCancel, onSave }) {
+  const [localMemo, setLocalMemo] = React.useState(memo || "");
+  const [localShow, setLocalShow] = React.useState(popupShow !== false);
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-white text-[15px] font-bold">{type === "pickup" ? "상차지" : "하차지"} 오더메모</h3>
+            <p className="text-white/55 text-[12px] mt-0.5">{name}</p>
+          </div>
+          <button onClick={onCancel} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div className="px-6 py-5 space-y-3">
+          <textarea
+            autoFocus
+            rows={5}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+            placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
+            value={localMemo}
+            onChange={(e) => setLocalMemo(e.target.value)}
+          />
+          <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+            <div>
+              <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+            </div>
+            <button type="button"
+              onClick={() => setLocalShow(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${localShow ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${localShow ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+        <div className="px-6 pb-5 flex gap-3">
+          <button onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+          <button onClick={() => onSave(localMemo, localShow)}
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 첨부파일(이미지/PDF) 미리보기 — 확대/축소/회전/저장 지원
+function FilePreviewModal({ base64, type, name, onClose }) {
+  const [zoom, setZoom] = React.useState(1);
+  const [rotate, setRotate] = React.useState(0);
+  const isImage = (type || "").startsWith("image/");
+
+  const handleSave = () => {
+    const a = document.createElement("a");
+    a.href = base64;
+    a.download = name || "첨부파일";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999999] flex flex-col bg-black/85">
+      <div className="flex items-center justify-between gap-3 px-5 py-3 bg-[#1B2B4B] shrink-0">
+        <span className="text-white text-[14px] font-semibold truncate">{name}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          {isImage && (
+            <>
+              <button onClick={() => setZoom(z => Math.max(0.25, +(z - 0.25).toFixed(2)))}
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">축소</button>
+              <span className="text-white/70 text-[12px] w-11 text-center">{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom(z => Math.min(4, +(z + 0.25).toFixed(2)))}
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">확대</button>
+              <button onClick={() => setRotate(r => (r + 90) % 360)}
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">회전</button>
+            </>
+          )}
+          <button onClick={handleSave}
+            className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[13px] font-bold hover:opacity-90 transition">저장</button>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none px-2">✕</button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto flex items-center justify-center p-6" onClick={onClose}>
+        {isImage ? (
+          <img
+            src={base64}
+            alt={name}
+            onClick={e => e.stopPropagation()}
+            style={{ transform: `scale(${zoom}) rotate(${rotate}deg)`, transition: "transform 0.15s ease", maxWidth: "none" }}
+            className="max-h-[80vh]"
+          />
+        ) : (
+          <iframe
+            src={base64}
+            title={name}
+            onClick={e => e.stopPropagation()}
+            className="w-full h-full bg-white rounded-lg"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------------------------
    Firestore 실시간 동기화 훅
 --------------------------------------------------*/
@@ -1564,6 +1858,32 @@ const markEditRequestSeen = async (order) => {
       { ...client, id, companyName: client.companyName || viewCompany },
       { merge: true }
     );
+
+    // ═══════════════════════════════════════════════════
+    // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 하차지거래처가 있으면 주소/담당자/
+    // 메모/오더메모를 그대로 반영한다. upsertPlace를 다시 부르지 않고 직접 write해서
+    // 서로 재귀 호출되지 않게 한다. 이번 호출에서 실제로 넘어온 필드만 반영한다
+    // (예: 오더메모만 고친 호출이 주소/담당자를 비워버리면 안 되므로).
+    // ═══════════════════════════════════════════════════
+    try {
+      const nameKey = normalizeCompanyKey(client.거래처명 || "");
+      if (nameKey) {
+        const matches = (places || []).filter(p => normalizeCompanyKey(p.업체명 || "") === nameKey);
+        for (const m of matches) {
+          const syncFields = {};
+          if (client.주소 !== undefined) syncFields.주소 = client.주소;
+          if (client.contacts !== undefined) syncFields.contacts = client.contacts;
+          if (client.담당자 !== undefined) syncFields.담당자 = client.담당자;
+          if (client.연락처 !== undefined) syncFields.담당자번호 = client.연락처;
+          if (client.메모 !== undefined) syncFields.메모 = client.메모;
+          if (client.오더메모 !== undefined) syncFields.오더메모 = client.오더메모;
+          if (client.팝업표시 !== undefined) syncFields.팝업표시 = client.팝업표시;
+          if (Object.keys(syncFields).length) {
+            await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
+          }
+        }
+      }
+    } catch {}
   };
 
   const removeClient = async (id) => deleteDoc(doc(db, COLL.clients, id));
@@ -1600,6 +1920,18 @@ function makePlaceKey(name = "") {
     .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "")
     .trim();
 }
+
+// 담당자명 없이 연락처만 입력됐을 때 자동으로 붙일 이름 — 아직 "담당자"라는 이름이
+// 없으면 그대로 "담당자", 이미 있으면 담당자1, 담당자2 순으로 이어붙인다.
+const nextManagerName = (contacts) => {
+  const list = Array.isArray(contacts) ? contacts : [];
+  const hasBare = list.some(c => (c.name || "").trim() === "담당자");
+  if (!hasBare) return "담당자";
+  const nums = list
+    .map(c => { const m = /^담당자(\d+)$/.exec((c.name || "").trim()); return m ? parseInt(m[1], 10) : 0; })
+    .filter(n => n > 0);
+  return `담당자${nums.length > 0 ? Math.max(...nums) + 1 : 1}`;
+};
 /* -------------------------------------------------
    하차지 저장 (upsertPlace) — Firestore (최종 안정버전)
 --------------------------------------------------*/
@@ -1705,7 +2037,11 @@ const upsertPlace = async (place) => {
       담당자번호: primaryContact?.phone || (place.담당자번호 || "").trim(),
       등급: place.등급 || existingData?.등급 || "일반",
       등급변경일: place.등급변경일 || existingData?.등급변경일 || null,
+      // 메모(일반메모): 담당자가 참고용으로 자유롭게 적는 메모. 오더메모와 달리 팝업을 띄우지 않는다.
       메모: place.메모 !== undefined ? place.메모 : (existingData?.메모 || ""),
+      // 오더메모: 이 거래처명을 상/하차지명 등 어디서 입력하든 팝업표시가 켜져 있으면
+      // 안내 팝업으로 뜨는 메모 — 기본거래처와 동일한 의미/필드명으로 맞춘다.
+      오더메모: place.오더메모 !== undefined ? place.오더메모 : (existingData?.오더메모 || ""),
       // 메모/등급 안내 팝업 노출 여부 — 기본값은 켜짐(true). 거래처관리에서 끈 경우에만 false로 저장된다.
       팝업표시: place.팝업표시 !== undefined ? place.팝업표시 : (existingData?.팝업표시 !== undefined ? existingData.팝업표시 : true),
       isActive: place.isActive !== false,
@@ -1714,6 +2050,27 @@ const upsertPlace = async (place) => {
     };
 
     await setDoc(ref, data, { merge: true });
+
+    // ═══════════════════════════════════════════════════
+    // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 기본거래처가 있으면 주소/담당자/
+    // 메모/오더메모를 그대로 반영한다. 어느 쪽에서 고치든 같이 바뀌어야 한다는 요구사항.
+    // upsertClient를 다시 부르지 않고 직접 write해서 서로 재귀 호출되지 않게 한다.
+    // ═══════════════════════════════════════════════════
+    try {
+      const clientSnap = await getDocs(query(collection(db, "clients"), where("거래처명", "==", name)));
+      for (const d of clientSnap.docs) {
+        await setDoc(doc(db, "clients", d.id), {
+          주소: data.주소,
+          contacts: data.contacts,
+          담당자: data.담당자,
+          연락처: data.담당자번호,
+          메모: data.메모,
+          오더메모: data.오더메모,
+          팝업표시: data.팝업표시,
+        }, { merge: true }).catch(() => {});
+      }
+    } catch {}
+
     return key;
 
   } catch (e) {
@@ -4005,6 +4362,7 @@ return (
                 clients={clients}
                 places={places}
                 upsertDriver={upsertDriver}
+                upsertClient={upsertClientSafe}
                 isViewer={isViewer}
                 setCargoAddPopup={setCargoAddPopup}
                 approvedShippers={approvedShippers}
@@ -5584,14 +5942,6 @@ const openNewPlacePrompt = (name) => {
   setNewClientModalOpen(true);
 };
 
-// 담당자N 자동 이름 부여 헬퍼
-const nextManagerName = (contacts) => {
-  const nums = contacts
-    .map(c => { const m = /^담당자(\d+)$/.exec(c.name?.trim() || ""); return m ? parseInt(m[1], 10) : 0; })
-    .filter(n => n > 0);
-  return `담당자${nums.length > 0 ? Math.max(...nums) + 1 : 1}`;
-};
-
 // 주소 정규화 (공백·특수문자 제거, 소문자)
 const normalizeAddr = (a = "") =>
   String(a).trim().replace(/\s+/g, "").replace(/[-./]/g, "").toLowerCase();
@@ -5652,8 +6002,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
         if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
         else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
-      } else if (cPhone && cContacts.length === 0) {
-        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      } else if (cPhone) {
+        const samePhoneIdx = cContacts.findIndex(c => c.phone?.replace(/\D/g, "") === cPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          cContacts = cContacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(cContacts);
+          cContacts = cContacts.map(c => ({ ...c, isPrimary: false }));
+          cContacts.push({ name: autoName, phone: cPhone, isPrimary: true });
+        }
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
       const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
@@ -5664,6 +6021,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
+        오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
+        팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
       }).catch(() => {});
       return;
     }
@@ -5748,6 +6107,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     등급변경일: existing?.등급변경일 || null,
     메모: extraFields?.메모 || existing?.메모 || "",
     이메일: extraFields?.이메일 || existing?.이메일 || "",
+    오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
+    팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
   });
 };
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
@@ -5759,36 +6120,42 @@ const mergedClients = React.useMemo(() => {
   // 살아남게 한다.
   const mkKey = (n, a) => `${normalizeKey(n)}|${normalizeAddr(a || "")}`;
 
-  // ✅ 1️⃣ placeList를 먼저 넣는다 (주소/담당자 기준)
-  placeList.forEach(p => {
-    const key = mkKey(p.업체명, p.주소);
-    if (normalizeKey(p.업체명)) map.set(key, p);
-  });
-
-  // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용 (clients 컬렉션은 거래처명 필드 사용)
+  // ✅ 1️⃣ 기본거래처(clients)를 먼저 넣어 우선시킨다 — savePlaceSmart가 이름이 일치하는
+  // 기본거래처가 있으면 항상 그쪽에 담당자를 누적 저장하므로(하차지거래처 사본은 새로
+  // 안 만듦), 같은 이름+주소로 하차지거래처에도 예전 중복 문서가 남아있으면 그 오래된
+  // (담당자가 갱신되지 않은) 하차지거래처 쪽이 여기서 이겨버려 방금 저장한 담당자 목록이
+  // 아니라 옛 담당자만 계속 자동입력되고 선택 팝업도 뜨지 않는 문제가 있었다.
   clients.forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     const key = mkKey(name, c.주소);
     if (!normalizeKey(name)) return;
+    map.set(key, {
+      업체명: name,
+      주소: c.주소 || "",
+      담당자: c.담당자 || "",
+      담당자번호: c.연락처 || c.담당자번호 || "",
+      메모: c.메모 || "",
+      오더메모: c.오더메모 || "",
+      등급: c.등급 || "일반",
+      등급변경일: c.등급변경일 || null,
+      팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
+      // 하차지거래처와 달리 기본거래처는 원래 contacts 배열이 없었지만, savePlaceSmart가
+      // 이제 기본거래처에도 여러 담당자를 contacts로 저장한다 — 여기서 빠뜨리면
+      // 담당자가 여러 명이어도 항상 대표 담당자 1명만 적용되고 선택 팝업이 안 뜬다.
+      contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
+    });
+  });
 
-    // 완전히 동일한 이름+주소가 아닐 때만 추가 (진짜 중복만 걸러낸다)
-    if (!map.has(key)) {
-      map.set(key, {
-        업체명: name,
-        주소: c.주소 || "",
-        담당자: c.담당자 || "",
-        담당자번호: c.연락처 || c.담당자번호 || "",
-        메모: c.메모 || "",
-        오더메모: c.오더메모 || "",
-        등급: c.등급 || "일반",
-        등급변경일: c.등급변경일 || null,
-        팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
-        // 하차지거래처와 달리 기본거래처는 원래 contacts 배열이 없었지만, savePlaceSmart가
-        // 이제 기본거래처에도 여러 담당자를 contacts로 저장한다 — 여기서 빠뜨리면
-        // 담당자가 여러 명이어도 항상 대표 담당자 1명만 적용되고 선택 팝업이 안 뜬다.
-        contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
-      });
-    }
+  // ✅ 2️⃣ placeList는 기본거래처에 이름 자체가 아예 없는(진짜 하차지 전용) 업체만
+  // 보충한다 — 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로,
+  // 주소가 우연히 다르게 남아있어도 자동완성 드롭다운에 기본거래처 항목 하나만
+  // 뜨면 된다(같은 회사가 드롭다운에 2개로 중복되어 보이던 문제).
+  const clientNameSet = new Set(clients.map(c => normalizeKey(c.업체명 || c.거래처명 || "")).filter(Boolean));
+  placeList.forEach(p => {
+    const nameKey = normalizeKey(p.업체명);
+    if (!nameKey || clientNameSet.has(nameKey)) return;
+    const key = mkKey(p.업체명, p.주소);
+    if (!map.has(key)) map.set(key, p);
   });
   return Array.from(map.values());
 }, [placeList, clients]);
@@ -6951,7 +7318,45 @@ const [contactActive, setContactActive] = React.useState(0);
 const [contactQueue, setContactQueue] = React.useState([]);
 const [editingContactIdx, setEditingContactIdx] = React.useState(null);
 const [editContactData, setEditContactData] = React.useState({ name: "", phone: "" });
+const [contactSearchQ, setContactSearchQ] = React.useState("");
 const [clientAlert, setClientAlert] = React.useState(null);
+
+// 상/하차지 오더메모 버튼 — 상/하차지명에 입력된 거래처의 오더메모를 바로 보고
+// 수정할 수 있게 해준다. ⚠️ 여기서 "저장"을 눌러도 거래처관리에 바로 반영되지
+// 않는다 — 오더를 실제로 등록해야만 그 값이 함께 저장되도록, 우선 form에만
+// 임시로 담아두고(상차지오더메모/상차지오더메모팝업표시 등) 오더 등록 시점에
+// savePlaceSmart로 실제 반영한다(아래 백그라운드 저장 부분 참고).
+const [orderMemoPopup, setOrderMemoPopup] = React.useState(null); // { type, name, memo, 등급, 팝업표시 }
+const openOrderMemoEditor = (type) => {
+  const name = (type === "pickup" ? form.상차지명 : form.하차지명 || "").trim();
+  if (!name) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+  const pendingMemoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const pendingShowKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  if (form[pendingMemoKey] !== undefined || form[pendingShowKey] !== undefined) {
+    // 이미 이번 오더에서 한 번 수정해둔 값이 있으면(아직 등록 전) 그 값을 그대로 이어서 보여준다.
+    setOrderMemoPopup({
+      type, name,
+      memo: form[pendingMemoKey] || "",
+      팝업표시: form[pendingShowKey] !== undefined ? form[pendingShowKey] : true,
+    });
+    return;
+  }
+  const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
+  setOrderMemoPopup({
+    type, name,
+    memo: found?.오더메모 || "",
+    팝업표시: found?.팝업표시 !== undefined ? found.팝업표시 : true,
+  });
+};
+const saveOrderMemo = (memo, popupShow) => {
+  if (!orderMemoPopup) return;
+  const { type } = orderMemoPopup;
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  setForm(p => ({ ...p, [memoKey]: memo, [showKey]: popupShow }));
+  setOrderMemoPopup(null);
+  showAlert("오더를 등록하면 오더메모가 함께 저장됩니다.");
+};
 
 // 🚫 거래처/상하차지 등급·메모 알림 대상 찾기
 // 하차지거래처(placeRows)뿐 아니라 기본거래처(clients)에만 등록된 업체의
@@ -6961,30 +7366,33 @@ const [clientAlert, setClientAlert] = React.useState(null);
 const findClientAlertTarget = (name) => {
   if (!name) return null;
   const trimmed = name.trim();
-  // 하차지거래처(placeRows)는 기존과 동일하게 메모 필드로 판단한다.
-  const placeHasNote = (v) => v?.메모 && String(v.메모).trim();
-  const placeTarget = (placeRows || []).find(
-    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || placeHasNote(p))
-  );
-  if (placeTarget) {
-    return placeTarget.팝업표시 === false ? null : placeTarget;
-  }
-  // 기본거래처(clients)는 "일반메모"가 아니라 "오더메모"가 있을 때만 팝업 대상이다.
-  const clientHasNote = (v) => v?.오더메모 && String(v.오더메모).trim();
+  // 하차지거래처/기본거래처 모두 "일반메모"가 아니라 "오더메모"가 있을 때만 팝업 대상이다
+  // (두 컬렉션이 이제 이름이 같으면 서로 동기화되므로 판단 기준도 동일하게 맞춘다).
+  const hasNote = (v) => v?.오더메모 && String(v.오더메모).trim();
+  // ⚠️ 기본거래처(clients)를 먼저 확인한다 — 상/하차지명 드롭다운(mergedClients)이나
+  // 실제 저장(savePlaceSmart)이나 전부 기본거래처를 우선하는데, 여기만 하차지거래처를
+  // 먼저 보면, 아직 서로 동기화되지 않은 옛 하차지거래처 문서(팝업표시가 켜진 채로
+  // 남아있는)가 이겨버려서 기본거래처에서 분명히 꺼둔 팝업이 거래처명 필드에서만
+  // 다시 뜨는 문제가 있었다.
   const clientTarget = (clients || []).find(
-    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || clientHasNote(c))
+    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
   );
-  if (!clientTarget || clientTarget.팝업표시 === false) return null;
-  // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
-  return { ...clientTarget, 메모: clientTarget.오더메모 || "" };
+  if (clientTarget) {
+    // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
+    return clientTarget.팝업표시 === false ? null : { ...clientTarget, 메모: clientTarget.오더메모 || "" };
+  }
+  const placeTarget = (placeRows || []).find(
+    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
+  );
+  if (!placeTarget || placeTarget.팝업표시 === false) return null;
+  return { ...placeTarget, 메모: placeTarget.오더메모 || "" };
 };
 // 드롭다운에서 "특정 항목"을 직접 선택한 경우 전용 — 같은 업체명이라도 기본거래처와
 // 하차지거래처, 혹은 주소가 다른 하차지거래처가 각각 따로 존재할 수 있으므로, 이름으로
-// 다시 검색하지 않고 사용자가 실제로 고른 그 객체 자신의 등급/메모(오더메모)만 본다.
+// 다시 검색하지 않고 사용자가 실제로 고른 그 객체 자신의 등급/오더메모만 본다.
 const getAlertTargetForSelectedPlace = (place) => {
   if (!place || place.팝업표시 === false) return null;
-  const isPlaceRecord = !!place._id; // 하차지거래처(mergedClients)는 real _id를 갖고, 기본거래처 파생 항목은 없다
-  const note = isPlaceRecord ? place.메모 : place.오더메모;
+  const note = place.오더메모;
   const hasNote = note && String(note).trim();
   if (place.등급 !== "블랙" && place.등급 !== "주의" && !hasNote) return null;
   return { ...place, 메모: note || "" };
@@ -7088,6 +7496,7 @@ const openContactPopup = (items) => {
   setContactQueue(rest);
   setContactPopup(first);
   setContactActive(0);
+  setContactSearchQ("");
 };
 
 const closeContactPopup = (selectedContact) => {
@@ -7098,6 +7507,7 @@ const closeContactPopup = (selectedContact) => {
     setForm(prev => ({ ...prev, ...field }));
   }
   setContactPopup(null);
+  setContactSearchQ("");
 
   if (contactQueue.length > 0) {
     const [next, ...rest] = contactQueue;
@@ -7178,7 +7588,7 @@ const [driverActive, setDriverActive] = React.useState(0);
      const grade = list[0]?.등급 || list[0]?.grade || list[0]?.상태 || "";
     if (grade === "블랙") {
       setBlackAlert(list[0]);
-    } else if (list[0]?.메모 && String(list[0].메모).trim()) {
+    } else if (shouldShowDriverMemoAlert(list[0])) {
       window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: list[0] }));
     }
     setForm((p) => ({
@@ -7686,6 +8096,10 @@ const rec = {
 const _pName = form.상차지명, _pAddr = form.상차지주소, _pMgr = form.상차지담당자, _pPhone = form.상차지담당자번호, _pId = form.상차지Id;
 const _dName = form.하차지명, _dAddr = form.하차지주소, _dMgr = form.하차지담당자, _dPhone = form.하차지담당자번호, _dId = form.하차지Id;
 const _carNo = form.차량번호, _name = form.이름, _tel = form.전화번호;
+// 상/하차지 오더메모 버튼으로 미리 수정해둔 값(아직 거래처관리엔 반영 안 됨) — 오더가
+// 실제로 등록되는 지금 시점에만 함께 반영한다.
+const _pOrderMemo = form.상차지오더메모, _pOrderMemoShow = form.상차지오더메모팝업표시;
+const _dOrderMemo = form.하차지오더메모, _dOrderMemoShow = form.하차지오더메모팝업표시;
 
 // ★ 오더 병렬 저장 (순차→병렬로 속도 개선)
 const saveCount = multiCount > 1 ? multiCount : 1;
@@ -7719,8 +8133,12 @@ setBottomStatusKey(k => k+1);
 
 // ★ 백그라운드 저장 (UI 블로킹 없음)
 if (typeof upsertPlace === "function") {
-  savePlaceSmart(_pName, _pAddr, _pMgr, _pPhone, _pId).catch(() => {});
-  savePlaceSmart(_dName, _dAddr, _dMgr, _dPhone, _dId).catch(() => {});
+  savePlaceSmart(_pName, _pAddr, _pMgr, _pPhone, _pId, undefined,
+    (_pOrderMemo !== undefined || _pOrderMemoShow !== undefined) ? { 오더메모: _pOrderMemo, 팝업표시: _pOrderMemoShow } : undefined
+  ).catch(() => {});
+  savePlaceSmart(_dName, _dAddr, _dMgr, _dPhone, _dId, undefined,
+    (_dOrderMemo !== undefined || _dOrderMemoShow !== undefined) ? { 오더메모: _dOrderMemo, 팝업표시: _dOrderMemoShow } : undefined
+  ).catch(() => {});
   // 경유 하차지 자동 등록
   [...(rec.경유하차목록 || []), ...(rec.경유상차목록 || [])].forEach(s => {
     if (s?.업체명?.trim()) {
@@ -8572,7 +8990,7 @@ setSmartDriverMatched(results.slice(0, 8));
 const selectSmartDriver = (d) => {
   const grade = d?.등급 || d?.grade || "";
   if (grade === "블랙") setBlackAlert(d);
-  else if (d?.메모 && String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
+  else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
   setForm(p => ({
     ...p,
     차량번호: d.차량번호,
@@ -8605,7 +9023,7 @@ const applySmartDriverInput = async (text) => {
       // 완전히 동일 → 기존 기사 정보로 세팅
       const grade = existing?.등급 || existing?.grade || "";
       if (grade === "블랙") setBlackAlert(existing);
-      else if (existing?.메모 && String(existing.메모).trim()) {
+      else if (shouldShowDriverMemoAlert(existing)) {
         window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
       }
       setForm(p => ({
@@ -8642,7 +9060,7 @@ const applySmartDriverInput = async (text) => {
       // 그 외 (이름 파싱 안 됨 등) → 기존 기사 정보로 세팅
       const grade = existing?.등급 || existing?.grade || "";
       if (grade === "블랙") setBlackAlert(existing);
-      else if (existing?.메모 && String(existing.메모).trim()) {
+      else if (shouldShowDriverMemoAlert(existing)) {
         window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
       }
       setForm(p => ({
@@ -9374,8 +9792,16 @@ const similar = placeList.filter(p => {
 
   {/* 상차지명 + 자동완성 */}
   <div className="relative">
-    <label className="block text-[16px] font-bold text-blue-600 mb-1">
+    <label className="flex items-center gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
   상차지 {reqStar}
+  <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("pickup")}
+    className="text-[#1B2B4B] hover:opacity-70 transition" title="상차지 오더메모">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+      <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+      <path d="M9 13h6" /><path d="M9 17h6" />
+    </svg>
+  </button>
 </label>
 
     <input
@@ -9508,8 +9934,16 @@ className={`
 
 {/* 하차지명 + 자동완성 */}
 <div className="relative">
-  <label className="block text-[16px] font-bold text-red-500 mb-1">
+  <label className="flex items-center gap-1.5 text-[16px] font-bold text-red-500 mb-1">
     하차지 {reqStar}
+    <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("drop")}
+      className="text-[#1B2B4B] hover:opacity-70 transition" title="하차지 오더메모">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+        <path d="M9 13h6" /><path d="M9 17h6" />
+      </svg>
+    </button>
   </label>
 
   <input
@@ -9693,7 +10127,7 @@ className={`
 
     {/* 드롭다운 */}
     <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-  <select
+  <CustomSelect
    className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.화물타입 || ""}
 
@@ -9725,7 +10159,7 @@ className={`
         <option value="파레트">파레트</option>
         <option value="박스">박스</option>
         <option value="통">통</option>
-      </select>
+      </CustomSelect>
 
       {/* 화살표 */}
             <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">
@@ -9863,7 +10297,7 @@ className={`
     {/* 드롭다운 */}
     <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
 
-      <select
+      <CustomSelect
         className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.톤수타입}
 
@@ -9882,7 +10316,7 @@ className={`
         <option value="">없음</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
       {/* 화살표 */}
             <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">
@@ -10319,7 +10753,7 @@ className={`
               }}
             />
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-              <select
+              <CustomSelect
                 className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.화물타입 ?? "파레트"}
                 onChange={(e) => {
@@ -10335,7 +10769,7 @@ className={`
                 <option value="파레트">파레트</option>
                 <option value="박스">박스</option>
                 <option value="통">통</option>
-              </select>
+              </CustomSelect>
               <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">▾</span>
             </div>
           </div>
@@ -10371,7 +10805,7 @@ className={`
               }}
             />
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-              <select
+              <CustomSelect
                 className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.톤수타입 ?? "톤"}
                 onChange={(e) => {
@@ -10386,7 +10820,7 @@ className={`
                 <option value="">없음</option>
                 <option value="톤">톤</option>
                 <option value="kg">kg</option>
-              </select>
+              </CustomSelect>
               <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">▾</span>
             </div>
           </div>
@@ -10397,7 +10831,7 @@ className={`
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">상차시간</label>
-            <select
+            <CustomSelect
               className={inputCls}
               value={stop.상차시간 || ""}
               onChange={(e) => {
@@ -10413,11 +10847,11 @@ className={`
               {localTimeOptions.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">하차시간</label>
-            <select
+            <CustomSelect
               className={inputCls}
               value={stop.하차시간 || ""}
               onChange={(e) => {
@@ -10433,7 +10867,7 @@ className={`
               {localTimeOptions.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
           
         </div>
@@ -10443,7 +10877,7 @@ className={`
           <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">
             {stopType === "pickup" ? "상차방법" : "하차방법"}
           </label>
-          <select
+          <CustomSelect
             className={inputCls}
             value={stop.방법 || ""}
             onChange={(e) => {
@@ -10459,7 +10893,7 @@ className={`
             {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => (
               <option key={v} value={v}>{v}</option>
             ))}
-          </select>
+          </CustomSelect>
         </div>
 
         {/* 삭제 버튼 */}
@@ -10767,24 +11201,24 @@ className={`
   {/* 상/하차 방법 */}
   <div>
     <label className={labelCls}>상차방법</label>
-    <select className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
+    <CustomSelect className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
       <option value="">선택 ▾</option>
       {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
   <div>
     <label className={labelCls}>하차방법</label>
-    <select className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
+    <CustomSelect className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
       <option value="">선택 ▾</option>
       {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
   {/* 결제 */}
   <div>
     <label className={labelCls}>지급방식 {reqStar}</label>
-   <select ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(e) => {
+   <CustomSelect ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(e) => {
   const v = e.target.value;
   onChange("지급방식", v);
  if (v === "취소") {
@@ -10795,15 +11229,15 @@ className={`
 }}>
       <option value="">선택 ▾</option>
       {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
   <div>
     <label className={labelCls}>배차방식</label>
-    <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+    <CustomSelect className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
       {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
 {/* =============================== 
@@ -11274,11 +11708,11 @@ className={`
                     ))}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">상차방법</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.startLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, startLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                 </div>
@@ -11298,11 +11732,11 @@ className={`
                     ))}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">하차방법</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.endLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, endLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                 </div>
@@ -11336,20 +11770,20 @@ className={`
                     ))}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">결제방식</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.farePaytype ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, farePaytype: e.target.value }))}>
                         {["인수증","선불","착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">세금계산서</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.taxbillType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, taxbillType: e.target.value }))}>
                         <option value="Y">Y - 발행</option>
                         <option value="N">N - 미발행</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                 </div>
@@ -11360,12 +11794,12 @@ className={`
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">화주유형</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.firstType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, firstType: e.target.value }))}>
                         <option value="01">01 - 직접화주</option>
                         <option value="02">02 - 주선사</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                     {[["화주명","firstShipperNm"],["화주연락처","firstShipperInfo"],["사업자번호","firstShipperBizNo"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
@@ -11500,7 +11934,7 @@ className={`
               {/* 검색바 */}
               <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 shrink-0">
                 <div className="flex gap-2">
-                  <select
+                  <CustomSelect
                     className="border border-gray-200 bg-white px-3 py-2 rounded-xl text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]"
                     value={copyFilterType}
                     onChange={(e) => setCopyFilterType(e.target.value)}
@@ -11510,7 +11944,7 @@ className={`
                     <option value="상차지명">상차지명</option>
                     <option value="하차지명">하차지명</option>
                     <option value="화물내용">화물내용</option>
-                  </select>
+                  </CustomSelect>
                   <input
                     type="text"
                     placeholder="검색어를 입력하세요"
@@ -11847,8 +12281,13 @@ className={`
     </div>
   </div>
 </div>
-{/* ================= 담당자 선택 팝업 ================= */}
-{contactPopup && (
+{/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}
+{contactPopup && (() => {
+  const nq = norm(contactSearchQ);
+  const visible = contactPopup.contacts
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !nq || norm(c.name || "").includes(nq) || (c.phone || "").replace(/\D/g, "").includes(nq.replace(/\D/g, "")));
+  return (
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -11856,21 +12295,28 @@ className={`
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setContactActive(i => Math.min(i + 1, contactPopup.contacts.length - 1));
+        setContactActive(i => Math.min(i + 1, visible.length - 1));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setContactActive(i => Math.max(i - 1, 0));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setContactActive(i => Math.min(i + 5, visible.length - 1));
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setContactActive(i => Math.max(i - 5, 0));
       } else if (e.key === "Enter" || e.key === "Escape") {
         e.preventDefault();
         if (e.key === "Enter") {
-          closeContactPopup(contactPopup.contacts[contactActive] || null);
+          const picked = visible[contactActive]?.c;
+          closeContactPopup(picked || null);
         } else {
           closeContactPopup(null);
         }
       }
     }}
   >
-    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
     <h3 className="text-white font-bold text-[15px]">
           {contactPopup.type === "pickup" ? "🔵 상차지" : "🔴 하차지"} 담당자 선택
@@ -11878,10 +12324,21 @@ className={`
             <span className="ml-2 text-[11px] text-white/50">+{contactQueue.length}건 대기</span>
           )}
         </h3>
-        <p className="text-white/60 text-[12px] mt-0.5">{contactPopup.place.업체명}</p>
+        <p className="text-white/60 text-[12px] mt-0.5">{contactPopup.place.업체명} · 총 {contactPopup.contacts.length}명</p>
       </div>
-      <div className="p-4 space-y-2">
-        {contactPopup.contacts.map((c, i) => (
+      <div className="px-5 pt-4">
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          placeholder="담당자 이름 또는 전화번호 검색"
+          value={contactSearchQ}
+          onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
+        />
+      </div>
+      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+        {visible.length === 0 && (
+          <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
+        )}
+        {visible.map(({ c, i }) => (
           <div
             key={i}
             className={`rounded-xl border-2 transition ${
@@ -11893,25 +12350,25 @@ className={`
           >
             {editingContactIdx === i ? (
               /* ── 인라인 수정 폼 ── */
-              <div className="px-4 py-3 space-y-2" onClick={e => e.stopPropagation()}>
+              <div className="px-3 py-2.5 space-y-1.5" onClick={e => e.stopPropagation()}>
                 <input
                   autoFocus
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="이름"
                   value={editContactData.name}
                   onChange={e => setEditContactData(p => ({ ...p, name: e.target.value }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="전화번호"
                   value={editContactData.phone}
                   onChange={e => setEditContactData(p => ({ ...p, phone: e.target.value }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-1.5 pt-0.5">
                   <button
-                    className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-xs font-bold"
+                    className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold"
                     onClick={async () => {
                       if (!editContactData.name.trim()) return showAlert("이름을 입력하세요.");
                       const updated = contactPopup.contacts.map((x, idx) =>
@@ -11922,26 +12379,26 @@ className={`
                     }}
                   >저장</button>
                   <button
-                    className="px-4 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
+                    className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-[11px]"
                     onClick={() => setEditingContactIdx(null)}
                   >취소</button>
                 </div>
               </div>
             ) : (
               /* ── 일반 표시 ── */
-              <div className="flex items-center">
+              <div className="flex flex-col h-full">
                 {/* 선택 영역 */}
                 <div
-                  className="flex-1 px-4 py-3 cursor-pointer"
+                  className="flex-1 px-3 py-2.5 cursor-pointer min-w-0"
                   onClick={() => closeContactPopup(c)}
                 >
-                  <div className="font-bold text-gray-900">{c.name || "-"}</div>
-                  <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+                  <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
+                  <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
                 </div>
                 {/* 수정/삭제 버튼 */}
-                <div className="flex gap-1 pr-3 shrink-0">
+                <div className="flex gap-1 px-2.5 pb-2 shrink-0">
                   <button
-                    className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-xs font-semibold transition"
+                    className="flex-1 py-1 rounded-lg bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-[11px] font-semibold transition"
                     onClick={e => {
                       e.stopPropagation();
                       setEditContactData({ name: c.name || "", phone: c.phone || "" });
@@ -11950,7 +12407,7 @@ className={`
                     }}
                   >수정</button>
                   <button
-                    className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-xs font-semibold transition"
+                    className="flex-1 py-1 rounded-lg bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-[11px] font-semibold transition"
                     onClick={async e => {
                       e.stopPropagation();
                       if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
@@ -11968,14 +12425,15 @@ className={`
           </div>
         ))}
       </div>
-      <div className="px-4 pb-4 text-right">
+      <div className="px-5 pb-4 text-right">
         <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => closeContactPopup(null)}>
           취소
         </button>
       </div>
     </div>
   </div>
-)}
+  );
+})()}
 {blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
@@ -12027,6 +12485,47 @@ className={`
       </div>
       <div className="px-6 pb-5">
         <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-sm" onClick={() => setMemoAlert(null)}>확인</button>
+      </div>
+    </div>
+  </div>
+)}
+{/* 상/하차지 오더메모 보기·수정 팝업 */}
+{orderMemoPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setOrderMemoPopup(null)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-white text-[15px] font-bold">{orderMemoPopup.type === "pickup" ? "상차지" : "하차지"} 오더메모</h3>
+          <p className="text-white/55 text-[12px] mt-0.5">{orderMemoPopup.name}</p>
+        </div>
+        <button onClick={() => setOrderMemoPopup(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <textarea
+          autoFocus
+          rows={5}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+          placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
+          value={orderMemoPopup.memo}
+          onChange={(e) => setOrderMemoPopup(p => ({ ...p, memo: e.target.value }))}
+        />
+        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+          </div>
+          <button type="button"
+            onClick={() => setOrderMemoPopup(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${orderMemoPopup.팝업표시 === false ? "bg-gray-300" : "bg-[#1B2B4B]"}`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${orderMemoPopup.팝업표시 === false ? "translate-x-1" : "translate-x-6"}`} />
+          </button>
+        </div>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button onClick={() => setOrderMemoPopup(null)}
+          className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+        <button onClick={() => saveOrderMemo(orderMemoPopup.memo, orderMemoPopup.팝업표시)}
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
       </div>
     </div>
   </div>
@@ -13049,7 +13548,7 @@ setConfirmChange(null);
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
-            <select
+            <CustomSelect
               id="nc-grade"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
               value={newClientModalData.grade}
@@ -13060,7 +13559,7 @@ setConfirmChange(null);
               <option value="블랙">블랙</option>
               <option value="주의">주의</option>
               <option value="이탈">이탈</option>
-            </select>
+            </CustomSelect>
           </div>
         </div>
         <div>
@@ -16002,12 +16501,25 @@ const mergedClients = React.useMemo(() => {
   // 이름만으로 키를 잡으면 주소가 다른 기본거래처/하차지거래처가 있을 때 하나가
   // 다른 하나를 가려버린다 — 이름+주소 조합으로 키를 잡아 둘 다 살아남게 한다.
   const mkKey = (n, a) => `${(n||"").toLowerCase().replace(/\s+/g,"")}|${(a||"").toLowerCase().replace(/\s+/g,"")}`;
-  (placeRows || []).forEach(p => { if ((p.업체명||"").trim()) map.set(mkKey(p.업체명, p.주소), p); });
+  // ⚠️ 기본거래처를 먼저 넣어 우선시킨다 — savePlaceSmart가 이름이 일치하는 기본거래처가
+  // 있으면 항상 그쪽에 담당자를 누적 저장하므로(하차지거래처 사본은 새로 안 만듦),
+  // 같은 이름+주소로 하차지거래처에도 예전 중복 문서가 남아있는 경우 그 오래된(담당자가
+  // 갱신되지 않은) 하차지거래처 쪽이 여기서 이겨버리면 방금 저장한 담당자 목록이 아니라
+  // 옛 담당자만 계속 자동입력되고 선택 팝업도 뜨지 않는다.
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+  });
+  // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
+  // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
+  const clientNameSet = new Set((clients || []).map(c => (c.업체명 || c.거래처명 || "").toLowerCase().replace(/\s+/g, "")).filter(Boolean));
+  (placeRows || []).forEach(p => {
+    const nameKey = (p.업체명 || "").toLowerCase().replace(/\s+/g, "");
+    if (!nameKey || clientNameSet.has(nameKey)) return;
+    const k = mkKey(p.업체명, p.주소);
+    if (!map.has(k)) map.set(k, p);
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -16028,7 +16540,7 @@ const rtIsSameAddr = (a = "", b = "") => {
   const longer = na.length <= nb.length ? nb : na;
   return shorter.length >= 10 && longer.startsWith(shorter);
 };
-const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
+const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution, extraFields) => {
   if (!name) return;
 
   if (_conflictResolution === "keep_new") {
@@ -16066,8 +16578,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
         if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
         else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
-      } else if (cPhone && cContacts.length === 0) {
-        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      } else if (cPhone) {
+        const samePhoneIdx = cContacts.findIndex(c => c.phone?.replace(/\D/g, "") === cPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          cContacts = cContacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(cContacts);
+          cContacts = cContacts.map(c => ({ ...c, isPrimary: false }));
+          cContacts.push({ name: autoName, phone: cPhone, isPrimary: true });
+        }
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
       const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
@@ -16078,6 +16597,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
+        오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
+        팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
       }).catch(() => {});
       return;
     }
@@ -16111,8 +16632,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
       contacts = contacts.map(c => ({ ...c, isPrimary: false }));
       contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true });
     }
-  } else if (resolvedPhone && contacts.length === 0) {
-    contacts = [{ name: "", phone: resolvedPhone, isPrimary: true }];
+  } else if (resolvedPhone) {
+    const samePhoneIdx = contacts.findIndex(c => c.phone?.replace(/\D/g, "") === resolvedPhone.replace(/\D/g, "") && c.phone);
+    if (samePhoneIdx >= 0) {
+      contacts = contacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+    } else {
+      const autoName = nextManagerName(contacts);
+      contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+      contacts.push({ name: autoName, phone: resolvedPhone, isPrimary: true });
+    }
   }
 
   const finalAddr = _conflictResolution === "keep" ? (existing?.주소 || addr || "") : (addr || existing?.주소 || "");
@@ -16122,8 +16650,10 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     업체명: name,
     주소: finalAddr,
     contacts,
-    등급: existing?.등급 || "일반",
-    메모: existing?.메모 || "",
+    등급: extraFields?.등급 || existing?.등급 || "일반",
+    메모: extraFields?.메모 || existing?.메모 || "",
+    오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
+    팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
   }).catch(() => {});
 };
 
@@ -16381,11 +16911,11 @@ const checkWarningStatus = (name, type) => {
     const foundPlace = (placeRows || []).find(p => p.업체명 === name);
     if (foundPlace && foundPlace.팝업표시 !== false) {
       const status = foundPlace.업체상태 || foundPlace.등급;
-      const note = foundPlace.메모;
+      const note = foundPlace.오더메모;
       if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
         const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-        setWarningPopup({ name, status: gradeStatus, type, info: foundPlace });
+        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
       }
     }
   };
@@ -16398,6 +16928,52 @@ const checkWarningStatus = (name, type) => {
   const [editActiveIndex, setEditActiveIndex] = React.useState(0);
   const [panelContactPopup4, setPanelContactPopup4] = React.useState(null);
   const [panelContactActive4, setPanelContactActive4] = React.useState(0);
+  const [panelContactSearch4, setPanelContactSearch4] = React.useState("");
+  React.useEffect(() => { setPanelContactSearch4(""); }, [panelContactPopup4]);
+
+  // 오더복사/수정 패널(copyTarget) 오더메모 팝업
+  const [panelMemoPopupC4, setPanelMemoPopupC4] = React.useState(null);
+  const openPanelMemoC4 = (type) => {
+    const name = (type === "pickup" ? copyTarget?.상차지명 : copyTarget?.하차지명) || "";
+    if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+    const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined) {
+      setPanelMemoPopupC4({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true });
+      return;
+    }
+    const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
+    setPanelMemoPopupC4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+  };
+  const savePanelMemoC4 = (memo, show) => {
+    if (!panelMemoPopupC4) return;
+    const memoKey = panelMemoPopupC4.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = panelMemoPopupC4.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+    setPanelMemoPopupC4(null);
+  };
+
+  // 선택수정 패널(editTarget) 오더메모 팝업
+  const [panelMemoPopupE4, setPanelMemoPopupE4] = React.useState(null);
+  const openPanelMemoE4 = (type) => {
+    const name = (type === "pickup" ? editTarget?.상차지명 : editTarget?.하차지명) || "";
+    if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+    const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined) {
+      setPanelMemoPopupE4({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true });
+      return;
+    }
+    const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
+    setPanelMemoPopupE4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+  };
+  const savePanelMemoE4 = (memo, show) => {
+    if (!panelMemoPopupE4) return;
+    const memoKey = panelMemoPopupE4.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = panelMemoPopupE4.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+    setPanelMemoPopupE4(null);
+  };
   // ==========================
   // 🔵 선택수정 거래처 자동완성 상태 (추가)
   // ==========================
@@ -18318,7 +18894,7 @@ const driverPanelCallbackRef = React.useRef(null);
     const match = matches[0];
     // 메모/블랙 즉시 팝업
     const g3 = match?.등급 || match?.grade || "";
-    if (g3 !== "블랙" && match?.메모 && String(match.메모).trim()) {
+    if (g3 !== "블랙" && shouldShowDriverMemoAlert(match)) {
       window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
     }
     const existingName = (oldRow.이름 || "").trim();
@@ -19567,7 +20143,7 @@ const handleCloseFileUpload = async (e) => {
 
     if (key === "지급방식") {
       return (
-        <select
+        <CustomSelect
           className="border rounded px-1 py-0.5 w-full text-center"
           value={val || ""}
           onChange={(e) => {
@@ -19589,13 +20165,13 @@ const handleCloseFileUpload = async (e) => {
           <option value="손실">손실</option>
           <option value="개인">개인</option>
           <option value="취소">취소</option>
-        </select>
+        </CustomSelect>
       );
     }
 
     if (key === "배차방식") {
       return (
-        <select
+        <CustomSelect
           className="border rounded px-1 py-0.5 w-full text-center"
           value={val || ""}
           onChange={(e) => {
@@ -19615,12 +20191,12 @@ const handleCloseFileUpload = async (e) => {
           <option value="직접배차">직접배차</option>
           <option value="인성">인성</option>
           <option value="고정기사">24시(고정기사)</option>
-        </select>
+        </CustomSelect>
       );
     }
     if (key === "차량종류") {
       return (
-        <select
+        <CustomSelect
           className="border p-1 rounded w-full"
           value={val || ""}
           onChange={(e) => {
@@ -19649,7 +20225,7 @@ const handleCloseFileUpload = async (e) => {
           <option value="냉장/냉동윙">냉장/냉동윙</option>
           <option value="오토바이">오토바이</option>
           <option value="기타">기타</option>
-        </select>
+        </CustomSelect>
       );
     }
     return (
@@ -19856,42 +20432,67 @@ const head = isDark
     </div>
   </div>
 )}
-{panelContactPopup4 && (
+{panelMemoPopupC4 && (
+  <OrderMemoModal {...panelMemoPopupC4} onCancel={() => setPanelMemoPopupC4(null)} onSave={savePanelMemoC4} />
+)}
+{panelMemoPopupE4 && (
+  <OrderMemoModal {...panelMemoPopupE4} onCancel={() => setPanelMemoPopupE4(null)} onSave={savePanelMemoE4} />
+)}
+{panelContactPopup4 && (() => {
+  const q4 = panelContactSearch4.trim().toLowerCase();
+  const visible4 = panelContactPopup4.contacts
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !q4 || (c.name || "").toLowerCase().includes(q4) || (c.phone || "").replace(/\D/g, "").includes(q4.replace(/\D/g, "")));
+  return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
     ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
     onKeyDown={(e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, panelContactPopup4.contacts.length - 1)); }
+      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, visible4.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 1, 0)); }
-      else if (e.key === "Enter") { e.preventDefault(); const c = panelContactPopup4.contacts[panelContactActive4]; if (c) { const key = panelContactPopup4.type === "pickup" ? "상차" : "하차"; panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup4(null); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 5, visible4.length - 1)); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 5, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); const c = visible4[panelContactActive4]?.c; if (c) { const key = panelContactPopup4.type === "pickup" ? "상차" : "하차"; panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup4(null); }
       else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup4(null); }
     }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
         <h3 className="text-white font-bold text-[15px]">{panelContactPopup4.type === "pickup" ? "상차지" : "하차지"} 담당자 선택</h3>
-        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup4.place.업체명}</p>
+        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup4.place.업체명} · 총 {panelContactPopup4.contacts.length}명</p>
       </div>
-      <div className="p-4 space-y-2">
-        {panelContactPopup4.contacts.map((c, i) => (
+      <div className="px-5 pt-4">
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          placeholder="담당자 이름 또는 전화번호 검색"
+          value={panelContactSearch4}
+          onChange={e => { setPanelContactSearch4(e.target.value); setPanelContactActive4(0); }}
+        />
+      </div>
+      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+        {visible4.length === 0 && (
+          <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
+        )}
+        {visible4.map(({ c, i }) => (
           <div key={i}
-            className={`rounded-xl border-2 px-4 py-3 cursor-pointer transition ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            className={`rounded-xl border-2 px-3 py-2.5 cursor-pointer transition min-w-0 ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
             onMouseEnter={() => setPanelContactActive4(i)}
             onClick={() => {
               const key = panelContactPopup4.type === "pickup" ? "상차" : "하차";
               panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
               setPanelContactPopup4(null);
             }}>
-            <div className="font-bold text-gray-900">{c.name || "-"}</div>
-            <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+            <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
+            <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
           </div>
         ))}
       </div>
-      <div className="px-4 pb-4 text-right">
+      <div className="px-5 pb-4 text-right">
         <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => setPanelContactPopup4(null)}>취소</button>
       </div>
     </div>
   </div>
-)}
+  );
+})()}
     {/* 상차 임박 경고 배너 — 접기/펼치기 */}
 {warningList.length > 0 && (
   <div className="mb-3 w-fit max-w-full select-none">
@@ -19975,7 +20576,7 @@ const head = isDark
     );
   })}
   {/* 상태 필터 드롭다운 */}
-  <select
+  <CustomSelect
     value={statusFilter}
     onChange={e => setStatusFilter(e.target.value)}
     className="h-[30px] px-2 rounded-lg border-2 border-[#1B2B4B] text-[11px] font-semibold text-[#1B2B4B] bg-white outline-none flex-shrink-0 cursor-pointer"
@@ -19984,7 +20585,7 @@ const head = isDark
     <option value="UNASSIGNED">미배차 {statusSummary.미배차}</option>
     <option value="ASSIGNED">완료 {statusSummary.배차완료}</option>
     {statusSummary.업체미전달>0 && <option value="UNDELIVERED">미전달 {statusSummary.업체미전달}</option>}
-  </select>
+  </CustomSelect>
 
   <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
     <button onClick={async(e)=>{
@@ -20344,8 +20945,12 @@ flashRow(savedId);
     }, 400);
 
     patchDispatch(savedId, payload).catch(console.error);
-    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null).catch(console.error);
-    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null).catch(console.error);
+    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
+      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
+      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
@@ -20363,6 +20968,12 @@ flashRow(savedId);
     await submitCopyOrderPC(copyTarget, approvedShippers);
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
+    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
+      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
+      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
   }}
   className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
@@ -20514,7 +21125,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
       <Field label="상차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.상차방법 ?? ""}
@@ -20526,11 +21137,11 @@ checkWarningStatus(c.거래처명, "거래처");
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
-      <Field label="상차지명">
+      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("pickup")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -20689,7 +21300,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 <Field label="하차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.하차방법 ?? ""}
@@ -20701,9 +21312,9 @@ checkWarningStatus(c.거래처명, "거래처");
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
-      <Field label="하차지명">
+      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("drop")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -20861,7 +21472,7 @@ checkWarningStatus(c.거래처명, "거래처");
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
           {smartList4.map((d,i)=>(
             <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -20938,7 +21549,7 @@ checkWarningStatus(c.거래처명, "거래처");
             const grade = match?.등급 || match?.grade || "";
             if (grade === "블랙") {
               setBlackAlert(match);
-            } else if (match?.메모 && String(match.메모).trim()) {
+            } else if (shouldShowDriverMemoAlert(match)) {
               window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
             }
           }
@@ -20981,7 +21592,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량종류">
-      <select
+      <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="inputStyle"
         value={copyTarget?.차량종류 ?? ""}
@@ -21001,7 +21612,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <option value="리프트">리프트</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-      </select>
+      </CustomSelect>
     </Field>
 
 <Field label="차량톤수">
@@ -21031,7 +21642,7 @@ checkWarningStatus(c.거래처명, "거래처");
       />
 
       {/* 드롭다운 */}
-      <select
+      <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="
           px-3 py-2
@@ -21057,7 +21668,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <option value="">선택</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
     </div>
 
@@ -21089,7 +21700,7 @@ value={copyTarget?.화물수량 || ""}
     />
 
     {/* 드롭다운 */}
-    <select
+    <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="
         px-3 py-2
@@ -21116,7 +21727,7 @@ value={copyTarget?.화물수량 || ""}
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
   </div>
 
@@ -21168,7 +21779,7 @@ value={copyTarget?.화물수량 || ""}
               ); })()}
             </Field>
 <Field label="지급방식">
-  <select
+  <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
     className="inputStyle"
     value={copyTarget?.지급방식 ?? ""}
@@ -21181,11 +21792,11 @@ value={copyTarget?.화물수량 || ""}
     <option value="손실">손실</option>
     <option value="개인">개인</option>
     <option value="취소">취소</option>
-  </select>
+  </CustomSelect>
 </Field>
 
 <Field label="배차방식">
-  <select
+  <CustomSelect
     className="inputStyle"
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
@@ -21194,7 +21805,7 @@ value={copyTarget?.화물수량 || ""}
     <option value="24시">24시</option>
     <option value="직접배차">직접배차</option>
     <option value="인성">인성</option>
-  </select>
+  </CustomSelect>
 </Field>
           </div>
         </div>
@@ -22029,7 +22640,7 @@ value={copyTarget?.화물수량 || ""}
         selectCls="border p-2 rounded flex-1 min-w-0"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       />
-      <select
+      <CustomSelect
         className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={editTarget.상차시간기준 || ""}
@@ -22040,7 +22651,7 @@ value={copyTarget?.화물수량 || ""}
         <option value="">기준없음</option>
         <option value="이전">이전</option>
         <option value="이후">이후</option>
-      </select>
+      </CustomSelect>
     </div>
   </div>
 
@@ -22068,7 +22679,7 @@ value={copyTarget?.화물수량 || ""}
         selectCls="border p-2 rounded flex-1 min-w-0"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       />
-      <select
+      <CustomSelect
         className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={editTarget.하차시간기준 || ""}
@@ -22079,7 +22690,7 @@ value={copyTarget?.화물수량 || ""}
         <option value="">기준없음</option>
         <option value="이전">이전</option>
         <option value="이후">이후</option>
-      </select>
+      </CustomSelect>
     </div>
   </div>
 </div>
@@ -22089,7 +22700,7 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             {/* ===================== 상차지 ===================== */}
             <div className="mb-3 relative">
-              <label>상차지명</label>
+              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("pickup")} /></label>
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
@@ -22198,14 +22809,14 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
-                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
+                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
                             </div>
             </div>
 
@@ -22235,7 +22846,7 @@ value={copyTarget?.화물수량 || ""}
 
             {/* ===================== 하차지 ===================== */}
             <div className="mb-3 relative">
-              <label>하차지명</label>
+              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("drop")} /></label>
 
               <input
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
@@ -22345,14 +22956,14 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
-                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
+                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
                             </div>
             </div>
 
@@ -22409,7 +23020,7 @@ value={copyTarget?.화물수량 || ""}
   {/* 버튼형 드롭다운 */}
   <div className="absolute top-0 right-0 h-full flex items-center pr-2">
 
-    <select
+    <CustomSelect
       className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.화물타입 || ""}
@@ -22425,7 +23036,7 @@ value={copyTarget?.화물수량 || ""}
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
     <span className="absolute right-3 text-blue-500 text-xs pointer-events-none">
       ▾
@@ -22441,7 +23052,7 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 차량종류 ================= */}
   <div>
     <label>차량종류</label>
-    <select
+    <CustomSelect
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.차량종류 || ""}
@@ -22466,7 +23077,7 @@ value={copyTarget?.화물수량 || ""}
       <option value="냉장/냉동윙">냉장/냉동윙</option>
       <option value="오토바이">오토바이</option>
       <option value="기타">기타</option>
-    </select>
+    </CustomSelect>
   </div>
 
   {/* ================= 차량톤수 ================= */}
@@ -22497,7 +23108,7 @@ value={copyTarget?.화물수량 || ""}
     {/* 🔹 내부 드롭다운 */}
     <div className="absolute top-0 right-0 h-full flex items-center pr-1">
 
-<select
+<CustomSelect
   className="h-full px-2 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={
@@ -22522,7 +23133,7 @@ value={copyTarget?.화물수량 || ""}
         <option value="">선택</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
       {/* ▼ 아이콘 */}
       <span className="absolute right-2 text-blue-400 text-[10px] pointer-events-none">
@@ -22551,7 +23162,7 @@ value={copyTarget?.화물수량 || ""}
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
                     {smartList4.map((d,i)=>(
                       <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -22594,7 +23205,7 @@ value={copyTarget?.화물수량 || ""}
                     if (match) {
                       const grade = match?.등급 || match?.grade || "";
                       if (grade === "블랙") setBlackAlert(match);
-                      else if (match?.메모 && String(match.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
+                      else if (shouldShowDriverMemoAlert(match)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
                     }
                   }
                   setEditTarget((p) => ({
@@ -22792,7 +23403,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                   value={editTarget.지급방식 || ""}
@@ -22807,12 +23418,12 @@ value={copyTarget?.화물수량 || ""}
                   <option value="손실">손실</option>
                   <option value="개인">개인</option>
                   <option value="취소">취소</option>
-                </select>
+                </CustomSelect>
               </div>
 
               <div>
                 <label>배차방식</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
@@ -22824,7 +23435,7 @@ value={copyTarget?.화물수량 || ""}
                   <option value="직접배차">직접배차</option>
                   <option value="인성">인성</option>
                   <option value="고정기사">고정기사</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -23049,8 +23660,12 @@ patchDispatch(editTarget._id, payload).catch(console.error);
 if (editTarget.거래처명) {
   upsertClient?.({ 거래처명: editTarget.거래처명, 주소: editTarget.상차지주소||"", 담당자: editTarget.거래처담당자||"", 연락처: editTarget.거래처연락처||"", updatedAt: Date.now() }).catch(console.error);
 }
-if (editTarget.상차지명) savePlaceSmart(editTarget.상차지명, editTarget.상차지주소||"", editTarget.상차지담당자||"", editTarget.상차지담당자번호||"", null).catch(console.error);
-if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.하차지주소||"", editTarget.하차지담당자||"", editTarget.하차지담당자번호||"", null).catch(console.error);
+if (editTarget.상차지명) savePlaceSmart(editTarget.상차지명, editTarget.상차지주소||"", editTarget.상차지담당자||"", editTarget.상차지담당자번호||"", null, undefined,
+  (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시 } : undefined
+).catch(console.error);
+if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.하차지주소||"", editTarget.하차지담당자||"", editTarget.하차지담당자번호||"", null, undefined,
+  (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시 } : undefined
+).catch(console.error);
                 }}
               >
                 저장
@@ -24744,10 +25359,10 @@ setConfirmChange(null);
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
+                <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
                   <option value="">선택 안함</option>
                   {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
-                </select>
+                </CustomSelect>
                 <div className="flex gap-2">
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}>오름차순</button>
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}>내림차순</button>
@@ -24765,15 +25380,15 @@ setConfirmChange(null);
                         onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
                         {cond.exclude?"제외":"포함"}
                       </button>
-                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
                         <option value="">항목 선택</option>
                         {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
-                      </select>
+                      </CustomSelect>
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
-                        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
+                        <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
                           {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
-                        </select>
+                        </CustomSelect>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
@@ -25196,12 +25811,25 @@ const mergedClients = React.useMemo(() => {
   // 이름만으로 키를 잡으면 주소가 다른 기본거래처/하차지거래처가 있을 때 하나가
   // 다른 하나를 가려버린다 — 이름+주소 조합으로 키를 잡아 둘 다 살아남게 한다.
   const mkKey = (n, a) => `${(n||"").toLowerCase().replace(/\s+/g,"")}|${(a||"").toLowerCase().replace(/\s+/g,"")}`;
-  (placeRows || []).forEach(p => { if ((p.업체명||"").trim()) map.set(mkKey(p.업체명, p.주소), p); });
+  // ⚠️ 기본거래처를 먼저 넣어 우선시킨다 — savePlaceSmart가 이름이 일치하는 기본거래처가
+  // 있으면 항상 그쪽에 담당자를 누적 저장하므로(하차지거래처 사본은 새로 안 만듦),
+  // 같은 이름+주소로 하차지거래처에도 예전 중복 문서가 남아있는 경우 그 오래된(담당자가
+  // 갱신되지 않은) 하차지거래처 쪽이 여기서 이겨버리면 방금 저장한 담당자 목록이 아니라
+  // 옛 담당자만 계속 자동입력되고 선택 팝업도 뜨지 않는다.
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+  });
+  // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
+  // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
+  const clientNameSet = new Set((clients || []).map(c => (c.업체명 || c.거래처명 || "").toLowerCase().replace(/\s+/g, "")).filter(Boolean));
+  (placeRows || []).forEach(p => {
+    const nameKey = (p.업체명 || "").toLowerCase().replace(/\s+/g, "");
+    if (!nameKey || clientNameSet.has(nameKey)) return;
+    const k = mkKey(p.업체명, p.주소);
+    if (!map.has(k)) map.set(k, p);
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -25214,7 +25842,7 @@ const [placeConflictQueue, setPlaceConflictQueue] = React.useState([]);
 const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
 const dsNormalizeKey = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
 const dsNormalizeAddr = (a = "") => String(a).trim().replace(/\s+/g, "").replace(/[-./]/g, "").toLowerCase();
-const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
+const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution, extraFields) => {
   if (!name) return;
 
   if (_conflictResolution === "keep_new") {
@@ -25252,8 +25880,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
         if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
         else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
-      } else if (cPhone && cContacts.length === 0) {
-        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      } else if (cPhone) {
+        const samePhoneIdx = cContacts.findIndex(c => c.phone?.replace(/\D/g, "") === cPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          cContacts = cContacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(cContacts);
+          cContacts = cContacts.map(c => ({ ...c, isPrimary: false }));
+          cContacts.push({ name: autoName, phone: cPhone, isPrimary: true });
+        }
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
       const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
@@ -25264,6 +25899,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
+        오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
+        팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
       }).catch(() => {});
       return;
     }
@@ -25297,8 +25934,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
       contacts = contacts.map(c => ({ ...c, isPrimary: false }));
       contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true });
     }
-  } else if (resolvedPhone && contacts.length === 0) {
-    contacts = [{ name: "", phone: resolvedPhone, isPrimary: true }];
+  } else if (resolvedPhone) {
+    const samePhoneIdx = contacts.findIndex(c => c.phone?.replace(/\D/g, "") === resolvedPhone.replace(/\D/g, "") && c.phone);
+    if (samePhoneIdx >= 0) {
+      contacts = contacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+    } else {
+      const autoName = nextManagerName(contacts);
+      contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+      contacts.push({ name: autoName, phone: resolvedPhone, isPrimary: true });
+    }
   }
 
   const finalAddr = _conflictResolution === "keep" ? (existing?.주소 || addr || "") : (addr || existing?.주소 || "");
@@ -25308,8 +25952,10 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     업체명: name,
     주소: finalAddr,
     contacts,
-    등급: existing?.등급 || "일반",
-    메모: existing?.메모 || "",
+    등급: extraFields?.등급 || existing?.등급 || "일반",
+    메모: extraFields?.메모 || existing?.메모 || "",
+    오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
+    팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
   }).catch(() => {});
 };
 
@@ -25457,11 +26103,11 @@ const checkWarningStatus = (name, type) => {
   const foundPlace = allPlaces.find(p => (p.업체명 || p.name) === name);
   if (foundPlace && foundPlace.팝업표시 !== false) {
     const status = foundPlace.업체상태 || foundPlace.등급;
-    const note = foundPlace.메모;
+    const note = foundPlace.오더메모;
     if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
       const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-      setWarningPopup({ name, status: gradeStatus, type, info: foundPlace });
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
     }
   }
 };
@@ -26130,6 +26776,52 @@ const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
 const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
 const [panelContactPopup5, setPanelContactPopup5] = React.useState(null);
 const [panelContactActive5, setPanelContactActive5] = React.useState(0);
+const [panelContactSearch5, setPanelContactSearch5] = React.useState("");
+React.useEffect(() => { setPanelContactSearch5(""); }, [panelContactPopup5]);
+
+// 오더복사/수정 패널(copyTarget) 오더메모 팝업
+const [panelMemoPopupC5, setPanelMemoPopupC5] = React.useState(null);
+const openPanelMemoC5 = (type) => {
+  const name = (type === "pickup" ? copyTarget?.상차지명 : copyTarget?.하차지명) || "";
+  if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined) {
+    setPanelMemoPopupC5({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true });
+    return;
+  }
+  const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
+  setPanelMemoPopupC5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+};
+const savePanelMemoC5 = (memo, show) => {
+  if (!panelMemoPopupC5) return;
+  const memoKey = panelMemoPopupC5.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = panelMemoPopupC5.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+  setPanelMemoPopupC5(null);
+};
+
+// 선택수정 패널(editTarget) 오더메모 팝업
+const [panelMemoPopupE5, setPanelMemoPopupE5] = React.useState(null);
+const openPanelMemoE5 = (type) => {
+  const name = (type === "pickup" ? editTarget?.상차지명 : editTarget?.하차지명) || "";
+  if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined) {
+    setPanelMemoPopupE5({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true });
+    return;
+  }
+  const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
+  setPanelMemoPopupE5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+};
+const savePanelMemoE5 = (memo, show) => {
+  if (!panelMemoPopupE5) return;
+  const memoKey = panelMemoPopupE5.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = panelMemoPopupE5.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+  setPanelMemoPopupE5(null);
+};
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
@@ -27399,7 +28091,7 @@ if (mode === "driver") {
       const grade = matches[0]?.등급 || matches[0]?.grade || "";
       if (grade === "블랙") {
         setBlackAlert(matches[0]);
-      } else if (matches[0]?.메모 && String(matches[0].메모).trim()) {
+      } else if (shouldShowDriverMemoAlert(matches[0])) {
         window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: matches[0] }));
       }
       setDriverConfirmInfo({
@@ -27756,10 +28448,16 @@ const filtered = React.useMemo(() => {
       return found ? [found] : [];
     }
 
-    let data = (dispatchData || []).map(d => {
-      const id = getId(d);
-      return localOverrides[id] ? { ...d, ...localOverrides[id] } : d;
-    });
+    // ⚡ localOverrides는 보통 비어있거나 극소수 건만 담고 있는데, 매번 전체
+    // dispatchData를 map()으로 새로 순회/복사하면 오더가 많아질수록(수천~수만 건)
+    // 그 자체로 무거워진다 — 실제로 override가 있을 때만 map을 수행한다.
+    const hasOverrides = Object.keys(localOverrides).length > 0;
+    let data = hasOverrides
+      ? (dispatchData || []).map(d => {
+          const id = getId(d);
+          return localOverrides[id] ? { ...d, ...localOverrides[id] } : d;
+        })
+      : (dispatchData || []);
 
   // 🔥 조회 버튼 누르기 전 → 전체
   if (!loaded) return data;
@@ -27969,7 +28667,12 @@ const save = {
   const [dsWarningExpanded, setDsWarningExpanded] = React.useState(false);
   const dsWarningList = React.useMemo(() => {
     const now = new Date();
+    // ⚡ 상차 2시간 이내인 오더만 대상이므로 상차일이 오늘이 아니면 볼 필요가 없다 —
+    // 누적 오더가 많아질수록(수천~수만 건) 매번 전체를 정규식/Date 파싱하던 게
+    // 무거워서, 값싼 날짜 문자열 비교로 먼저 걸러낸다.
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     return dispatchData.filter(r => {
+      if (r.상차일 !== todayStr) return false;
       if (r.차량번호 && String(r.차량번호).trim()) return false;
       if (!r.상차일 || !r.상차시간) return false;
       let s = String(r.상차시간).trim()
@@ -28232,42 +28935,67 @@ return (
     </div>
   </div>
 )}
-{panelContactPopup5 && (
+{panelMemoPopupC5 && (
+  <OrderMemoModal {...panelMemoPopupC5} onCancel={() => setPanelMemoPopupC5(null)} onSave={savePanelMemoC5} />
+)}
+{panelMemoPopupE5 && (
+  <OrderMemoModal {...panelMemoPopupE5} onCancel={() => setPanelMemoPopupE5(null)} onSave={savePanelMemoE5} />
+)}
+{panelContactPopup5 && (() => {
+  const q5 = panelContactSearch5.trim().toLowerCase();
+  const visible5 = panelContactPopup5.contacts
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !q5 || (c.name || "").toLowerCase().includes(q5) || (c.phone || "").replace(/\D/g, "").includes(q5.replace(/\D/g, "")));
+  return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
     ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
     onKeyDown={(e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, panelContactPopup5.contacts.length - 1)); }
+      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, visible5.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 1, 0)); }
-      else if (e.key === "Enter") { e.preventDefault(); const c = panelContactPopup5.contacts[panelContactActive5]; if (c) { const key = panelContactPopup5.type === "pickup" ? "상차" : "하차"; panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup5(null); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 5, visible5.length - 1)); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 5, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); const c = visible5[panelContactActive5]?.c; if (c) { const key = panelContactPopup5.type === "pickup" ? "상차" : "하차"; panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup5(null); }
       else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup5(null); }
     }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
         <h3 className="text-white font-bold text-[15px]">{panelContactPopup5.type === "pickup" ? "상차지" : "하차지"} 담당자 선택</h3>
-        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup5.place.업체명}</p>
+        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup5.place.업체명} · 총 {panelContactPopup5.contacts.length}명</p>
       </div>
-      <div className="p-4 space-y-2">
-        {panelContactPopup5.contacts.map((c, i) => (
+      <div className="px-5 pt-4">
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          placeholder="담당자 이름 또는 전화번호 검색"
+          value={panelContactSearch5}
+          onChange={e => { setPanelContactSearch5(e.target.value); setPanelContactActive5(0); }}
+        />
+      </div>
+      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+        {visible5.length === 0 && (
+          <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
+        )}
+        {visible5.map(({ c, i }) => (
           <div key={i}
-            className={`rounded-xl border-2 px-4 py-3 cursor-pointer transition ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            className={`rounded-xl border-2 px-3 py-2.5 cursor-pointer transition min-w-0 ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
             onMouseEnter={() => setPanelContactActive5(i)}
             onClick={() => {
               const key = panelContactPopup5.type === "pickup" ? "상차" : "하차";
               panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
               setPanelContactPopup5(null);
             }}>
-            <div className="font-bold text-gray-900">{c.name || "-"}</div>
-            <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+            <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
+            <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
           </div>
         ))}
       </div>
-      <div className="px-4 pb-4 text-right">
+      <div className="px-5 pb-4 text-right">
         <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => setPanelContactPopup5(null)}>취소</button>
       </div>
     </div>
   </div>
-)}
+  );
+})()}
 {/* 오류오더 필터 활성 배너 */}
       {filterErrorIds !== null && (
         <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
@@ -28362,7 +29090,7 @@ return (
         {/* 구분선 */}
         <div className="w-px h-8 bg-gray-300 mx-1 shrink-0" />
         {/* 상태 필터 드롭다운 */}
-        <select
+        <CustomSelect
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
           className="h-[34px] px-3 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-700 cursor-pointer focus:outline-none focus:border-[#1B2B4B] transition"
@@ -28371,7 +29099,7 @@ return (
           <option value="UNASSIGNED">미배차 {statusSummary.미배차}</option>
           <option value="COMPLETE">완료 {statusSummary.완료}</option>
           <option value="UNDELIVERED">미전달 {statusSummary.미전달}</option>
-        </select>
+        </CustomSelect>
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
@@ -28399,7 +29127,7 @@ return (
         {/* 검색창 (통합) — 조회 버튼이 날짜/검색어 공용이라, 날짜만 바꾸고 아직
             조회를 누르지 않은 상태면 천천히 깜빡여 클릭을 유도한다. */}
         <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
-          <select className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
+          <CustomSelect className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
             value={searchType} onChange={(e)=>{setSearchType(e.target.value);setQ("");setQInput("");setPage(0);}}>
             <option value="all">통합</option>
             <option value="client">거래처</option>
@@ -28409,7 +29137,7 @@ return (
             <option value="driver">기사명</option>
             <option value="pay">지급방식</option>
             <option value="dispatch">배차방식</option>
-          </select>
+          </CustomSelect>
           <input className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
             value={loaded?qInput:""} onChange={(e)=>{setQInput(e.target.value);}}
             onKeyDown={(e)=>{ if(e.key==="Enter"){ handleSearch(); } }} />
@@ -28607,7 +29335,7 @@ return (
       row.차량종류 || "-"
 
     ) : key === "차량종류" ? (
-      <select
+      <CustomSelect
         className="border rounded px-1 py-0.5 w-full text-center"
         value={row.차량종류 || ""}
         onChange={(e) =>
@@ -28628,7 +29356,7 @@ return (
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-      </select>
+      </CustomSelect>
 
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
@@ -28811,7 +29539,7 @@ return (
                     {(row.source === "shipper" || row.source === "shipper_mobile") ? (
                       <span title="지급방식은 화주사만 변경할 수 있습니다">{row.지급방식 || "-"}</span>
                     ) : (
-                      <select
+                      <CustomSelect
                         className="border rounded px-1 py-0.5 w-full text-center"
                         value={row.지급방식 || ""}
                         onChange={(e) =>
@@ -28825,13 +29553,13 @@ return (
                         <option value="손실">손실</option>
                         <option value="개인">개인</option>
                         <option value="취소">취소</option>
-                      </select>
+                      </CustomSelect>
                     )}
                   </td>
 
 
                   <td className="border text-center">
-                    <select
+                    <CustomSelect
                       className="border rounded px-1 py-0.5 w-full text-center"
                       value={row.배차방식 || ""}
                       onChange={(e) =>
@@ -28843,7 +29571,7 @@ return (
                       <option value="직접배차">직접배차</option>
                       <option value="인성">인성</option>
                       <option value="고정기사">고정기사</option>
-                    </select>
+                    </CustomSelect>
                   </td>
 
                   {/* 메모 */}
@@ -29177,7 +29905,7 @@ return (
 
             {/* ================= 상차지명 ================= */}
             <div className="mb-3 relative">
-              <label>상차지명</label>
+              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("pickup")} /></label>
               <input
                 className="border p-2 rounded w-full"
                 value={editTarget.상차지명 || ""}
@@ -29298,7 +30026,7 @@ return (
               </div>
               <div>
                 <label className="text-sm font-medium">상차 방법</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full"
                   value={editTarget.상차방법 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}
@@ -29309,7 +30037,7 @@ return (
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -29328,7 +30056,7 @@ return (
 
             {/* ================= 하차지명 ================= */}
             <div className="mb-3 relative">
-              <label>하차지명</label>
+              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("drop")} /></label>
               <input
                 className="border p-2 rounded w-full"
                 value={editTarget.하차지명 || ""}
@@ -29449,7 +30177,7 @@ return (
               </div>
               <div>
                 <label className="text-sm font-medium">하차 방법</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full"
                   value={editTarget.하차방법 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}
@@ -29460,7 +30188,7 @@ return (
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -29497,7 +30225,7 @@ return (
       }}
     />
 
-    <select
+    <CustomSelect
         className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] w-[58px] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
         value={editTarget?.화물타입 || ""}
       onChange={(e) => {
@@ -29512,7 +30240,7 @@ return (
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
   </div>
 </Field>
@@ -29522,7 +30250,7 @@ return (
 <div className="grid grid-cols-2 gap-3">
 
   <Field label="차량종류">
-    <select
+    <CustomSelect
       className="border p-2 rounded w-full"
       value={editTarget?.차량종류 || ""}
       onChange={(e) =>
@@ -29543,7 +30271,7 @@ return (
         <option value="리프트">리프트</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-    </select>
+    </CustomSelect>
   </Field>
 
 
@@ -29566,7 +30294,7 @@ return (
         }}
       />
 
-       <select
+       <CustomSelect
         className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] w-[58px] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
         value={editTarget?.톤수타입 || ""}
         onChange={(e) => {
@@ -29584,7 +30312,7 @@ return (
         <option value="">선택</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
     </div>
   </Field>
@@ -29607,7 +30335,7 @@ return (
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
                     {smartList5.map((d,i)=>(
                       <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -29650,7 +30378,7 @@ return (
                     if (match5) {
                       const grade5 = match5?.등급 || match5?.grade || "";
                       if (grade5 === "블랙") setBlackAlert(match5);
-                      else if (match5?.메모 && String(match5.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match5 }));
+                      else if (shouldShowDriverMemoAlert(match5)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match5 }));
                     }
                   }
                   setEditTarget((p) => ({
@@ -29846,7 +30574,7 @@ return (
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                   value={editTarget.지급방식 || ""}
@@ -29861,12 +30589,12 @@ return (
                   <option value="손실">손실</option>
                   <option value="개인">개인</option>
                   <option value="취소">취소</option>
-                </select>
+                </CustomSelect>
               </div>
 
               <div>
                 <label>배차방식</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
@@ -29878,7 +30606,7 @@ return (
                   <option value="직접배차">직접배차</option>
                   <option value="인성">인성</option>
                   <option value="고정기사">고정기사</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -30090,8 +30818,12 @@ return (
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 400);
     patchDispatch(savedId, payload).catch(console.error);
-    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null).catch(console.error);
-    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null).catch(console.error);
+    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
+      (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
+      (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
     if (payload.차량번호 && payload.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
       if (!existingD) {
@@ -30219,8 +30951,12 @@ return (
 
     // ✅ 백그라운드 저장
     patchDispatch(id, payload).catch(console.error);
-    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null).catch(console.error);
-    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null).catch(console.error);
+    if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
+      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
+      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
     const plate = normalizePlate(payload.차량번호 || "");
     if (plate) {
       const d = (drivers || []).find(x => normalizePlate(x.차량번호) === plate);
@@ -30249,6 +30985,12 @@ return (
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
+    if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
+      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
+    if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
+      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
+    ).catch(console.error);
 
   }}
     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
@@ -30400,7 +31142,7 @@ setCopyTarget(prev=>({
         />
       </Field>
       <Field label="상차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.상차방법 ?? ""}
@@ -30412,11 +31154,11 @@ setCopyTarget(prev=>({
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
-      <Field label="상차지명">
+      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("pickup")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -30557,7 +31299,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 <Field label="하차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.하차방법 ?? ""}
@@ -30569,9 +31311,9 @@ setCopyPlaceOptions(list);
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
-      <Field label="하차지명">
+      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} /></span>}>
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -30711,7 +31453,7 @@ setCopyPlaceOptions(list);
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
           {smartList5.map((d,i)=>(
             <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -30769,7 +31511,7 @@ setCopyPlaceOptions(list);
         const grade = match?.등급 || match?.grade || "";
         if (grade === "블랙") {
           setBlackAlert(match);
-        } else if (match?.메모 && String(match.메모).trim()) {
+        } else if (shouldShowDriverMemoAlert(match)) {
           window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
         }
       }
@@ -30838,7 +31580,7 @@ setCopyPlaceOptions(list);
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량종류">
-      <select
+      <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="inputStyle"
         value={copyTarget?.차량종류 ?? ""}
@@ -30858,7 +31600,7 @@ setCopyPlaceOptions(list);
         <option value="리프트">리프트</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-      </select>
+      </CustomSelect>
     </Field>
 
  <Field label="차량톤수">
@@ -30885,7 +31627,7 @@ setCopyPlaceOptions(list);
     />
 
     {/* 단위 */}
-    <select
+    <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
       value={copyTarget?.톤수타입 || ""}
@@ -30904,7 +31646,7 @@ setCopyPlaceOptions(list);
       <option value="">선택</option>
       <option value="톤">톤</option>
       <option value="kg">kg</option>
-    </select>
+    </CustomSelect>
 
   </div>
 
@@ -30930,7 +31672,7 @@ setCopyPlaceOptions(list);
     />
 
     {/* 타입 */}
-    <select
+    <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
       value={copyTarget?.화물타입 || ""}
@@ -30946,7 +31688,7 @@ setCopyPlaceOptions(list);
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
   </div>
 
@@ -30998,7 +31740,7 @@ setCopyPlaceOptions(list);
               ); })()}
             </Field>
 <Field label="지급방식">
-  <select
+  <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
     className="inputStyle"
     value={copyTarget?.지급방식 ?? ""}
@@ -31011,11 +31753,11 @@ setCopyPlaceOptions(list);
     <option value="손실">손실</option>
     <option value="개인">개인</option>
     <option value="취소">취소</option>
-  </select>
+  </CustomSelect>
 </Field>
 
 <Field label="배차방식">
-  <select
+  <CustomSelect
     className="inputStyle"
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
@@ -31024,7 +31766,7 @@ setCopyPlaceOptions(list);
     <option value="24시">24시</option>
     <option value="직접배차">직접배차</option>
     <option value="인성">인성</option>
-  </select>
+  </CustomSelect>
 </Field>
           </div>
 </div>
@@ -32138,10 +32880,10 @@ setCopyPlaceOptions(list);
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
+                <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
                   <option value="">선택 안함</option>
                   {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
-                </select>
+                </CustomSelect>
                 <div className="flex gap-2">
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}>오름차순</button>
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}>내림차순</button>
@@ -32159,15 +32901,15 @@ setCopyPlaceOptions(list);
                         onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
                         {cond.exclude?"제외":"포함"}
                       </button>
-                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
                         <option value="">항목 선택</option>
                         {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
-                      </select>
+                      </CustomSelect>
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
-                        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
+                        <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
                           {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
-                        </select>
+                        </CustomSelect>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
@@ -33432,7 +34174,7 @@ function NewOrderPopup({
 
             <div>
   <label>상차시간</label>
-  <select
+  <CustomSelect
     className="border p-2 rounded w-full"
     value={newOrder.상차시간}
     onChange={(e) => handleChange("상차시간", e.target.value)}
@@ -33474,7 +34216,7 @@ function NewOrderPopup({
     <option value="오후 10시 30분">오후 10시 30분</option>
     <option value="오후 11시">오후 11시</option>
     <option value="오후 11시 30분">오후 11시 30분</option>
-  </select>
+  </CustomSelect>
 </div>
 
 <div>
@@ -33489,7 +34231,7 @@ function NewOrderPopup({
 
 <div>
   <label>하차시간</label>
-  <select
+  <CustomSelect
     className="border p-2 rounded w-full"
     value={newOrder.하차시간}
     onChange={(e) => handleChange("하차시간", e.target.value)}
@@ -33531,7 +34273,7 @@ function NewOrderPopup({
     <option value="오후 10시 30분">오후 10시 30분</option>
     <option value="오후 11시">오후 11시</option>
     <option value="오후 11시 30분">오후 11시 30분</option>
-  </select>
+  </CustomSelect>
 </div>
 
           </div>
@@ -33589,7 +34331,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label>차량종류</label>
-              <select
+              <CustomSelect
                 className="border p-2 rounded w-full"
                 value={newOrder.차량종류}
                 onChange={(e) => handleChange("차량종류", e.target.value)}
@@ -33609,7 +34351,7 @@ function NewOrderPopup({
                 <option value="냉장/냉동윙">냉장/냉동윙</option>
                 <option value="오토바이">오토바이</option>
                 <option value="기타">기타</option>
-              </select>
+              </CustomSelect>
             </div>
 
 
@@ -33649,7 +34391,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label>지급방식</label>
-              <select
+              <CustomSelect
                 className="border p-2 rounded w-full"
                 value={newOrder.지급방식}
                 onChange={(e) => handleChange("지급방식", e.target.value)}
@@ -33661,13 +34403,13 @@ function NewOrderPopup({
                 <option value="손실">손실</option>
                 <option value="개인">개인</option>
                 <option value="취소">취소</option>
-              </select>
+              </CustomSelect>
             </div>
 
 
             <div>
               <label>배차방식</label>
-              <select
+              <CustomSelect
                 className="border p-2 rounded w-full"
                 value={newOrder.배차방식}
                 onChange={(e) => handleChange("배차방식", e.target.value)}
@@ -33677,7 +34419,7 @@ function NewOrderPopup({
                 <option value="직접배차">직접배차</option>
                 <option value="인성">인성</option>
                 <option value="고정기사">고정기사</option>
-              </select>
+              </CustomSelect>
             </div>
 
           </div>
@@ -35982,7 +36724,7 @@ function SettlementMonthlyHeader({ targetMonth, setTargetMonth, monthRows, forec
           <h3 className="text-[15px] font-bold text-white">누적현황 및 월 예상지표</h3>
           <p className="text-[11px] text-white/50 mt-0.5">선택 월 기준 실적 및 예측</p>
         </div>
-        <select
+        <CustomSelect
           className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
           value={targetMonth}
           onChange={(e) => setTargetMonth(e.target.value)}
@@ -35996,7 +36738,7 @@ function SettlementMonthlyHeader({ targetMonth, setTargetMonth, monthRows, forec
               </option>
             );
           })}
-        </select>
+        </CustomSelect>
       </div>
 
       <div className="p-6 space-y-6">
@@ -36384,7 +37126,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
           <button onClick={() => onAI("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
           <button onClick={() => onAI("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition">AI 제안</button>
           <button onClick={() => onAI("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">보고서</button>
-          <select
+          <CustomSelect
             className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
@@ -36394,7 +37136,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
               .map((y) => (
                 <option key={y} value={Number(y)} className="text-gray-900">{y}년</option>
               ))}
-          </select>
+          </CustomSelect>
         </div>
       </div>
 
@@ -36865,7 +37607,64 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [] }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [] }) {
+  // 오더복사/수정 패널에서 담당자를 새로 입력해도 거래처관리(기본거래처/하차지거래처)에
+  // 반영되지 않던 문제 — DispatchManagement/RealtimeStatus/DispatchStatus의
+  // savePlaceSmart와 동일한 우선순위(기본거래처 우선)로 담당자를 병합 저장한다.
+  // 이 화면은 주소 충돌 팝업 인프라가 없어 단순 병합만 수행한다.
+  const syncPlaceContactSimple = async (name, addr, manager, phone) => {
+    const nm = (name || "").trim();
+    const resolvedManager = (manager || "").trim();
+    const resolvedPhone = (phone || "").trim();
+    if (!nm || (!resolvedManager && !resolvedPhone)) return;
+    const nk = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9가-힣]/g, "");
+    const nameKey = nk(nm);
+
+    const mergeContacts = (list) => {
+      let contacts = Array.isArray(list) ? [...list] : [];
+      if (resolvedManager) {
+        const idx = contacts.findIndex(c => c.name?.trim() === resolvedManager);
+        if (idx >= 0) contacts = contacts.map((c, i) => ({ ...c, phone: i === idx ? (resolvedPhone || c.phone) : c.phone, isPrimary: i === idx }));
+        else { contacts = contacts.map(c => ({ ...c, isPrimary: false })); contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true }); }
+      } else if (resolvedPhone) {
+        const samePhoneIdx = contacts.findIndex(c => c.phone?.replace(/\D/g, "") === resolvedPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          contacts = contacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(contacts);
+          contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+          contacts.push({ name: autoName, phone: resolvedPhone, isPrimary: true });
+        }
+      }
+      return contacts;
+    };
+
+    const clientMatch = (clients || []).find(c => nk(c.업체명 || c.거래처명 || "") === nameKey);
+    if (clientMatch && upsertClient) {
+      const cContacts = mergeContacts(Array.isArray(clientMatch.contacts) ? clientMatch.contacts
+        : (clientMatch.담당자 ? [{ name: clientMatch.담당자, phone: clientMatch.연락처 || "", isPrimary: true }] : []));
+      const primary = cContacts.find(c => c.isPrimary) || cContacts[0];
+      await upsertClient({
+        id: clientMatch.id,
+        거래처명: clientMatch.거래처명 || nm,
+        주소: addr || clientMatch.주소 || "",
+        담당자: primary?.name || clientMatch.담당자 || "",
+        연락처: primary?.phone || clientMatch.연락처 || "",
+        contacts: cContacts,
+      }).catch(() => {});
+      return;
+    }
+
+    const placeMatch = (places || []).find(p => nk(p.업체명 || "") === nameKey);
+    const pContacts = mergeContacts(placeMatch?.contacts);
+    await upsertPlace({
+      _id: placeMatch?._id,
+      업체명: nm,
+      주소: addr || placeMatch?.주소 || "",
+      contacts: pContacts,
+    }).catch(() => {});
+  };
+
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -37622,6 +38421,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       await patchDispatch(copyTarget._id, payload);
                       showToast("오더 수정 완료");
                       setCopyPanelOpen(false);
+                      if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
+                      if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
                     }}
                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
                   >
@@ -37635,6 +38436,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
                       showToast("복사 등록 완료");
                       setCopyPanelOpen(false);
+                      if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
+                      if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
                     }}
                     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
                   >
@@ -37966,7 +38769,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             if (match) {
                               const grade = match?.등급 || match?.grade || "";
                               if (grade === "블랙") setBlackDriverAlert(match);
-                              else if (match?.메모 && String(match.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
+                              else if (shouldShowDriverMemoAlert(match)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
                             }
                             setCopyTarget(prev => ({ ...prev, 차량번호: v, 이름: match?.이름 || "", 전화번호: formatPhone(match?.전화번호 || ""), 배차상태: match ? "배차완료" : "배차중" }));
                           }}
@@ -42867,7 +43670,6 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
 function DriverManagement({ drivers, upsertDriver, removeDriver }) {
-  const [selectedMonths, setSelectedMonths] = React.useState(new Set());
   const [q, setQ] = React.useState("");
   const [qField, setQField] = React.useState("전체");
   const [searched, setSearched] = React.useState(false);
@@ -42878,6 +43680,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const perPage = 100;
+  const [editDriverModal, setEditDriverModal] = React.useState(null); // 더블클릭 수정 팝업
 
   // 기사정리 팝업 상태
   const [cleanupOpen, setCleanupOpen] = React.useState(false);
@@ -42990,9 +43793,15 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
     setSelected(selected.size === ids.length ? new Set() : new Set(ids));
   };
 
-  const handleBlur = async (row, key, val) => {
-    if (!row.id) return showAlert("문서 ID가 없어 수정할 수 없습니다.");
-    await upsertDriver({ ...row, [key]: val });
+  const saveEditDriver = async () => {
+    if (!editDriverModal) return;
+    if (!editDriverModal.id) return showAlert("문서 ID가 없어 수정할 수 없습니다.");
+    // 블랙 등급은 메모가 있으면 무조건 팝업이 뜨도록 별도로 처리되므로(팝업표시 값과 무관),
+    // 저장 시점에도 사용자에게 혼란을 주지 않도록 항상 팝업표시:true로 맞춰 저장한다.
+    const 팝업표시 = editDriverModal.등급 === "블랙" ? true : editDriverModal.팝업표시 === true;
+    await upsertDriver({ ...editDriverModal, 팝업표시 });
+    setEditDriverModal(null);
+    showAlert("수정 완료");
   };
 
   const addNew = async () => {
@@ -43224,18 +44033,14 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#1B2B4B]">
-                <th
-                    className="px-3 py-3 text-white text-center w-10 cursor-pointer select-none"
-                    onClick={() => toggleAllMonths(monthRows)}
-                  >
-                    <input
-                      type="checkbox"
-                      onChange={() => toggleAllMonths(monthRows)}
-                      checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
-                      onClick={e => e.stopPropagation()}
-                    />
-                  </th>
-                {["순번","차량번호","이름","전화번호","등급","메모","삭제"].map(h => (
+                <th className="px-3 py-3 text-white text-center w-10">
+                  <input
+                    type="checkbox"
+                    onChange={toggleAll}
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                  />
+                </th>
+                {["순번","차량번호","이름","전화번호","등급","메모","팝업","삭제"].map(h => (
                   <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -43243,7 +44048,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             <tbody>
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16 text-gray-400 text-[14px]">
+                  <td colSpan={9} className="text-center py-16 text-gray-400 text-[14px]">
                     {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                   </td>
                 </tr>
@@ -43251,51 +44056,41 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 const docId = r.id;
                 if (!docId) return null;
                 const grade = r.등급 || "일반";
+                const memoPopupOn = grade === "블랙" ? !!(r.메모 && String(r.메모).trim()) : r.팝업표시 === true;
                 return (
                   <tr key={`${docId}_${i}`}
-                    className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    className={`border-b border-gray-100 transition hover:bg-blue-50/40 cursor-pointer ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
+                    onDoubleClick={() => setEditDriverModal({ ...r })}>
                     <td className="px-3 py-2.5 text-center">
-                      <input type="checkbox" checked={selected.has(docId)} onChange={()=>toggleOne(docId)} />
+                      <input type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B]">
-                      <span contentEditable suppressContentEditableWarning
-                        onBlur={e=>handleBlur(r,"차량번호",e.currentTarget.innerText.trim())}>
-                        {r.차량번호||"-"}
-                      </span>
+                    <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap">{r.차량번호||"-"}</td>
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
+                    </td>
+                    <td className="px-2 py-2.5 text-center max-w-[200px]">
+                      {(r.메모 || "").length > 18 ? (
+                        <span className="text-[13px] text-gray-500">
+                          {(r.메모 || "").slice(0, 18)}…
+                        </span>
+                      ) : (
+                        <span className="text-[13px] text-gray-500">{r.메모 || ""}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <span contentEditable suppressContentEditableWarning
-                        onBlur={e=>handleBlur(r,"이름",e.currentTarget.innerText.trim())}>
-                        {r.이름||"-"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span contentEditable suppressContentEditableWarning
-                        onBlur={e=>handleBlur(r,"전화번호",e.currentTarget.innerText.trim().replace(/[^\d]/g,""))}>
-                        {formatPhone(r.전화번호)||"-"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <select
-                        className={`px-2.5 py-1 rounded-lg text-[12px] font-bold border-0 cursor-pointer ${gradeBadge(grade)}`}
-                        value={grade}
-                        onChange={e=>handleBlur(r,"등급",e.target.value)}>
-                        <option value="일반">일반</option>
-                        <option value="지입">지입</option>
-                        <option value="직영">직영</option>
-                        <option value="블랙">블랙</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <input className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
-                        defaultValue={r.메모||""}
-                        onBlur={e=>handleBlur(r,"메모",e.target.value)} />
+                      {(r.메모 || "").trim() && (
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${memoPopupOn ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-400"}`}>
+                          {memoPopupOn ? "ON" : "OFF"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <button
                         className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
-                        onClick={()=>{ if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
+                        onClick={(e)=>{ e.stopPropagation(); if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
                         삭제
                       </button>
                     </td>
@@ -43304,6 +44099,86 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
+      {editDriverModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}</h3>
+              <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+            </div>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호 *</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editDriverModal.차량번호||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 차량번호: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editDriverModal.이름||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 이름: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={formatPhone(editDriverModal.전화번호)||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 전화번호: e.target.value.replace(/[^\d]/g,"") }))} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
+                <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                  value={editDriverModal.등급||"일반"}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 등급: e.target.value }))}>
+                  <option value="일반">일반</option>
+                  <option value="지입">지입</option>
+                  <option value="직영">직영</option>
+                  <option value="블랙">블랙</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editDriverModal.메모||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 메모: e.target.value }))} />
+              </div>
+              {(editDriverModal.메모||"").trim() && (
+                editDriverModal.등급 === "블랙" ? (
+                  <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div>
+                      <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">블랙 등급은 메모가 있으면 항상 켜져 있으며 끌 수 없습니다</div>
+                    </div>
+                    <span className="relative inline-flex h-6 w-11 items-center rounded-full bg-[#1B2B4B] shrink-0">
+                      <span className="inline-block h-4 w-4 translate-x-6 transform rounded-full bg-white" />
+                    </span>
+                  </div>
+                ) : (
+                  <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div>
+                      <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">켜두면 이 기사를 어디서 선택하든 메모 안내 팝업이 뜹니다 (기본값: 꺼짐)</div>
+                    </div>
+                    <button type="button"
+                      onClick={() => setEditDriverModal(p => ({ ...p, 팝업표시: p.팝업표시 === true ? false : true }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editDriverModal.팝업표시 === true ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editDriverModal.팝업표시 === true ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+            <div className="px-6 pb-5 flex gap-3">
+              <button onClick={() => setEditDriverModal(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+              <button onClick={saveEditDriver}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -43559,6 +44434,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       등급: d.등급 || "일반",
       등급변경일: d.등급변경일 || null,
       메모: d.메모 || "",
+      오더메모: d.오더메모 || "",
       팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
       updatedAt: d.updatedAt || null,
       // 담당자가 2명 이상인 문서를 수정 팝업에서 저장할 때, 대표(주 담당자)를
@@ -43681,6 +44557,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [editClientModal, setEditClientModal] = React.useState(null); // row data for popup
   const [editPlaceModal, setEditPlaceModal] = React.useState(null); // 하차지거래처 수정 팝업
   const [memoPopup, setMemoPopup] = React.useState(null); // memo text for popup
+  const [filePreview, setFilePreview] = React.useState(null); // 첨부파일 미리보기
 
   // ═══════════════════════════════════════════════════
   // 하차지에서 불러오기 팝업
@@ -43694,72 +44571,107 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const importDropRef = React.useRef(null);
   const importItemRefs = React.useRef([]);
 
+  // 하차지거래처를 삭제하기 전에, 같은 이름의 기본거래처가 있으면(주소 표기가
+  // 도로명/지번처럼 달라 "중복 정리"의 정확일치 후보에는 안 걸리는 경우까지 포함)
+  // 그 담당자들을 먼저 기본거래처로 합쳐준다. 이게 없으면 이름은 같지만 주소
+  // 표기가 달라 별도 문서로 남아있던 하차지거래처를 지울 때마다 그 담당자들이
+  // 기본거래처로 옮겨지지 않고 그대로 사라져 버린다.
+  const extractPlaceContacts = (p) => {
+    if (Array.isArray(p._allContacts) && p._allContacts.length) return p._allContacts.map(c => ({ name: c.name || "", phone: c.phone || "" }));
+    if (Array.isArray(p.contacts) && p.contacts.length) return p.contacts;
+    if (Array.isArray(p._rawContacts) && p._rawContacts.length) return p._rawContacts;
+    if (p.담당자) return [{ name: p.담당자, phone: p.담당자번호 || "" }];
+    return [];
+  };
+  const mergePlaceContactsIntoClient = async (place) => {
+    if (!place?.업체명) return;
+    const client = rows.find(c => norm(c.거래처명 || "") === norm(place.업체명 || ""));
+    if (!client) return;
+    const placeContacts = extractPlaceContacts(place);
+    if (!placeContacts.length) return;
+    const baseContacts = Array.isArray(client.contacts) && client.contacts.length
+      ? [...client.contacts]
+      : (client.담당자 ? [{ name: client.담당자, phone: client.연락처 || "", isPrimary: true }] : []);
+    const existingNames = new Set(baseContacts.map(c => (c.name || "").trim()).filter(Boolean));
+    const mergedContacts = [...baseContacts];
+    let changed = false;
+    placeContacts.forEach(pc => {
+      const nm = (pc.name || "").trim();
+      if (nm && !existingNames.has(nm)) {
+        existingNames.add(nm);
+        mergedContacts.push({ name: nm, phone: pc.phone || "", isPrimary: false });
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    if (!mergedContacts.some(c => c.isPrimary) && mergedContacts.length) mergedContacts[0].isPrimary = true;
+    try {
+      await upsertClient?.({ id: client.id, 거래처명: client.거래처명, contacts: mergedContacts });
+    } catch (e) {
+      console.error("담당자 병합 실패:", client.거래처명, e);
+    }
+  };
+
   // ═══════════════════════════════════════════════════
-  // 기본거래처 ↔ 하차지거래처 중복 정리 (거래처명+주소가 완전히 같은 것만 대상)
+  // 담당자 불일치 점검/복구 (임시) — 이름이 같은 기본거래처/하차지거래처 사이에
+  // 담당자 목록이 서로 다르면(한쪽에만 있던 담당자가 있으면), 두 쪽을 합집합으로
+  // 합쳐서 양쪽 모두에 반영한다. 예전에 두 컬렉션이 서로 동기화되지 않던 시절
+  // 한쪽에서만 담당자가 갱신되어 반대쪽에 있던 담당자가 사라진 것처럼 보이는
+  // 경우, 아직 어느 한쪽에 데이터가 남아있다면 이 도구로 되살릴 수 있다.
   // ═══════════════════════════════════════════════════
-  const [showDedupPopup, setShowDedupPopup] = React.useState(false);
-  const [dedupSelected, setDedupSelected] = React.useState(new Set());
-  const [dedupRunning, setDedupRunning] = React.useState(false);
-  const dedupMatches = React.useMemo(() => {
-    // "기본거래처" 탭의 "중복 정리" 버튼에서만 쓰인다 — "하차지거래처" 탭으로
-    // 마운트될 때도 계산하면 탭 전환마다 낭비되는 작업이라 subTab으로 가드한다.
+  const [showMismatchPopup, setShowMismatchPopup] = React.useState(false);
+  const [mismatchSelected, setMismatchSelected] = React.useState(new Set());
+  const [mismatchRunning, setMismatchRunning] = React.useState(false);
+  const mismatchCandidates = React.useMemo(() => {
     if (subTab !== "기본") return [];
     const list = [];
     rows.forEach(c => {
       const cName = norm(c.거래처명 || "");
-      const cAddr = normalizePlace(c.주소 || "");
-      if (!cName || !cAddr) return;
-      const place = placeRows.find(p => norm(p.업체명 || "") === cName && normalizePlace(p.주소 || "") === cAddr);
-      if (place) list.push({ client: c, place });
+      if (!cName) return;
+      const place = placeRows.find(p => norm(p.업체명 || "") === cName);
+      if (!place) return;
+      const cContacts = Array.isArray(c.contacts) && c.contacts.length
+        ? c.contacts
+        : (c.담당자 ? [{ name: c.담당자, phone: c.연락처 || "", isPrimary: true }] : []);
+      const pContacts = extractPlaceContacts(place);
+      const cNames = new Set(cContacts.map(x => (x.name || "").trim()).filter(Boolean));
+      const pNames = new Set(pContacts.map(x => (x.name || "").trim()).filter(Boolean));
+      const onlyInPlace = [...pNames].filter(n => !cNames.has(n));
+      const onlyInClient = [...cNames].filter(n => !pNames.has(n));
+      if (onlyInPlace.length || onlyInClient.length) {
+        list.push({ client: c, place, cContacts, pContacts, onlyInPlace, onlyInClient });
+      }
     });
     return list;
   }, [rows, placeRows, subTab]);
 
-  const runDedupCleanup = async () => {
-    const targets = dedupMatches.filter(m => dedupSelected.has(m.place.id));
+  const runMismatchFix = async () => {
+    const targets = mismatchCandidates.filter(m => mismatchSelected.has(m.client.id || m.client.거래처명));
     if (!targets.length) return;
-    setDedupRunning(true);
+    setMismatchRunning(true);
     let ok = 0;
-    for (const { client, place } of targets) {
+    for (const { client, place, cContacts, pContacts } of targets) {
       try {
-        // 담당자 병합: 기본거래처의 기존 담당자(대표)를 유지하고, 하차지거래처에만
-        // 있던 담당자들을 이름이 겹치지 않을 때만 추가로 합친다.
-        const baseContacts = Array.isArray(client.contacts) && client.contacts.length
-          ? [...client.contacts]
-          : (client.담당자 ? [{ name: client.담당자, phone: client.연락처 || "", isPrimary: true }] : []);
-        const placeContacts = Array.isArray(place.contacts) ? place.contacts
-          : (Array.isArray(place._rawContacts) ? place._rawContacts : []);
-        const existingNames = new Set(baseContacts.map(c => (c.name || "").trim()).filter(Boolean));
-        const mergedContacts = [...baseContacts];
-        placeContacts.forEach(pc => {
+        const merged = [...cContacts];
+        const names = new Set(merged.map(c => (c.name || "").trim()).filter(Boolean));
+        pContacts.forEach(pc => {
           const nm = (pc.name || "").trim();
-          if (nm && !existingNames.has(nm)) {
-            existingNames.add(nm);
-            mergedContacts.push({ name: nm, phone: pc.phone || "", isPrimary: false });
-          } else if (!nm && (pc.phone || "").trim() && !mergedContacts.some(c => (c.phone || "") === pc.phone)) {
-            mergedContacts.push({ name: "", phone: pc.phone, isPrimary: false });
+          if (nm && !names.has(nm)) {
+            names.add(nm);
+            merged.push({ name: nm, phone: pc.phone || "", isPrimary: false });
           }
         });
-        if (!mergedContacts.some(c => c.isPrimary) && mergedContacts.length) mergedContacts[0].isPrimary = true;
-
-        const mergedOrderMemo = (client.오더메모 || "").trim() ? client.오더메모 : (place.메모 || "");
-
-        await upsertClient?.({
-          id: client.id,
-          거래처명: client.거래처명,
-          오더메모: mergedOrderMemo,
-          contacts: mergedContacts,
-        });
-        await removePlace(place.id);
+        if (!merged.some(c => c.isPrimary) && merged.length) merged[0].isPrimary = true;
+        await upsertClient?.({ id: client.id, 거래처명: client.거래처명, contacts: merged });
         ok++;
       } catch (e) {
-        console.error("중복 정리 실패:", client.거래처명, e);
+        console.error("담당자 불일치 복구 실패:", client.거래처명, e);
       }
     }
-    setDedupRunning(false);
-    setDedupSelected(new Set());
-    setShowDedupPopup(false);
-    showAlert(`${ok}건 정리 완료 (하차지거래처 중복 삭제, 메모/담당자는 기본거래처로 이관)`);
+    setMismatchRunning(false);
+    setMismatchSelected(new Set());
+    setShowMismatchPopup(false);
+    showAlert(`${ok}건 복구 완료 (양쪽 담당자 목록을 합쳐서 반영, 이후 자동으로 서로 동기화됩니다)`);
   };
 
 React.useEffect(() => {
@@ -43830,6 +44742,13 @@ React.useEffect(() => {
     const id = editClientModal.id || editClientModal.거래처명;
     if (!id) return;
     const { _dragOver, ...data } = editClientModal;
+    // 담당자 목록에서 대표(또는 첫 번째) 담당자를 평면 필드(담당자/연락처)에도 반영 —
+    // 여러 화면이 아직 이 평면 필드를 폴백으로 읽고 있어 계속 맞춰줘야 한다.
+    const contacts = Array.isArray(data.contacts) ? data.contacts.filter(c => c.name?.trim() || c.phone?.trim()) : [];
+    const primaryContact = contacts.find(c => c.isPrimary) || contacts[0] || null;
+    data.contacts = contacts;
+    data.담당자 = primaryContact?.name || "";
+    data.연락처 = primaryContact?.phone || "";
     try {
       await upsertClient?.({ ...data, id });
     } catch (e) {
@@ -43850,24 +44769,21 @@ React.useEffect(() => {
     // _id가 한 번도 전달되지 않았다. 그 결과 매번 업체명으로 문서를 다시 찾는 폴백
     // 경로를 타게 되어, 같은 업체명의 문서가 여러 개면 엉뚱한 문서를 수정/조회하게
     // 되고, 방금 수정한 문서는 그대로 남아 있다가 실시간 리스너로 되돌아와 보였다.
-    //
-    // 담당자가 2명 이상인 문서라면 upsertPlace의 이름-매칭 병합 로직은 바뀐 이름을
-    // "새 담당자 추가"로 오인해 기존 대표 담당자를 그대로 남겨버린다. 이 팝업은
-    // 대표 담당자 1명만 수정하는 화면이므로, contacts 배열을 직접 구성해 대표
-    // 담당자를 명시적으로 교체함으로써 그 모호함을 아예 없앤다.
-    const rawContacts = Array.isArray(editPlaceModal._rawContacts) ? editPlaceModal._rawContacts : [];
-    const newName = (editPlaceModal.담당자 || "").trim();
-    const newPhone = (editPlaceModal.담당자번호 || "").trim();
-    let contacts;
-    if (rawContacts.length === 0) {
-      contacts = newName ? [{ name: newName, phone: newPhone, isPrimary: true }] : [];
-    } else {
-      const primaryIdx = rawContacts.findIndex(c => c.isPrimary);
-      const idx = primaryIdx >= 0 ? primaryIdx : 0;
-      contacts = rawContacts.map((c, i) => i === idx ? { ...c, name: newName, phone: newPhone, isPrimary: true } : c);
+    let contacts = Array.isArray(editPlaceModal.contacts)
+      ? editPlaceModal.contacts.filter(c => c.name?.trim() || c.phone?.trim())
+      : [];
+    if (contacts.length && !contacts.some(c => c.isPrimary)) {
+      contacts = contacts.map((c, i) => i === 0 ? { ...c, isPrimary: true } : c);
     }
-    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts });
-    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal } : r));
+    const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
+    const 담당자 = primary?.name || "";
+    const 담당자번호 = primary?.phone || "";
+    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts, 담당자, 담당자번호 });
+    // ⚠️ 더블클릭으로 다시 열 때는 담당자 목록을 contacts가 아니라 _rawContacts에서 다시
+    // 채운다(위 주석 참고) — 여기서 _rawContacts도 함께 갱신하지 않으면, 저장 직후 실시간
+    // 리스너가 아직 새 데이터를 반영하기 전에 곧바로 다시 열었을 때 옛 담당자 목록(저장 전
+    // _rawContacts)이 그대로 보이는 문제가 있었다.
+    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal, contacts, 담당자, 담당자번호, _rawContacts: contacts } : r));
     setEditPlaceModal(null);
     showAlert("수정 완료");
   };
@@ -44078,7 +44994,11 @@ React.useEffect(() => {
   const removeSelectedPlaces = async () => {
     if (!placeSelected.size) return showAlert("선택된 항목이 없습니다.");
     if (!confirm(`${placeSelected.size}건 삭제할까요?`)) return;
-    for (const id of placeSelected) await removePlace(id);
+    for (const id of placeSelected) {
+      const row = mergedPlaceRows.find(p => (p.id || p.업체명) === id);
+      if (row) await mergePlaceContactsIntoClient(row);
+      await removePlace(id);
+    }
     setPlaceSelected(new Set());
     showAlert("삭제 완료");
   };
@@ -44338,7 +45258,7 @@ React.useEffect(() => {
                         <input type="checkbox" onChange={togglePlaceAll}
                           checked={filteredPlaces.length > 0 && placeSelected.size === filteredPlaces.length} />
                       </th>
-                      {["업체명","주소","담당자","담당자번호","등급","메모","삭제"].map((h) => (
+                      {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","삭제"].map((h) => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -44349,7 +45269,12 @@ React.useEffect(() => {
                       const grade = r.등급 || "일반";
                       return (
                         <tr key={id}
-                          onDoubleClick={() => setEditPlaceModal({ ...r })}
+                          onDoubleClick={() => setEditPlaceModal({
+                            ...r,
+                            contacts: Array.isArray(r._rawContacts) && r._rawContacts.length
+                              ? r._rawContacts
+                              : (r.담당자 ? [{ name: r.담당자, phone: r.담당자번호 || "", isPrimary: true }] : []),
+                          })}
                           className={`hover:bg-blue-50/60 transition border-b border-gray-100 cursor-pointer ${
                             grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
                           }`}>
@@ -44382,8 +45307,13 @@ React.useEffect(() => {
                             </div>
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.메모||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.오더메모||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                            <button onClick={() => { if (confirm("삭제하시겠습니까?")) removePlace(id); }}
+                            <button onClick={async () => {
+                              if (!confirm("삭제하시겠습니까?")) return;
+                              await mergePlaceContactsIntoClient(r);
+                              await removePlace(id);
+                            }}
                               className="px-2.5 py-1 bg-red-500 text-white rounded text-xs font-semibold hover:bg-red-600 transition">삭제</button>
                           </td>
                         </tr>
@@ -44634,10 +45564,12 @@ React.useEffect(() => {
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
                 하차지에서 불러오기
               </button>
-              <button onClick={() => { setDedupSelected(new Set(dedupMatches.map(m => m.place.id))); setShowDedupPopup(true); }}
-                className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
-                중복 정리{dedupMatches.length > 0 && ` (${dedupMatches.length})`}
-              </button>
+              {mismatchCandidates.length > 0 && (
+                <button onClick={() => { setMismatchSelected(new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명))); setShowMismatchPopup(true); }}
+                  className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
+                  담당자 불일치 복구 ({mismatchCandidates.length})
+                </button>
+              )}
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
                 <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
@@ -44726,14 +45658,14 @@ React.useEffect(() => {
 
           {/* 수정 팝업 */}
           {editClientModal && (
-            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditClientModal(null)}>
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
                   <h3 className="text-white font-bold text-[15px]">거래처 수정 — {editClientModal.거래처명}</h3>
                   <button onClick={() => setEditClientModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
-                  {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["담당자","담당자"],["연락처","연락처"],["이메일","이메일"]].map(([label, key]) => (
+                  {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["이메일","이메일"]].map(([label, key]) => (
                     <div key={key}>
                       <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
                       <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
@@ -44746,6 +45678,13 @@ React.useEffect(() => {
                     <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.주소||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 주소: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자 목록</label>
+                    <ContactListEditor
+                      contacts={editClientModal.contacts}
+                      onChange={(next) => setEditClientModal(p => ({ ...p, contacts: next }))}
+                    />
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
@@ -44816,6 +45755,11 @@ React.useEffect(() => {
                           <div className="flex items-center justify-center gap-3">
                             <span className="text-[12px] text-gray-400">{editClientModal.첨부파일명}</span>
                             <button
+                              className="text-[12px] text-[#1B2B4B] font-semibold hover:underline"
+                              onClick={() => setFilePreview({ base64: editClientModal.첨부파일Base64, type: editClientModal.첨부파일타입, name: editClientModal.첨부파일명 })}>
+                              미리보기
+                            </button>
+                            <button
                               className="text-[12px] text-red-500 font-semibold hover:text-red-700"
                               onClick={() => setEditClientModal(p => ({ ...p, 첨부파일Base64: null, 첨부파일명: null, 첨부파일타입: null }))}>
                               삭제
@@ -44839,6 +45783,15 @@ React.useEffect(() => {
                 </div>
               </div>
             </div>
+          )}
+
+          {filePreview && (
+            <FilePreviewModal
+              base64={filePreview.base64}
+              type={filePreview.type}
+              name={filePreview.name}
+              onClose={() => setFilePreview(null)}
+            />
           )}
 
           {/* 메모 더보기 팝업 */}
@@ -44883,7 +45836,12 @@ React.useEffect(() => {
                       return (
                         <tr key={id}
                           className={`transition border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"} hover:bg-blue-50/30 cursor-pointer`}
-                          onDoubleClick={() => setEditClientModal({ ...r })}>
+                          onDoubleClick={() => setEditClientModal({
+                            ...r,
+                            contacts: Array.isArray(r.contacts) && r.contacts.length
+                              ? r.contacts
+                              : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []),
+                          })}>
                           <td className="px-3 py-2.5 text-center">
                             <input type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
                           </td>
@@ -44960,7 +45918,7 @@ React.useEffect(() => {
               <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
-              {[["업체명 *","업체명"],["담당자","담당자"],["담당자번호","담당자번호"]].map(([label, key]) => (
+              {[["업체명 *","업체명"]].map(([label, key]) => (
                 <div key={key}>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
                   <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
@@ -44968,6 +45926,13 @@ React.useEffect(() => {
                     onChange={(e) => setEditPlaceModal(p => ({ ...p, [key]: e.target.value }))} />
                 </div>
               ))}
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자 목록</label>
+                <ContactListEditor
+                  contacts={editPlaceModal.contacts}
+                  onChange={(next) => setEditPlaceModal(p => ({ ...p, contacts: next }))}
+                />
+              </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
                 <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
@@ -44985,17 +45950,24 @@ React.useEffect(() => {
                   value={editPlaceModal.주소||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 주소: e.target.value }))} />
               </div>
-              <div className="col-span-2">
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
                 <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={editPlaceModal.메모||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 메모: e.target.value }))} />
               </div>
-              {(editPlaceModal.메모?.trim() || (editPlaceModal.등급 && editPlaceModal.등급 !== "일반")) && (
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
+                  value={editPlaceModal.오더메모||""}
+                  onChange={(e) => setEditPlaceModal(p => ({ ...p, 오더메모: e.target.value }))} />
+              </div>
+              {(editPlaceModal.오더메모?.trim() || (editPlaceModal.등급 && editPlaceModal.등급 !== "일반")) && (
                 <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                   <div>
-                    <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 메모·등급 안내 팝업이 뜨지 않습니다</div>
+                    <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
                   </div>
                   <button type="button"
                     onClick={() => setEditPlaceModal(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
@@ -45015,48 +45987,48 @@ React.useEffect(() => {
         </div>
       )}
 
-      {/* ══════ 기본거래처 ↔ 하차지거래처 중복 정리 팝업 ══════ */}
-      {showDedupPopup && (
+
+      {/* ══════ 담당자 불일치 복구 팝업 (임시) ══════ */}
+      {showMismatchPopup && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[15px]">중복 정리 — 기본거래처 ↔ 하차지거래처</h3>
-                <p className="text-white/55 text-[12px] mt-0.5">거래처명·주소가 완전히 같은 항목만 대상입니다. 하차지거래처의 메모는 기본거래처의 오더메모로, 담당자 목록은 병합되어 이관되고, 하차지거래처 쪽 항목은 삭제됩니다.</p>
+                <h3 className="text-white font-bold text-[15px]">담당자 불일치 복구</h3>
+                <p className="text-white/55 text-[12px] mt-0.5">이름이 같은 기본거래처/하차지거래처인데 담당자 목록이 서로 다른 항목입니다. 선택하면 양쪽 담당자를 합쳐서 반영하고, 이후로는 자동으로 서로 동기화됩니다.</p>
               </div>
-              <button onClick={() => setShowDedupPopup(false)}
+              <button onClick={() => setShowMismatchPopup(false)}
                 className="text-white/60 hover:text-white text-xl leading-none">×</button>
             </div>
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
-              <span className="text-[12px] text-gray-500">{dedupMatches.length}건 발견 · {dedupSelected.size}건 선택됨</span>
+              <span className="text-[12px] text-gray-500">{mismatchCandidates.length}건 발견 · {mismatchSelected.size}건 선택됨</span>
               <button
-                onClick={() => setDedupSelected(prev => prev.size === dedupMatches.length ? new Set() : new Set(dedupMatches.map(m => m.place.id)))}
+                onClick={() => setMismatchSelected(prev => prev.size === mismatchCandidates.length ? new Set() : new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명)))}
                 className="text-[12px] text-[#1B2B4B] font-semibold underline">
-                {dedupSelected.size === dedupMatches.length ? "전체 해제" : "전체 선택"}
+                {mismatchSelected.size === mismatchCandidates.length ? "전체 해제" : "전체 선택"}
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3">
-              {dedupMatches.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-10">거래처명·주소가 완전히 같은 중복 항목이 없습니다.</div>
+              {mismatchCandidates.length === 0 ? (
+                <div className="text-center text-gray-400 text-sm py-10">불일치 항목이 없습니다.</div>
               ) : (
                 <div className="space-y-2">
-                  {dedupMatches.map(({ client, place }) => {
-                    const contactCount = Array.isArray(place.contacts) ? place.contacts.filter(c => c.name?.trim() || c.phone?.trim()).length : (place._rawContacts?.length || 0);
+                  {mismatchCandidates.map((m) => {
+                    const id = m.client.id || m.client.거래처명;
                     return (
-                      <label key={place.id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
-                        <input type="checkbox" className="mt-1" checked={dedupSelected.has(place.id)}
-                          onChange={() => setDedupSelected(prev => {
+                      <label key={id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" className="mt-1" checked={mismatchSelected.has(id)}
+                          onChange={() => setMismatchSelected(prev => {
                             const n = new Set(prev);
-                            n.has(place.id) ? n.delete(place.id) : n.add(place.id);
+                            n.has(id) ? n.delete(id) : n.add(id);
                             return n;
                           })} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-bold text-gray-800">{client.거래처명}</div>
-                          <div className="text-[12px] text-gray-500 mt-0.5">{client.주소}</div>
-                          <div className="flex gap-3 mt-1 text-[11px] text-gray-400">
-                            {place.메모?.trim() && <span className="text-[#1B2B4B]">하차지 메모 있음</span>}
-                            {contactCount > 0 && <span>담당자 {contactCount}명</span>}
-                          </div>
+                          <div className="text-[13px] font-bold text-gray-800">{m.client.거래처명}</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">기본거래처 담당자: {m.cContacts.map(c => c.name).filter(Boolean).join(", ") || "-"}</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">하차지거래처 담당자: {m.pContacts.map(c => c.name).filter(Boolean).join(", ") || "-"}</div>
+                          {m.onlyInPlace.length > 0 && <div className="text-[12px] text-orange-600 mt-0.5">하차지에만 있음: {m.onlyInPlace.join(", ")}</div>}
+                          {m.onlyInClient.length > 0 && <div className="text-[12px] text-orange-600 mt-0.5">기본거래처에만 있음: {m.onlyInClient.join(", ")}</div>}
                         </div>
                       </label>
                     );
@@ -45065,11 +46037,11 @@ React.useEffect(() => {
               )}
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex gap-3 shrink-0">
-              <button onClick={() => setShowDedupPopup(false)}
+              <button onClick={() => setShowMismatchPopup(false)}
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-              <button onClick={runDedupCleanup} disabled={dedupRunning || dedupSelected.size === 0}
+              <button onClick={runMismatchFix} disabled={mismatchRunning || mismatchSelected.size === 0}
                 className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-bold transition">
-                {dedupRunning ? "정리 중..." : `선택 항목 정리 (${dedupSelected.size})`}
+                {mismatchRunning ? "복구 중..." : `선택 항목 복구 (${mismatchSelected.size})`}
               </button>
             </div>
           </div>
