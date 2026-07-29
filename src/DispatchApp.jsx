@@ -43871,6 +43871,47 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     return list;
   }, [rows, placeRows, subTab]);
 
+  // 하차지거래처를 삭제하기 전에, 같은 이름의 기본거래처가 있으면(주소 표기가
+  // 도로명/지번처럼 달라 "중복 정리"의 정확일치 후보에는 안 걸리는 경우까지 포함)
+  // 그 담당자들을 먼저 기본거래처로 합쳐준다. 이게 없으면 이름은 같지만 주소
+  // 표기가 달라 별도 문서로 남아있던 하차지거래처를 지울 때마다 그 담당자들이
+  // 기본거래처로 옮겨지지 않고 그대로 사라져 버린다.
+  const extractPlaceContacts = (p) => {
+    if (Array.isArray(p._allContacts) && p._allContacts.length) return p._allContacts.map(c => ({ name: c.name || "", phone: c.phone || "" }));
+    if (Array.isArray(p.contacts) && p.contacts.length) return p.contacts;
+    if (Array.isArray(p._rawContacts) && p._rawContacts.length) return p._rawContacts;
+    if (p.담당자) return [{ name: p.담당자, phone: p.담당자번호 || "" }];
+    return [];
+  };
+  const mergePlaceContactsIntoClient = async (place) => {
+    if (!place?.업체명) return;
+    const client = rows.find(c => norm(c.거래처명 || "") === norm(place.업체명 || ""));
+    if (!client) return;
+    const placeContacts = extractPlaceContacts(place);
+    if (!placeContacts.length) return;
+    const baseContacts = Array.isArray(client.contacts) && client.contacts.length
+      ? [...client.contacts]
+      : (client.담당자 ? [{ name: client.담당자, phone: client.연락처 || "", isPrimary: true }] : []);
+    const existingNames = new Set(baseContacts.map(c => (c.name || "").trim()).filter(Boolean));
+    const mergedContacts = [...baseContacts];
+    let changed = false;
+    placeContacts.forEach(pc => {
+      const nm = (pc.name || "").trim();
+      if (nm && !existingNames.has(nm)) {
+        existingNames.add(nm);
+        mergedContacts.push({ name: nm, phone: pc.phone || "", isPrimary: false });
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    if (!mergedContacts.some(c => c.isPrimary) && mergedContacts.length) mergedContacts[0].isPrimary = true;
+    try {
+      await upsertClient?.({ id: client.id, 거래처명: client.거래처명, contacts: mergedContacts });
+    } catch (e) {
+      console.error("담당자 병합 실패:", client.거래처명, e);
+    }
+  };
+
   const runDedupCleanup = async () => {
     const targets = dedupMatches.filter(m => dedupSelected.has(m.place.id));
     if (!targets.length) return;
@@ -44234,7 +44275,11 @@ React.useEffect(() => {
   const removeSelectedPlaces = async () => {
     if (!placeSelected.size) return showAlert("선택된 항목이 없습니다.");
     if (!confirm(`${placeSelected.size}건 삭제할까요?`)) return;
-    for (const id of placeSelected) await removePlace(id);
+    for (const id of placeSelected) {
+      const row = mergedPlaceRows.find(p => (p.id || p.업체명) === id);
+      if (row) await mergePlaceContactsIntoClient(row);
+      await removePlace(id);
+    }
     setPlaceSelected(new Set());
     showAlert("삭제 완료");
   };
@@ -44539,7 +44584,11 @@ React.useEffect(() => {
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.메모||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                            <button onClick={() => { if (confirm("삭제하시겠습니까?")) removePlace(id); }}
+                            <button onClick={async () => {
+                              if (!confirm("삭제하시겠습니까?")) return;
+                              await mergePlaceContactsIntoClient(r);
+                              await removePlace(id);
+                            }}
                               className="px-2.5 py-1 bg-red-500 text-white rounded text-xs font-semibold hover:bg-red-600 transition">삭제</button>
                           </td>
                         </tr>
