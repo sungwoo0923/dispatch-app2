@@ -5842,6 +5842,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
+        오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
+        팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
       }).catch(() => {});
       return;
     }
@@ -7138,32 +7140,40 @@ const [editContactData, setEditContactData] = React.useState({ name: "", phone: 
 const [clientAlert, setClientAlert] = React.useState(null);
 
 // 상/하차지 오더메모 버튼 — 상/하차지명에 입력된 거래처의 오더메모를 바로 보고
-// 수정할 수 있게 해준다. 저장하면 거래처관리(기본거래처/하차지거래처)에도
-// 그대로 반영된다(신규 업체명이면 기본거래처에 새로 만들어짐).
+// 수정할 수 있게 해준다. ⚠️ 여기서 "저장"을 눌러도 거래처관리에 바로 반영되지
+// 않는다 — 오더를 실제로 등록해야만 그 값이 함께 저장되도록, 우선 form에만
+// 임시로 담아두고(상차지오더메모/상차지오더메모팝업표시 등) 오더 등록 시점에
+// savePlaceSmart로 실제 반영한다(아래 백그라운드 저장 부분 참고).
 const [orderMemoPopup, setOrderMemoPopup] = React.useState(null); // { type, name, memo, 등급, 팝업표시 }
 const openOrderMemoEditor = (type) => {
   const name = (type === "pickup" ? form.상차지명 : form.하차지명 || "").trim();
   if (!name) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+  const pendingMemoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const pendingShowKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  if (form[pendingMemoKey] !== undefined || form[pendingShowKey] !== undefined) {
+    // 이미 이번 오더에서 한 번 수정해둔 값이 있으면(아직 등록 전) 그 값을 그대로 이어서 보여준다.
+    setOrderMemoPopup({
+      type, name,
+      memo: form[pendingMemoKey] || "",
+      팝업표시: form[pendingShowKey] !== undefined ? form[pendingShowKey] : true,
+    });
+    return;
+  }
   const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
   setOrderMemoPopup({
     type, name,
     memo: found?.오더메모 || "",
-    등급: found?.등급 || "일반",
     팝업표시: found?.팝업표시 !== undefined ? found.팝업표시 : true,
   });
 };
-const saveOrderMemo = async (memo, popupShow) => {
+const saveOrderMemo = (memo, popupShow) => {
   if (!orderMemoPopup) return;
-  const { name } = orderMemoPopup;
-  const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
-  if (found && found._id) {
-    await upsertPlace?.({ _id: found._id, 업체명: name, 오더메모: memo, 팝업표시: popupShow });
-  } else {
-    const clientMatch = (clients || []).find(c => normalizeKey(c.업체명 || c.거래처명 || "") === normalizeKey(name));
-    await upsertClient?.({ id: clientMatch?.id || name, 거래처명: name, 오더메모: memo, 팝업표시: popupShow });
-  }
+  const { type } = orderMemoPopup;
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+  setForm(p => ({ ...p, [memoKey]: memo, [showKey]: popupShow }));
   setOrderMemoPopup(null);
-  showAlert("오더메모가 저장되었습니다.");
+  showAlert("오더를 등록하면 오더메모가 함께 저장됩니다.");
 };
 
 // 🚫 거래처/상하차지 등급·메모 알림 대상 찾기
@@ -7177,18 +7187,23 @@ const findClientAlertTarget = (name) => {
   // 하차지거래처/기본거래처 모두 "일반메모"가 아니라 "오더메모"가 있을 때만 팝업 대상이다
   // (두 컬렉션이 이제 이름이 같으면 서로 동기화되므로 판단 기준도 동일하게 맞춘다).
   const hasNote = (v) => v?.오더메모 && String(v.오더메모).trim();
-  const placeTarget = (placeRows || []).find(
-    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
-  );
-  if (placeTarget) {
-    return placeTarget.팝업표시 === false ? null : { ...placeTarget, 메모: placeTarget.오더메모 || "" };
-  }
+  // ⚠️ 기본거래처(clients)를 먼저 확인한다 — 상/하차지명 드롭다운(mergedClients)이나
+  // 실제 저장(savePlaceSmart)이나 전부 기본거래처를 우선하는데, 여기만 하차지거래처를
+  // 먼저 보면, 아직 서로 동기화되지 않은 옛 하차지거래처 문서(팝업표시가 켜진 채로
+  // 남아있는)가 이겨버려서 기본거래처에서 분명히 꺼둔 팝업이 거래처명 필드에서만
+  // 다시 뜨는 문제가 있었다.
   const clientTarget = (clients || []).find(
     (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
   );
-  if (!clientTarget || clientTarget.팝업표시 === false) return null;
-  // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
-  return { ...clientTarget, 메모: clientTarget.오더메모 || "" };
+  if (clientTarget) {
+    // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
+    return clientTarget.팝업표시 === false ? null : { ...clientTarget, 메모: clientTarget.오더메모 || "" };
+  }
+  const placeTarget = (placeRows || []).find(
+    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
+  );
+  if (!placeTarget || placeTarget.팝업표시 === false) return null;
+  return { ...placeTarget, 메모: placeTarget.오더메모 || "" };
 };
 // 드롭다운에서 "특정 항목"을 직접 선택한 경우 전용 — 같은 업체명이라도 기본거래처와
 // 하차지거래처, 혹은 주소가 다른 하차지거래처가 각각 따로 존재할 수 있으므로, 이름으로
@@ -7897,6 +7912,10 @@ const rec = {
 const _pName = form.상차지명, _pAddr = form.상차지주소, _pMgr = form.상차지담당자, _pPhone = form.상차지담당자번호, _pId = form.상차지Id;
 const _dName = form.하차지명, _dAddr = form.하차지주소, _dMgr = form.하차지담당자, _dPhone = form.하차지담당자번호, _dId = form.하차지Id;
 const _carNo = form.차량번호, _name = form.이름, _tel = form.전화번호;
+// 상/하차지 오더메모 버튼으로 미리 수정해둔 값(아직 거래처관리엔 반영 안 됨) — 오더가
+// 실제로 등록되는 지금 시점에만 함께 반영한다.
+const _pOrderMemo = form.상차지오더메모, _pOrderMemoShow = form.상차지오더메모팝업표시;
+const _dOrderMemo = form.하차지오더메모, _dOrderMemoShow = form.하차지오더메모팝업표시;
 
 // ★ 오더 병렬 저장 (순차→병렬로 속도 개선)
 const saveCount = multiCount > 1 ? multiCount : 1;
@@ -7930,8 +7949,12 @@ setBottomStatusKey(k => k+1);
 
 // ★ 백그라운드 저장 (UI 블로킹 없음)
 if (typeof upsertPlace === "function") {
-  savePlaceSmart(_pName, _pAddr, _pMgr, _pPhone, _pId).catch(() => {});
-  savePlaceSmart(_dName, _dAddr, _dMgr, _dPhone, _dId).catch(() => {});
+  savePlaceSmart(_pName, _pAddr, _pMgr, _pPhone, _pId, undefined,
+    (_pOrderMemo !== undefined || _pOrderMemoShow !== undefined) ? { 오더메모: _pOrderMemo, 팝업표시: _pOrderMemoShow } : undefined
+  ).catch(() => {});
+  savePlaceSmart(_dName, _dAddr, _dMgr, _dPhone, _dId, undefined,
+    (_dOrderMemo !== undefined || _dOrderMemoShow !== undefined) ? { 오더메모: _dOrderMemo, 팝업표시: _dOrderMemoShow } : undefined
+  ).catch(() => {});
   // 경유 하차지 자동 등록
   [...(rec.경유하차목록 || []), ...(rec.경유상차목록 || [])].forEach(s => {
     if (s?.업체명?.trim()) {
@@ -16309,7 +16332,7 @@ const rtIsSameAddr = (a = "", b = "") => {
   const longer = na.length <= nb.length ? nb : na;
   return shorter.length >= 10 && longer.startsWith(shorter);
 };
-const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
+const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution, extraFields) => {
   if (!name) return;
 
   if (_conflictResolution === "keep_new") {
@@ -16359,6 +16382,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
+        오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
+        팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
       }).catch(() => {});
       return;
     }
@@ -25508,7 +25533,7 @@ const [placeConflictQueue, setPlaceConflictQueue] = React.useState([]);
 const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
 const dsNormalizeKey = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
 const dsNormalizeAddr = (a = "") => String(a).trim().replace(/\s+/g, "").replace(/[-./]/g, "").toLowerCase();
-const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
+const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution, extraFields) => {
   if (!name) return;
 
   if (_conflictResolution === "keep_new") {
@@ -25558,6 +25583,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         담당자: cPrimary?.name || clientMatch.담당자 || "",
         연락처: cPrimary?.phone || clientMatch.연락처 || "",
         contacts: cContacts,
+        오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
+        팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
       }).catch(() => {});
       return;
     }
