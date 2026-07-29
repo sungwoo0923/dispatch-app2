@@ -755,9 +755,12 @@ const sixMonthsAgo = getSixMonthsAgo();
       scheduleDispatchSave(filteredArr);
 
       // 🔔 최초 로드: prevMap 구축만
+      // ⚠️ persistentLocalCache를 쓰기 때문에 첫 스냅샷은 "어제 PC를 끄기 전" 상태를 담은
+      // 로컬 캐시본일 수 있다. 이 캐시 스냅샷을 기준선으로 확정해버리면, 바로 뒤이어 도착하는
+      // 진짜 서버 스냅샷(그 사이 오프라인 동안 모바일 등에서 쌓인 실제 변경사항 전부)이 전부
+      // "방금 발생한 변경"으로 오인되어 알림이 한꺼번에 쏟아진다 — 캐시 스냅샷 동안은 계속
+      // 기준선만 다시 세우고, fromCache가 아닌 "진짜" 첫 서버 응답을 받은 뒤부터만 변경 감지를 시작한다.
       if (ordersFirstLoad) {
-        ordersFirstLoad = false;
-        markRealFirstLoadDone("orders");
         arr.forEach(r => {
           ordersPrev.set(r._id, {
             car: (r.차량번호 || "").trim(),
@@ -767,6 +770,10 @@ const sixMonthsAgo = getSixMonthsAgo();
             cancelReq: r.취소요청 === true,
           });
         });
+        if (!snap.metadata.fromCache) {
+          ordersFirstLoad = false;
+          markRealFirstLoadDone("orders");
+        }
         return;
       }
 
@@ -938,16 +945,19 @@ const sixMonthsAgo = getSixMonthsAgo();
       });
       scheduleDispatchSave(arr2);
 
-      // 🔔 최초 로드: prevMap 구축만
+      // 🔔 최초 로드: prevMap 구축만 (fromCache 스냅샷 동안은 기준선만 계속 갱신하고,
+      // 진짜 서버 스냅샷을 받은 뒤부터만 변경 감지를 시작한다 — 위 orders 리스너와 동일한 이유)
       if (dispatchFirstLoad) {
-        dispatchFirstLoad = false;
-        markRealFirstLoadDone("dispatch");
         arr2.forEach(r => {
           dispatchPrev.set(r._id, {
             car: (r.차량번호 || "").trim(),
             status: (r.배차상태 || "").trim(),
           });
         });
+        if (!snap.metadata.fromCache) {
+          dispatchFirstLoad = false;
+          markRealFirstLoadDone("dispatch");
+        }
         return;
       }
 
