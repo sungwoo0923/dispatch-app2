@@ -743,7 +743,15 @@ const CustomSelect = React.forwardRef(function CustomSelect(
   }, [open, updateMenuRect]);
 
   return (
-    <div className="relative h-full" ref={wrapRef}>
+    // display:contents — 이 래퍼가 실제 레이아웃 박스를 만들지 않게 한다. 코드베이스 안에
+    // 이 자리에 select를 쓰던 곳들이 크게 두 가지 방식으로 되어 있었다: (a) select를 담는
+    // 별도의 absolute wrapper div가 이미 있는 방식, (b) select 자체에 absolute/h-[30px]/
+    // top-1/2 같은 위치·크기 클래스를 직접 준 방식. 여기서 relative/h-full이 있는 진짜
+    // div로 감싸면 (b) 방식에서 새 블록 박스가 하나 더 생겨 버튼이 그 박스 안에서 다시
+    // 중앙정렬되면서 세로 공간이 두 배로 늘어나 버튼이 칸 아래로 삐져나오는 원인이 됐다.
+    // display:contents면 이 div는 레이아웃에 전혀 관여하지 않아 button의 className이
+    // 래퍼가 아예 없는 것처럼(원래 select가 있던 자리 그대로) 동작한다.
+    <div className="contents" ref={wrapRef}>
       <button
         type="button"
         id={id}
@@ -767,7 +775,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             setOpen(false);
           } else if (e.key === "Escape") setOpen(false);
         }}
-        className={`${className} text-left overflow-hidden text-ellipsis whitespace-nowrap`}
+        className={`${className} relative text-left overflow-hidden text-ellipsis whitespace-nowrap`}
       >
         <span className="pr-2.5">{current ? current.label : (placeholder || "")}</span>
         <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60">
@@ -10210,11 +10218,6 @@ className={`
         <option value="통">통</option>
       </CustomSelect>
 
-      {/* 화살표 */}
-            <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">
-        ▾
-      </span>
-
     </div>
 
   </div>
@@ -10366,12 +10369,6 @@ className={`
         <option value="톤">톤</option>
         <option value="kg">kg</option>
       </CustomSelect>
-
-      {/* 화살표 */}
-            <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">
-        ▾
-      </span>
-
 
     </div>
 
@@ -10819,7 +10816,6 @@ className={`
                 <option value="박스">박스</option>
                 <option value="통">통</option>
               </CustomSelect>
-              <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">▾</span>
             </div>
           </div>
 
@@ -10870,7 +10866,6 @@ className={`
                 <option value="톤">톤</option>
                 <option value="kg">kg</option>
               </CustomSelect>
-              <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">▾</span>
             </div>
           </div>
 
@@ -23087,10 +23082,6 @@ value={copyTarget?.화물수량 || ""}
       <option value="통">통</option>
     </CustomSelect>
 
-    <span className="absolute right-3 text-blue-500 text-xs pointer-events-none">
-      ▾
-    </span>
-
   </div>
 
 </div>
@@ -23183,11 +23174,6 @@ value={copyTarget?.화물수량 || ""}
         <option value="톤">톤</option>
         <option value="kg">kg</option>
       </CustomSelect>
-
-      {/* ▼ 아이콘 */}
-      <span className="absolute right-2 text-blue-400 text-[10px] pointer-events-none">
-        ▾
-      </span>
 
     </div>
 
