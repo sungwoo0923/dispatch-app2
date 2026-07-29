@@ -644,7 +644,7 @@ function ContactListEditor({ contacts, onChange }) {
               <input autoFocus className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
                 placeholder="이름" value={draft.name} onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} />
               <input className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
-                placeholder="전화번호" value={draft.phone} onChange={e => setDraft(p => ({ ...p, phone: e.target.value }))} />
+                placeholder="전화번호" value={draft.phone} onChange={e => setDraft(p => ({ ...p, phone: formatPhone(e.target.value) }))} />
               <button onClick={saveEdit} className="shrink-0 px-2 py-1 rounded bg-[#1B2B4B] text-white text-[11px] font-bold">저장</button>
               <button onClick={() => setEditingIdx(null)} className="shrink-0 px-2 py-1 rounded bg-gray-100 text-gray-600 text-[11px] font-semibold">취소</button>
             </div>
@@ -1693,6 +1693,31 @@ const markEditRequestSeen = async (order) => {
       { ...client, id, companyName: client.companyName || viewCompany },
       { merge: true }
     );
+
+    // ═══════════════════════════════════════════════════
+    // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 하차지거래처가 있으면 주소/담당자/
+    // 메모/오더메모를 그대로 반영한다. upsertPlace를 다시 부르지 않고 직접 write해서
+    // 서로 재귀 호출되지 않게 한다. 이번 호출에서 실제로 넘어온 필드만 반영한다
+    // (예: 오더메모만 고친 호출이 주소/담당자를 비워버리면 안 되므로).
+    // ═══════════════════════════════════════════════════
+    try {
+      const nameKey = normalizeCompanyKey(client.거래처명 || "");
+      if (nameKey) {
+        const matches = (places || []).filter(p => normalizeCompanyKey(p.업체명 || "") === nameKey);
+        for (const m of matches) {
+          const syncFields = {};
+          if (client.주소 !== undefined) syncFields.주소 = client.주소;
+          if (client.contacts !== undefined) syncFields.contacts = client.contacts;
+          if (client.담당자 !== undefined) syncFields.담당자 = client.담당자;
+          if (client.연락처 !== undefined) syncFields.담당자번호 = client.연락처;
+          if (client.메모 !== undefined) syncFields.메모 = client.메모;
+          if (client.오더메모 !== undefined) syncFields.오더메모 = client.오더메모;
+          if (Object.keys(syncFields).length) {
+            await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
+          }
+        }
+      }
+    } catch {}
   };
 
   const removeClient = async (id) => deleteDoc(doc(db, COLL.clients, id));
@@ -1834,7 +1859,11 @@ const upsertPlace = async (place) => {
       담당자번호: primaryContact?.phone || (place.담당자번호 || "").trim(),
       등급: place.등급 || existingData?.등급 || "일반",
       등급변경일: place.등급변경일 || existingData?.등급변경일 || null,
+      // 메모(일반메모): 담당자가 참고용으로 자유롭게 적는 메모. 오더메모와 달리 팝업을 띄우지 않는다.
       메모: place.메모 !== undefined ? place.메모 : (existingData?.메모 || ""),
+      // 오더메모: 이 거래처명을 상/하차지명 등 어디서 입력하든 팝업표시가 켜져 있으면
+      // 안내 팝업으로 뜨는 메모 — 기본거래처와 동일한 의미/필드명으로 맞춘다.
+      오더메모: place.오더메모 !== undefined ? place.오더메모 : (existingData?.오더메모 || ""),
       // 메모/등급 안내 팝업 노출 여부 — 기본값은 켜짐(true). 거래처관리에서 끈 경우에만 false로 저장된다.
       팝업표시: place.팝업표시 !== undefined ? place.팝업표시 : (existingData?.팝업표시 !== undefined ? existingData.팝업표시 : true),
       isActive: place.isActive !== false,
@@ -1843,6 +1872,26 @@ const upsertPlace = async (place) => {
     };
 
     await setDoc(ref, data, { merge: true });
+
+    // ═══════════════════════════════════════════════════
+    // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 기본거래처가 있으면 주소/담당자/
+    // 메모/오더메모를 그대로 반영한다. 어느 쪽에서 고치든 같이 바뀌어야 한다는 요구사항.
+    // upsertClient를 다시 부르지 않고 직접 write해서 서로 재귀 호출되지 않게 한다.
+    // ═══════════════════════════════════════════════════
+    try {
+      const clientSnap = await getDocs(query(collection(db, "clients"), where("거래처명", "==", name)));
+      for (const d of clientSnap.docs) {
+        await setDoc(doc(db, "clients", d.id), {
+          주소: data.주소,
+          contacts: data.contacts,
+          담당자: data.담당자,
+          연락처: data.담당자번호,
+          메모: data.메모,
+          오더메모: data.오더메모,
+        }, { merge: true }).catch(() => {});
+      }
+    } catch {}
+
     return key;
 
   } catch (e) {
@@ -5914,10 +5963,16 @@ const mergedClients = React.useMemo(() => {
     });
   });
 
-  // ✅ 2️⃣ placeList는 기본거래처에 없는(진짜 하차지 전용) 업체명+주소만 보충한다
+  // ✅ 2️⃣ placeList는 기본거래처에 이름 자체가 아예 없는(진짜 하차지 전용) 업체만
+  // 보충한다 — 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로,
+  // 주소가 우연히 다르게 남아있어도 자동완성 드롭다운에 기본거래처 항목 하나만
+  // 뜨면 된다(같은 회사가 드롭다운에 2개로 중복되어 보이던 문제).
+  const clientNameSet = new Set(clients.map(c => normalizeKey(c.업체명 || c.거래처명 || "")).filter(Boolean));
   placeList.forEach(p => {
+    const nameKey = normalizeKey(p.업체명);
+    if (!nameKey || clientNameSet.has(nameKey)) return;
     const key = mkKey(p.업체명, p.주소);
-    if (normalizeKey(p.업체명) && !map.has(key)) map.set(key, p);
+    if (!map.has(key)) map.set(key, p);
   });
   return Array.from(map.values());
 }, [placeList, clients]);
@@ -7090,18 +7145,17 @@ const [clientAlert, setClientAlert] = React.useState(null);
 const findClientAlertTarget = (name) => {
   if (!name) return null;
   const trimmed = name.trim();
-  // 하차지거래처(placeRows)는 기존과 동일하게 메모 필드로 판단한다.
-  const placeHasNote = (v) => v?.메모 && String(v.메모).trim();
+  // 하차지거래처/기본거래처 모두 "일반메모"가 아니라 "오더메모"가 있을 때만 팝업 대상이다
+  // (두 컬렉션이 이제 이름이 같으면 서로 동기화되므로 판단 기준도 동일하게 맞춘다).
+  const hasNote = (v) => v?.오더메모 && String(v.오더메모).trim();
   const placeTarget = (placeRows || []).find(
-    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || placeHasNote(p))
+    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
   );
   if (placeTarget) {
-    return placeTarget.팝업표시 === false ? null : placeTarget;
+    return placeTarget.팝업표시 === false ? null : { ...placeTarget, 메모: placeTarget.오더메모 || "" };
   }
-  // 기본거래처(clients)는 "일반메모"가 아니라 "오더메모"가 있을 때만 팝업 대상이다.
-  const clientHasNote = (v) => v?.오더메모 && String(v.오더메모).trim();
   const clientTarget = (clients || []).find(
-    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || clientHasNote(c))
+    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
   );
   if (!clientTarget || clientTarget.팝업표시 === false) return null;
   // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
@@ -7109,11 +7163,10 @@ const findClientAlertTarget = (name) => {
 };
 // 드롭다운에서 "특정 항목"을 직접 선택한 경우 전용 — 같은 업체명이라도 기본거래처와
 // 하차지거래처, 혹은 주소가 다른 하차지거래처가 각각 따로 존재할 수 있으므로, 이름으로
-// 다시 검색하지 않고 사용자가 실제로 고른 그 객체 자신의 등급/메모(오더메모)만 본다.
+// 다시 검색하지 않고 사용자가 실제로 고른 그 객체 자신의 등급/오더메모만 본다.
 const getAlertTargetForSelectedPlace = (place) => {
   if (!place || place.팝업표시 === false) return null;
-  const isPlaceRecord = !!place._id; // 하차지거래처(mergedClients)는 real _id를 갖고, 기본거래처 파생 항목은 없다
-  const note = isPlaceRecord ? place.메모 : place.오더메모;
+  const note = place.오더메모;
   const hasNote = note && String(note).trim();
   if (place.등급 !== "블랙" && place.등급 !== "주의" && !hasNote) return null;
   return { ...place, 메모: note || "" };
@@ -16142,8 +16195,12 @@ const mergedClients = React.useMemo(() => {
     const k = mkKey(name, c.주소);
     map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
+  // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
+  // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
+  const clientNameSet = new Set((clients || []).map(c => (c.업체명 || c.거래처명 || "").toLowerCase().replace(/\s+/g, "")).filter(Boolean));
   (placeRows || []).forEach(p => {
-    if (!(p.업체명||"").trim()) return;
+    const nameKey = (p.업체명 || "").toLowerCase().replace(/\s+/g, "");
+    if (!nameKey || clientNameSet.has(nameKey)) return;
     const k = mkKey(p.업체명, p.주소);
     if (!map.has(k)) map.set(k, p);
   });
@@ -16519,11 +16576,11 @@ const checkWarningStatus = (name, type) => {
     const foundPlace = (placeRows || []).find(p => p.업체명 === name);
     if (foundPlace && foundPlace.팝업표시 !== false) {
       const status = foundPlace.업체상태 || foundPlace.등급;
-      const note = foundPlace.메모;
+      const note = foundPlace.오더메모;
       if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
         const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-        setWarningPopup({ name, status: gradeStatus, type, info: foundPlace });
+        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
       }
     }
   };
@@ -25345,8 +25402,12 @@ const mergedClients = React.useMemo(() => {
     const k = mkKey(name, c.주소);
     map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
+  // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
+  // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
+  const clientNameSet = new Set((clients || []).map(c => (c.업체명 || c.거래처명 || "").toLowerCase().replace(/\s+/g, "")).filter(Boolean));
   (placeRows || []).forEach(p => {
-    if (!(p.업체명||"").trim()) return;
+    const nameKey = (p.업체명 || "").toLowerCase().replace(/\s+/g, "");
+    if (!nameKey || clientNameSet.has(nameKey)) return;
     const k = mkKey(p.업체명, p.주소);
     if (!map.has(k)) map.set(k, p);
   });
@@ -25604,11 +25665,11 @@ const checkWarningStatus = (name, type) => {
   const foundPlace = allPlaces.find(p => (p.업체명 || p.name) === name);
   if (foundPlace && foundPlace.팝업표시 !== false) {
     const status = foundPlace.업체상태 || foundPlace.등급;
-    const note = foundPlace.메모;
+    const note = foundPlace.오더메모;
     if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
       const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-      setWarningPopup({ name, status: gradeStatus, type, info: foundPlace });
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
     }
   }
 };
@@ -43778,6 +43839,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       등급: d.등급 || "일반",
       등급변경일: d.등급변경일 || null,
       메모: d.메모 || "",
+      오더메모: d.오더메모 || "",
       팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
       updatedAt: d.updatedAt || null,
       // 담당자가 2명 이상인 문서를 수정 팝업에서 저장할 때, 대표(주 담당자)를
@@ -43914,57 +43976,6 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const importDropRef = React.useRef(null);
   const importItemRefs = React.useRef([]);
 
-  // ═══════════════════════════════════════════════════
-  // 기본거래처 → 하차지거래처 복원 (예전 "중복 정리"로 삭제됐던 하차지거래처
-  // 사본을 다시 만들어, 이름이 같으면 두 컬렉션 모두에 존재하던 원래 상태로
-  // 되돌린다 — "중복 정리" 자체는 부작용이 있어 제거했다)
-  // ═══════════════════════════════════════════════════
-  const [showRestorePopup, setShowRestorePopup] = React.useState(false);
-  const [restoreSelected, setRestoreSelected] = React.useState(new Set());
-  const [restoreRunning, setRestoreRunning] = React.useState(false);
-  const restoreCandidates = React.useMemo(() => {
-    if (subTab !== "기본") return [];
-    const placeNames = new Set(placeRows.map(p => norm(p.업체명 || "")).filter(Boolean));
-    return rows.filter(c => {
-      const cName = norm(c.거래처명 || "");
-      return cName && !placeNames.has(cName);
-    });
-  }, [rows, placeRows, subTab]);
-
-  const runRestore = async () => {
-    const targets = restoreCandidates.filter(c => restoreSelected.has(c.id || c.거래처명));
-    if (!targets.length) return;
-    setRestoreRunning(true);
-    let ok = 0;
-    for (const client of targets) {
-      try {
-        const contacts = Array.isArray(client.contacts) && client.contacts.length
-          ? client.contacts
-          : (client.담당자 ? [{ name: client.담당자, phone: client.연락처 || "", isPrimary: true }] : []);
-        const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
-        const uniqueKey = makePlaceKey(client.거래처명) + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        await upsertPlace?.({
-          _id: uniqueKey,
-          업체명: client.거래처명,
-          주소: client.주소 || "",
-          담당자: primary?.name || "",
-          담당자번호: primary?.phone || "",
-          contacts,
-          등급: client.등급 || "일반",
-          메모: client.오더메모 || "",
-          _forceNew: true,
-        });
-        ok++;
-      } catch (e) {
-        console.error("복원 실패:", client.거래처명, e);
-      }
-    }
-    setRestoreRunning(false);
-    setRestoreSelected(new Set());
-    setShowRestorePopup(false);
-    showAlert(`${ok}건 복원 완료 (기본거래처 내용을 하차지거래처에도 복사)`);
-  };
-
   // 하차지거래처를 삭제하기 전에, 같은 이름의 기본거래처가 있으면(주소 표기가
   // 도로명/지번처럼 달라 "중복 정리"의 정확일치 후보에는 안 걸리는 경우까지 포함)
   // 그 담당자들을 먼저 기본거래처로 합쳐준다. 이게 없으면 이름은 같지만 주소
@@ -44004,6 +44015,68 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     } catch (e) {
       console.error("담당자 병합 실패:", client.거래처명, e);
     }
+  };
+
+  // ═══════════════════════════════════════════════════
+  // 담당자 불일치 점검/복구 (임시) — 이름이 같은 기본거래처/하차지거래처 사이에
+  // 담당자 목록이 서로 다르면(한쪽에만 있던 담당자가 있으면), 두 쪽을 합집합으로
+  // 합쳐서 양쪽 모두에 반영한다. 예전에 두 컬렉션이 서로 동기화되지 않던 시절
+  // 한쪽에서만 담당자가 갱신되어 반대쪽에 있던 담당자가 사라진 것처럼 보이는
+  // 경우, 아직 어느 한쪽에 데이터가 남아있다면 이 도구로 되살릴 수 있다.
+  // ═══════════════════════════════════════════════════
+  const [showMismatchPopup, setShowMismatchPopup] = React.useState(false);
+  const [mismatchSelected, setMismatchSelected] = React.useState(new Set());
+  const [mismatchRunning, setMismatchRunning] = React.useState(false);
+  const mismatchCandidates = React.useMemo(() => {
+    if (subTab !== "기본") return [];
+    const list = [];
+    rows.forEach(c => {
+      const cName = norm(c.거래처명 || "");
+      if (!cName) return;
+      const place = placeRows.find(p => norm(p.업체명 || "") === cName);
+      if (!place) return;
+      const cContacts = Array.isArray(c.contacts) && c.contacts.length
+        ? c.contacts
+        : (c.담당자 ? [{ name: c.담당자, phone: c.연락처 || "", isPrimary: true }] : []);
+      const pContacts = extractPlaceContacts(place);
+      const cNames = new Set(cContacts.map(x => (x.name || "").trim()).filter(Boolean));
+      const pNames = new Set(pContacts.map(x => (x.name || "").trim()).filter(Boolean));
+      const onlyInPlace = [...pNames].filter(n => !cNames.has(n));
+      const onlyInClient = [...cNames].filter(n => !pNames.has(n));
+      if (onlyInPlace.length || onlyInClient.length) {
+        list.push({ client: c, place, cContacts, pContacts, onlyInPlace, onlyInClient });
+      }
+    });
+    return list;
+  }, [rows, placeRows, subTab]);
+
+  const runMismatchFix = async () => {
+    const targets = mismatchCandidates.filter(m => mismatchSelected.has(m.client.id || m.client.거래처명));
+    if (!targets.length) return;
+    setMismatchRunning(true);
+    let ok = 0;
+    for (const { client, place, cContacts, pContacts } of targets) {
+      try {
+        const merged = [...cContacts];
+        const names = new Set(merged.map(c => (c.name || "").trim()).filter(Boolean));
+        pContacts.forEach(pc => {
+          const nm = (pc.name || "").trim();
+          if (nm && !names.has(nm)) {
+            names.add(nm);
+            merged.push({ name: nm, phone: pc.phone || "", isPrimary: false });
+          }
+        });
+        if (!merged.some(c => c.isPrimary) && merged.length) merged[0].isPrimary = true;
+        await upsertClient?.({ id: client.id, 거래처명: client.거래처명, contacts: merged });
+        ok++;
+      } catch (e) {
+        console.error("담당자 불일치 복구 실패:", client.거래처명, e);
+      }
+    }
+    setMismatchRunning(false);
+    setMismatchSelected(new Set());
+    setShowMismatchPopup(false);
+    showAlert(`${ok}건 복구 완료 (양쪽 담당자 목록을 합쳐서 반영, 이후 자동으로 서로 동기화됩니다)`);
   };
 
 React.useEffect(() => {
@@ -44584,7 +44657,7 @@ React.useEffect(() => {
                         <input type="checkbox" onChange={togglePlaceAll}
                           checked={filteredPlaces.length > 0 && placeSelected.size === filteredPlaces.length} />
                       </th>
-                      {["업체명","주소","담당자","담당자번호","등급","메모","삭제"].map((h) => (
+                      {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","삭제"].map((h) => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -44633,6 +44706,7 @@ React.useEffect(() => {
                             </div>
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.메모||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.오더메모||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
                               if (!confirm("삭제하시겠습니까?")) return;
@@ -44889,10 +44963,12 @@ React.useEffect(() => {
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
                 하차지에서 불러오기
               </button>
-              <button onClick={() => { setRestoreSelected(new Set(restoreCandidates.map(c => c.id || c.거래처명))); setShowRestorePopup(true); }}
-                className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
-                하차지거래처 복원{restoreCandidates.length > 0 && ` (${restoreCandidates.length})`}
-              </button>
+              {mismatchCandidates.length > 0 && (
+                <button onClick={() => { setMismatchSelected(new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명))); setShowMismatchPopup(true); }}
+                  className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
+                  담당자 불일치 복구 ({mismatchCandidates.length})
+                </button>
+              )}
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
                 <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
@@ -45273,17 +45349,24 @@ React.useEffect(() => {
                   value={editPlaceModal.주소||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 주소: e.target.value }))} />
               </div>
-              <div className="col-span-2">
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
                 <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={editPlaceModal.메모||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 메모: e.target.value }))} />
               </div>
-              {(editPlaceModal.메모?.trim() || (editPlaceModal.등급 && editPlaceModal.등급 !== "일반")) && (
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
+                  value={editPlaceModal.오더메모||""}
+                  onChange={(e) => setEditPlaceModal(p => ({ ...p, 오더메모: e.target.value }))} />
+              </div>
+              {(editPlaceModal.오더메모?.trim() || (editPlaceModal.등급 && editPlaceModal.등급 !== "일반")) && (
                 <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                   <div>
-                    <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 메모·등급 안내 팝업이 뜨지 않습니다</div>
+                    <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
                   </div>
                   <button type="button"
                     onClick={() => setEditPlaceModal(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
@@ -45303,49 +45386,48 @@ React.useEffect(() => {
         </div>
       )}
 
-      {/* ══════ 기본거래처 → 하차지거래처 복원 팝업 ══════ */}
-      {showRestorePopup && (
+
+      {/* ══════ 담당자 불일치 복구 팝업 (임시) ══════ */}
+      {showMismatchPopup && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[15px]">하차지거래처 복원 — 기본거래처 → 하차지거래처</h3>
-                <p className="text-white/55 text-[12px] mt-0.5">현재 하차지거래처에 같은 이름이 하나도 없는 기본거래처가 대상입니다. 선택하면 거래처명·주소·담당자·메모·등급을 그대로 복사한 하차지거래처 항목이 새로 만들어집니다(기본거래처는 그대로 유지).</p>
+                <h3 className="text-white font-bold text-[15px]">담당자 불일치 복구</h3>
+                <p className="text-white/55 text-[12px] mt-0.5">이름이 같은 기본거래처/하차지거래처인데 담당자 목록이 서로 다른 항목입니다. 선택하면 양쪽 담당자를 합쳐서 반영하고, 이후로는 자동으로 서로 동기화됩니다.</p>
               </div>
-              <button onClick={() => setShowRestorePopup(false)}
+              <button onClick={() => setShowMismatchPopup(false)}
                 className="text-white/60 hover:text-white text-xl leading-none">×</button>
             </div>
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
-              <span className="text-[12px] text-gray-500">{restoreCandidates.length}건 발견 · {restoreSelected.size}건 선택됨</span>
+              <span className="text-[12px] text-gray-500">{mismatchCandidates.length}건 발견 · {mismatchSelected.size}건 선택됨</span>
               <button
-                onClick={() => setRestoreSelected(prev => prev.size === restoreCandidates.length ? new Set() : new Set(restoreCandidates.map(c => c.id || c.거래처명)))}
+                onClick={() => setMismatchSelected(prev => prev.size === mismatchCandidates.length ? new Set() : new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명)))}
                 className="text-[12px] text-[#1B2B4B] font-semibold underline">
-                {restoreSelected.size === restoreCandidates.length ? "전체 해제" : "전체 선택"}
+                {mismatchSelected.size === mismatchCandidates.length ? "전체 해제" : "전체 선택"}
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3">
-              {restoreCandidates.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-10">복원할 항목이 없습니다 (모든 기본거래처가 이미 하차지거래처에도 있습니다).</div>
+              {mismatchCandidates.length === 0 ? (
+                <div className="text-center text-gray-400 text-sm py-10">불일치 항목이 없습니다.</div>
               ) : (
                 <div className="space-y-2">
-                  {restoreCandidates.map((client) => {
-                    const id = client.id || client.거래처명;
-                    const contactCount = Array.isArray(client.contacts) ? client.contacts.filter(c => c.name?.trim() || c.phone?.trim()).length : (client.담당자 ? 1 : 0);
+                  {mismatchCandidates.map((m) => {
+                    const id = m.client.id || m.client.거래처명;
                     return (
                       <label key={id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
-                        <input type="checkbox" className="mt-1" checked={restoreSelected.has(id)}
-                          onChange={() => setRestoreSelected(prev => {
+                        <input type="checkbox" className="mt-1" checked={mismatchSelected.has(id)}
+                          onChange={() => setMismatchSelected(prev => {
                             const n = new Set(prev);
                             n.has(id) ? n.delete(id) : n.add(id);
                             return n;
                           })} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-bold text-gray-800">{client.거래처명}</div>
-                          <div className="text-[12px] text-gray-500 mt-0.5">{client.주소 || "-"}</div>
-                          <div className="flex gap-3 mt-1 text-[11px] text-gray-400">
-                            {client.오더메모?.trim() && <span className="text-[#1B2B4B]">오더메모 있음</span>}
-                            {contactCount > 0 && <span>담당자 {contactCount}명</span>}
-                          </div>
+                          <div className="text-[13px] font-bold text-gray-800">{m.client.거래처명}</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">기본거래처 담당자: {m.cContacts.map(c => c.name).filter(Boolean).join(", ") || "-"}</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">하차지거래처 담당자: {m.pContacts.map(c => c.name).filter(Boolean).join(", ") || "-"}</div>
+                          {m.onlyInPlace.length > 0 && <div className="text-[12px] text-orange-600 mt-0.5">하차지에만 있음: {m.onlyInPlace.join(", ")}</div>}
+                          {m.onlyInClient.length > 0 && <div className="text-[12px] text-orange-600 mt-0.5">기본거래처에만 있음: {m.onlyInClient.join(", ")}</div>}
                         </div>
                       </label>
                     );
@@ -45354,11 +45436,11 @@ React.useEffect(() => {
               )}
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex gap-3 shrink-0">
-              <button onClick={() => setShowRestorePopup(false)}
+              <button onClick={() => setShowMismatchPopup(false)}
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-              <button onClick={runRestore} disabled={restoreRunning || restoreSelected.size === 0}
+              <button onClick={runMismatchFix} disabled={mismatchRunning || mismatchSelected.size === 0}
                 className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-bold transition">
-                {restoreRunning ? "복원 중..." : `선택 항목 복원 (${restoreSelected.size})`}
+                {mismatchRunning ? "복구 중..." : `선택 항목 복구 (${mismatchSelected.size})`}
               </button>
             </div>
           </div>
