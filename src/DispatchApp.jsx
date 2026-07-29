@@ -5824,36 +5824,36 @@ const mergedClients = React.useMemo(() => {
   // 살아남게 한다.
   const mkKey = (n, a) => `${normalizeKey(n)}|${normalizeAddr(a || "")}`;
 
-  // ✅ 1️⃣ placeList를 먼저 넣는다 (주소/담당자 기준)
-  placeList.forEach(p => {
-    const key = mkKey(p.업체명, p.주소);
-    if (normalizeKey(p.업체명)) map.set(key, p);
-  });
-
-  // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용 (clients 컬렉션은 거래처명 필드 사용)
+  // ✅ 1️⃣ 기본거래처(clients)를 먼저 넣어 우선시킨다 — savePlaceSmart가 이름이 일치하는
+  // 기본거래처가 있으면 항상 그쪽에 담당자를 누적 저장하므로(하차지거래처 사본은 새로
+  // 안 만듦), 같은 이름+주소로 하차지거래처에도 예전 중복 문서가 남아있으면 그 오래된
+  // (담당자가 갱신되지 않은) 하차지거래처 쪽이 여기서 이겨버려 방금 저장한 담당자 목록이
+  // 아니라 옛 담당자만 계속 자동입력되고 선택 팝업도 뜨지 않는 문제가 있었다.
   clients.forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     const key = mkKey(name, c.주소);
     if (!normalizeKey(name)) return;
+    map.set(key, {
+      업체명: name,
+      주소: c.주소 || "",
+      담당자: c.담당자 || "",
+      담당자번호: c.연락처 || c.담당자번호 || "",
+      메모: c.메모 || "",
+      오더메모: c.오더메모 || "",
+      등급: c.등급 || "일반",
+      등급변경일: c.등급변경일 || null,
+      팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
+      // 하차지거래처와 달리 기본거래처는 원래 contacts 배열이 없었지만, savePlaceSmart가
+      // 이제 기본거래처에도 여러 담당자를 contacts로 저장한다 — 여기서 빠뜨리면
+      // 담당자가 여러 명이어도 항상 대표 담당자 1명만 적용되고 선택 팝업이 안 뜬다.
+      contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
+    });
+  });
 
-    // 완전히 동일한 이름+주소가 아닐 때만 추가 (진짜 중복만 걸러낸다)
-    if (!map.has(key)) {
-      map.set(key, {
-        업체명: name,
-        주소: c.주소 || "",
-        담당자: c.담당자 || "",
-        담당자번호: c.연락처 || c.담당자번호 || "",
-        메모: c.메모 || "",
-        오더메모: c.오더메모 || "",
-        등급: c.등급 || "일반",
-        등급변경일: c.등급변경일 || null,
-        팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
-        // 하차지거래처와 달리 기본거래처는 원래 contacts 배열이 없었지만, savePlaceSmart가
-        // 이제 기본거래처에도 여러 담당자를 contacts로 저장한다 — 여기서 빠뜨리면
-        // 담당자가 여러 명이어도 항상 대표 담당자 1명만 적용되고 선택 팝업이 안 뜬다.
-        contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
-      });
-    }
+  // ✅ 2️⃣ placeList는 기본거래처에 없는(진짜 하차지 전용) 업체명+주소만 보충한다
+  placeList.forEach(p => {
+    const key = mkKey(p.업체명, p.주소);
+    if (normalizeKey(p.업체명) && !map.has(key)) map.set(key, p);
   });
   return Array.from(map.values());
 }, [placeList, clients]);
@@ -8941,8 +8941,8 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
    {/* ================== 통합 입력 카드 ================== */}
 <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
 
-{/* 액션바 — 확대/좁은 화면에서도 버튼 위치가 바뀌지 않도록 줄바꿈 대신 가로 스크롤 */}
-<div className="px-4 py-2.5 flex flex-nowrap items-center gap-3 border-b border-gray-100 bg-gray-50/60 overflow-x-auto" style={{ minHeight: "44px" }}>
+{/* 액션바 */}
+<div className="px-4 py-2.5 flex flex-wrap items-center gap-3 border-b border-gray-100 bg-gray-50/60" style={{ minHeight: "44px" }}>
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2">
 
@@ -16067,12 +16067,21 @@ const mergedClients = React.useMemo(() => {
   // 이름만으로 키를 잡으면 주소가 다른 기본거래처/하차지거래처가 있을 때 하나가
   // 다른 하나를 가려버린다 — 이름+주소 조합으로 키를 잡아 둘 다 살아남게 한다.
   const mkKey = (n, a) => `${(n||"").toLowerCase().replace(/\s+/g,"")}|${(a||"").toLowerCase().replace(/\s+/g,"")}`;
-  (placeRows || []).forEach(p => { if ((p.업체명||"").trim()) map.set(mkKey(p.업체명, p.주소), p); });
+  // ⚠️ 기본거래처를 먼저 넣어 우선시킨다 — savePlaceSmart가 이름이 일치하는 기본거래처가
+  // 있으면 항상 그쪽에 담당자를 누적 저장하므로(하차지거래처 사본은 새로 안 만듦),
+  // 같은 이름+주소로 하차지거래처에도 예전 중복 문서가 남아있는 경우 그 오래된(담당자가
+  // 갱신되지 않은) 하차지거래처 쪽이 여기서 이겨버리면 방금 저장한 담당자 목록이 아니라
+  // 옛 담당자만 계속 자동입력되고 선택 팝업도 뜨지 않는다.
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+  });
+  (placeRows || []).forEach(p => {
+    if (!(p.업체명||"").trim()) return;
+    const k = mkKey(p.업체명, p.주소);
+    if (!map.has(k)) map.set(k, p);
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -20015,8 +20024,8 @@ const head = isDark
   </div>
 </div>
 
-{/* ======================== 검색+필터+버튼 한 줄 (줄바꿈 대신 가로 스크롤) ======================== */}
-<div className="flex items-center gap-1 flex-nowrap mb-2 pb-0.5 overflow-x-auto">
+{/* ======================== 검색+필터+버튼 한 줄 ======================== */}
+<div className="flex items-center gap-1 flex-wrap mb-2 pb-0.5">
   {/* 검색창 */}
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
     <input
@@ -20051,7 +20060,7 @@ const head = isDark
     {statusSummary.업체미전달>0 && <option value="UNDELIVERED">미전달 {statusSummary.업체미전달}</option>}
   </select>
 
-  <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-nowrap justify-end">
+  <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
     <button onClick={async(e)=>{
   e.preventDefault();
   e.stopPropagation();
@@ -25261,12 +25270,21 @@ const mergedClients = React.useMemo(() => {
   // 이름만으로 키를 잡으면 주소가 다른 기본거래처/하차지거래처가 있을 때 하나가
   // 다른 하나를 가려버린다 — 이름+주소 조합으로 키를 잡아 둘 다 살아남게 한다.
   const mkKey = (n, a) => `${(n||"").toLowerCase().replace(/\s+/g,"")}|${(a||"").toLowerCase().replace(/\s+/g,"")}`;
-  (placeRows || []).forEach(p => { if ((p.업체명||"").trim()) map.set(mkKey(p.업체명, p.주소), p); });
+  // ⚠️ 기본거래처를 먼저 넣어 우선시킨다 — savePlaceSmart가 이름이 일치하는 기본거래처가
+  // 있으면 항상 그쪽에 담당자를 누적 저장하므로(하차지거래처 사본은 새로 안 만듦),
+  // 같은 이름+주소로 하차지거래처에도 예전 중복 문서가 남아있는 경우 그 오래된(담당자가
+  // 갱신되지 않은) 하차지거래처 쪽이 여기서 이겨버리면 방금 저장한 담당자 목록이 아니라
+  // 옛 담당자만 계속 자동입력되고 선택 팝업도 뜨지 않는다.
   (clients || []).forEach(c => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+  });
+  (placeRows || []).forEach(p => {
+    if (!(p.업체명||"").trim()) return;
+    const k = mkKey(p.업체명, p.주소);
+    if (!map.has(k)) map.set(k, p);
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
@@ -28439,8 +28457,8 @@ return (
         </select>
       </div>
 
-      {/* ===== 페이지+검색+날짜+버튼 한 줄 (줄바꿈 대신 가로 스크롤) ===== */}
-      <div className="flex items-center gap-1 flex-nowrap mb-2 w-full pb-0.5 overflow-x-auto">
+      {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
+      <div className="flex items-center gap-1 flex-wrap mb-2 w-full pb-0.5">
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
@@ -28496,7 +28514,7 @@ return (
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
 
         {/* 우측 버튼들 */}
-        <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-nowrap justify-end">
+        <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
           <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
@@ -37300,9 +37318,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
         </div>
       </div>
 
-      {/* 검색바 (줄바꿈 대신 가로 스크롤) */}
+      {/* 검색바 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4">
-        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -39667,9 +39685,9 @@ const handleBatchSettle = async (targetStatus) => {
       {/* ══════════════ 거래명세서 탭 ══════════════ */}
       {tab === "invoice" && (
         <>
-          {/* 검색 바 (줄바꿈 대신 가로 스크롤) */}
+          {/* 검색 바 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-            <div className="flex flex-nowrap items-end gap-3 overflow-x-auto">
+            <div className="flex flex-wrap items-end gap-3">
               {/* ★ 검색 타입 + 입력 + 드롭다운 */}
               <div className="relative" ref={dropdownRef}>
                 <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
@@ -39761,7 +39779,7 @@ const handleBatchSettle = async (targetStatus) => {
               >
                 초기화
               </button>
-              <div className="ml-auto flex gap-2 flex-nowrap items-center">
+              <div className="ml-auto flex gap-2 flex-wrap items-center">
                 <button onClick={downloadInvoiceExcel} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">엑셀</button>
                 <button onClick={savePDF} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">PDF</button>
                 <button onClick={handlePrint} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">인쇄</button>
@@ -40914,8 +40932,8 @@ const handleBatchSettle = async (targetStatus) => {
                 초기화
               </button>
             </div>
-            {/* Row 2: 액션 버튼 (우측 정렬, 줄바꿈 대신 가로 스크롤) */}
-            <div className="flex flex-nowrap items-center justify-end gap-2 pt-2 border-t border-gray-100 overflow-x-auto">
+            {/* Row 2: 액션 버튼 (우측 정렬) */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-100">
                 <button onClick={settleSelected} disabled={!selectedMonths.size}
                   className={`px-3 py-2 rounded-lg text-[13px] font-bold transition border ${selectedMonths.size?"bg-[#1B2B4B] text-white border-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/30 text-white border-transparent cursor-not-allowed"}`}>
                   선택 정산완료
@@ -44365,8 +44383,8 @@ React.useEffect(() => {
             ))}
           </div>
 
-          {/* 검색 + 버튼 바 (줄바꿈 대신 가로 스크롤) */}
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+          {/* 검색 + 버튼 바 */}
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
               <select className="px-2 h-full text-[12px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
                 value={placeFilterType} onChange={(e) => setPlaceFilterType(e.target.value)}>
@@ -44753,8 +44771,8 @@ React.useEffect(() => {
       {subTab === "기본" && (
         <div className="space-y-3">
 
-          {/* 툴바 (줄바꿈 대신 가로 스크롤) */}
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+          {/* 툴바 */}
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
               <span className="px-3 bg-[#1B2B4B] text-white text-[12px] font-semibold h-full flex items-center">검색</span>
               <input className="px-3 h-full text-[13px] w-56 outline-none"
