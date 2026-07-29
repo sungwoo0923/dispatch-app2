@@ -1755,6 +1755,18 @@ function makePlaceKey(name = "") {
     .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "")
     .trim();
 }
+
+// 담당자명 없이 연락처만 입력됐을 때 자동으로 붙일 이름 — 아직 "담당자"라는 이름이
+// 없으면 그대로 "담당자", 이미 있으면 담당자1, 담당자2 순으로 이어붙인다.
+const nextManagerName = (contacts) => {
+  const list = Array.isArray(contacts) ? contacts : [];
+  const hasBare = list.some(c => (c.name || "").trim() === "담당자");
+  if (!hasBare) return "담당자";
+  const nums = list
+    .map(c => { const m = /^담당자(\d+)$/.exec((c.name || "").trim()); return m ? parseInt(m[1], 10) : 0; })
+    .filter(n => n > 0);
+  return `담당자${nums.length > 0 ? Math.max(...nums) + 1 : 1}`;
+};
 /* -------------------------------------------------
    하차지 저장 (upsertPlace) — Firestore (최종 안정버전)
 --------------------------------------------------*/
@@ -5765,14 +5777,6 @@ const openNewPlacePrompt = (name) => {
   setNewClientModalOpen(true);
 };
 
-// 담당자N 자동 이름 부여 헬퍼
-const nextManagerName = (contacts) => {
-  const nums = contacts
-    .map(c => { const m = /^담당자(\d+)$/.exec(c.name?.trim() || ""); return m ? parseInt(m[1], 10) : 0; })
-    .filter(n => n > 0);
-  return `담당자${nums.length > 0 ? Math.max(...nums) + 1 : 1}`;
-};
-
 // 주소 정규화 (공백·특수문자 제거, 소문자)
 const normalizeAddr = (a = "") =>
   String(a).trim().replace(/\s+/g, "").replace(/[-./]/g, "").toLowerCase();
@@ -5833,8 +5837,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
         if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
         else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
-      } else if (cPhone && cContacts.length === 0) {
-        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      } else if (cPhone) {
+        const samePhoneIdx = cContacts.findIndex(c => c.phone?.replace(/\D/g, "") === cPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          cContacts = cContacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(cContacts);
+          cContacts = cContacts.map(c => ({ ...c, isPrimary: false }));
+          cContacts.push({ name: autoName, phone: cPhone, isPrimary: true });
+        }
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
       const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
@@ -7140,6 +7151,7 @@ const [contactActive, setContactActive] = React.useState(0);
 const [contactQueue, setContactQueue] = React.useState([]);
 const [editingContactIdx, setEditingContactIdx] = React.useState(null);
 const [editContactData, setEditContactData] = React.useState({ name: "", phone: "" });
+const [contactSearchQ, setContactSearchQ] = React.useState("");
 const [clientAlert, setClientAlert] = React.useState(null);
 
 // 상/하차지 오더메모 버튼 — 상/하차지명에 입력된 거래처의 오더메모를 바로 보고
@@ -7317,6 +7329,7 @@ const openContactPopup = (items) => {
   setContactQueue(rest);
   setContactPopup(first);
   setContactActive(0);
+  setContactSearchQ("");
 };
 
 const closeContactPopup = (selectedContact) => {
@@ -7327,6 +7340,7 @@ const closeContactPopup = (selectedContact) => {
     setForm(prev => ({ ...prev, ...field }));
   }
   setContactPopup(null);
+  setContactSearchQ("");
 
   if (contactQueue.length > 0) {
     const [next, ...rest] = contactQueue;
@@ -12100,8 +12114,13 @@ className={`
     </div>
   </div>
 </div>
-{/* ================= 담당자 선택 팝업 ================= */}
-{contactPopup && (
+{/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}
+{contactPopup && (() => {
+  const nq = norm(contactSearchQ);
+  const visible = contactPopup.contacts
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !nq || norm(c.name || "").includes(nq) || (c.phone || "").replace(/\D/g, "").includes(nq.replace(/\D/g, "")));
+  return (
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -12109,21 +12128,28 @@ className={`
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setContactActive(i => Math.min(i + 1, contactPopup.contacts.length - 1));
+        setContactActive(i => Math.min(i + 1, visible.length - 1));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setContactActive(i => Math.max(i - 1, 0));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setContactActive(i => Math.min(i + 5, visible.length - 1));
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setContactActive(i => Math.max(i - 5, 0));
       } else if (e.key === "Enter" || e.key === "Escape") {
         e.preventDefault();
         if (e.key === "Enter") {
-          closeContactPopup(contactPopup.contacts[contactActive] || null);
+          const picked = visible[contactActive]?.c;
+          closeContactPopup(picked || null);
         } else {
           closeContactPopup(null);
         }
       }
     }}
   >
-    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
     <h3 className="text-white font-bold text-[15px]">
           {contactPopup.type === "pickup" ? "🔵 상차지" : "🔴 하차지"} 담당자 선택
@@ -12131,10 +12157,21 @@ className={`
             <span className="ml-2 text-[11px] text-white/50">+{contactQueue.length}건 대기</span>
           )}
         </h3>
-        <p className="text-white/60 text-[12px] mt-0.5">{contactPopup.place.업체명}</p>
+        <p className="text-white/60 text-[12px] mt-0.5">{contactPopup.place.업체명} · 총 {contactPopup.contacts.length}명</p>
       </div>
-      <div className="p-4 space-y-2">
-        {contactPopup.contacts.map((c, i) => (
+      <div className="px-5 pt-4">
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          placeholder="담당자 이름 또는 전화번호 검색"
+          value={contactSearchQ}
+          onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
+        />
+      </div>
+      <div className="p-5 grid grid-flow-col grid-rows-5 auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+        {visible.length === 0 && (
+          <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
+        )}
+        {visible.map(({ c, i }) => (
           <div
             key={i}
             className={`rounded-xl border-2 transition ${
@@ -12146,25 +12183,25 @@ className={`
           >
             {editingContactIdx === i ? (
               /* ── 인라인 수정 폼 ── */
-              <div className="px-4 py-3 space-y-2" onClick={e => e.stopPropagation()}>
+              <div className="px-3 py-2.5 space-y-1.5" onClick={e => e.stopPropagation()}>
                 <input
                   autoFocus
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="이름"
                   value={editContactData.name}
                   onChange={e => setEditContactData(p => ({ ...p, name: e.target.value }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
                 <input
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="전화번호"
                   value={editContactData.phone}
                   onChange={e => setEditContactData(p => ({ ...p, phone: e.target.value }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-1.5 pt-0.5">
                   <button
-                    className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-xs font-bold"
+                    className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold"
                     onClick={async () => {
                       if (!editContactData.name.trim()) return showAlert("이름을 입력하세요.");
                       const updated = contactPopup.contacts.map((x, idx) =>
@@ -12175,26 +12212,26 @@ className={`
                     }}
                   >저장</button>
                   <button
-                    className="px-4 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
+                    className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-[11px]"
                     onClick={() => setEditingContactIdx(null)}
                   >취소</button>
                 </div>
               </div>
             ) : (
               /* ── 일반 표시 ── */
-              <div className="flex items-center">
+              <div className="flex flex-col h-full">
                 {/* 선택 영역 */}
                 <div
-                  className="flex-1 px-4 py-3 cursor-pointer"
+                  className="flex-1 px-3 py-2.5 cursor-pointer min-w-0"
                   onClick={() => closeContactPopup(c)}
                 >
-                  <div className="font-bold text-gray-900">{c.name || "-"}</div>
-                  <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+                  <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
+                  <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
                 </div>
                 {/* 수정/삭제 버튼 */}
-                <div className="flex gap-1 pr-3 shrink-0">
+                <div className="flex gap-1 px-2.5 pb-2 shrink-0">
                   <button
-                    className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-xs font-semibold transition"
+                    className="flex-1 py-1 rounded-lg bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-[11px] font-semibold transition"
                     onClick={e => {
                       e.stopPropagation();
                       setEditContactData({ name: c.name || "", phone: c.phone || "" });
@@ -12203,7 +12240,7 @@ className={`
                     }}
                   >수정</button>
                   <button
-                    className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-xs font-semibold transition"
+                    className="flex-1 py-1 rounded-lg bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-[11px] font-semibold transition"
                     onClick={async e => {
                       e.stopPropagation();
                       if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
@@ -12221,14 +12258,15 @@ className={`
           </div>
         ))}
       </div>
-      <div className="px-4 pb-4 text-right">
+      <div className="px-5 pb-4 text-right">
         <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => closeContactPopup(null)}>
           취소
         </button>
       </div>
     </div>
   </div>
-)}
+  );
+})()}
 {blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
@@ -16373,8 +16411,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
         if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
         else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
-      } else if (cPhone && cContacts.length === 0) {
-        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      } else if (cPhone) {
+        const samePhoneIdx = cContacts.findIndex(c => c.phone?.replace(/\D/g, "") === cPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          cContacts = cContacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(cContacts);
+          cContacts = cContacts.map(c => ({ ...c, isPrimary: false }));
+          cContacts.push({ name: autoName, phone: cPhone, isPrimary: true });
+        }
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
       const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
@@ -16420,8 +16465,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
       contacts = contacts.map(c => ({ ...c, isPrimary: false }));
       contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true });
     }
-  } else if (resolvedPhone && contacts.length === 0) {
-    contacts = [{ name: "", phone: resolvedPhone, isPrimary: true }];
+  } else if (resolvedPhone) {
+    const samePhoneIdx = contacts.findIndex(c => c.phone?.replace(/\D/g, "") === resolvedPhone.replace(/\D/g, "") && c.phone);
+    if (samePhoneIdx >= 0) {
+      contacts = contacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+    } else {
+      const autoName = nextManagerName(contacts);
+      contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+      contacts.push({ name: autoName, phone: resolvedPhone, isPrimary: true });
+    }
   }
 
   const finalAddr = _conflictResolution === "keep" ? (existing?.주소 || addr || "") : (addr || existing?.주소 || "");
@@ -16707,6 +16759,8 @@ const checkWarningStatus = (name, type) => {
   const [editActiveIndex, setEditActiveIndex] = React.useState(0);
   const [panelContactPopup4, setPanelContactPopup4] = React.useState(null);
   const [panelContactActive4, setPanelContactActive4] = React.useState(0);
+  const [panelContactSearch4, setPanelContactSearch4] = React.useState("");
+  React.useEffect(() => { setPanelContactSearch4(""); }, [panelContactPopup4]);
   // ==========================
   // 🔵 선택수정 거래처 자동완성 상태 (추가)
   // ==========================
@@ -20165,42 +20219,61 @@ const head = isDark
     </div>
   </div>
 )}
-{panelContactPopup4 && (
+{panelContactPopup4 && (() => {
+  const q4 = panelContactSearch4.trim().toLowerCase();
+  const visible4 = panelContactPopup4.contacts
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !q4 || (c.name || "").toLowerCase().includes(q4) || (c.phone || "").replace(/\D/g, "").includes(q4.replace(/\D/g, "")));
+  return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
     ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
     onKeyDown={(e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, panelContactPopup4.contacts.length - 1)); }
+      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, visible4.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 1, 0)); }
-      else if (e.key === "Enter") { e.preventDefault(); const c = panelContactPopup4.contacts[panelContactActive4]; if (c) { const key = panelContactPopup4.type === "pickup" ? "상차" : "하차"; panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup4(null); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 5, visible4.length - 1)); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 5, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); const c = visible4[panelContactActive4]?.c; if (c) { const key = panelContactPopup4.type === "pickup" ? "상차" : "하차"; panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup4(null); }
       else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup4(null); }
     }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
         <h3 className="text-white font-bold text-[15px]">{panelContactPopup4.type === "pickup" ? "상차지" : "하차지"} 담당자 선택</h3>
-        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup4.place.업체명}</p>
+        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup4.place.업체명} · 총 {panelContactPopup4.contacts.length}명</p>
       </div>
-      <div className="p-4 space-y-2">
-        {panelContactPopup4.contacts.map((c, i) => (
+      <div className="px-5 pt-4">
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          placeholder="담당자 이름 또는 전화번호 검색"
+          value={panelContactSearch4}
+          onChange={e => { setPanelContactSearch4(e.target.value); setPanelContactActive4(0); }}
+        />
+      </div>
+      <div className="p-5 grid grid-flow-col grid-rows-5 auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+        {visible4.length === 0 && (
+          <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
+        )}
+        {visible4.map(({ c, i }) => (
           <div key={i}
-            className={`rounded-xl border-2 px-4 py-3 cursor-pointer transition ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            className={`rounded-xl border-2 px-3 py-2.5 cursor-pointer transition min-w-0 ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
             onMouseEnter={() => setPanelContactActive4(i)}
             onClick={() => {
               const key = panelContactPopup4.type === "pickup" ? "상차" : "하차";
               panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
               setPanelContactPopup4(null);
             }}>
-            <div className="font-bold text-gray-900">{c.name || "-"}</div>
-            <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+            <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
+            <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
           </div>
         ))}
       </div>
-      <div className="px-4 pb-4 text-right">
+      <div className="px-5 pb-4 text-right">
         <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => setPanelContactPopup4(null)}>취소</button>
       </div>
     </div>
   </div>
-)}
+  );
+})()}
     {/* 상차 임박 경고 배너 — 접기/펼치기 */}
 {warningList.length > 0 && (
   <div className="mb-3 w-fit max-w-full select-none">
@@ -25576,8 +25649,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         const idx = cContacts.findIndex(c => c.name?.trim() === cManager);
         if (idx >= 0) cContacts = cContacts.map((c, i) => ({ ...c, phone: i === idx ? (cPhone || c.phone) : c.phone, isPrimary: i === idx }));
         else { cContacts = cContacts.map(c => ({ ...c, isPrimary: false })); cContacts.push({ name: cManager, phone: cPhone, isPrimary: true }); }
-      } else if (cPhone && cContacts.length === 0) {
-        cContacts = [{ name: "", phone: cPhone, isPrimary: true }];
+      } else if (cPhone) {
+        const samePhoneIdx = cContacts.findIndex(c => c.phone?.replace(/\D/g, "") === cPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          cContacts = cContacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(cContacts);
+          cContacts = cContacts.map(c => ({ ...c, isPrimary: false }));
+          cContacts.push({ name: autoName, phone: cPhone, isPrimary: true });
+        }
       }
       const cPrimary = cContacts.find(c => c.isPrimary) || cContacts[0];
       const cFinalAddr = _conflictResolution === "keep" ? (clientMatch.주소 || addr || "") : (addr || clientMatch.주소 || "");
@@ -25623,8 +25703,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
       contacts = contacts.map(c => ({ ...c, isPrimary: false }));
       contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true });
     }
-  } else if (resolvedPhone && contacts.length === 0) {
-    contacts = [{ name: "", phone: resolvedPhone, isPrimary: true }];
+  } else if (resolvedPhone) {
+    const samePhoneIdx = contacts.findIndex(c => c.phone?.replace(/\D/g, "") === resolvedPhone.replace(/\D/g, "") && c.phone);
+    if (samePhoneIdx >= 0) {
+      contacts = contacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+    } else {
+      const autoName = nextManagerName(contacts);
+      contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+      contacts.push({ name: autoName, phone: resolvedPhone, isPrimary: true });
+    }
   }
 
   const finalAddr = _conflictResolution === "keep" ? (existing?.주소 || addr || "") : (addr || existing?.주소 || "");
@@ -26456,6 +26543,8 @@ const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
 const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
 const [panelContactPopup5, setPanelContactPopup5] = React.useState(null);
 const [panelContactActive5, setPanelContactActive5] = React.useState(0);
+const [panelContactSearch5, setPanelContactSearch5] = React.useState("");
+React.useEffect(() => { setPanelContactSearch5(""); }, [panelContactPopup5]);
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
@@ -28558,42 +28647,61 @@ return (
     </div>
   </div>
 )}
-{panelContactPopup5 && (
+{panelContactPopup5 && (() => {
+  const q5 = panelContactSearch5.trim().toLowerCase();
+  const visible5 = panelContactPopup5.contacts
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !q5 || (c.name || "").toLowerCase().includes(q5) || (c.phone || "").replace(/\D/g, "").includes(q5.replace(/\D/g, "")));
+  return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
     ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
     onKeyDown={(e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, panelContactPopup5.contacts.length - 1)); }
+      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, visible5.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 1, 0)); }
-      else if (e.key === "Enter") { e.preventDefault(); const c = panelContactPopup5.contacts[panelContactActive5]; if (c) { const key = panelContactPopup5.type === "pickup" ? "상차" : "하차"; panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup5(null); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 5, visible5.length - 1)); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 5, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); const c = visible5[panelContactActive5]?.c; if (c) { const key = panelContactPopup5.type === "pickup" ? "상차" : "하차"; panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup5(null); }
       else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup5(null); }
     }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
         <h3 className="text-white font-bold text-[15px]">{panelContactPopup5.type === "pickup" ? "상차지" : "하차지"} 담당자 선택</h3>
-        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup5.place.업체명}</p>
+        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup5.place.업체명} · 총 {panelContactPopup5.contacts.length}명</p>
       </div>
-      <div className="p-4 space-y-2">
-        {panelContactPopup5.contacts.map((c, i) => (
+      <div className="px-5 pt-4">
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          placeholder="담당자 이름 또는 전화번호 검색"
+          value={panelContactSearch5}
+          onChange={e => { setPanelContactSearch5(e.target.value); setPanelContactActive5(0); }}
+        />
+      </div>
+      <div className="p-5 grid grid-flow-col grid-rows-5 auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+        {visible5.length === 0 && (
+          <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
+        )}
+        {visible5.map(({ c, i }) => (
           <div key={i}
-            className={`rounded-xl border-2 px-4 py-3 cursor-pointer transition ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            className={`rounded-xl border-2 px-3 py-2.5 cursor-pointer transition min-w-0 ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
             onMouseEnter={() => setPanelContactActive5(i)}
             onClick={() => {
               const key = panelContactPopup5.type === "pickup" ? "상차" : "하차";
               panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
               setPanelContactPopup5(null);
             }}>
-            <div className="font-bold text-gray-900">{c.name || "-"}</div>
-            <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+            <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
+            <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
           </div>
         ))}
       </div>
-      <div className="px-4 pb-4 text-right">
+      <div className="px-5 pb-4 text-right">
         <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => setPanelContactPopup5(null)}>취소</button>
       </div>
     </div>
   </div>
-)}
+  );
+})()}
 {/* 오류오더 필터 활성 배너 */}
       {filterErrorIds !== null && (
         <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
@@ -37212,6 +37320,15 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
         const idx = contacts.findIndex(c => c.name?.trim() === resolvedManager);
         if (idx >= 0) contacts = contacts.map((c, i) => ({ ...c, phone: i === idx ? (resolvedPhone || c.phone) : c.phone, isPrimary: i === idx }));
         else { contacts = contacts.map(c => ({ ...c, isPrimary: false })); contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true }); }
+      } else if (resolvedPhone) {
+        const samePhoneIdx = contacts.findIndex(c => c.phone?.replace(/\D/g, "") === resolvedPhone.replace(/\D/g, "") && c.phone);
+        if (samePhoneIdx >= 0) {
+          contacts = contacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+        } else {
+          const autoName = nextManagerName(contacts);
+          contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+          contacts.push({ name: autoName, phone: resolvedPhone, isPrimary: true });
+        }
       }
       return contacts;
     };
