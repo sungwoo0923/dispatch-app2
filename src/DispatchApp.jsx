@@ -20139,7 +20139,7 @@ const handleCloseFileUpload = async (e) => {
 
     if (key === "지급방식") {
       return (
-        <select
+        <CustomSelect
           className="border rounded px-1 py-0.5 w-full text-center"
           value={val || ""}
           onChange={(e) => {
@@ -20161,13 +20161,13 @@ const handleCloseFileUpload = async (e) => {
           <option value="손실">손실</option>
           <option value="개인">개인</option>
           <option value="취소">취소</option>
-        </select>
+        </CustomSelect>
       );
     }
 
     if (key === "배차방식") {
       return (
-        <select
+        <CustomSelect
           className="border rounded px-1 py-0.5 w-full text-center"
           value={val || ""}
           onChange={(e) => {
@@ -20187,12 +20187,12 @@ const handleCloseFileUpload = async (e) => {
           <option value="직접배차">직접배차</option>
           <option value="인성">인성</option>
           <option value="고정기사">24시(고정기사)</option>
-        </select>
+        </CustomSelect>
       );
     }
     if (key === "차량종류") {
       return (
-        <select
+        <CustomSelect
           className="border p-1 rounded w-full"
           value={val || ""}
           onChange={(e) => {
@@ -20221,7 +20221,7 @@ const handleCloseFileUpload = async (e) => {
           <option value="냉장/냉동윙">냉장/냉동윙</option>
           <option value="오토바이">오토바이</option>
           <option value="기타">기타</option>
-        </select>
+        </CustomSelect>
       );
     }
     return (
@@ -20572,7 +20572,7 @@ const head = isDark
     );
   })}
   {/* 상태 필터 드롭다운 */}
-  <select
+  <CustomSelect
     value={statusFilter}
     onChange={e => setStatusFilter(e.target.value)}
     className="h-[30px] px-2 rounded-lg border-2 border-[#1B2B4B] text-[11px] font-semibold text-[#1B2B4B] bg-white outline-none flex-shrink-0 cursor-pointer"
@@ -20581,7 +20581,7 @@ const head = isDark
     <option value="UNASSIGNED">미배차 {statusSummary.미배차}</option>
     <option value="ASSIGNED">완료 {statusSummary.배차완료}</option>
     {statusSummary.업체미전달>0 && <option value="UNDELIVERED">미전달 {statusSummary.업체미전달}</option>}
-  </select>
+  </CustomSelect>
 
   <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
     <button onClick={async(e)=>{
@@ -21121,7 +21121,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
       <Field label="상차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.상차방법 ?? ""}
@@ -21133,7 +21133,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
@@ -21296,7 +21296,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 <Field label="하차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.하차방법 ?? ""}
@@ -21308,7 +21308,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
       <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("drop")} /></span>}>
         <div className="relative">
@@ -21588,7 +21588,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량종류">
-      <select
+      <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="inputStyle"
         value={copyTarget?.차량종류 ?? ""}
@@ -21608,7 +21608,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <option value="리프트">리프트</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-      </select>
+      </CustomSelect>
     </Field>
 
 <Field label="차량톤수">
@@ -21638,7 +21638,7 @@ checkWarningStatus(c.거래처명, "거래처");
       />
 
       {/* 드롭다운 */}
-      <select
+      <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="
           px-3 py-2
@@ -21664,7 +21664,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <option value="">선택</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
     </div>
 
@@ -21696,7 +21696,7 @@ value={copyTarget?.화물수량 || ""}
     />
 
     {/* 드롭다운 */}
-    <select
+    <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="
         px-3 py-2
@@ -21723,7 +21723,7 @@ value={copyTarget?.화물수량 || ""}
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
   </div>
 
@@ -21775,7 +21775,7 @@ value={copyTarget?.화물수량 || ""}
               ); })()}
             </Field>
 <Field label="지급방식">
-  <select
+  <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
     className="inputStyle"
     value={copyTarget?.지급방식 ?? ""}
@@ -21788,11 +21788,11 @@ value={copyTarget?.화물수량 || ""}
     <option value="손실">손실</option>
     <option value="개인">개인</option>
     <option value="취소">취소</option>
-  </select>
+  </CustomSelect>
 </Field>
 
 <Field label="배차방식">
-  <select
+  <CustomSelect
     className="inputStyle"
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
@@ -21801,7 +21801,7 @@ value={copyTarget?.화물수량 || ""}
     <option value="24시">24시</option>
     <option value="직접배차">직접배차</option>
     <option value="인성">인성</option>
-  </select>
+  </CustomSelect>
 </Field>
           </div>
         </div>
@@ -22636,7 +22636,7 @@ value={copyTarget?.화물수량 || ""}
         selectCls="border p-2 rounded flex-1 min-w-0"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       />
-      <select
+      <CustomSelect
         className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={editTarget.상차시간기준 || ""}
@@ -22647,7 +22647,7 @@ value={copyTarget?.화물수량 || ""}
         <option value="">기준없음</option>
         <option value="이전">이전</option>
         <option value="이후">이후</option>
-      </select>
+      </CustomSelect>
     </div>
   </div>
 
@@ -22675,7 +22675,7 @@ value={copyTarget?.화물수량 || ""}
         selectCls="border p-2 rounded flex-1 min-w-0"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       />
-      <select
+      <CustomSelect
         className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={editTarget.하차시간기준 || ""}
@@ -22686,7 +22686,7 @@ value={copyTarget?.화물수량 || ""}
         <option value="">기준없음</option>
         <option value="이전">이전</option>
         <option value="이후">이후</option>
-      </select>
+      </CustomSelect>
     </div>
   </div>
 </div>
@@ -22805,14 +22805,14 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
-                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
+                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
                             </div>
             </div>
 
@@ -22952,14 +22952,14 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
-                <select className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
+                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
                             </div>
             </div>
 
@@ -23016,7 +23016,7 @@ value={copyTarget?.화물수량 || ""}
   {/* 버튼형 드롭다운 */}
   <div className="absolute top-0 right-0 h-full flex items-center pr-2">
 
-    <select
+    <CustomSelect
       className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.화물타입 || ""}
@@ -23032,7 +23032,7 @@ value={copyTarget?.화물수량 || ""}
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
     <span className="absolute right-3 text-blue-500 text-xs pointer-events-none">
       ▾
@@ -23048,7 +23048,7 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 차량종류 ================= */}
   <div>
     <label>차량종류</label>
-    <select
+    <CustomSelect
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.차량종류 || ""}
@@ -23073,7 +23073,7 @@ value={copyTarget?.화물수량 || ""}
       <option value="냉장/냉동윙">냉장/냉동윙</option>
       <option value="오토바이">오토바이</option>
       <option value="기타">기타</option>
-    </select>
+    </CustomSelect>
   </div>
 
   {/* ================= 차량톤수 ================= */}
@@ -23104,7 +23104,7 @@ value={copyTarget?.화물수량 || ""}
     {/* 🔹 내부 드롭다운 */}
     <div className="absolute top-0 right-0 h-full flex items-center pr-1">
 
-<select
+<CustomSelect
   className="h-full px-2 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer disabled:opacity-50"
   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={
@@ -23129,7 +23129,7 @@ value={copyTarget?.화물수량 || ""}
         <option value="">선택</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
       {/* ▼ 아이콘 */}
       <span className="absolute right-2 text-blue-400 text-[10px] pointer-events-none">
@@ -23399,7 +23399,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                   value={editTarget.지급방식 || ""}
@@ -23414,12 +23414,12 @@ value={copyTarget?.화물수량 || ""}
                   <option value="손실">손실</option>
                   <option value="개인">개인</option>
                   <option value="취소">취소</option>
-                </select>
+                </CustomSelect>
               </div>
 
               <div>
                 <label>배차방식</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
@@ -23431,7 +23431,7 @@ value={copyTarget?.화물수량 || ""}
                   <option value="직접배차">직접배차</option>
                   <option value="인성">인성</option>
                   <option value="고정기사">고정기사</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -25355,10 +25355,10 @@ setConfirmChange(null);
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
+                <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
                   <option value="">선택 안함</option>
                   {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
-                </select>
+                </CustomSelect>
                 <div className="flex gap-2">
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}>오름차순</button>
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}>내림차순</button>
@@ -25376,15 +25376,15 @@ setConfirmChange(null);
                         onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
                         {cond.exclude?"제외":"포함"}
                       </button>
-                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
                         <option value="">항목 선택</option>
                         {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
-                      </select>
+                      </CustomSelect>
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
-                        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
+                        <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
                           {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
-                        </select>
+                        </CustomSelect>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
@@ -29084,7 +29084,7 @@ return (
         {/* 구분선 */}
         <div className="w-px h-8 bg-gray-300 mx-1 shrink-0" />
         {/* 상태 필터 드롭다운 */}
-        <select
+        <CustomSelect
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
           className="h-[34px] px-3 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-700 cursor-pointer focus:outline-none focus:border-[#1B2B4B] transition"
@@ -29093,7 +29093,7 @@ return (
           <option value="UNASSIGNED">미배차 {statusSummary.미배차}</option>
           <option value="COMPLETE">완료 {statusSummary.완료}</option>
           <option value="UNDELIVERED">미전달 {statusSummary.미전달}</option>
-        </select>
+        </CustomSelect>
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
@@ -29121,7 +29121,7 @@ return (
         {/* 검색창 (통합) — 조회 버튼이 날짜/검색어 공용이라, 날짜만 바꾸고 아직
             조회를 누르지 않은 상태면 천천히 깜빡여 클릭을 유도한다. */}
         <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
-          <select className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
+          <CustomSelect className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
             value={searchType} onChange={(e)=>{setSearchType(e.target.value);setQ("");setQInput("");setPage(0);}}>
             <option value="all">통합</option>
             <option value="client">거래처</option>
@@ -29131,7 +29131,7 @@ return (
             <option value="driver">기사명</option>
             <option value="pay">지급방식</option>
             <option value="dispatch">배차방식</option>
-          </select>
+          </CustomSelect>
           <input className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
             value={loaded?qInput:""} onChange={(e)=>{setQInput(e.target.value);}}
             onKeyDown={(e)=>{ if(e.key==="Enter"){ handleSearch(); } }} />
@@ -29329,7 +29329,7 @@ return (
       row.차량종류 || "-"
 
     ) : key === "차량종류" ? (
-      <select
+      <CustomSelect
         className="border rounded px-1 py-0.5 w-full text-center"
         value={row.차량종류 || ""}
         onChange={(e) =>
@@ -29350,7 +29350,7 @@ return (
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-      </select>
+      </CustomSelect>
 
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
@@ -29533,7 +29533,7 @@ return (
                     {(row.source === "shipper" || row.source === "shipper_mobile") ? (
                       <span title="지급방식은 화주사만 변경할 수 있습니다">{row.지급방식 || "-"}</span>
                     ) : (
-                      <select
+                      <CustomSelect
                         className="border rounded px-1 py-0.5 w-full text-center"
                         value={row.지급방식 || ""}
                         onChange={(e) =>
@@ -29547,13 +29547,13 @@ return (
                         <option value="손실">손실</option>
                         <option value="개인">개인</option>
                         <option value="취소">취소</option>
-                      </select>
+                      </CustomSelect>
                     )}
                   </td>
 
 
                   <td className="border text-center">
-                    <select
+                    <CustomSelect
                       className="border rounded px-1 py-0.5 w-full text-center"
                       value={row.배차방식 || ""}
                       onChange={(e) =>
@@ -29565,7 +29565,7 @@ return (
                       <option value="직접배차">직접배차</option>
                       <option value="인성">인성</option>
                       <option value="고정기사">고정기사</option>
-                    </select>
+                    </CustomSelect>
                   </td>
 
                   {/* 메모 */}
@@ -30020,7 +30020,7 @@ return (
               </div>
               <div>
                 <label className="text-sm font-medium">상차 방법</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full"
                   value={editTarget.상차방법 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}
@@ -30031,7 +30031,7 @@ return (
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -30171,7 +30171,7 @@ return (
               </div>
               <div>
                 <label className="text-sm font-medium">하차 방법</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full"
                   value={editTarget.하차방법 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}
@@ -30182,7 +30182,7 @@ return (
                   <option value="직접수작업">직접수작업</option>
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -30219,7 +30219,7 @@ return (
       }}
     />
 
-    <select
+    <CustomSelect
         className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] w-[58px] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
         value={editTarget?.화물타입 || ""}
       onChange={(e) => {
@@ -30234,7 +30234,7 @@ return (
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
   </div>
 </Field>
@@ -30244,7 +30244,7 @@ return (
 <div className="grid grid-cols-2 gap-3">
 
   <Field label="차량종류">
-    <select
+    <CustomSelect
       className="border p-2 rounded w-full"
       value={editTarget?.차량종류 || ""}
       onChange={(e) =>
@@ -30265,7 +30265,7 @@ return (
         <option value="리프트">리프트</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-    </select>
+    </CustomSelect>
   </Field>
 
 
@@ -30288,7 +30288,7 @@ return (
         }}
       />
 
-       <select
+       <CustomSelect
         className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] w-[58px] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
         value={editTarget?.톤수타입 || ""}
         onChange={(e) => {
@@ -30306,7 +30306,7 @@ return (
         <option value="">선택</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
     </div>
   </Field>
@@ -30568,7 +30568,7 @@ return (
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                   value={editTarget.지급방식 || ""}
@@ -30583,12 +30583,12 @@ return (
                   <option value="손실">손실</option>
                   <option value="개인">개인</option>
                   <option value="취소">취소</option>
-                </select>
+                </CustomSelect>
               </div>
 
               <div>
                 <label>배차방식</label>
-                <select
+                <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
@@ -30600,7 +30600,7 @@ return (
                   <option value="직접배차">직접배차</option>
                   <option value="인성">인성</option>
                   <option value="고정기사">고정기사</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -31136,7 +31136,7 @@ setCopyTarget(prev=>({
         />
       </Field>
       <Field label="상차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.상차방법 ?? ""}
@@ -31148,7 +31148,7 @@ setCopyTarget(prev=>({
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
@@ -31293,7 +31293,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 <Field label="하차방법">
-  <select
+  <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
     className="inputStyle"
     value={copyTarget?.하차방법 ?? ""}
@@ -31305,7 +31305,7 @@ setCopyPlaceOptions(list);
     <option value="직접수작업">직접수작업</option>
     <option value="수도움">수도움</option>
     <option value="크레인">크레인</option>
-  </select>
+  </CustomSelect>
 </Field>
       <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} /></span>}>
         <div className="relative">
@@ -31574,7 +31574,7 @@ setCopyPlaceOptions(list);
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량종류">
-      <select
+      <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="inputStyle"
         value={copyTarget?.차량종류 ?? ""}
@@ -31594,7 +31594,7 @@ setCopyPlaceOptions(list);
         <option value="리프트">리프트</option>
         <option value="오토바이">오토바이</option>
         <option value="기타">기타</option>
-      </select>
+      </CustomSelect>
     </Field>
 
  <Field label="차량톤수">
@@ -31621,7 +31621,7 @@ setCopyPlaceOptions(list);
     />
 
     {/* 단위 */}
-    <select
+    <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
       value={copyTarget?.톤수타입 || ""}
@@ -31640,7 +31640,7 @@ setCopyPlaceOptions(list);
       <option value="">선택</option>
       <option value="톤">톤</option>
       <option value="kg">kg</option>
-    </select>
+    </CustomSelect>
 
   </div>
 
@@ -31666,7 +31666,7 @@ setCopyPlaceOptions(list);
     />
 
     {/* 타입 */}
-    <select
+    <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
       value={copyTarget?.화물타입 || ""}
@@ -31682,7 +31682,7 @@ setCopyPlaceOptions(list);
       <option value="파레트">파레트</option>
       <option value="박스">박스</option>
       <option value="통">통</option>
-    </select>
+    </CustomSelect>
 
   </div>
 
@@ -31734,7 +31734,7 @@ setCopyPlaceOptions(list);
               ); })()}
             </Field>
 <Field label="지급방식">
-  <select
+  <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
     className="inputStyle"
     value={copyTarget?.지급방식 ?? ""}
@@ -31747,11 +31747,11 @@ setCopyPlaceOptions(list);
     <option value="손실">손실</option>
     <option value="개인">개인</option>
     <option value="취소">취소</option>
-  </select>
+  </CustomSelect>
 </Field>
 
 <Field label="배차방식">
-  <select
+  <CustomSelect
     className="inputStyle"
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
@@ -31760,7 +31760,7 @@ setCopyPlaceOptions(list);
     <option value="24시">24시</option>
     <option value="직접배차">직접배차</option>
     <option value="인성">인성</option>
-  </select>
+  </CustomSelect>
 </Field>
           </div>
 </div>
@@ -32874,10 +32874,10 @@ setCopyPlaceOptions(list);
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
+                <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
                   <option value="">선택 안함</option>
                   {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
-                </select>
+                </CustomSelect>
                 <div className="flex gap-2">
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}>오름차순</button>
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}>내림차순</button>
@@ -32895,15 +32895,15 @@ setCopyPlaceOptions(list);
                         onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
                         {cond.exclude?"제외":"포함"}
                       </button>
-                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
                         <option value="">항목 선택</option>
                         {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
-                      </select>
+                      </CustomSelect>
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
-                        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
+                        <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
                           {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
-                        </select>
+                        </CustomSelect>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
@@ -34168,7 +34168,7 @@ function NewOrderPopup({
 
             <div>
   <label>상차시간</label>
-  <select
+  <CustomSelect
     className="border p-2 rounded w-full"
     value={newOrder.상차시간}
     onChange={(e) => handleChange("상차시간", e.target.value)}
@@ -34210,7 +34210,7 @@ function NewOrderPopup({
     <option value="오후 10시 30분">오후 10시 30분</option>
     <option value="오후 11시">오후 11시</option>
     <option value="오후 11시 30분">오후 11시 30분</option>
-  </select>
+  </CustomSelect>
 </div>
 
 <div>
@@ -34225,7 +34225,7 @@ function NewOrderPopup({
 
 <div>
   <label>하차시간</label>
-  <select
+  <CustomSelect
     className="border p-2 rounded w-full"
     value={newOrder.하차시간}
     onChange={(e) => handleChange("하차시간", e.target.value)}
@@ -34267,7 +34267,7 @@ function NewOrderPopup({
     <option value="오후 10시 30분">오후 10시 30분</option>
     <option value="오후 11시">오후 11시</option>
     <option value="오후 11시 30분">오후 11시 30분</option>
-  </select>
+  </CustomSelect>
 </div>
 
           </div>
@@ -34325,7 +34325,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label>차량종류</label>
-              <select
+              <CustomSelect
                 className="border p-2 rounded w-full"
                 value={newOrder.차량종류}
                 onChange={(e) => handleChange("차량종류", e.target.value)}
@@ -34345,7 +34345,7 @@ function NewOrderPopup({
                 <option value="냉장/냉동윙">냉장/냉동윙</option>
                 <option value="오토바이">오토바이</option>
                 <option value="기타">기타</option>
-              </select>
+              </CustomSelect>
             </div>
 
 
@@ -34385,7 +34385,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label>지급방식</label>
-              <select
+              <CustomSelect
                 className="border p-2 rounded w-full"
                 value={newOrder.지급방식}
                 onChange={(e) => handleChange("지급방식", e.target.value)}
@@ -34397,13 +34397,13 @@ function NewOrderPopup({
                 <option value="손실">손실</option>
                 <option value="개인">개인</option>
                 <option value="취소">취소</option>
-              </select>
+              </CustomSelect>
             </div>
 
 
             <div>
               <label>배차방식</label>
-              <select
+              <CustomSelect
                 className="border p-2 rounded w-full"
                 value={newOrder.배차방식}
                 onChange={(e) => handleChange("배차방식", e.target.value)}
@@ -34413,7 +34413,7 @@ function NewOrderPopup({
                 <option value="직접배차">직접배차</option>
                 <option value="인성">인성</option>
                 <option value="고정기사">고정기사</option>
-              </select>
+              </CustomSelect>
             </div>
 
           </div>
@@ -36718,7 +36718,7 @@ function SettlementMonthlyHeader({ targetMonth, setTargetMonth, monthRows, forec
           <h3 className="text-[15px] font-bold text-white">누적현황 및 월 예상지표</h3>
           <p className="text-[11px] text-white/50 mt-0.5">선택 월 기준 실적 및 예측</p>
         </div>
-        <select
+        <CustomSelect
           className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
           value={targetMonth}
           onChange={(e) => setTargetMonth(e.target.value)}
@@ -36732,7 +36732,7 @@ function SettlementMonthlyHeader({ targetMonth, setTargetMonth, monthRows, forec
               </option>
             );
           })}
-        </select>
+        </CustomSelect>
       </div>
 
       <div className="p-6 space-y-6">
@@ -37120,7 +37120,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
           <button onClick={() => onAI("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
           <button onClick={() => onAI("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition">AI 제안</button>
           <button onClick={() => onAI("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">보고서</button>
-          <select
+          <CustomSelect
             className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
@@ -37130,7 +37130,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
               .map((y) => (
                 <option key={y} value={Number(y)} className="text-gray-900">{y}년</option>
               ))}
-          </select>
+          </CustomSelect>
         </div>
       </div>
 
