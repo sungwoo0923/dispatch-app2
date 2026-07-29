@@ -43915,34 +43915,55 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const importItemRefs = React.useRef([]);
 
   // ═══════════════════════════════════════════════════
-  // 기본거래처 ↔ 하차지거래처 중복 정리 (거래처명+주소가 완전히 같은 것만 대상)
+  // 기본거래처 → 하차지거래처 복원 (예전 "중복 정리"로 삭제됐던 하차지거래처
+  // 사본을 다시 만들어, 이름이 같으면 두 컬렉션 모두에 존재하던 원래 상태로
+  // 되돌린다 — "중복 정리" 자체는 부작용이 있어 제거했다)
   // ═══════════════════════════════════════════════════
-  const [showDedupPopup, setShowDedupPopup] = React.useState(false);
-  const [dedupSelected, setDedupSelected] = React.useState(new Set());
-  const [dedupRunning, setDedupRunning] = React.useState(false);
-  const dedupMatches = React.useMemo(() => {
-    // "기본거래처" 탭의 "중복 정리" 버튼에서만 쓰인다 — "하차지거래처" 탭으로
-    // 마운트될 때도 계산하면 탭 전환마다 낭비되는 작업이라 subTab으로 가드한다.
+  const [showRestorePopup, setShowRestorePopup] = React.useState(false);
+  const [restoreSelected, setRestoreSelected] = React.useState(new Set());
+  const [restoreRunning, setRestoreRunning] = React.useState(false);
+  const restoreCandidates = React.useMemo(() => {
     if (subTab !== "기본") return [];
-    // ⚠️ 예전엔 거래처명+주소가 "완전히 같은" 것만 후보로 잡았는데, 그러면 도로명/지번
-    // 표기 차이처럼 같은 회사의 같은 곳인데 주소 문자열만 다른 하차지거래처는 후보에도
-    // 안 잡혀 계속 남아있게 된다 — 이런 문서가 상/하차지명 자동완성에 기본거래처와
-    // 별개의 항목으로 계속 떠서, 선택 시 주소 불일치 팝업이 뜨고, 잘못 삭제하면 그
-    // 문서에만 있던 담당자가 사라지는 원인이 됐다. 이제 이름만 같아도 후보로 잡되,
-    // 주소가 정확히 같은지(exact)는 별도로 표시해 사용자가 확인 후 정리하게 한다.
-    const list = [];
-    rows.forEach(c => {
+    const placeNames = new Set(placeRows.map(p => norm(p.업체명 || "")).filter(Boolean));
+    return rows.filter(c => {
       const cName = norm(c.거래처명 || "");
-      if (!cName) return;
-      const cAddr = normalizePlace(c.주소 || "");
-      placeRows.forEach(p => {
-        if (norm(p.업체명 || "") !== cName) return;
-        const pAddr = normalizePlace(p.주소 || "");
-        list.push({ client: c, place: p, exact: !!(cAddr && pAddr && cAddr === pAddr) });
-      });
+      return cName && !placeNames.has(cName);
     });
-    return list;
   }, [rows, placeRows, subTab]);
+
+  const runRestore = async () => {
+    const targets = restoreCandidates.filter(c => restoreSelected.has(c.id || c.거래처명));
+    if (!targets.length) return;
+    setRestoreRunning(true);
+    let ok = 0;
+    for (const client of targets) {
+      try {
+        const contacts = Array.isArray(client.contacts) && client.contacts.length
+          ? client.contacts
+          : (client.담당자 ? [{ name: client.담당자, phone: client.연락처 || "", isPrimary: true }] : []);
+        const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
+        const uniqueKey = makePlaceKey(client.거래처명) + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        await upsertPlace?.({
+          _id: uniqueKey,
+          업체명: client.거래처명,
+          주소: client.주소 || "",
+          담당자: primary?.name || "",
+          담당자번호: primary?.phone || "",
+          contacts,
+          등급: client.등급 || "일반",
+          메모: client.오더메모 || "",
+          _forceNew: true,
+        });
+        ok++;
+      } catch (e) {
+        console.error("복원 실패:", client.거래처명, e);
+      }
+    }
+    setRestoreRunning(false);
+    setRestoreSelected(new Set());
+    setShowRestorePopup(false);
+    showAlert(`${ok}건 복원 완료 (기본거래처 내용을 하차지거래처에도 복사)`);
+  };
 
   // 하차지거래처를 삭제하기 전에, 같은 이름의 기본거래처가 있으면(주소 표기가
   // 도로명/지번처럼 달라 "중복 정리"의 정확일치 후보에는 안 걸리는 경우까지 포함)
@@ -43983,53 +44004,6 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     } catch (e) {
       console.error("담당자 병합 실패:", client.거래처명, e);
     }
-  };
-
-  const runDedupCleanup = async () => {
-    const targets = dedupMatches.filter(m => dedupSelected.has(m.place.id));
-    if (!targets.length) return;
-    setDedupRunning(true);
-    let ok = 0;
-    for (const { client, place } of targets) {
-      try {
-        // 담당자 병합: 기본거래처의 기존 담당자(대표)를 유지하고, 하차지거래처에만
-        // 있던 담당자들을 이름이 겹치지 않을 때만 추가로 합친다.
-        const baseContacts = Array.isArray(client.contacts) && client.contacts.length
-          ? [...client.contacts]
-          : (client.담당자 ? [{ name: client.담당자, phone: client.연락처 || "", isPrimary: true }] : []);
-        const placeContacts = Array.isArray(place.contacts) ? place.contacts
-          : (Array.isArray(place._rawContacts) ? place._rawContacts : []);
-        const existingNames = new Set(baseContacts.map(c => (c.name || "").trim()).filter(Boolean));
-        const mergedContacts = [...baseContacts];
-        placeContacts.forEach(pc => {
-          const nm = (pc.name || "").trim();
-          if (nm && !existingNames.has(nm)) {
-            existingNames.add(nm);
-            mergedContacts.push({ name: nm, phone: pc.phone || "", isPrimary: false });
-          } else if (!nm && (pc.phone || "").trim() && !mergedContacts.some(c => (c.phone || "") === pc.phone)) {
-            mergedContacts.push({ name: "", phone: pc.phone, isPrimary: false });
-          }
-        });
-        if (!mergedContacts.some(c => c.isPrimary) && mergedContacts.length) mergedContacts[0].isPrimary = true;
-
-        const mergedOrderMemo = (client.오더메모 || "").trim() ? client.오더메모 : (place.메모 || "");
-
-        await upsertClient?.({
-          id: client.id,
-          거래처명: client.거래처명,
-          오더메모: mergedOrderMemo,
-          contacts: mergedContacts,
-        });
-        await removePlace(place.id);
-        ok++;
-      } catch (e) {
-        console.error("중복 정리 실패:", client.거래처명, e);
-      }
-    }
-    setDedupRunning(false);
-    setDedupSelected(new Set());
-    setShowDedupPopup(false);
-    showAlert(`${ok}건 정리 완료 (하차지거래처 중복 삭제, 메모/담당자는 기본거래처로 이관)`);
   };
 
 React.useEffect(() => {
@@ -44915,9 +44889,9 @@ React.useEffect(() => {
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
                 하차지에서 불러오기
               </button>
-              <button onClick={() => { setDedupSelected(new Set(dedupMatches.map(m => m.place.id))); setShowDedupPopup(true); }}
+              <button onClick={() => { setRestoreSelected(new Set(restoreCandidates.map(c => c.id || c.거래처명))); setShowRestorePopup(true); }}
                 className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
-                중복 정리{dedupMatches.length > 0 && ` (${dedupMatches.length})`}
+                하차지거래처 복원{restoreCandidates.length > 0 && ` (${restoreCandidates.length})`}
               </button>
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
@@ -45329,52 +45303,47 @@ React.useEffect(() => {
         </div>
       )}
 
-      {/* ══════ 기본거래처 ↔ 하차지거래처 중복 정리 팝업 ══════ */}
-      {showDedupPopup && (
+      {/* ══════ 기본거래처 → 하차지거래처 복원 팝업 ══════ */}
+      {showRestorePopup && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[15px]">중복 정리 — 기본거래처 ↔ 하차지거래처</h3>
-                <p className="text-white/55 text-[12px] mt-0.5">거래처명이 같은 하차지거래처가 대상입니다(주소 표기가 도로명/지번처럼 달라도 포함). 하차지거래처의 메모는 기본거래처의 오더메모로, 담당자 목록은 병합되어 이관되고, 하차지거래처 쪽 항목은 삭제됩니다.</p>
+                <h3 className="text-white font-bold text-[15px]">하차지거래처 복원 — 기본거래처 → 하차지거래처</h3>
+                <p className="text-white/55 text-[12px] mt-0.5">현재 하차지거래처에 같은 이름이 하나도 없는 기본거래처가 대상입니다. 선택하면 거래처명·주소·담당자·메모·등급을 그대로 복사한 하차지거래처 항목이 새로 만들어집니다(기본거래처는 그대로 유지).</p>
               </div>
-              <button onClick={() => setShowDedupPopup(false)}
+              <button onClick={() => setShowRestorePopup(false)}
                 className="text-white/60 hover:text-white text-xl leading-none">×</button>
             </div>
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
-              <span className="text-[12px] text-gray-500">{dedupMatches.length}건 발견 · {dedupSelected.size}건 선택됨</span>
+              <span className="text-[12px] text-gray-500">{restoreCandidates.length}건 발견 · {restoreSelected.size}건 선택됨</span>
               <button
-                onClick={() => setDedupSelected(prev => prev.size === dedupMatches.length ? new Set() : new Set(dedupMatches.map(m => m.place.id)))}
+                onClick={() => setRestoreSelected(prev => prev.size === restoreCandidates.length ? new Set() : new Set(restoreCandidates.map(c => c.id || c.거래처명)))}
                 className="text-[12px] text-[#1B2B4B] font-semibold underline">
-                {dedupSelected.size === dedupMatches.length ? "전체 해제" : "전체 선택"}
+                {restoreSelected.size === restoreCandidates.length ? "전체 해제" : "전체 선택"}
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3">
-              {dedupMatches.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-10">거래처명이 같은 하차지거래처 중복 항목이 없습니다.</div>
+              {restoreCandidates.length === 0 ? (
+                <div className="text-center text-gray-400 text-sm py-10">복원할 항목이 없습니다 (모든 기본거래처가 이미 하차지거래처에도 있습니다).</div>
               ) : (
                 <div className="space-y-2">
-                  {dedupMatches.map(({ client, place, exact }) => {
-                    const contactCount = Array.isArray(place.contacts) ? place.contacts.filter(c => c.name?.trim() || c.phone?.trim()).length : (place._rawContacts?.length || 0);
+                  {restoreCandidates.map((client) => {
+                    const id = client.id || client.거래처명;
+                    const contactCount = Array.isArray(client.contacts) ? client.contacts.filter(c => c.name?.trim() || c.phone?.trim()).length : (client.담당자 ? 1 : 0);
                     return (
-                      <label key={place.id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
-                        <input type="checkbox" className="mt-1" checked={dedupSelected.has(place.id)}
-                          onChange={() => setDedupSelected(prev => {
+                      <label key={id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" className="mt-1" checked={restoreSelected.has(id)}
+                          onChange={() => setRestoreSelected(prev => {
                             const n = new Set(prev);
-                            n.has(place.id) ? n.delete(place.id) : n.add(place.id);
+                            n.has(id) ? n.delete(id) : n.add(id);
                             return n;
                           })} />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div className="text-[13px] font-bold text-gray-800">{client.거래처명}</div>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${exact ? "bg-gray-100 text-gray-500" : "bg-orange-100 text-orange-700"}`}>
-                              {exact ? "주소 동일" : "주소 표기 다름 — 확인 필요"}
-                            </span>
-                          </div>
-                          <div className="text-[12px] text-gray-500 mt-0.5">기본거래처 주소: {client.주소 || "-"}</div>
-                          {!exact && <div className="text-[12px] text-orange-600 mt-0.5">하차지거래처 주소: {place.주소 || "-"}</div>}
+                          <div className="text-[13px] font-bold text-gray-800">{client.거래처명}</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">{client.주소 || "-"}</div>
                           <div className="flex gap-3 mt-1 text-[11px] text-gray-400">
-                            {place.메모?.trim() && <span className="text-[#1B2B4B]">하차지 메모 있음</span>}
+                            {client.오더메모?.trim() && <span className="text-[#1B2B4B]">오더메모 있음</span>}
                             {contactCount > 0 && <span>담당자 {contactCount}명</span>}
                           </div>
                         </div>
@@ -45385,11 +45354,11 @@ React.useEffect(() => {
               )}
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex gap-3 shrink-0">
-              <button onClick={() => setShowDedupPopup(false)}
+              <button onClick={() => setShowRestorePopup(false)}
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-              <button onClick={runDedupCleanup} disabled={dedupRunning || dedupSelected.size === 0}
+              <button onClick={runRestore} disabled={restoreRunning || restoreSelected.size === 0}
                 className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-bold transition">
-                {dedupRunning ? "정리 중..." : `선택 항목 정리 (${dedupSelected.size})`}
+                {restoreRunning ? "복원 중..." : `선택 항목 복원 (${restoreSelected.size})`}
               </button>
             </div>
           </div>
