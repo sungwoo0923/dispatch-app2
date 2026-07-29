@@ -33,7 +33,8 @@ export default function UpdateBanner() {
     if (!("serviceWorker" in navigator)) return;
 
     const activateUpdate = () => {
-      if (SHOW_UPDATE_BANNER) setVisible(true);
+      if (!SHOW_UPDATE_BANNER) return;
+      setVisible(true);
       window.dispatchEvent(new Event("appUpdateAvailable"));
     };
 
