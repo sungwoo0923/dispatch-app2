@@ -179,9 +179,13 @@ export default function UploadPage() {
   const [lastLoc, setLastLoc] = useState(null);
   const watchIdRef = useRef(null);
   const lastLocWriteRef = useRef(0);
+  // 위치 공유는 기사가 동의 팝업에서 "승인"을 눌러야만 시작된다(null=아직 응답
+  // 안 함, true=승인, false=거절). 거절하면 sharingLoc도 함께 꺼서 위치 공유가
+  // 거절된 것으로 간주한다.
+  const [locConsent, setLocConsent] = useState(null);
 
   useEffect(() => {
-    if (!sharingLoc || !order || isManual) return;
+    if (!sharingLoc || !order || isManual || locConsent !== true) return;
     if (!navigator.geolocation) {
       setLocError("이 브라우저는 위치 공유를 지원하지 않습니다.");
       setSharingLoc(false);
@@ -483,6 +487,41 @@ export default function UploadPage() {
         </div>
       </div>
 
+      {/* ── 위치정보 제공 동의 팝업 — 링크로 들어오면 위치 공유가 시작되기 전에
+          반드시 먼저 뜨고, 승인해야만 위치 공유가 켜진다 ── */}
+      {status === "ready" && !isManual && order && locConsent === null && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000, padding: 20 }}>
+          <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 420, overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.3)" }}>
+            <div style={{ background: "#1B2B4B", padding: "20px 22px" }}>
+              <div style={{ color: "white", fontWeight: 800, fontSize: 16 }}>위치정보 제공 동의</div>
+              <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12.5, marginTop: 4, fontWeight: 500 }}>상/하차 확인을 위한 안내입니다</div>
+            </div>
+            <div style={{ padding: "20px 22px 4px" }}>
+              <div style={{ fontSize: 14, color: "#1e293b", lineHeight: 1.75, fontWeight: 500 }}>
+                운송사에서 상/하차 여부를 확인하기 위하여 위치정보를 공유받을 수 있습니다.
+              </div>
+              <div style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.7, marginTop: 10, fontWeight: 500 }}>
+                이 화면을 보고 계신 동안에만 위치가 전송되며, 화면을 벗어나거나 끄면 전송이 즉시 중단됩니다. 원치 않으시면 아래 <b style={{ color: "#334155" }}>거절</b> 버튼을 눌러주세요.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, padding: "20px 22px 22px" }}>
+              <button
+                onClick={() => { setLocConsent(false); setSharingLoc(false); }}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "1.5px solid #e2e8f0", background: "white", color: "#475569", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+              >
+                거절
+              </button>
+              <button
+                onClick={() => setLocConsent(true)}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: "#1B2B4B", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+              >
+                승인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px 40px" }}>
 
         {/* ── 로딩 ── */}
@@ -610,12 +649,20 @@ export default function UploadPage() {
                         {sharingLoc && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", display: "inline-block", animation: "uploadLocPulse 1.4s ease-in-out infinite" }} />}
                         실시간 위치 공유
                       </div>
-                      <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>
-                        {sharingLoc ? "운송사·화주사가 현재 위치를 볼 수 있어요. 이 화면을 켜둔 상태로 유지해주세요." : "켜두면 배송 중 위치를 운송사/화주사가 확인할 수 있어요."}
+                      <div style={{ fontSize: 12, color: "#475569", marginTop: 3, lineHeight: 1.5, fontWeight: 500 }}>
+                        {sharingLoc
+                          ? "운송사에서 상/하차 여부를 확인하기 위하여 위치정보를 공유받고 있습니다. 원치 않으시면 버튼을 눌러 꺼주세요."
+                          : "운송사에서 상/하차 여부를 확인하기 위하여 위치정보를 공유받을 수 있습니다. 원하시면 버튼을 눌러 켜주세요."}
                       </div>
                     </div>
                     <button
-                      onClick={() => setSharingLoc(v => !v)}
+                      onClick={() => setSharingLoc(v => {
+                        const next = !v;
+                        // 수동으로 다시 "켜기"를 누르는 것도 명시적 동의로 취급한다 —
+                        // 팝업에서 거절한 뒤에도 이 버튼으로 다시 켤 수 있어야 한다.
+                        if (next) setLocConsent(true);
+                        return next;
+                      })}
                       style={{
                         padding: "8px 14px", borderRadius: 20, border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer",
                         background: sharingLoc ? "#1B2B4B" : "#e2e8f0", color: sharingLoc ? "#fff" : "#475569",

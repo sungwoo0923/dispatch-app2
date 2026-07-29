@@ -152,8 +152,12 @@ export default function DriverSearchPage() {
     if (e.key === "Enter") handleSearch();
   };
 
-  const goToUpload = (id) => {
-    window.location.href = `/upload?id=${id}`;
+  const goToUpload = (id, token) => {
+    // 오더에 이미 업로드토큰이 발급되어 있는데(과거에 "기사전달용" 링크를 한 번이라도
+    // 만든 적이 있으면) 여기서 토큰 없이 넘어가면, /upload 쪽 잠금 로직이 "토큰이
+    // 안 맞는 예전 링크"로 오인해 업로드한 적이 없어도 "이미 업로드 완료"로 막아버렸다.
+    // 검색 결과에 이미 포함된 현재 토큰을 그대로 같이 넘겨 정상 접근되게 한다.
+    window.location.href = `/upload?id=${id}${token ? `&t=${token}` : ""}`;
   };
 
   const statusLabel = (r) => {
@@ -285,7 +289,7 @@ export default function DriverSearchPage() {
                   return (
                     <button
                       key={r._id}
-                      onClick={() => goToUpload(r._id)}
+                      onClick={() => goToUpload(r._id, r.업로드토큰)}
                       style={{
                         background: "#f8fafc",
                         border: "1.5px solid #e2e8f0",
