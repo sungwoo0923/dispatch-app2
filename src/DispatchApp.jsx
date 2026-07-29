@@ -671,6 +671,107 @@ function ContactListEditor({ contacts, onChange }) {
   );
 }
 
+// 브라우저 기본 <select>의 옵션 목록은 OS/브라우저가 직접 그려서 CSS로 꾸밀 수
+// 없다 — 프로그램 전체 톤(네이비 강조, 둥근 모서리, 그림자)과 어울리도록 직접
+// 구현한 대체 드롭다운. <select>와 동일하게 value/onChange/className/children
+// (<option>)을 그대로 받아 기존 코드를 최소한만 바꿔도 되도록 만들었다 — onChange는
+// 네이티브 select와 똑같이 { target: { value } } 형태로 호출한다.
+const CustomSelect = React.forwardRef(function CustomSelect(
+  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name },
+  ref
+) {
+  const [open, setOpen] = React.useState(false);
+  const wrapRef = React.useRef(null);
+  const btnRef = React.useRef(null);
+  React.useImperativeHandle(ref, () => ({
+    focus: () => btnRef.current?.focus(),
+    scrollIntoView: (opts) => btnRef.current?.scrollIntoView(opts),
+    value,
+  }));
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDocDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [open]);
+
+  const options = React.Children.toArray(children)
+    .filter((c) => c && typeof c === "object" && c.type === "option")
+    .map((c) => ({
+      value: c.props.value !== undefined ? c.props.value : (typeof c.props.children === "string" ? c.props.children : ""),
+      label: c.props.children,
+      disabled: !!c.props.disabled,
+    }));
+  const current = options.find((o) => String(o.value) === String(value ?? ""));
+  const [activeIdx, setActiveIdx] = React.useState(-1);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        id={id}
+        name={name}
+        ref={btnRef}
+        disabled={disabled}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onClick={() => { if (disabled) return; setOpen((v) => !v); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); }}
+        onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (disabled || e.defaultPrevented) return;
+          if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(e.key)) e.preventDefault();
+          if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { setOpen(true); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); return; }
+          if (!open) return;
+          if (e.key === "ArrowDown") setActiveIdx((i) => Math.min(i + 1, options.length - 1));
+          else if (e.key === "ArrowUp") setActiveIdx((i) => Math.max(i - 1, 0));
+          else if (e.key === "Enter") {
+            const o = options[activeIdx];
+            if (o && !o.disabled) { onChange?.({ target: { value: o.value } }); }
+            setOpen(false);
+          } else if (e.key === "Escape") setOpen(false);
+        }}
+        className={`${className} flex items-center justify-between gap-1.5 text-left disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        <span className="truncate">{current ? current.label : (placeholder || "")}</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={`shrink-0 opacity-60 transition-transform ${open ? "rotate-180" : ""}`}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-[9999] mt-1 left-0 min-w-full w-max max-w-[320px] max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1">
+          {options.length === 0 && (
+            <div className="px-3 py-2 text-[13px] text-gray-400">항목 없음</div>
+          )}
+          {options.map((o, i) => (
+            <div
+              key={i}
+              onMouseEnter={() => setActiveIdx(i)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (o.disabled) return;
+                onChange?.({ target: { value: o.value } });
+                setOpen(false);
+              }}
+              className={`px-3 py-2 text-[13px] cursor-pointer whitespace-nowrap ${
+                o.disabled
+                  ? "text-gray-300 cursor-not-allowed"
+                  : String(o.value) === String(value ?? "")
+                  ? "bg-[#1B2B4B] text-white font-semibold"
+                  : i === activeIdx
+                  ? "bg-gray-100 text-gray-800"
+                  : "text-gray-700"
+              }`}
+            >
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 // 상/하차지명 라벨 옆 오더메모 아이콘 버튼 — 배차관리 등록 폼과 동일한 디자인을
 // 오더복사/수정 패널, 선택수정 패널에서도 재사용한다.
 function OrderMemoIconButton({ onClick, title = "오더메모" }) {
@@ -10024,7 +10125,7 @@ className={`
 
     {/* 드롭다운 */}
     <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-  <select
+  <CustomSelect
    className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.화물타입 || ""}
 
@@ -10056,7 +10157,7 @@ className={`
         <option value="파레트">파레트</option>
         <option value="박스">박스</option>
         <option value="통">통</option>
-      </select>
+      </CustomSelect>
 
       {/* 화살표 */}
             <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">
@@ -10194,7 +10295,7 @@ className={`
     {/* 드롭다운 */}
     <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
 
-      <select
+      <CustomSelect
         className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.톤수타입}
 
@@ -10213,7 +10314,7 @@ className={`
         <option value="">없음</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
 
       {/* 화살표 */}
             <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">
@@ -10650,7 +10751,7 @@ className={`
               }}
             />
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-              <select
+              <CustomSelect
                 className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.화물타입 ?? "파레트"}
                 onChange={(e) => {
@@ -10666,7 +10767,7 @@ className={`
                 <option value="파레트">파레트</option>
                 <option value="박스">박스</option>
                 <option value="통">통</option>
-              </select>
+              </CustomSelect>
               <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">▾</span>
             </div>
           </div>
@@ -10702,7 +10803,7 @@ className={`
               }}
             />
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-              <select
+              <CustomSelect
                 className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.톤수타입 ?? "톤"}
                 onChange={(e) => {
@@ -10717,7 +10818,7 @@ className={`
                 <option value="">없음</option>
                 <option value="톤">톤</option>
                 <option value="kg">kg</option>
-              </select>
+              </CustomSelect>
               <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">▾</span>
             </div>
           </div>
@@ -10728,7 +10829,7 @@ className={`
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">상차시간</label>
-            <select
+            <CustomSelect
               className={inputCls}
               value={stop.상차시간 || ""}
               onChange={(e) => {
@@ -10744,11 +10845,11 @@ className={`
               {localTimeOptions.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">하차시간</label>
-            <select
+            <CustomSelect
               className={inputCls}
               value={stop.하차시간 || ""}
               onChange={(e) => {
@@ -10764,7 +10865,7 @@ className={`
               {localTimeOptions.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
           
         </div>
@@ -10774,7 +10875,7 @@ className={`
           <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">
             {stopType === "pickup" ? "상차방법" : "하차방법"}
           </label>
-          <select
+          <CustomSelect
             className={inputCls}
             value={stop.방법 || ""}
             onChange={(e) => {
@@ -10790,7 +10891,7 @@ className={`
             {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => (
               <option key={v} value={v}>{v}</option>
             ))}
-          </select>
+          </CustomSelect>
         </div>
 
         {/* 삭제 버튼 */}
@@ -11098,24 +11199,24 @@ className={`
   {/* 상/하차 방법 */}
   <div>
     <label className={labelCls}>상차방법</label>
-    <select className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
+    <CustomSelect className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
       <option value="">선택 ▾</option>
       {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
   <div>
     <label className={labelCls}>하차방법</label>
-    <select className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
+    <CustomSelect className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
       <option value="">선택 ▾</option>
       {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
   {/* 결제 */}
   <div>
     <label className={labelCls}>지급방식 {reqStar}</label>
-   <select ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(e) => {
+   <CustomSelect ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(e) => {
   const v = e.target.value;
   onChange("지급방식", v);
  if (v === "취소") {
@@ -11126,15 +11227,15 @@ className={`
 }}>
       <option value="">선택 ▾</option>
       {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
   <div>
     <label className={labelCls}>배차방식</label>
-    <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+    <CustomSelect className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
       {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-    </select>
+    </CustomSelect>
   </div>
 
 {/* =============================== 
@@ -11605,11 +11706,11 @@ className={`
                     ))}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">상차방법</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.startLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, startLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                 </div>
@@ -11629,11 +11730,11 @@ className={`
                     ))}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">하차방법</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.endLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, endLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                 </div>
@@ -11667,20 +11768,20 @@ className={`
                     ))}
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">결제방식</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.farePaytype ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, farePaytype: e.target.value }))}>
                         {["인수증","선불","착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">세금계산서</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.taxbillType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, taxbillType: e.target.value }))}>
                         <option value="Y">Y - 발행</option>
                         <option value="N">N - 미발행</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                 </div>
@@ -11691,12 +11792,12 @@ className={`
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">화주유형</span>
-                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.firstType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, firstType: e.target.value }))}>
                         <option value="01">01 - 직접화주</option>
                         <option value="02">02 - 주선사</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                     {[["화주명","firstShipperNm"],["화주연락처","firstShipperInfo"],["사업자번호","firstShipperBizNo"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
@@ -11831,7 +11932,7 @@ className={`
               {/* 검색바 */}
               <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 shrink-0">
                 <div className="flex gap-2">
-                  <select
+                  <CustomSelect
                     className="border border-gray-200 bg-white px-3 py-2 rounded-xl text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]"
                     value={copyFilterType}
                     onChange={(e) => setCopyFilterType(e.target.value)}
@@ -11841,7 +11942,7 @@ className={`
                     <option value="상차지명">상차지명</option>
                     <option value="하차지명">하차지명</option>
                     <option value="화물내용">화물내용</option>
-                  </select>
+                  </CustomSelect>
                   <input
                     type="text"
                     placeholder="검색어를 입력하세요"
@@ -13445,7 +13546,7 @@ setConfirmChange(null);
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
-            <select
+            <CustomSelect
               id="nc-grade"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
               value={newClientModalData.grade}
@@ -13456,7 +13557,7 @@ setConfirmChange(null);
               <option value="블랙">블랙</option>
               <option value="주의">주의</option>
               <option value="이탈">이탈</option>
-            </select>
+            </CustomSelect>
           </div>
         </div>
         <div>
