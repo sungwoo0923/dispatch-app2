@@ -2017,6 +2017,9 @@ useEffect(() => {
         contacts: contacts,  // ★ 전체 contacts도 보관
         등급: data.등급 || "일반",
         메모: data.메모 || "",
+        // ★ PC와 동일: 오더메모(등급/메모 안내 팝업용)·팝업표시(안내 팝업 노출 여부)
+        오더메모: data.오더메모 || "",
+        팝업표시: data.팝업표시 !== undefined ? data.팝업표시 : true,
       };
     });
 
@@ -2051,7 +2054,14 @@ useEffect(() => {
         주소: d.주소 || "",
         담당자: d.담당자 || "",
         담당자번호: d.연락처 || d.담당자번호 || "",
+        contacts: Array.isArray(d.contacts) ? d.contacts : [],
         메모: d.메모 || "",
+        // ★ PC와 동일: 등급/오더메모/팝업표시 — 기존에는 clients(기본거래처)에서
+        // 이 필드들을 아예 안 읽어서, 이탈/주의/블랙/오더메모 팝업이 하차지거래처
+        // 쪽에만 (그것도 잘못된 필드명으로) 반쪽으로 동작하고 있었다.
+        등급: d.등급 || "일반",
+        오더메모: d.오더메모 || "",
+        팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
       }));
     setClients(list);
   });
@@ -2643,66 +2653,101 @@ const groupedByDate = useMemo(() => {
 
   return map;
 }, [filteredOrders]);
-  // ★ PC 거래처관리(places) 자동 동기화
-  const syncPlaceFromOrder = async (docData) => {
+  // ★ PC 거래처관리(clients/places) 자동 동기화 — PC의 savePlaceSmart와 동일하게
+  // 기본거래처(clients)에 이미 있는 업체명이면 하차지거래처(places)에 별도 사본을
+  // 만들지 않고 기본거래처 쪽을 갱신하고, 그 하차지거래처 사본이 있으면 함께
+  // 미러링한다. extra는 { pickup: {오더메모, 팝업표시}, drop: {...} } 형태로,
+  // 상/하차지 오더메모 팝업에서 저장한 값을 오더가 실제로 등록/수정되는 시점에만
+  // 반영하기 위해 넘긴다(PC와 동일한 지연 저장 방식).
+  const syncPlaceFromOrder = async (docData, extra = {}) => {
     const normalizeKey = (s = "") =>
-      String(s).toLowerCase().replace(/\s+/g, "").replace(/[^\uAC00-\uD7A3a-z0-9]/g, "");
+      String(s).toLowerCase().replace(/\s+/g, "").replace(/[^가-힣a-z0-9]/g, "");
 
-    const syncOne = async (placeName, addr, manager, phone) => {
+    const mergeContacts = (existingContacts, manager, phone) => {
+      let contacts = Array.isArray(existingContacts) ? [...existingContacts] : [];
+      if (manager?.trim()) {
+        const sameIdx = contacts.findIndex(c => (c.name || "").trim() === manager.trim());
+        if (sameIdx >= 0) {
+          contacts = contacts.map((c, i) => ({
+            ...c,
+            phone: i === sameIdx ? (phone || c.phone) : c.phone,
+            isPrimary: i === sameIdx,
+          }));
+        } else {
+          contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+          contacts.push({ name: manager.trim(), phone: phone || "", isPrimary: true });
+        }
+      } else if (phone?.trim()) {
+        const samePhone = contacts.findIndex(c => (c.phone || "").replace(/\D/g, "") === phone.replace(/\D/g, ""));
+        if (samePhone < 0) {
+          const autoName = contacts.some(c => (c.name || "").trim() === "담당자") ? `담당자${contacts.length}` : "담당자";
+          contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+          contacts.push({ name: autoName, phone: phone.trim(), isPrimary: true });
+        }
+      }
+      return contacts;
+    };
+
+    const syncOne = async (placeName, addr, manager, phone, extraFields = {}) => {
       if (!placeName?.trim()) return;
-
       const key = normalizeKey(placeName);
 
-      // places 컬렉션에서 동일 업체 찾기
-      const existing = places.find(
-        (p) => normalizeKey(p.거래처명) === key
-      );
+      // ① 기본거래처(clients) 우선 확인 — PC와 동일한 우선순위
+      const clientMatch = clients.find((c) => normalizeKey(c.거래처명) === key);
+      if (clientMatch) {
+        const contacts = mergeContacts(clientMatch.contacts, manager, phone);
+        const primary = contacts.find(c => c.isPrimary) || contacts[0];
+        const payload = {
+          거래처명: placeName,
+          주소: addr || clientMatch.주소 || "",
+          담당자: primary?.name || "",
+          연락처: primary?.phone || "",
+          contacts,
+          등급: extraFields.등급 !== undefined ? extraFields.등급 : (clientMatch.등급 || "일반"),
+          오더메모: extraFields.오더메모 !== undefined ? extraFields.오더메모 : (clientMatch.오더메모 || ""),
+          팝업표시: extraFields.팝업표시 !== undefined ? extraFields.팝업표시 : (clientMatch.팝업표시 !== undefined ? clientMatch.팝업표시 : true),
+          updatedAt: serverTimestamp(),
+        };
+        await updateDoc(doc(db, "clients", clientMatch.id), payload).catch(() => {});
 
-      if (existing) {
-        // 기존 업체: contacts 배열 업데이트
-        let contacts = Array.isArray(existing.contacts) ? [...existing.contacts] : [];
-
-        if (manager?.trim()) {
-          const sameIdx = contacts.findIndex(c => (c.name || "").trim() === manager.trim());
-          if (sameIdx >= 0) {
-            // 동일 이름 → 전화번호 최신화 + primary 이동
-            contacts = contacts.map((c, i) => ({
-              ...c,
-              phone: i === sameIdx ? (phone || c.phone) : c.phone,
-              isPrimary: i === sameIdx,
-            }));
-          } else {
-            // 새 담당자 → 추가
-            contacts = contacts.map(c => ({ ...c, isPrimary: false }));
-            contacts.push({ name: manager.trim(), phone: phone || "", isPrimary: true });
-          }
-        } else if (phone?.trim()) {
-          // 이름 없고 연락처만 있을 때 → 자동 이름 생성 후 저장
-          const samePhone = contacts.findIndex(c => (c.phone || "").replace(/\D/g, "") === phone.replace(/\D/g, ""));
-          if (samePhone < 0) {
-            const autoName = `담당자${contacts.length + 1}`;
-            contacts = contacts.map(c => ({ ...c, isPrimary: false }));
-            contacts.push({ name: autoName, phone: phone.trim(), isPrimary: true });
-          }
+        // 같은 이름의 하차지거래처 사본이 있으면 함께 반영(재귀 호출 없이 직접 write)
+        const placeMirror = places.find((p) => normalizeKey(p.거래처명) === key);
+        if (placeMirror) {
+          await updateDoc(doc(db, "places", placeMirror.id), {
+            업체명: payload.거래처명,
+            주소: payload.주소,
+            담당자: payload.담당자,
+            담당자번호: payload.연락처,
+            contacts: payload.contacts,
+            등급: payload.등급,
+            오더메모: payload.오더메모,
+            팝업표시: payload.팝업표시,
+            updatedAt: serverTimestamp(),
+          }).catch(() => {});
         }
+        return;
+      }
 
+      // ② 기본거래처에 없으면 하차지거래처(places)만 갱신/생성
+      const existing = places.find((p) => normalizeKey(p.거래처명) === key);
+      if (existing) {
+        const contacts = mergeContacts(existing.contacts, manager, phone);
+        const primary = contacts.find(c => c.isPrimary) || contacts[0];
         const updatePayload = {
           업체명: placeName,
           주소: addr || existing.주소 || "",
-          contacts: contacts,
+          contacts,
+          등급: extraFields.등급 !== undefined ? extraFields.등급 : (existing.등급 || "일반"),
+          오더메모: extraFields.오더메모 !== undefined ? extraFields.오더메모 : (existing.오더메모 || ""),
+          팝업표시: extraFields.팝업표시 !== undefined ? extraFields.팝업표시 : (existing.팝업표시 !== undefined ? existing.팝업표시 : true),
           updatedAt: serverTimestamp(),
         };
-
-        // 구형 필드도 동기화
-        const primary = contacts.find(c => c.isPrimary) || contacts[0];
         if (primary) {
           updatePayload.담당자 = primary.name || "";
           updatePayload.담당자번호 = primary.phone || "";
         }
-
         await updateDoc(doc(db, "places", existing.id), updatePayload);
       } else {
-        // 기존 업체 없음 → places에 신규 자동 등록
         const newContacts = manager?.trim()
           ? [{ name: manager.trim(), phone: phone || "", isPrimary: true }]
           : [];
@@ -2710,7 +2755,9 @@ const groupedByDate = useMemo(() => {
           업체명: placeName,
           주소: addr || "",
           contacts: newContacts,
-          등급: "일반",
+          등급: extraFields.등급 || "일반",
+          오더메모: extraFields.오더메모 || "",
+          팝업표시: extraFields.팝업표시 !== undefined ? extraFields.팝업표시 : true,
           createdAt: serverTimestamp(),
         });
       }
@@ -2721,7 +2768,8 @@ const groupedByDate = useMemo(() => {
       docData.상차지명,
       docData.상차지주소,
       docData.상차지담당자,
-      docData.상차지담당자번호
+      docData.상차지담당자번호,
+      extra.pickup || {}
     );
 
     // 하차지 동기화
@@ -2729,7 +2777,8 @@ const groupedByDate = useMemo(() => {
       docData.하차지명,
       docData.하차지주소,
       docData.하차지담당자,
-      docData.하차지담당자번호
+      docData.하차지담당자번호,
+      extra.drop || {}
     );
   };
 
@@ -2838,6 +2887,17 @@ const groupedByDate = useMemo(() => {
       _lastModified: Date.now(),
     };
 
+    // 상/하차지 오더메모 버튼으로 미리 수정해둔 값(아직 거래처관리엔 반영 안 됨) — 오더가
+    // 실제로 등록/수정되는 지금 시점에만 syncPlaceFromOrder를 통해 함께 반영한다.
+    const pendingMemoExtra = {
+      pickup: (form.상차지오더메모 !== undefined || form.상차지오더메모팝업표시 !== undefined)
+        ? { 오더메모: form.상차지오더메모, 팝업표시: form.상차지오더메모팝업표시 }
+        : {},
+      drop: (form.하차지오더메모 !== undefined || form.하차지오더메모팝업표시 !== undefined)
+        ? { 오더메모: form.하차지오더메모, 팝업표시: form.하차지오더메모팝업표시 }
+        : {},
+    };
+
     // 🔒 화주사가 등록한 오더는 운송사에서 결제정보/기사배정 외 필드를 수정할 수 없다 (예외 없음)
     if (form._editId) {
       const isShipperOrder = selectedOrder?.source === "shipper" || selectedOrder?.source === "shipper_mobile";
@@ -2875,7 +2935,7 @@ const groupedByDate = useMemo(() => {
       syncShipperMirrorMobile(selectedOrder, docData).catch(() => {});
 
       // ★ PC 거래처관리(places) 동기화
-      await syncPlaceFromOrder(docData);
+      await syncPlaceFromOrder(docData, pendingMemoExtra);
 
       // selectedOrder 최신화 (상세보기로 돌아갈 때 최신 데이터 반영)
       const updated = { ...selectedOrder, ...docData, _id: form._editId, id: form._editId };
@@ -2919,7 +2979,7 @@ const groupedByDate = useMemo(() => {
         });
 
         // ★ PC 거래처관리(places) 동기화
-        await syncPlaceFromOrder(rowData);
+        await syncPlaceFromOrder(rowData, pendingMemoExtra);
 
         // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (PC와 동일)
         let matchedShipper = approvedShippers.find(
@@ -4722,10 +4782,13 @@ setOpenMemo={setOpenMemo}
             form={form}
             setForm={setForm}
             clients={[
-              ...places,
-              ...clients.filter(c =>
-                c.거래처명 &&
-                !places.some(p => normalizeCompany(p.거래처명) === normalizeCompany(c.거래처명))
+              // ★ PC의 mergedClients와 동일하게 기본거래처(clients)를 우선한다 — 반대로
+              // 하면 아직 동기화 전인 옛 하차지거래처 사본이 최신 기본거래처 데이터를
+              // 가려버리는 문제가 있다(PC에서 "롯데마트" 버그로 겪은 것과 동일한 원인).
+              ...clients,
+              ...places.filter(p =>
+                p.거래처명 &&
+                !clients.some(c => normalizeCompany(c.거래처명) === normalizeCompany(p.거래처명))
               )
             ]}
             basicClients={clients}
@@ -4798,12 +4861,13 @@ setOpenMemo={setOpenMemo}
             drivers={drivers}
             orders={orders}
             clients={[
-              ...places,
-              ...clients.filter(c =>
-                c.거래처명 &&
-                !places.some(p => normalizeCompany(p.거래처명) === normalizeCompany(c.거래처명))
+              ...clients,
+              ...places.filter(p =>
+                p.거래처명 &&
+                !clients.some(c => normalizeCompany(c.거래처명) === normalizeCompany(p.거래처명))
               )
             ]}
+            basicClients={clients}
             onDuplicate={handleOrderDuplicate}
             onAssignDriver={assignDriver}
             onCancelAssign={cancelAssign}
@@ -10399,6 +10463,83 @@ const [matchedClients, setMatchedClients] = useState([]);
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
+  // ═══════════════════════════════════════════════════
+  // 거래처 등급(블랙/주의)·오더메모 안내 팝업 — PC와 동일한 기능.
+  // 기본거래처(basicClientsOnly)를 먼저 확인하고, 없으면 하차지거래처까지
+  // 포함된 병합 풀(clients)에서 찾는다(PC의 findClientAlertTarget과 동일한
+  // 우선순위 — 반대로 하면 아직 동기화 전인 옛 하차지거래처 값이 기본거래처의
+  // 최신 설정을 가려버릴 수 있다).
+  // ═══════════════════════════════════════════════════
+  const [clientAlert, setClientAlert] = useState(null); // { 업체명, 등급, 메모 }
+  const pendingAlertActionRef = useRef(null);
+  const hasOrderNote = (v) => v?.오더메모 && String(v.오더메모).trim();
+  const findClientAlertTarget = (name) => {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const clientTarget = (basicClientsOnly || []).find(
+      (c) => (c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasOrderNote(c))
+    );
+    if (clientTarget) {
+      return clientTarget.팝업표시 === false ? null : { ...clientTarget, 메모: clientTarget.오더메모 || "" };
+    }
+    const placeTarget = (clients || []).find(
+      (p) => (p.거래처명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasOrderNote(p))
+    );
+    if (!placeTarget || placeTarget.팝업표시 === false) return null;
+    return { ...placeTarget, 메모: placeTarget.오더메모 || "" };
+  };
+  const getAlertTargetForSelectedPlace = (place) => {
+    if (!place || place.팝업표시 === false) return null;
+    if (place.등급 === "블랙" || place.등급 === "주의" || hasOrderNote(place)) {
+      return { ...place, 메모: place.오더메모 || "" };
+    }
+    return null;
+  };
+  // target이 있으면 팝업을 띄우고, 팝업을 닫을 때(확인 버튼) action을 이어서 실행한다.
+  // target이 없으면 곧바로 action을 실행한다 — 거래처 적용 위치 선택 팝업이나
+  // 담당자 선택 팝업이 등급/메모 안내 팝업보다 먼저 뜨지 않도록 순서를 보장한다.
+  const showAlertThen = (target, action) => {
+    if (target) {
+      pendingAlertActionRef.current = action || null;
+      setClientAlert(target);
+    } else {
+      action?.();
+    }
+  };
+  const closeClientAlert = () => {
+    setClientAlert(null);
+    const action = pendingAlertActionRef.current;
+    pendingAlertActionRef.current = null;
+    if (action) setTimeout(action, 50);
+  };
+
+  // ═══════════════════════════════════════════════════
+  // 상/하차지 오더메모 보기·수정 팝업 — PC와 동일하게, "저장"을 눌러도 즉시
+  // 거래처관리에 반영되지 않고 form에만 임시로 담아뒀다가 실제로 오더를
+  // 등록/수정하는 시점에만 함께 저장된다(아래 handleSave/저장 로직에서 처리).
+  // ═══════════════════════════════════════════════════
+  const [orderMemoPopup, setOrderMemoPopup] = useState(null); // { type, name, memo, 팝업표시 }
+  const openOrderMemoEditor = (type) => {
+    const name = (type === "pickup" ? form.상차지명 : form.하차지명) || "";
+    if (!name.trim()) { showToast?.(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+    const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    if (form[memoKey] !== undefined || form[showKey] !== undefined) {
+      setOrderMemoPopup({ type, name: name.trim(), memo: form[memoKey] || "", 팝업표시: form[showKey] !== undefined ? form[showKey] : true });
+      return;
+    }
+    const found = (clients || []).find((c) => normalizeCompany(c.거래처명 || "") === normalizeCompany(name));
+    setOrderMemoPopup({ type, name: name.trim(), memo: found?.오더메모 || "", 팝업표시: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+  };
+  const saveOrderMemo = (memo, show) => {
+    if (!orderMemoPopup) return;
+    const memoKey = orderMemoPopup.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    const showKey = orderMemoPopup.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
+    setForm((p) => ({ ...p, [memoKey]: memo, [showKey]: show }));
+    setOrderMemoPopup(null);
+    showToast?.("오더를 등록/저장하면 오더메모가 함께 반영됩니다.");
+  };
+
 // 🔍 거래처 검색 함수 — 기본거래처(basicClientsOnly)만 대상으로 한다.
 // (clients prop은 MobileApp에서 이미 places+clients 통합 전달되어 상/하차지
 //  주소 자동완성에 쓰이므로, 거래처명 검색에는 별도로 받은 basicClients를 사용한다)
@@ -10445,7 +10586,7 @@ const chooseClient = (c) => {
   setMatchedClients([]);
   update("거래처명", c.거래처명);
   setSelectedClient(c);
-  setShowClientApplyModal(true);
+  showAlertThen(findClientAlertTarget(c.거래처명), () => setShowClientApplyModal(true));
 };
 
 const [showNewDriver, setShowNewDriver] = useState(false);
@@ -10865,9 +11006,11 @@ const pickPickup = (c) => {
     setQueryPickup("");
     setShowPickupList(false);
 
-    if (unique.length > 1) {
-      openContactPopup([{ type: "pickup", place: c, contacts: unique }]);
-    }
+    showAlertThen(getAlertTargetForSelectedPlace(c), () => {
+      if (unique.length > 1) {
+        openContactPopup([{ type: "pickup", place: c, contacts: unique }]);
+      }
+    });
 };
 const pickDrop = (c) => {
   update("하차지명", c.거래처명 || c.하차지명 || "");
@@ -10882,9 +11025,11 @@ const pickDrop = (c) => {
   setQueryDrop("");
   setShowDropList(false);
 
-  if (unique.length > 1) {
-    openContactPopup([{ type: "drop", place: c, contacts: unique }]);
-  }
+  showAlertThen(getAlertTargetForSelectedPlace(c), () => {
+    if (unique.length > 1) {
+      openContactPopup([{ type: "drop", place: c, contacts: unique }]);
+    }
+  });
 };
 
   // ===== 음성 오더 등록 =====
@@ -11258,6 +11403,15 @@ const pickDrop = (c) => {
   <RowLabelInput
     label="상차지"
     labelClassName="font-bold justify-center text-center"
+    right={
+      <button type="button" onClick={() => openOrderMemoEditor("pickup")} className="text-[#1B2B4B] active:opacity-60" title="상차지 오더메모">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+          <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+          <path d="M9 13h6" /><path d="M9 17h6" />
+        </svg>
+      </button>
+    }
     input={
       <div className="space-y-1">
 
@@ -11293,6 +11447,9 @@ const pickDrop = (c) => {
 
   update("상차지담당자", primary?.name || found.담당자 || "");
   update("상차지담당자번호", primary?.phone || found.담당자번호 || "");
+
+  const alertTarget = getAlertTargetForSelectedPlace(found);
+  if (alertTarget) setClientAlert(alertTarget);
 }
 
             }}
@@ -11396,6 +11553,15 @@ const pickDrop = (c) => {
   <RowLabelInput
     label="하차지"
     labelClassName="font-bold justify-center text-center"
+    right={
+      <button type="button" onClick={() => openOrderMemoEditor("drop")} className="text-[#1B2B4B] active:opacity-60" title="하차지 오더메모">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+          <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+          <path d="M9 13h6" /><path d="M9 17h6" />
+        </svg>
+      </button>
+    }
     input={
       <div className="space-y-1">
 
@@ -11437,6 +11603,9 @@ const pickDrop = (c) => {
 
   update("하차지담당자", primary?.name || found.담당자 || "");
   update("하차지담당자번호", primary?.phone || found.담당자번호 || "");
+
+  const alertTarget = getAlertTargetForSelectedPlace(found);
+  if (alertTarget) setClientAlert(alertTarget);
 }
 
             }}
@@ -13163,6 +13332,82 @@ const pickDrop = (c) => {
 )}
 
 {/* ===== 담당자 선택 팝업 ===== */}
+{clientAlert && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999] px-6">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[340px] overflow-hidden">
+      <div className={`px-5 py-4 ${clientAlert.등급 === "블랙" ? "bg-gray-900" : clientAlert.등급 === "주의" ? "bg-orange-500" : "bg-[#1B2B4B]"}`}>
+        <div className="text-white font-bold text-[15px]">
+          {clientAlert.등급 === "블랙" ? "⛔ 블랙 등급 거래처" : clientAlert.등급 === "주의" ? "⚠️ 주의 등급 거래처" : "📋 거래처 안내"}
+        </div>
+        <div className="text-white/70 text-[12px] mt-0.5">{clientAlert.거래처명 || clientAlert.업체명}</div>
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        {(clientAlert.등급 === "블랙" || clientAlert.등급 === "주의") && (
+          <div className={`text-[12px] font-bold px-3 py-1.5 rounded-lg inline-block ${clientAlert.등급 === "블랙" ? "bg-gray-100 text-gray-800" : "bg-orange-50 text-orange-600"}`}>
+            {clientAlert.등급} 등급으로 지정된 거래처입니다
+          </div>
+        )}
+        {clientAlert.메모 && clientAlert.메모.trim() && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">
+            <div className="text-[11px] font-semibold text-gray-500 mb-1">메모</div>
+            <div className="text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap">{clientAlert.메모}</div>
+          </div>
+        )}
+      </div>
+      <div className="px-5 pb-5">
+        <button
+          type="button"
+          onClick={closeClientAlert}
+          className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold"
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{orderMemoPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] px-6" onClick={() => setOrderMemoPopup(null)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
+        <div>
+          <div className="text-white text-[14px] font-bold">{orderMemoPopup.type === "pickup" ? "상차지" : "하차지"} 오더메모</div>
+          <div className="text-white/55 text-[12px] mt-0.5">{orderMemoPopup.name}</div>
+        </div>
+        <button type="button" onClick={() => setOrderMemoPopup(null)} className="text-white/60 text-xl leading-none">✕</button>
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        <textarea
+          autoFocus
+          rows={4}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+          placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
+          value={orderMemoPopup.memo}
+          onChange={(e) => setOrderMemoPopup((p) => ({ ...p, memo: e.target.value }))}
+        />
+        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+          <div className="pr-2">
+            <div className="text-[12.5px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+            <div className="text-[10.5px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 안내 팝업이 뜨지 않습니다</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOrderMemoPopup((p) => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${orderMemoPopup.팝업표시 === false ? "bg-gray-300" : "bg-[#1B2B4B]"}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${orderMemoPopup.팝업표시 === false ? "translate-x-1" : "translate-x-6"}`} />
+          </button>
+        </div>
+      </div>
+      <div className="px-5 pb-5 flex gap-2">
+        <button type="button" onClick={() => setOrderMemoPopup(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">취소</button>
+        <button type="button" onClick={() => saveOrderMemo(orderMemoPopup.memo, orderMemoPopup.팝업표시)} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold">저장</button>
+      </div>
+    </div>
+  </div>
+)}
+
 {contactPopup && (
   <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
     <div className="absolute inset-0 bg-black/50" onClick={() => closeContactPopup(null)} />
