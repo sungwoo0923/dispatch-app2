@@ -681,20 +681,15 @@ const CustomSelect = React.forwardRef(function CustomSelect(
   ref
 ) {
   const [open, setOpen] = React.useState(false);
+  const [menuRect, setMenuRect] = React.useState(null);
   const wrapRef = React.useRef(null);
   const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
   React.useImperativeHandle(ref, () => ({
     focus: () => btnRef.current?.focus(),
     scrollIntoView: (opts) => btnRef.current?.scrollIntoView(opts),
     value,
   }));
-
-  React.useEffect(() => {
-    if (!open) return;
-    const onDocDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", onDocDown);
-    return () => document.removeEventListener("mousedown", onDocDown);
-  }, [open]);
 
   const options = React.Children.toArray(children)
     .filter((c) => c && typeof c === "object" && c.type === "option")
@@ -705,6 +700,47 @@ const CustomSelect = React.forwardRef(function CustomSelect(
     }));
   const current = options.find((o) => String(o.value) === String(value ?? ""));
   const [activeIdx, setActiveIdx] = React.useState(-1);
+
+  // 옵션 목록은 트리거 바로 아래가 아니라 document.body에 fixed로 올려서 그린다 —
+  // 이전에는 트리거의 부모를 기준으로 absolute 배치했는데, 부모가 스크롤 가능한
+  // 패널(오더복사/수정 패널 등)이면 그 패널의 overflow에 목록이 잘려서 안 보이거나
+  // (오더복사수정패널에서 보고된 문제), 반대로 패널 폭을 넘어가며 화면 밖으로
+  // 삐져나가는 문제(다른 화면에서 보고된 문제)가 있었다. 화면 좌표 기준으로 직접
+  // 위치를 계산하면 어느 스크롤 컨테이너 안에 있든 항상 트리거 바로 아래에 잘리지
+  // 않고 뜬다.
+  const updateMenuRect = React.useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < 220 && r.top > spaceBelow;
+    setMenuRect({
+      left: r.left,
+      width: r.width,
+      top: openUp ? undefined : r.bottom + 4,
+      bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
+      maxHeight: Math.max(120, (openUp ? r.top : spaceBelow) - 12),
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    updateMenuRect();
+    const close = () => setOpen(false);
+    const onDocDown = (e) => {
+      if (wrapRef.current && wrapRef.current.contains(e.target)) return;
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDocDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open, updateMenuRect]);
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -731,15 +767,24 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             setOpen(false);
           } else if (e.key === "Escape") setOpen(false);
         }}
-        className={`${className} flex items-center justify-between gap-1.5 text-left disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`${className} text-left overflow-hidden text-ellipsis whitespace-nowrap`}
       >
-        <span className="truncate">{current ? current.label : (placeholder || "")}</span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={`shrink-0 opacity-60 transition-transform ${open ? "rotate-180" : ""}`}>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+        {current ? current.label : (placeholder || "")}
       </button>
-      {open && (
-        <div className="absolute z-[9999] mt-1 left-0 min-w-full w-max max-w-[320px] max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1">
+      {open && menuRect && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: "fixed",
+            left: menuRect.left,
+            top: menuRect.top,
+            bottom: menuRect.bottom,
+            minWidth: menuRect.width,
+            maxWidth: Math.max(menuRect.width, 320),
+            maxHeight: menuRect.maxHeight,
+          }}
+          className="z-[999999] overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1"
+        >
           {options.length === 0 && (
             <div className="px-3 py-2 text-[13px] text-gray-400">항목 없음</div>
           )}
@@ -766,7 +811,8 @@ const CustomSelect = React.forwardRef(function CustomSelect(
               {o.label}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
