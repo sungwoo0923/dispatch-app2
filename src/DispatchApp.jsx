@@ -600,6 +600,71 @@ function HoverInfoTrigger({ label, tooltipRows, className }) {
   );
 }
 
+// 기사 메모 팝업 표시 여부. 블랙 등급은 별도의 blackAlert 팝업이 항상(무조건) 뜨므로
+// 여기서는 관여하지 않는다 — 일반/직영/지입 등급은 거래처관리와 달리 기본값이 꺼짐이라,
+// 사용자가 기사수정 팝업에서 명시적으로 켠(팝업표시 === true) 경우에만 메모 팝업을 띄운다.
+function shouldShowDriverMemoAlert(d) {
+  return !!(d && d.메모 && String(d.메모).trim() && d.팝업표시 === true);
+}
+
+// 첨부파일(이미지/PDF) 미리보기 — 확대/축소/회전/저장 지원
+function FilePreviewModal({ base64, type, name, onClose }) {
+  const [zoom, setZoom] = React.useState(1);
+  const [rotate, setRotate] = React.useState(0);
+  const isImage = (type || "").startsWith("image/");
+
+  const handleSave = () => {
+    const a = document.createElement("a");
+    a.href = base64;
+    a.download = name || "첨부파일";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999999] flex flex-col bg-black/85">
+      <div className="flex items-center justify-between gap-3 px-5 py-3 bg-[#1B2B4B] shrink-0">
+        <span className="text-white text-[14px] font-semibold truncate">{name}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          {isImage && (
+            <>
+              <button onClick={() => setZoom(z => Math.max(0.25, +(z - 0.25).toFixed(2)))}
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">축소</button>
+              <span className="text-white/70 text-[12px] w-11 text-center">{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom(z => Math.min(4, +(z + 0.25).toFixed(2)))}
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">확대</button>
+              <button onClick={() => setRotate(r => (r + 90) % 360)}
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">회전</button>
+            </>
+          )}
+          <button onClick={handleSave}
+            className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[13px] font-bold hover:opacity-90 transition">저장</button>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none px-2">✕</button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto flex items-center justify-center p-6" onClick={onClose}>
+        {isImage ? (
+          <img
+            src={base64}
+            alt={name}
+            onClick={e => e.stopPropagation()}
+            style={{ transform: `scale(${zoom}) rotate(${rotate}deg)`, transition: "transform 0.15s ease", maxWidth: "none" }}
+            className="max-h-[80vh]"
+          />
+        ) : (
+          <iframe
+            src={base64}
+            title={name}
+            onClick={e => e.stopPropagation()}
+            className="w-full h-full bg-white rounded-lg"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------------------------
    Firestore 실시간 동기화 훅
 --------------------------------------------------*/
@@ -7178,7 +7243,7 @@ const [driverActive, setDriverActive] = React.useState(0);
      const grade = list[0]?.등급 || list[0]?.grade || list[0]?.상태 || "";
     if (grade === "블랙") {
       setBlackAlert(list[0]);
-    } else if (list[0]?.메모 && String(list[0].메모).trim()) {
+    } else if (shouldShowDriverMemoAlert(list[0])) {
       window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: list[0] }));
     }
     setForm((p) => ({
@@ -8572,7 +8637,7 @@ setSmartDriverMatched(results.slice(0, 8));
 const selectSmartDriver = (d) => {
   const grade = d?.등급 || d?.grade || "";
   if (grade === "블랙") setBlackAlert(d);
-  else if (d?.메모 && String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
+  else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
   setForm(p => ({
     ...p,
     차량번호: d.차량번호,
@@ -8605,7 +8670,7 @@ const applySmartDriverInput = async (text) => {
       // 완전히 동일 → 기존 기사 정보로 세팅
       const grade = existing?.등급 || existing?.grade || "";
       if (grade === "블랙") setBlackAlert(existing);
-      else if (existing?.메모 && String(existing.메모).trim()) {
+      else if (shouldShowDriverMemoAlert(existing)) {
         window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
       }
       setForm(p => ({
@@ -8642,7 +8707,7 @@ const applySmartDriverInput = async (text) => {
       // 그 외 (이름 파싱 안 됨 등) → 기존 기사 정보로 세팅
       const grade = existing?.등급 || existing?.grade || "";
       if (grade === "블랙") setBlackAlert(existing);
-      else if (existing?.메모 && String(existing.메모).trim()) {
+      else if (shouldShowDriverMemoAlert(existing)) {
         window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
       }
       setForm(p => ({
@@ -8876,8 +8941,8 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
    {/* ================== 통합 입력 카드 ================== */}
 <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
 
-{/* 액션바 */}
-<div className="px-4 py-2.5 flex flex-wrap items-center gap-3 border-b border-gray-100 bg-gray-50/60" style={{ minHeight: "44px" }}>
+{/* 액션바 — 확대/좁은 화면에서도 버튼 위치가 바뀌지 않도록 줄바꿈 대신 가로 스크롤 */}
+<div className="px-4 py-2.5 flex flex-nowrap items-center gap-3 border-b border-gray-100 bg-gray-50/60 overflow-x-auto" style={{ minHeight: "44px" }}>
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2">
 
@@ -18318,7 +18383,7 @@ const driverPanelCallbackRef = React.useRef(null);
     const match = matches[0];
     // 메모/블랙 즉시 팝업
     const g3 = match?.등급 || match?.grade || "";
-    if (g3 !== "블랙" && match?.메모 && String(match.메모).trim()) {
+    if (g3 !== "블랙" && shouldShowDriverMemoAlert(match)) {
       window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
     }
     const existingName = (oldRow.이름 || "").trim();
@@ -19950,8 +20015,8 @@ const head = isDark
   </div>
 </div>
 
-{/* ======================== 검색+필터+버튼 한 줄 ======================== */}
-<div className="flex items-center gap-1 flex-wrap mb-2 pb-0.5">
+{/* ======================== 검색+필터+버튼 한 줄 (줄바꿈 대신 가로 스크롤) ======================== */}
+<div className="flex items-center gap-1 flex-nowrap mb-2 pb-0.5 overflow-x-auto">
   {/* 검색창 */}
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
     <input
@@ -19986,7 +20051,7 @@ const head = isDark
     {statusSummary.업체미전달>0 && <option value="UNDELIVERED">미전달 {statusSummary.업체미전달}</option>}
   </select>
 
-  <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+  <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-nowrap justify-end">
     <button onClick={async(e)=>{
   e.preventDefault();
   e.stopPropagation();
@@ -20861,7 +20926,7 @@ checkWarningStatus(c.거래처명, "거래처");
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
           {smartList4.map((d,i)=>(
             <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -20938,7 +21003,7 @@ checkWarningStatus(c.거래처명, "거래처");
             const grade = match?.등급 || match?.grade || "";
             if (grade === "블랙") {
               setBlackAlert(match);
-            } else if (match?.메모 && String(match.메모).trim()) {
+            } else if (shouldShowDriverMemoAlert(match)) {
               window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
             }
           }
@@ -22551,7 +22616,7 @@ value={copyTarget?.화물수량 || ""}
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
                     {smartList4.map((d,i)=>(
                       <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -22594,7 +22659,7 @@ value={copyTarget?.화물수량 || ""}
                     if (match) {
                       const grade = match?.등급 || match?.grade || "";
                       if (grade === "블랙") setBlackAlert(match);
-                      else if (match?.메모 && String(match.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
+                      else if (shouldShowDriverMemoAlert(match)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
                     }
                   }
                   setEditTarget((p) => ({
@@ -27399,7 +27464,7 @@ if (mode === "driver") {
       const grade = matches[0]?.등급 || matches[0]?.grade || "";
       if (grade === "블랙") {
         setBlackAlert(matches[0]);
-      } else if (matches[0]?.메모 && String(matches[0].메모).trim()) {
+      } else if (shouldShowDriverMemoAlert(matches[0])) {
         window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: matches[0] }));
       }
       setDriverConfirmInfo({
@@ -28374,8 +28439,8 @@ return (
         </select>
       </div>
 
-      {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
-      <div className="flex items-center gap-1 flex-wrap mb-2 w-full pb-0.5">
+      {/* ===== 페이지+검색+날짜+버튼 한 줄 (줄바꿈 대신 가로 스크롤) ===== */}
+      <div className="flex items-center gap-1 flex-nowrap mb-2 w-full pb-0.5 overflow-x-auto">
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
@@ -28431,7 +28496,7 @@ return (
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
 
         {/* 우측 버튼들 */}
-        <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+        <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-nowrap justify-end">
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
           <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
@@ -29607,7 +29672,7 @@ return (
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
                     {smartList5.map((d,i)=>(
                       <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -29650,7 +29715,7 @@ return (
                     if (match5) {
                       const grade5 = match5?.등급 || match5?.grade || "";
                       if (grade5 === "블랙") setBlackAlert(match5);
-                      else if (match5?.메모 && String(match5.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match5 }));
+                      else if (shouldShowDriverMemoAlert(match5)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match5 }));
                     }
                   }
                   setEditTarget((p) => ({
@@ -30711,7 +30776,7 @@ setCopyPlaceOptions(list);
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
           {smartList5.map((d,i)=>(
             <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -30769,7 +30834,7 @@ setCopyPlaceOptions(list);
         const grade = match?.등급 || match?.grade || "";
         if (grade === "블랙") {
           setBlackAlert(match);
-        } else if (match?.메모 && String(match.메모).trim()) {
+        } else if (shouldShowDriverMemoAlert(match)) {
           window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
         }
       }
@@ -37235,9 +37300,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
         </div>
       </div>
 
-      {/* 검색바 */}
+      {/* 검색바 (줄바꿈 대신 가로 스크롤) */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -37966,7 +38031,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             if (match) {
                               const grade = match?.등급 || match?.grade || "";
                               if (grade === "블랙") setBlackDriverAlert(match);
-                              else if (match?.메모 && String(match.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
+                              else if (shouldShowDriverMemoAlert(match)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
                             }
                             setCopyTarget(prev => ({ ...prev, 차량번호: v, 이름: match?.이름 || "", 전화번호: formatPhone(match?.전화번호 || ""), 배차상태: match ? "배차완료" : "배차중" }));
                           }}
@@ -39602,9 +39667,9 @@ const handleBatchSettle = async (targetStatus) => {
       {/* ══════════════ 거래명세서 탭 ══════════════ */}
       {tab === "invoice" && (
         <>
-          {/* 검색 바 */}
+          {/* 검색 바 (줄바꿈 대신 가로 스크롤) */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-nowrap items-end gap-3 overflow-x-auto">
               {/* ★ 검색 타입 + 입력 + 드롭다운 */}
               <div className="relative" ref={dropdownRef}>
                 <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
@@ -39696,7 +39761,7 @@ const handleBatchSettle = async (targetStatus) => {
               >
                 초기화
               </button>
-              <div className="ml-auto flex gap-2 flex-wrap items-center">
+              <div className="ml-auto flex gap-2 flex-nowrap items-center">
                 <button onClick={downloadInvoiceExcel} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">엑셀</button>
                 <button onClick={savePDF} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">PDF</button>
                 <button onClick={handlePrint} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">인쇄</button>
@@ -40849,8 +40914,8 @@ const handleBatchSettle = async (targetStatus) => {
                 초기화
               </button>
             </div>
-            {/* Row 2: 액션 버튼 (우측 정렬) */}
-            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-100">
+            {/* Row 2: 액션 버튼 (우측 정렬, 줄바꿈 대신 가로 스크롤) */}
+            <div className="flex flex-nowrap items-center justify-end gap-2 pt-2 border-t border-gray-100 overflow-x-auto">
                 <button onClick={settleSelected} disabled={!selectedMonths.size}
                   className={`px-3 py-2 rounded-lg text-[13px] font-bold transition border ${selectedMonths.size?"bg-[#1B2B4B] text-white border-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/30 text-white border-transparent cursor-not-allowed"}`}>
                   선택 정산완료
@@ -42867,7 +42932,6 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
 function DriverManagement({ drivers, upsertDriver, removeDriver }) {
-  const [selectedMonths, setSelectedMonths] = React.useState(new Set());
   const [q, setQ] = React.useState("");
   const [qField, setQField] = React.useState("전체");
   const [searched, setSearched] = React.useState(false);
@@ -42878,6 +42942,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const perPage = 100;
+  const [editDriverModal, setEditDriverModal] = React.useState(null); // 더블클릭 수정 팝업
 
   // 기사정리 팝업 상태
   const [cleanupOpen, setCleanupOpen] = React.useState(false);
@@ -42990,9 +43055,15 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
     setSelected(selected.size === ids.length ? new Set() : new Set(ids));
   };
 
-  const handleBlur = async (row, key, val) => {
-    if (!row.id) return showAlert("문서 ID가 없어 수정할 수 없습니다.");
-    await upsertDriver({ ...row, [key]: val });
+  const saveEditDriver = async () => {
+    if (!editDriverModal) return;
+    if (!editDriverModal.id) return showAlert("문서 ID가 없어 수정할 수 없습니다.");
+    // 블랙 등급은 메모가 있으면 무조건 팝업이 뜨도록 별도로 처리되므로(팝업표시 값과 무관),
+    // 저장 시점에도 사용자에게 혼란을 주지 않도록 항상 팝업표시:true로 맞춰 저장한다.
+    const 팝업표시 = editDriverModal.등급 === "블랙" ? true : editDriverModal.팝업표시 === true;
+    await upsertDriver({ ...editDriverModal, 팝업표시 });
+    setEditDriverModal(null);
+    showAlert("수정 완료");
   };
 
   const addNew = async () => {
@@ -43224,18 +43295,14 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#1B2B4B]">
-                <th
-                    className="px-3 py-3 text-white text-center w-10 cursor-pointer select-none"
-                    onClick={() => toggleAllMonths(monthRows)}
-                  >
-                    <input
-                      type="checkbox"
-                      onChange={() => toggleAllMonths(monthRows)}
-                      checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
-                      onClick={e => e.stopPropagation()}
-                    />
-                  </th>
-                {["순번","차량번호","이름","전화번호","등급","메모","삭제"].map(h => (
+                <th className="px-3 py-3 text-white text-center w-10">
+                  <input
+                    type="checkbox"
+                    onChange={toggleAll}
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                  />
+                </th>
+                {["순번","차량번호","이름","전화번호","등급","메모","팝업","삭제"].map(h => (
                   <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -43243,7 +43310,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             <tbody>
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16 text-gray-400 text-[14px]">
+                  <td colSpan={9} className="text-center py-16 text-gray-400 text-[14px]">
                     {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                   </td>
                 </tr>
@@ -43251,51 +43318,41 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 const docId = r.id;
                 if (!docId) return null;
                 const grade = r.등급 || "일반";
+                const memoPopupOn = grade === "블랙" ? !!(r.메모 && String(r.메모).trim()) : r.팝업표시 === true;
                 return (
                   <tr key={`${docId}_${i}`}
-                    className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    className={`border-b border-gray-100 transition hover:bg-blue-50/40 cursor-pointer ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
+                    onDoubleClick={() => setEditDriverModal({ ...r })}>
                     <td className="px-3 py-2.5 text-center">
-                      <input type="checkbox" checked={selected.has(docId)} onChange={()=>toggleOne(docId)} />
+                      <input type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B]">
-                      <span contentEditable suppressContentEditableWarning
-                        onBlur={e=>handleBlur(r,"차량번호",e.currentTarget.innerText.trim())}>
-                        {r.차량번호||"-"}
-                      </span>
+                    <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap">{r.차량번호||"-"}</td>
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
+                    </td>
+                    <td className="px-2 py-2.5 text-center max-w-[200px]">
+                      {(r.메모 || "").length > 18 ? (
+                        <span className="text-[13px] text-gray-500">
+                          {(r.메모 || "").slice(0, 18)}…
+                        </span>
+                      ) : (
+                        <span className="text-[13px] text-gray-500">{r.메모 || ""}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <span contentEditable suppressContentEditableWarning
-                        onBlur={e=>handleBlur(r,"이름",e.currentTarget.innerText.trim())}>
-                        {r.이름||"-"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span contentEditable suppressContentEditableWarning
-                        onBlur={e=>handleBlur(r,"전화번호",e.currentTarget.innerText.trim().replace(/[^\d]/g,""))}>
-                        {formatPhone(r.전화번호)||"-"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <select
-                        className={`px-2.5 py-1 rounded-lg text-[12px] font-bold border-0 cursor-pointer ${gradeBadge(grade)}`}
-                        value={grade}
-                        onChange={e=>handleBlur(r,"등급",e.target.value)}>
-                        <option value="일반">일반</option>
-                        <option value="지입">지입</option>
-                        <option value="직영">직영</option>
-                        <option value="블랙">블랙</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <input className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
-                        defaultValue={r.메모||""}
-                        onBlur={e=>handleBlur(r,"메모",e.target.value)} />
+                      {(r.메모 || "").trim() && (
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${memoPopupOn ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-400"}`}>
+                          {memoPopupOn ? "ON" : "OFF"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <button
                         className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
-                        onClick={()=>{ if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
+                        onClick={(e)=>{ e.stopPropagation(); if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
                         삭제
                       </button>
                     </td>
@@ -43304,6 +43361,86 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
+      {editDriverModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}</h3>
+              <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+            </div>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호 *</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editDriverModal.차량번호||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 차량번호: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editDriverModal.이름||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 이름: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={formatPhone(editDriverModal.전화번호)||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 전화번호: e.target.value.replace(/[^\d]/g,"") }))} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
+                <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                  value={editDriverModal.등급||"일반"}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 등급: e.target.value }))}>
+                  <option value="일반">일반</option>
+                  <option value="지입">지입</option>
+                  <option value="직영">직영</option>
+                  <option value="블랙">블랙</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  value={editDriverModal.메모||""}
+                  onChange={(e) => setEditDriverModal(p => ({ ...p, 메모: e.target.value }))} />
+              </div>
+              {(editDriverModal.메모||"").trim() && (
+                editDriverModal.등급 === "블랙" ? (
+                  <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div>
+                      <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">블랙 등급은 메모가 있으면 항상 켜져 있으며 끌 수 없습니다</div>
+                    </div>
+                    <span className="relative inline-flex h-6 w-11 items-center rounded-full bg-[#1B2B4B] shrink-0">
+                      <span className="inline-block h-4 w-4 translate-x-6 transform rounded-full bg-white" />
+                    </span>
+                  </div>
+                ) : (
+                  <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div>
+                      <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">켜두면 이 기사를 어디서 선택하든 메모 안내 팝업이 뜹니다 (기본값: 꺼짐)</div>
+                    </div>
+                    <button type="button"
+                      onClick={() => setEditDriverModal(p => ({ ...p, 팝업표시: p.팝업표시 === true ? false : true }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editDriverModal.팝업표시 === true ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editDriverModal.팝업표시 === true ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+            <div className="px-6 pb-5 flex gap-3">
+              <button onClick={() => setEditDriverModal(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+              <button onClick={saveEditDriver}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -43681,6 +43818,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [editClientModal, setEditClientModal] = React.useState(null); // row data for popup
   const [editPlaceModal, setEditPlaceModal] = React.useState(null); // 하차지거래처 수정 팝업
   const [memoPopup, setMemoPopup] = React.useState(null); // memo text for popup
+  const [filePreview, setFilePreview] = React.useState(null); // 첨부파일 미리보기
 
   // ═══════════════════════════════════════════════════
   // 하차지에서 불러오기 팝업
@@ -44227,8 +44365,8 @@ React.useEffect(() => {
             ))}
           </div>
 
-          {/* 검색 + 버튼 바 */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* 검색 + 버튼 바 (줄바꿈 대신 가로 스크롤) */}
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
             <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
               <select className="px-2 h-full text-[12px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
                 value={placeFilterType} onChange={(e) => setPlaceFilterType(e.target.value)}>
@@ -44615,8 +44753,8 @@ React.useEffect(() => {
       {subTab === "기본" && (
         <div className="space-y-3">
 
-          {/* 툴바 */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* 툴바 (줄바꿈 대신 가로 스크롤) */}
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
             <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
               <span className="px-3 bg-[#1B2B4B] text-white text-[12px] font-semibold h-full flex items-center">검색</span>
               <input className="px-3 h-full text-[13px] w-56 outline-none"
@@ -44726,7 +44864,7 @@ React.useEffect(() => {
 
           {/* 수정 팝업 */}
           {editClientModal && (
-            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setEditClientModal(null)}>
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
                   <h3 className="text-white font-bold text-[15px]">거래처 수정 — {editClientModal.거래처명}</h3>
@@ -44816,6 +44954,11 @@ React.useEffect(() => {
                           <div className="flex items-center justify-center gap-3">
                             <span className="text-[12px] text-gray-400">{editClientModal.첨부파일명}</span>
                             <button
+                              className="text-[12px] text-[#1B2B4B] font-semibold hover:underline"
+                              onClick={() => setFilePreview({ base64: editClientModal.첨부파일Base64, type: editClientModal.첨부파일타입, name: editClientModal.첨부파일명 })}>
+                              미리보기
+                            </button>
+                            <button
                               className="text-[12px] text-red-500 font-semibold hover:text-red-700"
                               onClick={() => setEditClientModal(p => ({ ...p, 첨부파일Base64: null, 첨부파일명: null, 첨부파일타입: null }))}>
                               삭제
@@ -44839,6 +44982,15 @@ React.useEffect(() => {
                 </div>
               </div>
             </div>
+          )}
+
+          {filePreview && (
+            <FilePreviewModal
+              base64={filePreview.base64}
+              type={filePreview.type}
+              name={filePreview.name}
+              onClose={() => setFilePreview(null)}
+            />
           )}
 
           {/* 메모 더보기 팝업 */}
