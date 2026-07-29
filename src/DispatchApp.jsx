@@ -742,6 +742,14 @@ const CustomSelect = React.forwardRef(function CustomSelect(
     };
   }, [open, updateMenuRect]);
 
+  // className에 이미 absolute/fixed/relative/sticky 중 하나가 있으면(위치 지정 기준을
+  // 이미 스스로 정하고 있는 경우, 예: 배차현황 선택수정 패널처럼 셀렉트 자체가
+  // absolute로 입력창 위에 겹쳐지는 구조) 여기서 relative를 추가로 붙이면 안 된다 —
+  // 같은 position 속성을 겨루는 유틸리티 클래스가 둘 다 있으면 Tailwind 컴파일
+  // 순서상 relative가 항상 이겨서 absolute 배치가 조용히 깨져버린다. 화살표 아이콘
+  // 위치 기준은 absolute/fixed/relative/sticky 무엇이든 이미 있으면 충분하다.
+  const needsRelative = !/\b(absolute|fixed|relative|sticky)\b/.test(className);
+
   return (
     // display:contents — 이 래퍼가 실제 레이아웃 박스를 만들지 않게 한다. 코드베이스 안에
     // 이 자리에 select를 쓰던 곳들이 크게 두 가지 방식으로 되어 있었다: (a) select를 담는
@@ -775,7 +783,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             setOpen(false);
           } else if (e.key === "Escape") setOpen(false);
         }}
-        className={`${className} relative text-left overflow-hidden text-ellipsis whitespace-nowrap`}
+        className={`${className}${needsRelative ? " relative" : ""} text-left overflow-hidden text-ellipsis whitespace-nowrap`}
       >
         <span className="pr-2.5">{current ? current.label : (placeholder || "")}</span>
         <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60">
