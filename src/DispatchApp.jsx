@@ -14612,6 +14612,8 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState(null);
   const [copyDone, setCopyDone] = React.useState(null);
+  const [unlocking, setUnlocking] = React.useState(false);
+  const [unlockedUntil, setUnlockedUntil] = React.useState(null);
   const [zipLoading, setZipLoading] = React.useState(false);
   const [rotations, setRotations] = React.useState({});
 
@@ -14758,6 +14760,30 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     return null;
   };
 
+  // 기사가 이미 업로드를 완료해 링크가 잠긴 뒤에도, 기존 링크(카톡/문자에 남아있는
+  // 그 링크)를 그대로 30분간만 다시 열어준다 — 새 링크를 발급/재전송할 필요가 없다.
+  // 업로드잠금 자체는 건드리지 않고, 별도의 임시 해제 만료시각만 기록한다
+  // (UploadPage가 접근 시 이 시각이 아직 안 지났으면 잠금을 무시하도록 확인).
+  // 기사가 재업로드를 완료하면(handleUpload) 이 만료시각을 즉시 지워 바로 재잠금된다.
+  const handleAllowReupload = async () => {
+    if (isViewer || unlocking) return;
+    setUnlocking(true);
+    try {
+      const col = row.__col || "orders";
+      const until = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      await updateDoc(doc(db, col, row._id), { 업로드잠금해제만료: until });
+      const mirror = getMirrorTarget();
+      if (mirror) {
+        await updateDoc(doc(db, mirror.col, mirror.id), { 업로드잠금해제만료: until }).catch(() => {});
+      }
+      setUnlockedUntil(until);
+    } catch (e) {
+      alert("재업로드 허용 실패: " + e.message);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
   const handleDelete = async (item) => {
     if (isViewer) { alert("조회전용 권한으로는 삭제할 수 없습니다."); return; }
     if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
@@ -14834,6 +14860,22 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {!isViewer && row.업로드잠금 && (
+              unlockedUntil ? (
+                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[12px] font-bold rounded-lg">
+                  ✓ 30분간 재업로드 허용됨
+                </span>
+              ) : (
+                <button
+                  onClick={handleAllowReupload}
+                  disabled={unlocking}
+                  title="기사가 갖고 있는 기존 업로드 링크를 30분간 다시 열어줍니다"
+                  className="px-3 py-1.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50"
+                >
+                  {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
+                </button>
+              )
+            )}
             {!isViewer && (
               <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer">
                 파일 추가
