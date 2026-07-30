@@ -545,6 +545,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const [activeTab, setActiveTab] = useState(embedded ? defaultTab : "표준운임"); // "표준운임" | "전국운임표"
 
   // 표준운임 상태
+  const [searchMode, setSearchMode] = useState(localStorage.getItem("sf_mode") || "client"); // "client" | "address"
   const [sortKey, setSortKey] = useState("date_desc");
   const [pickup, setPickup] = useState(localStorage.getItem("sf_pickup") || "");
   const [drop, setDrop] = useState(localStorage.getItem("sf_drop") || "");
@@ -703,7 +704,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     save("sf_pickupAddr", pickupAddr);
     save("sf_dropAddr", dropAddr);
     save("sf_client", client);
-  }, [pickup, drop, cargo, ton, vehicle, pickupAddr, dropAddr, client]);
+    save("sf_mode", searchMode);
+  }, [pickup, drop, cargo, ton, vehicle, pickupAddr, dropAddr, client, searchMode]);
 
   const clientList = useMemo(() =>
     [...new Set(dispatchData.map(r => r.거래처명).filter(Boolean))].sort(),
@@ -747,9 +749,10 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     const getPickupVias = r => [..._saVia(r.경유상차목록||[]),..._saVia(r.경유지_상차||[]),..._saVia(r.경유지상차||[])].map(_viaName).filter(Boolean);
     const getDropVias = r => [..._saVia(r.경유하차목록||[]),..._saVia(r.경유지_하차||[]),..._saVia(r.경유지하차||[])].map(_viaName).filter(Boolean);
 
-    // 경유지 포함 시 비교 기준 화물내용/톤수 = 본 오더 + 경유지 전체 합산
-    const mergedCargoOf = r => includeVia ? mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.화물내용 || "");
-    const mergedTonOf = r => includeVia ? mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.차량톤수 || "");
+    // 비교/표시 기준 화물내용·톤수는 경유지가 있으면 항상 본 오더 + 경유지 전체
+    // 합산값을 쓴다 — "경유포함" 토글은 검색어가 경유지명에도 매치될지만 결정한다.
+    const mergedCargoOf = r => mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
+    const mergedTonOf = r => mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
 
     list = list.filter(r => {
       const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
@@ -790,12 +793,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (client !== "전체" && client !== "") {
       list = list.filter(r => clean(r.거래처명) === clean(client));
     }
-
-    // 경유지 없는 직접 노선만 (토글 꺼진 경우)
-    list = list.filter(r => {
-      if (!includeVia && (getPickupVias(r).length > 0 || getDropVias(r).length > 0)) return false;
-      return true;
-    });
 
     // 결과 표시용: 경유지 목록 + 경유지 포함 합산 화물/톤수 태깅
     list = list.map(r => {
@@ -906,205 +903,224 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
       {/* ====== 표준운임 조회 탭 ====== */}
       {activeTab === "표준운임" && (
-        <>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4">
-            <div className="p-4">
-              <div className="mb-3">
-                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">노선 정보</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                    <div className="text-[11px] font-bold text-[#1B2B4B] mb-2 uppercase tracking-wider">상차지</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={labelCls}>지명 <span className="text-red-400">*</span></label>
-                        <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>주소 (선택)</label>
-                        <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                    <div className="text-[11px] font-bold text-[#1B2B4B] mb-2 uppercase tracking-wider">하차지</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={labelCls}>지명 <span className="text-red-400">*</span></label>
-                        <PlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 유통센터" onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>주소 (선택)</label>
-                        <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIncludeVia(v => !v)}
-                    className={`px-3 py-1.5 text-[12px] font-semibold rounded border transition ${
-                      includeVia
-                        ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                        : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                    }`}
-                  >
-                    경유포함
-                  </button>
-                </div>
-              </div>
+        <div className="grid grid-cols-2 gap-4 items-start">
 
-              <div className="mb-3">
-                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">조건</div>
-                <div className="grid grid-cols-5 gap-2">
-                  <div>
-                    <label className={labelCls}>거래처</label>
-                    <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>차량종류</label>
-                    <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
-                      {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>차량톤수</label>
-                    <input className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>화물내용</label>
-                    <input className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>정렬방식</label>
-                    <select className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
-                      <option value="date_desc">최신순</option>
-                      <option value="date_asc">오래된순</option>
-                      <option value="cargo_asc">화물내용 (숫자순)</option>
-                      <option value="vehicle_asc">차량종류순</option>
-                      <option value="fare_desc">청구운임 높은순</option>
-                      <option value="fare_asc">청구운임 낮은순</option>
-                      <option value="level">운임레벨 (표준→프리미엄)</option>
-                      <option value="level_spike">운임레벨 (프리미엄우선)</option>
-                      <option value="driver_desc">기사운임 높은순</option>
-                      <option value="fee_desc">수수료 높은순</option>
-                    </select>
-                  </div>
+          {/* ───────── 왼쪽: 검색 패널 ───────── */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+
+            {/* 검색 모드 토글 */}
+            <div className="flex gap-1.5 mb-3">
+              <button
+                type="button"
+                onClick={() => setSearchMode("client")}
+                className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
+                  searchMode === "client" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                }`}
+              >
+                거래처로 검색
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode("address")}
+                className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
+                  searchMode === "address" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                }`}
+              >
+                주소로 검색
+              </button>
+            </div>
+
+            {searchMode === "client" ? (
+              <div className="grid grid-cols-2 gap-2 mb-2.5">
+                <div className="col-span-2">
+                  <label className={labelCls}>거래처</label>
+                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
+                </div>
+                <div>
+                  <label className={labelCls}>상차지명 <span className="text-red-400">*</span></label>
+                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
+                <div>
+                  <label className={labelCls}>하차지명 <span className="text-red-400">*</span></label>
+                  <PlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 유통센터" onKeyDown={e=>e.key==="Enter"&&search()} />
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <button onClick={search} className="px-6 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
-                <button onClick={reset} className="px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
-                <span className="text-[12px] text-gray-400 ml-1">Enter 키로도 조회</span>
-                {searched && stats && (
-                  <span className="ml-auto text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
-                    총 <b className="text-[#1B2B4B]">{stats.count}</b>건 조회됨
-                  </span>
-                )}
+            ) : (
+              <div className="grid grid-cols-2 gap-2 mb-2.5">
+                <div className="col-span-2">
+                  <label className={labelCls}>거래처</label>
+                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
+                </div>
+                <div>
+                  <label className={labelCls}>상차지 주소 <span className="text-red-400">*</span></label>
+                  <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
+                <div>
+                  <label className={labelCls}>하차지 주소 <span className="text-red-400">*</span></label>
+                  <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
               </div>
+            )}
+
+            <label className="flex items-center gap-1.5 mb-3 cursor-pointer select-none w-fit">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">경유지명도 검색에 포함</span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <label className={labelCls}>차량종류</label>
+                <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
+                  {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>차량톤수</label>
+                <input className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+              </div>
+              <div>
+                <label className={labelCls}>화물내용</label>
+                <input className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+              </div>
+              <div>
+                <label className={labelCls}>정렬방식</label>
+                <select className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
+                  <option value="date_desc">최신순</option>
+                  <option value="date_asc">오래된순</option>
+                  <option value="cargo_asc">화물내용 (숫자순)</option>
+                  <option value="vehicle_asc">차량종류순</option>
+                  <option value="fare_desc">청구운임 높은순</option>
+                  <option value="fare_asc">청구운임 낮은순</option>
+                  <option value="level">운임레벨 (표준→프리미엄)</option>
+                  <option value="level_spike">운임레벨 (프리미엄우선)</option>
+                  <option value="driver_desc">기사운임 높은순</option>
+                  <option value="fee_desc">수수료 높은순</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button onClick={search} className="px-6 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
+              <button onClick={reset} className="px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
+              <span className="text-[12px] text-gray-400 ml-1">Enter 키로도 조회</span>
             </div>
           </div>
 
-          {stats && (
-            <div className="grid grid-cols-6 gap-3 mb-4">
-              <StatCard label="조회 건수" value={`${stats.count}건`} color="gray" />
-              <StatCard label="평균 청구운임" value={`${stats.avg.toLocaleString()}원`} color="navy" />
-              <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="navy" />
-              <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="navy" />
-              <StatCard label="평균 기사운임" value={`${stats.avgDriver.toLocaleString()}원`} sub={`마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원`} color="gray" />
-              <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color="gray" />
-            </div>
-          )}
+          {/* ───────── 오른쪽: 결과 패널 ───────── */}
+          <div className="space-y-3 min-w-0">
+            {!searched && (
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-400">
+                <div className="text-[14px] font-semibold mb-1">왼쪽에서 조건을 입력하고 조회하세요</div>
+                <div className="text-[12px]">노선·거래처·차량 조건에 맞는 운임 히스토리를 보여드립니다</div>
+              </div>
+            )}
 
-          {aiFare && (
-            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[13px] font-bold text-[#1B2B4B]">AI 추천 운임</span>
-                    <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full font-semibold">신뢰도 {aiFare.confidence}%</span>
+            {searched && stats && (
+              <div className="text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 w-fit">
+                총 <b className="text-[#1B2B4B]">{stats.count}</b>건 조회됨
+              </div>
+            )}
+
+            {stats && (
+              <div className="grid grid-cols-3 gap-2">
+                <StatCard label="조회 건수" value={`${stats.count}건`} color="gray" />
+                <StatCard label="평균 청구운임" value={`${stats.avg.toLocaleString()}원`} color="navy" />
+                <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="navy" />
+                <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="navy" />
+                <StatCard label="평균 기사운임" value={`${stats.avgDriver.toLocaleString()}원`} sub={`마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원`} color="gray" />
+                <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color="gray" />
+              </div>
+            )}
+
+            {aiFare && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[13px] font-bold text-[#1B2B4B]">AI 추천 운임</span>
+                      <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full font-semibold">신뢰도 {aiFare.confidence}%</span>
+                    </div>
+                    <p className="text-[12px] text-gray-500 leading-relaxed">{aiFare.message}</p>
                   </div>
-                  <p className="text-[12px] text-gray-500 leading-relaxed">{aiFare.message}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[11px] text-gray-400 mb-0.5">추천 운임</div>
-                  <div className="text-[20px] font-bold text-[#1B2B4B]">{aiFare.aiValue.toLocaleString()}원</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">범위: {aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}원</div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-[11px] text-gray-400 mb-0.5">추천 운임</div>
+                    <div className="text-[20px] font-bold text-[#1B2B4B]">{aiFare.aiValue.toLocaleString()}원</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">범위: {aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}원</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {searched && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1500px] text-[13px]">
-                  <thead>
-                    <tr className="bg-[#1B2B4B]">
-                      {["상차일","긴급","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
-                        <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.length === 0 ? (
-                      <tr><td colSpan={16} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
-                    ) : (
-                      result.map((r, i) => {
-                        // 경유지 정보 조합
-                        const _extractViaNames = (arr) => {
-                          let list = arr;
-                          if (typeof arr === "string" && arr.trim().startsWith("[")) {
-                            try { list = JSON.parse(arr); } catch { list = []; }
-                          }
-                          return Array.isArray(list)
-                            ? list.map(v => typeof v === "string" ? v : (v?.업체명 || v?.지명 || v?.하차지명 || v?.상차지명 || v?.주소 || "")).filter(Boolean)
-                            : [];
-                        };
-                        const _allViaNames = [
-                          ..._extractViaNames(r.경유지_상차),
-                          ..._extractViaNames(r.경유상차목록),
-                          ..._extractViaNames(r.경유지상차),
-                          ..._extractViaNames(r.경유지_하차),
-                          ..._extractViaNames(r.경유하차목록),
-                          ..._extractViaNames(r.경유지하차),
-                        ];
-                        const waypointText = [...new Set(_allViaNames)].join(" → ");
-                        return (
-                          <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
-                            <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
-                            <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                              {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-300">-</span>}
-                            </td>
-                            <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
-                            <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.하차지명}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.하차지주소}>{r.하차지주소}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-center max-w-[120px] truncate" title={waypointText}>
-                              {waypointText ? (
-                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-semibold">{waypointText}</span>
-                              ) : <span className="text-gray-300">-</span>}
-                            </td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedCargo || r.화물내용}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedTon || r.차량톤수}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
-                            <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
-                            <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
-                            <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
-                            <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+            {searched && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1500px] text-[13px]">
+                    <thead>
+                      <tr className="bg-[#1B2B4B]">
+                        {["상차일","긴급","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
+                          <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.length === 0 ? (
+                        <tr><td colSpan={16} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                      ) : (
+                        result.map((r, i) => {
+                          // 경유지 정보 조합
+                          const _extractViaNames = (arr) => {
+                            let list = arr;
+                            if (typeof arr === "string" && arr.trim().startsWith("[")) {
+                              try { list = JSON.parse(arr); } catch { list = []; }
+                            }
+                            return Array.isArray(list)
+                              ? list.map(v => typeof v === "string" ? v : (v?.업체명 || v?.지명 || v?.하차지명 || v?.상차지명 || v?.주소 || "")).filter(Boolean)
+                              : [];
+                          };
+                          const _allViaNames = [
+                            ..._extractViaNames(r.경유지_상차),
+                            ..._extractViaNames(r.경유상차목록),
+                            ..._extractViaNames(r.경유지상차),
+                            ..._extractViaNames(r.경유지_하차),
+                            ..._extractViaNames(r.경유하차목록),
+                            ..._extractViaNames(r.경유지하차),
+                          ];
+                          const waypointText = [...new Set(_allViaNames)].join(" → ");
+                          return (
+                            <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                              <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
+                              <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-300">-</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
+                              <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.하차지명}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.하차지주소}>{r.하차지주소}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-center max-w-[120px] truncate" title={waypointText}>
+                                {waypointText ? (
+                                  <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-semibold">{waypointText}</span>
+                                ) : <span className="text-gray-300">-</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedCargo || r.화물내용}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedTon || r.차량톤수}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
+                              <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
+                              <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
-        </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ====== 전국운임 조회 탭 (T-Map 도로거리 기반) ====== */}
