@@ -104,7 +104,7 @@ const cellBase = "border px-2 py-1 text-center whitespace-nowrap align-middle mi
 const headBase = "border px-2 py-2 whitespace-nowrap bg-gray-100";
 const inputBase = "border p-1 rounded w-36 text-center";
 const inputStyle =
-  "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] text-gray-800 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
+  "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
   const Field = ({ label, children }) => (
     <div className="space-y-1">
       <div className="text-[13px] font-bold text-gray-900">
