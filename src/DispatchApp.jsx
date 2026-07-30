@@ -104,10 +104,10 @@ const cellBase = "border px-2 py-1 text-center whitespace-nowrap align-middle mi
 const headBase = "border px-2 py-2 whitespace-nowrap bg-gray-100";
 const inputBase = "border p-1 rounded w-36 text-center";
 const inputStyle =
-  "w-full h-[42px] border border-slate-300 rounded-lg px-3 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition";
+  "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
   const Field = ({ label, children }) => (
     <div className="space-y-1">
-      <div className="text-xs font-semibold text-slate-500">
+      <div className="text-[13px] font-bold text-gray-900">
         {label}
       </div>
       {children}
@@ -701,6 +701,20 @@ const CustomSelect = React.forwardRef(function CustomSelect(
   const current = options.find((o) => String(o.value) === String(value ?? ""));
   const [activeIdx, setActiveIdx] = React.useState(-1);
 
+  // 옵션 글자 길이에 맞춰 드롭다운 목록 폭을 넉넉히 잡는다 — 트리거(닫힌 버튼)가
+  // 좁은 칸에 들어있어도(예: 오더복사수정패널의 그리드 칸) 목록을 열었을 때 긴
+  // 옵션명("냉장/냉동탑", "24시(외부업체)" 등)이 잘리지 않게 한다.
+  const menuMaxContentWidth = React.useMemo(() => {
+    let maxLen = 0;
+    options.forEach((o) => {
+      const text = typeof o.label === "string" ? o.label : "";
+      let w = 0;
+      for (const ch of text) w += /[ㄱ-힝]/.test(ch) ? 14 : 8;
+      if (w > maxLen) maxLen = w;
+    });
+    return Math.min(480, Math.max(200, maxLen + 56));
+  }, [options]);
+
   // 옵션 목록은 트리거 바로 아래가 아니라 document.body에 fixed로 올려서 그린다 —
   // 이전에는 트리거의 부모를 기준으로 absolute 배치했는데, 부모가 스크롤 가능한
   // 패널(오더복사/수정 패널 등)이면 그 패널의 overflow에 목록이 잘려서 안 보이거나
@@ -775,18 +789,37 @@ const CustomSelect = React.forwardRef(function CustomSelect(
           if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(e.key)) e.preventDefault();
           if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { setOpen(true); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); return; }
           if (!open) return;
-          if (e.key === "ArrowDown") setActiveIdx((i) => Math.min(i + 1, options.length - 1));
-          else if (e.key === "ArrowUp") setActiveIdx((i) => Math.max(i - 1, 0));
-          else if (e.key === "Enter") {
+          if (e.key === "ArrowDown") {
+            setActiveIdx((i) => {
+              let next = i;
+              for (let k = i + 1; k < options.length; k++) { if (!options[k].disabled) { next = k; break; } }
+              const o = options[next];
+              // 값이 빈 문자열("없음"/"선택" 등 플레이스홀더성 옵션)로 지나가는 중에는
+              // onChange를 쏘지 않는다 — 일부 필드는 값이 비워지는 순간 다른 입력창으로
+              // 포커스를 옮기는 등의 부수효과가 있어, 단순히 화살표로 훑고 지나가기만
+              // 해도 그 부수효과가 실행되어 방향키 탐색이 끊겨버렸다. 빈 값은 Enter나
+              // 클릭으로 확정할 때만 반영한다.
+              if (o && !o.disabled && o.value !== "") onChange?.({ target: { value: o.value } });
+              return next;
+            });
+          } else if (e.key === "ArrowUp") {
+            setActiveIdx((i) => {
+              let next = i;
+              for (let k = i - 1; k >= 0; k--) { if (!options[k].disabled) { next = k; break; } }
+              const o = options[next];
+              if (o && !o.disabled && o.value !== "") onChange?.({ target: { value: o.value } });
+              return next;
+            });
+          } else if (e.key === "Enter") {
             const o = options[activeIdx];
-            if (o && !o.disabled) { onChange?.({ target: { value: o.value } }); }
+            if (o && !o.disabled) onChange?.({ target: { value: o.value } });
             setOpen(false);
           } else if (e.key === "Escape") setOpen(false);
         }}
         className={`${className}${needsRelative ? " relative" : ""} text-left overflow-hidden text-ellipsis whitespace-nowrap`}
       >
-        <span className="pr-2.5">{current ? current.label : (placeholder || "")}</span>
-        <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60">
+        <span className="pr-4">{current ? current.label : (placeholder || "")}</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-80">
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
@@ -799,7 +832,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             top: menuRect.top,
             bottom: menuRect.bottom,
             minWidth: menuRect.width,
-            maxWidth: Math.max(menuRect.width, 320),
+            maxWidth: Math.max(menuRect.width, menuMaxContentWidth),
             maxHeight: menuRect.maxHeight,
           }}
           className="z-[999999] overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1"
@@ -820,10 +853,10 @@ const CustomSelect = React.forwardRef(function CustomSelect(
               className={`px-3 py-2 text-[13px] cursor-pointer whitespace-nowrap ${
                 o.disabled
                   ? "text-gray-300 cursor-not-allowed"
-                  : String(o.value) === String(value ?? "")
-                  ? "bg-[#1B2B4B] text-white font-semibold"
                   : i === activeIdx
-                  ? "bg-gray-100 text-gray-800"
+                  ? "bg-[#1B2B4B] text-white font-semibold"
+                  : String(o.value) === String(value ?? "")
+                  ? "bg-gray-100 text-gray-800 font-semibold"
                   : "text-gray-700"
               }`}
             >
@@ -834,6 +867,160 @@ const CustomSelect = React.forwardRef(function CustomSelect(
         document.body
       )}
     </div>
+  );
+});
+
+// 브라우저 기본 달력(type="date")을 대체하는 커스텀 날짜 선택기 — 숫자가 작고
+// 연/월 이동이 불편하다는 피드백에 따라 배차현황 검색 필터에 사용한다. CustomSelect와
+// 동일하게 트리거는 그대로 두고 달력 패널만 document.body에 fixed 포지션 portal로 띄운다.
+const CustomDatePicker = React.forwardRef(function CustomDatePicker(
+  { value, onChange, className = "", placeholder = "날짜 선택", disabled = false, showIcon = false },
+  ref
+) {
+  const [open, setOpen] = React.useState(false);
+  const [viewYear, setViewYear] = React.useState(() => (value ? new Date(value).getFullYear() : new Date().getFullYear()));
+  const [viewMonth, setViewMonth] = React.useState(() => (value ? new Date(value).getMonth() : new Date().getMonth()));
+  const [menuRect, setMenuRect] = React.useState(null);
+  const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+  React.useImperativeHandle(ref, () => ({ focus: () => btnRef.current?.focus() }));
+
+  const updateMenuRect = React.useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < 360 && r.top > spaceBelow;
+    setMenuRect({
+      left: r.left,
+      top: openUp ? undefined : r.bottom + 4,
+      bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    if (value) {
+      const d = new Date(value);
+      if (!isNaN(d)) { setViewYear(d.getFullYear()); setViewMonth(d.getMonth()); }
+    }
+    updateMenuRect();
+    const close = () => setOpen(false);
+    const onDocDown = (e) => {
+      if (btnRef.current && btnRef.current.contains(e.target)) return;
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDocDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open, updateMenuRect, value]);
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+  const now = new Date();
+  const todayStr = fmt(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const yearOptions = [];
+  for (let y = now.getFullYear() - 6; y <= now.getFullYear() + 3; y++) yearOptions.push(y);
+
+  const goMonth = (delta) => {
+    setViewMonth((m) => {
+      let nm = m + delta;
+      let ny = viewYear;
+      if (nm < 0) { nm = 11; ny -= 1; }
+      else if (nm > 11) { nm = 0; ny += 1; }
+      setViewYear(ny);
+      return nm;
+    });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={btnRef}
+        disabled={disabled}
+        onClick={() => { if (disabled) return; setOpen((v) => !v); }}
+        className={`${className} text-left ${showIcon ? "flex items-center justify-between gap-1.5" : ""}`}
+      >
+        <span>{value || <span className="text-gray-400">{placeholder}</span>}</span>
+        {showIcon && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        )}
+      </button>
+      {open && menuRect && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: "fixed", left: menuRect.left, top: menuRect.top, bottom: menuRect.bottom }}
+          className="z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl p-3 w-[290px]"
+        >
+          <div className="flex items-center justify-between mb-2 gap-1">
+            <button type="button" onClick={() => goMonth(-1)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-lg font-bold shrink-0">‹</button>
+            <div className="flex items-center gap-1.5">
+              <select value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))}
+                className="text-[14px] font-bold text-[#1B2B4B] border border-gray-200 rounded-md px-1.5 py-1 outline-none cursor-pointer">
+                {yearOptions.map((y) => <option key={y} value={y}>{y}년</option>)}
+              </select>
+              <select value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))}
+                className="text-[14px] font-bold text-[#1B2B4B] border border-gray-200 rounded-md px-1.5 py-1 outline-none cursor-pointer">
+                {Array.from({ length: 12 }, (_, i) => i).map((m) => <option key={m} value={m}>{m + 1}월</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={() => goMonth(1)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-lg font-bold shrink-0">›</button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
+              <div key={w} className={`text-center text-[11px] font-bold py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{w}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {cells.map((d, i) => {
+              if (d == null) return <div key={i} />;
+              const dateStr = fmt(viewYear, viewMonth, d);
+              const isSelected = dateStr === value;
+              const isToday = dateStr === todayStr;
+              return (
+                <button key={i} type="button"
+                  onClick={() => { onChange?.({ target: { value: dateStr } }); setOpen(false); }}
+                  className={`h-9 rounded-lg text-[13px] font-semibold transition ${
+                    isSelected ? "bg-[#1B2B4B] text-white" :
+                    isToday ? "border-2 border-[#1B2B4B] text-[#1B2B4B]" :
+                    "hover:bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
+            <button type="button"
+              onClick={() => { onChange?.({ target: { value: todayStr } }); setOpen(false); }}
+              className="text-[12px] font-bold text-[#1B2B4B] hover:underline">오늘</button>
+            <button type="button"
+              onClick={() => { onChange?.({ target: { value: "" } }); setOpen(false); }}
+              className="text-[12px] font-semibold text-gray-400 hover:underline">지우기</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 });
 
@@ -7439,18 +7626,20 @@ const findClientAlertTarget = (name) => {
   // 먼저 보면, 아직 서로 동기화되지 않은 옛 하차지거래처 문서(팝업표시가 켜진 채로
   // 남아있는)가 이겨버려서 기본거래처에서 분명히 꺼둔 팝업이 거래처명 필드에서만
   // 다시 뜨는 문제가 있었다.
+  const isWarnGrade = (g) => g === "블랙" || g === "주의" || g === "이탈";
   const clientTarget = (clients || []).find(
-    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
+    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (isWarnGrade(c.등급) || hasNote(c))
   );
   if (clientTarget) {
     // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
-    return clientTarget.팝업표시 === false ? null : { ...clientTarget, 메모: clientTarget.오더메모 || "" };
+    // 오더메모가 비어 있으면(예: 예전에 일반메모에만 적어둔 경우) 일반메모라도 참고할 수 있게 넣어준다.
+    return clientTarget.팝업표시 === false ? null : { ...clientTarget, 메모: clientTarget.오더메모 || clientTarget.메모 || "" };
   }
   const placeTarget = (placeRows || []).find(
-    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
+    (p) => (p.업체명 || "") === trimmed && (isWarnGrade(p.등급) || hasNote(p))
   );
   if (!placeTarget || placeTarget.팝업표시 === false) return null;
-  return { ...placeTarget, 메모: placeTarget.오더메모 || "" };
+  return { ...placeTarget, 메모: placeTarget.오더메모 || placeTarget.메모 || "" };
 };
 // 드롭다운에서 "특정 항목"을 직접 선택한 경우 전용 — 같은 업체명이라도 기본거래처와
 // 하차지거래처, 혹은 주소가 다른 하차지거래처가 각각 따로 존재할 수 있으므로, 이름으로
@@ -7459,8 +7648,8 @@ const getAlertTargetForSelectedPlace = (place) => {
   if (!place || place.팝업표시 === false) return null;
   const note = place.오더메모;
   const hasNote = note && String(note).trim();
-  if (place.등급 !== "블랙" && place.등급 !== "주의" && !hasNote) return null;
-  return { ...place, 메모: note || "" };
+  if (place.등급 !== "블랙" && place.등급 !== "주의" && place.등급 !== "이탈" && !hasNote) return null;
+  return { ...place, 메모: note || place.메모 || "" };
 };
 // 하위호환용 — 기존 호출부에서 그대로 쓸 수 있도록 남겨둠 (단일 대상만 체크)
 const checkClientGrade = (name, nextFocusId = null) => {
@@ -7823,8 +8012,18 @@ function checkDuplicateDispatch(form, dispatchData) {
       if (!f.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
       if (!f.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
       if (!f.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
-      if (!String(f.화물내용 || "").trim()) { miss.push("화물내용"); missKeys.push("화물내용"); }
-      if (!String(f.차량톤수 || "").trim()) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
+      // 화물내용/차량톤수는 파레트·박스 등 타입 드롭다운만 고르고 숫자를 안 넣으면
+      // "파레트"/"톤" 같은 단위 문자열만 저장되어 겉으로는 비어있지 않은 것처럼
+      // 보인다 — 실제 값(숫자)이 있는지까지 확인해야 한다.
+      const 화물내용본문 = String(f.화물내용 || "").split("+")[0];
+      const 화물내용비어있음 = f.화물타입 && f.화물타입 !== "없음"
+        ? !/\d/.test(화물내용본문)
+        : !화물내용본문.trim();
+      if (화물내용비어있음) { miss.push("화물내용"); missKeys.push("화물내용"); }
+      const 차량톤수비어있음 = f.톤수타입
+        ? !String(f.톤수값 || "").trim()
+        : !String(f.차량톤수 || "").trim();
+      if (차량톤수비어있음) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
       if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
       if (miss.length) {
         setRequiredErrors(new Set(missKeys));
@@ -9494,9 +9693,9 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 
 {/* ================= 상차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B]">상차</label>
-  <input
-    type="date"
+  <CustomDatePicker
     value={form.상차일 || ""}
+    showIcon
     className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
     onChange={(e) => onChange("상차일", e.target.value)}
   />
@@ -9568,9 +9767,9 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
  {/* ================= 하차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B] ml-4">하차</label>
   <div className="relative">
-    <input
-      type="date"
+    <CustomDatePicker
       value={form.하차일 || ""}
+      showIcon
       className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
       onChange={(e) => onChange("하차일", e.target.value)}
     />
@@ -10455,7 +10654,7 @@ className={`
       <label className={labelCls}>수수료</label>
       <input
         className={`${inputCls} bg-gray-100`}
-        value={form.수수료}
+        value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
         readOnly
       />
     </div>
@@ -12343,7 +12542,7 @@ className={`
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el && editingContactIdx === null) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && editingContactIdx === null && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -12587,7 +12786,7 @@ className={`
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
    onKeyDown={(e) => {
       if (e.key === "Enter" || e.key === "Escape") {
         e.preventDefault();
@@ -12601,14 +12800,16 @@ className={`
       {(() => {
         const isBlack = clientAlert.등급 === "블랙";
         const isCaution = clientAlert.등급 === "주의";
+        const isDeparture = clientAlert.등급 === "이탈";
+        const isGraded = isBlack || isCaution || isDeparture;
         // 등급이 "일반"이라도 메모가 등록돼 있으면 참고할 수 있도록 같은 방식으로 안내한다.
-        const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-[#1B2B4B]";
-        const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
-        const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
-        const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
-        const badgeCls = isBlack ? "bg-gray-900 text-white" : isCaution ? "bg-orange-500 text-white" : "bg-[#1B2B4B] text-white";
-        const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : "text-[#1B2B4B]";
-        const footTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-500" : "text-[#1B2B4B]";
+        const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+        const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+        const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
+        const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+        const badgeCls = isBlack ? "bg-gray-900 text-white" : isCaution ? "bg-orange-500 text-white" : isDeparture ? "bg-red-600 text-white" : "bg-[#1B2B4B] text-white";
+        const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
+        const footTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-500" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
         return (
       <>
       <div className={`px-6 py-4 flex items-center gap-3 ${headerCls}`}>
@@ -12636,13 +12837,13 @@ className={`
           )}
         </div>
         <p className="text-sm text-gray-600 text-center font-semibold">
-          {isBlack || isCaution
+          {isGraded
             ? <>해당 거래처는 <span className={`font-bold ${footTextCls}`}>{clientAlert.등급}</span> 등급으로 지정된 거래처입니다.</>
             : "해당 거래처에 등록된 메모를 확인해주세요."}
         </p>
       </div>
       <div className="px-6 pb-5">
-        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-[#1B2B4B]"}`}
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]"}`}
           onClick={() => {
             setClientAlert(null);
             setTimeout(() => { advancePopupChain(); }, 50);
@@ -13006,7 +13207,7 @@ setConfirmChange(null);
       }
     }}
     tabIndex={0}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
   >
     <div className="bg-white rounded-xl shadow-xl w-[1300px] h-[650px] flex overflow-hidden border">
 
@@ -13393,8 +13594,7 @@ setConfirmChange(null);
           {Array.from({ length: multiCount }, (_, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={orderDates[i] || form.상차일 || ""}
                 onChange={e => {
                   const next = [...orderDates];
@@ -13409,8 +13609,7 @@ setConfirmChange(null);
                 }}
                 className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
               />
-              <input
-                type="date"
+              <CustomDatePicker
                 value={orderDropDates[i] || orderDates[i] || form.상차일 || ""}
                 onChange={e => {
                   const nd = [...orderDropDates];
@@ -14423,6 +14622,8 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState(null);
   const [copyDone, setCopyDone] = React.useState(null);
+  const [unlocking, setUnlocking] = React.useState(false);
+  const [unlockedUntil, setUnlockedUntil] = React.useState(null);
   const [zipLoading, setZipLoading] = React.useState(false);
   const [rotations, setRotations] = React.useState({});
 
@@ -14569,6 +14770,30 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     return null;
   };
 
+  // 기사가 이미 업로드를 완료해 링크가 잠긴 뒤에도, 기존 링크(카톡/문자에 남아있는
+  // 그 링크)를 그대로 30분간만 다시 열어준다 — 새 링크를 발급/재전송할 필요가 없다.
+  // 업로드잠금 자체는 건드리지 않고, 별도의 임시 해제 만료시각만 기록한다
+  // (UploadPage가 접근 시 이 시각이 아직 안 지났으면 잠금을 무시하도록 확인).
+  // 기사가 재업로드를 완료하면(handleUpload) 이 만료시각을 즉시 지워 바로 재잠금된다.
+  const handleAllowReupload = async () => {
+    if (isViewer || unlocking) return;
+    setUnlocking(true);
+    try {
+      const col = row.__col || "orders";
+      const until = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      await updateDoc(doc(db, col, row._id), { 업로드잠금해제만료: until });
+      const mirror = getMirrorTarget();
+      if (mirror) {
+        await updateDoc(doc(db, mirror.col, mirror.id), { 업로드잠금해제만료: until }).catch(() => {});
+      }
+      setUnlockedUntil(until);
+    } catch (e) {
+      alert("재업로드 허용 실패: " + e.message);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
   const handleDelete = async (item) => {
     if (isViewer) { alert("조회전용 권한으로는 삭제할 수 없습니다."); return; }
     if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
@@ -14645,6 +14870,22 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {!isViewer && row.업로드잠금 && (
+              unlockedUntil ? (
+                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[12px] font-bold rounded-lg">
+                  ✓ 30분간 재업로드 허용됨
+                </span>
+              ) : (
+                <button
+                  onClick={handleAllowReupload}
+                  disabled={unlocking}
+                  title="기사가 갖고 있는 기존 업로드 링크를 30분간 다시 열어줍니다"
+                  className="px-3 py-1.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50"
+                >
+                  {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
+                </button>
+              )
+            )}
             {!isViewer && (
               <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer">
                 파일 추가
@@ -15812,14 +16053,14 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
   const needsError = showError && ampm === null && !!value;
 
   return (
-    <div className="flex items-center gap-1">
-      <button type="button" disabled={disabled} className={`${btnBase} ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}>오전</button>
-      <button type="button" disabled={disabled} className={`${btnBase} ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}>오후</button>
+    <div className="flex items-center gap-1 flex-nowrap">
+      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}>오전</button>
+      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}>오후</button>
       <select
         value={value || ""}
         disabled={disabled}
         onChange={e => onChange(e.target.value)}
-        className={(selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]") + " disabled:bg-gray-100 disabled:text-gray-400"}
+        className={(selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]").replace(/\bw-full\b/, "w-[108px]") + " shrink-0 disabled:bg-gray-100 disabled:text-gray-400"}
       >
         <option value="">시간 선택</option>
         {times.map(t => (
@@ -16949,14 +17190,14 @@ const lastWarnedRef = React.useRef(null);
 const checkWarningStatus = (name, type) => {
   const now = Date.now();
   if (lastWarnedRef.current?.name === name && now - lastWarnedRef.current.time < 3000) return;
-    const foundClient = (clients || []).find(c => c.거래처명 === name);
+    const foundClient = (clients || []).find(c => (c.업체명 || c.거래처명) === name);
     if (foundClient && foundClient.팝업표시 !== false) {
       const status = foundClient.업체상태 || foundClient.등급;
       const note = foundClient.오더메모;
-      if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+      if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
-        const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
+        const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || foundClient.메모 || "" } });
         return;
       }
     }
@@ -16964,10 +17205,10 @@ const checkWarningStatus = (name, type) => {
     if (foundPlace && foundPlace.팝업표시 !== false) {
       const status = foundPlace.업체상태 || foundPlace.등급;
       const note = foundPlace.오더메모;
-      if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+      if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
-        const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
+        const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || foundPlace.메모 || "" } });
       }
     }
   };
@@ -17312,7 +17553,7 @@ ${r.하차지주소 || ""}${(() => { const line = buildContactLine(r.하차지�
 하차방법 : ${r.하차방법 || "-"}
 
 화물 : ${_totTon4d}${_totCargo4d ? ` / ${_totCargo4d}` : ""} ${r.차량종류 || r.차종}
-결제방법 : ${r.지급방식 || "-"}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
+결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식 || "-")}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드필수
 KPP/아주파렛트 상차시 각각 전표업로드 필수
@@ -18059,18 +18300,26 @@ React.useEffect(() => {
     const targetClient = row ? String(row.거래처 || "").trim() : "";
     const _todayKstAddr4 = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const base = (dispatchData || []).filter(r => {
+    const matchDir = (pk, dk) => (dispatchData || []).filter(r => {
       if ((r.상차일 || "").slice(0, 10) === _todayKstAddr4) return false;
       if (!r.청구운임) return false;
       const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
       const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
-      if (!rPickup.includes(pickupKw)) return false;
-      if (!rDrop.includes(dropKw)) return false;
+      if (!rPickup.includes(pk)) return false;
+      if (!rDrop.includes(dk)) return false;
       const rGroup = getVehicleGroup(r.차량종류);
       if (rGroup !== targetGroup) return false;
       if (!ctxAddrAllClients4 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
       return true;
     });
+
+    // 입력한 방향으로 이력이 없으면, 상/하차 지역을 뒤바꾼 반대노선 이력도 확인한다.
+    let base = matchDir(pickupKw, dropKw);
+    let reversedMatch = false;
+    if (!base.length) {
+      base = matchDir(dropKw, pickupKw);
+      reversedMatch = base.length > 0;
+    }
 
     if (!base.length) {
       setCtxAddrResults4([]);
@@ -18086,6 +18335,7 @@ React.useEffect(() => {
         ton: row && getTotalTonFromOrder(row) != null && getTotalTonFromOrder(r) === getTotalTonFromOrder(row),
       },
       _time: r.updatedAt || r.등록일 || 0,
+      _reverseRoute: reversedMatch,
     }));
     scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
 
@@ -18100,6 +18350,9 @@ React.useEffect(() => {
     setCtxAddrResults4(scored);
     setCtxAddrSearch4Open(false);
     setCtxFare4PanelOpen(true);
+    if (reversedMatch) {
+      showAlert(`"${pickupKw} → ${dropKw}" 노선 이력은 없어, 반대 노선 "${dropKw} → ${pickupKw}" 이력 ${scored.length}건을 표시합니다.`);
+    }
   };
 
   // 🔵 동일 노선 추천 리스트
@@ -19054,13 +19307,21 @@ const driverPanelCallbackRef = React.useRef(null);
       );
     }
 
-    // 검색
+    // 검색 — 예전에는 row 객체의 모든 필드(Object.values)를 통째로 훑어서, id/history/
+    // 내부 플래그 등 화면에 보이지도 않는 값에 검색어가 우연히 포함되기만 해도 전혀
+    // 상관없는 오더가 결과에 섞여 나왔다(배차현황/5파트는 이미 아래처럼 실제 표시되는
+    // 필드만 검색해 이 문제가 없었다). 사용자가 보고 검색할 만한 필드로만 제한한다.
     if (q.trim()) {
       const key = q.toLowerCase();
+      const get = (v) => String(v || "").toLowerCase();
       data = data.filter((r) =>
-        Object.values(r).some((v) =>
-          String(v || "").toLowerCase().includes(key)
-        )
+        get(r.거래처명).includes(key) ||
+        get(r.상차지명).includes(key) ||
+        get(r.하차지명).includes(key) ||
+        get(r.차량번호).includes(key) ||
+        get(r.이름).includes(key) ||
+        get(r.지급방식).includes(key) ||
+        get(r.배차방식).includes(key)
       );
     }
 
@@ -20184,10 +20445,9 @@ const handleCloseFileUpload = async (e) => {
 
     if (key === "상차일" || key === "하차일") {
       return (
-        <input
-          type="date"
+        <CustomDatePicker
           className="border p-1 rounded w-full"
-          defaultValue={val || ""}
+          value={val || ""}
           onChange={(e) => handleEditChange(rowId, key, e.target.value)}
         />
       );
@@ -20498,7 +20758,7 @@ const head = isDark
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, visible4.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 1, 0)); }
@@ -21071,7 +21331,7 @@ flashRow(savedId);
     <div className="relative">
       <input
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.거래처명 ?? ""}
         onChange={(e)=>{
           const v = e.target.value;
@@ -21159,10 +21419,9 @@ checkWarningStatus(c.거래처명, "거래처");
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
         />
@@ -21173,13 +21432,13 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
       <Field label="상차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.상차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
   >
@@ -21197,7 +21456,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -21276,10 +21535,12 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       {/* 🔥 다시 추가된 칸들 */}
-      <Field label="상차지주소">
+      <Field label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.상차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
         />
@@ -21288,7 +21549,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label="상차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
         />
@@ -21297,7 +21558,7 @@ checkWarningStatus(c.거래처명, "거래처");
             <Field label="상차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
         />
@@ -21334,10 +21595,9 @@ checkWarningStatus(c.거래처명, "거래처");
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
         />
@@ -21348,13 +21608,13 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
 <Field label="하차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.하차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
   >
@@ -21370,7 +21630,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -21449,10 +21709,12 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       {/* 🔥 다시 추가된 하차 칸들 */}
-      <Field label="하차지주소">
+      <Field label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.하차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
         />
@@ -21461,7 +21723,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label="하차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
         />
@@ -21470,7 +21732,7 @@ checkWarningStatus(c.거래처명, "거래처");
            <Field label="하차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
         />
@@ -21507,8 +21769,8 @@ checkWarningStatus(c.거래처명, "거래처");
 </div>
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">기사 스마트 검색</h3></div>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
 <div className="p-4">
     <div className="relative" style={{overflow: "visible"}}>
       <input
@@ -21536,18 +21798,16 @@ checkWarningStatus(c.거래처명, "거래처");
       )}
     </div>
   </div>
-</section>
 
 {/* ================= 기사정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">기사정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량번호">
       <input
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.차량번호 ?? ""}
 
         onKeyDown={(e) => {
@@ -21619,7 +21879,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="기사명">
       <input
-        className="inputStyle bg-gray-100"
+        className={inputStyle}
         value={copyTarget?.이름 ?? ""}
         readOnly
       />
@@ -21627,7 +21887,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="전화번호">
       <input
-        className="inputStyle bg-gray-100"
+        className={inputStyle}
         value={formatPhone(copyTarget?.전화번호 ?? "")}
         readOnly
       />
@@ -21635,10 +21895,8 @@ checkWarningStatus(c.거래처명, "거래처");
 
   </div>
 </div>
-</section>
 {/* ================= 화물정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">화물정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
@@ -21646,7 +21904,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <Field label="차량종류">
       <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.차량종류 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
       >
@@ -21698,9 +21956,9 @@ checkWarningStatus(c.거래처명, "거래처");
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="
           px-3 py-2
-          bg-blue-50
-          text-blue-700
-          border-l
+          bg-[#1B2B4B]
+          text-white
+          font-bold
           outline-none
           cursor-pointer
         "
@@ -21756,9 +22014,9 @@ value={copyTarget?.화물수량 || ""}
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="
         px-3 py-2
-        bg-blue-50
-        text-blue-700
-        border-l
+        bg-[#1B2B4B]
+        text-white
+        font-bold
         outline-none
         cursor-pointer
       "
@@ -21787,17 +22045,15 @@ value={copyTarget?.화물수량 || ""}
 
   </div>
 </div>
-</section>
         {/* ================= 결제 정보 ================= */}
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">결제 정보</h3></div>
+          <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
           <div className="p-6">
 
           <div className="grid grid-cols-5 gap-8">
 
             <Field label="청구운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -21811,7 +22067,7 @@ value={copyTarget?.화물수량 || ""}
 
             <Field label="기사운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -21825,7 +22081,7 @@ value={copyTarget?.화물수량 || ""}
 
             <Field label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-blue-700"}`}>
+              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
@@ -21833,7 +22089,7 @@ value={copyTarget?.화물수량 || ""}
 <Field label="지급방식">
   <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.지급방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
   >
@@ -21849,7 +22105,7 @@ value={copyTarget?.화물수량 || ""}
 
 <Field label="배차방식">
   <CustomSelect
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
@@ -21861,10 +22117,8 @@ value={copyTarget?.화물수량 || ""}
 </Field>
           </div>
         </div>
-        </section>
 {/* ================= 메모 + 전달사항 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모 / 전달사항</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
   <div className="p-6 grid grid-cols-2 gap-4">
     <div>
       <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
@@ -22056,6 +22310,9 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -22427,6 +22684,9 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -22671,8 +22931,7 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 상차일 ================= */}
   <div>
     <label>상차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.상차일 || ""}
@@ -22710,8 +22969,7 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 하차일 ================= */}
   <div>
     <label>하차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.하차일 || ""}
@@ -24556,6 +24814,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -24945,7 +25206,7 @@ setConfirmChange(null);
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100001]"
           tabIndex={-1}
-          ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+          ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
           onKeyDown={(e) => {
             if (e.key === "Escape") { e.preventDefault(); setDeliveryConfirm(null); return; }
             if (e.key === "Enter") {
@@ -25523,11 +25784,12 @@ setConfirmChange(null);
           {(() => {
             const isBlack = warningPopup.status === "블랙";
             const isCaution = warningPopup.status === "주의";
-            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-[#1B2B4B]";
-            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
-            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
-            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
-            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-yellow-600" : "text-[#1B2B4B]";
+            const isDeparture = warningPopup.status === "이탈";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
             return (
               <>
             {/* 헤더 */}
@@ -25546,7 +25808,7 @@ setConfirmChange(null);
                 {warningPopup.status && (
                   <div className="flex items-center">
                     <span className="text-gray-500">등급</span>
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : "bg-orange-400"}`}>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-red-600"}`}>
                       {warningPopup.status}
                     </span>
                   </div>
@@ -25575,7 +25837,7 @@ setConfirmChange(null);
 
               <p className="text-sm text-gray-600 text-center font-semibold">
                 {warningPopup.status
-                  ? <>해당 거래처는 <span className={`font-bold ${isBlack ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</>
+                  ? <>해당 거래처는 <span className={`font-bold ${isBlack ? "text-red-600" : isCaution ? "text-orange-500" : "text-red-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</>
                   : "해당 거래처에 등록된 메모를 확인해주세요."}
               </p>
             </div>
@@ -26129,14 +26391,14 @@ const checkWarningStatus = (name, type) => {
   if (lastWarnedRef.current?.name === name && now - lastWarnedRef.current.time < 3000) return;
 
   // 거래처 목록 체크
-  const foundClient = (clients || []).find(c => c.거래처명 === name);
+  const foundClient = (clients || []).find(c => (c.업체명 || c.거래처명) === name);
   if (foundClient && foundClient.팝업표시 !== false) {
     const status = foundClient.업체상태 || foundClient.등급;
     const note = foundClient.오더메모;
-    if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
-      const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || foundClient.메모 || "" } });
       return;
     }
   }
@@ -26147,10 +26409,10 @@ const checkWarningStatus = (name, type) => {
   if (foundPlace && foundPlace.팝업표시 !== false) {
     const status = foundPlace.업체상태 || foundPlace.등급;
     const note = foundPlace.오더메모;
-    if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
-      const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
-      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || foundPlace.메모 || "" } });
     }
   }
 };
@@ -27577,7 +27839,7 @@ ${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자
 하차방법 : ${r.하차방법||"-"}
 
 화물 : ${_totTon5d}${_totCargo5d?` / ${_totCargo5d}`:""} ${r.차량종류||"-"}
-결제방법 : ${r.지급방식||"-"}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}
+결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식||"-")}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드필수
 KPP/아주파렛트 상차시 각각 전표업로드 필수
@@ -28855,17 +29117,25 @@ const save = {
     const targetGroup = row ? getVehicleGroup5(row.차량종류) : "general";
     const targetClient = row ? String(row.거래처 || "").trim() : "";
 
-    const base = (dispatchData || []).filter(r => {
+    const matchDir = (pk, dk) => (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
       const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
       const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
-      if (!rPickup.includes(pickupKw)) return false;
-      if (!rDrop.includes(dropKw)) return false;
+      if (!rPickup.includes(pk)) return false;
+      if (!rDrop.includes(dk)) return false;
       const rGroup = getVehicleGroup5(r.차량종류);
       if (rGroup !== targetGroup) return false;
       if (!ctxAddrAllClients5 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
       return true;
     });
+
+    // 입력한 방향으로 이력이 없으면, 상/하차 지역을 뒤바꾼 반대노선 이력도 확인한다.
+    let base = matchDir(pickupKw, dropKw);
+    let reversedMatch = false;
+    if (!base.length) {
+      base = matchDir(dropKw, pickupKw);
+      reversedMatch = base.length > 0;
+    }
 
     if (!base.length) {
       setCtxAddrResults5([]);
@@ -28881,6 +29151,7 @@ const save = {
         ton: row && getTotalTonFromOrder(row) != null && getTotalTonFromOrder(r) === getTotalTonFromOrder(row),
       },
       _time: r.updatedAt || r.등록일 || 0,
+      _reverseRoute: reversedMatch,
     }));
     scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
 
@@ -28895,6 +29166,9 @@ const save = {
     setCtxAddrResults5(scored);
     setCtxAddrSearch5Open(false);
     setCtxFare5PanelOpen(true);
+    if (reversedMatch) {
+      showAlert(`"${pickupKw} → ${dropKw}" 노선 이력은 없어, 반대 노선 "${dropKw} → ${pickupKw}" 이력 ${scored.length}건을 표시합니다.`);
+    }
   };
 
   if (!loaded) return null;
@@ -28992,7 +29266,7 @@ return (
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, visible5.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 1, 0)); }
@@ -29163,9 +29437,9 @@ return (
             적용된다. (예전에는 날짜를 하나만 골라도 바로 필터링되어, 시작일만
             고르고 종료일을 고르는 중에도 목록이 계속 바뀌어 보였다. 조회 버튼이
             날짜용/검색어용 2개로 따로 있던 것도 혼란스러워 하나로 합쳤다.) */}
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
+        <CustomDatePicker className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0 bg-white" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
         <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
+        <CustomDatePicker className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0 bg-white" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
 
         {/* 검색창 (통합) — 조회 버튼이 날짜/검색어 공용이라, 날짜만 바꾸고 아직
             조회를 누르지 않은 상태면 천천히 깜빡여 클릭을 유도한다. */}
@@ -29855,8 +30129,7 @@ return (
   {/* 상차일 */}
   <div>
     <label className="text-sm font-medium">상차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full"
       value={editTarget.상차일 || ""}
       onChange={(e) =>
@@ -29899,8 +30172,7 @@ return (
   {/* 하차일 */}
   <div>
     <label className="text-sm font-medium">하차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full"
       value={editTarget.하차일 || ""}
       onChange={(e) =>
@@ -31081,7 +31353,7 @@ return (
     <div className="relative">
       <input
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.거래처명 ?? ""}
         onChange={(e)=>{
           const v = e.target.value;
@@ -31167,10 +31439,9 @@ setCopyTarget(prev=>({
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
         />
@@ -31181,13 +31452,13 @@ setCopyTarget(prev=>({
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
       <Field label="상차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.상차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
   >
@@ -31205,7 +31476,7 @@ setCopyTarget(prev=>({
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -31284,10 +31555,12 @@ setCopyPlaceOptions(list);
       </Field>
 
       {/* 🔥 다시 추가된 칸들 */}
-      <Field label="상차지주소">
+      <Field label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.상차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
         />
@@ -31296,7 +31569,7 @@ setCopyPlaceOptions(list);
       <Field label="상차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
         />
@@ -31305,7 +31578,7 @@ setCopyPlaceOptions(list);
       <Field label="상차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
         />
@@ -31324,10 +31597,9 @@ setCopyPlaceOptions(list);
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
         />
@@ -31338,13 +31610,13 @@ setCopyPlaceOptions(list);
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
 <Field label="하차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.하차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
   >
@@ -31360,7 +31632,7 @@ setCopyPlaceOptions(list);
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -31439,10 +31711,12 @@ setCopyPlaceOptions(list);
       </Field>
 
       {/* 🔥 다시 추가된 하차 칸들 */}
-      <Field label="하차지주소">
+      <Field label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.하차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
         />
@@ -31451,7 +31725,7 @@ setCopyPlaceOptions(list);
       <Field label="하차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
         />
@@ -31460,7 +31734,7 @@ setCopyPlaceOptions(list);
       <Field label="하차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
         />
@@ -31479,8 +31753,8 @@ setCopyPlaceOptions(list);
 </div>
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">기사 스마트 검색</h3></div>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
   <div className="p-4">
     <div className="relative">
       <input
@@ -31508,18 +31782,16 @@ setCopyPlaceOptions(list);
       )}
     </div>
   </div>
-</section>
 
 {/* ================= 기사정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">기사정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
 
    <Field label="차량번호">
 <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget?.차량번호 || ""}
 
   onKeyDown={(e)=>{
@@ -31598,7 +31870,7 @@ setCopyPlaceOptions(list);
 
     <Field label="기사명">
       <input
-        className="inputStyle bg-gray-100"
+        className={inputStyle}
         value={copyTarget?.이름 || ""}
         readOnly
       />
@@ -31606,7 +31878,7 @@ setCopyPlaceOptions(list);
 
     <Field label="전화번호">
       <input
-        className="inputStyle bg-gray-100"
+        className={inputStyle}
        value={formatPhone(copyTarget?.전화번호 || "")}
         readOnly
       />
@@ -31614,10 +31886,8 @@ setCopyPlaceOptions(list);
 
   </div>
 </div>
-</section>
 {/* ================= 화물정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">화물정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
@@ -31625,7 +31895,7 @@ setCopyPlaceOptions(list);
     <Field label="차량종류">
       <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.차량종류 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
       >
@@ -31672,7 +31942,7 @@ setCopyPlaceOptions(list);
     {/* 단위 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
+      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
       value={copyTarget?.톤수타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -31717,7 +31987,7 @@ setCopyPlaceOptions(list);
     {/* 타입 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
+      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -31739,17 +32009,15 @@ setCopyPlaceOptions(list);
 
   </div>
 </div>
-</section>
         {/* ================= 결제 정보 ================= */}
-      <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">결제 정보</h3></div>
+          <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
           <div className="p-6">
 
           <div className="grid grid-cols-5 gap-8">
 
             <Field label="청구운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -31763,7 +32031,7 @@ setCopyPlaceOptions(list);
 
             <Field label="기사운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -31777,7 +32045,7 @@ setCopyPlaceOptions(list);
 
             <Field label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-blue-700"}`}>
+              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
@@ -31785,7 +32053,7 @@ setCopyPlaceOptions(list);
 <Field label="지급방식">
   <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.지급방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
   >
@@ -31801,7 +32069,7 @@ setCopyPlaceOptions(list);
 
 <Field label="배차방식">
   <CustomSelect
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
@@ -31813,10 +32081,8 @@ setCopyPlaceOptions(list);
 </Field>
           </div>
 </div>
-        </section>
 {/* ================= 메모 + 전달사항 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모 / 전달사항</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
   <div className="p-6 grid grid-cols-2 gap-4">
     <div>
       <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
@@ -32008,6 +32274,9 @@ setCopyPlaceOptions(list);
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -32854,7 +33123,7 @@ setCopyPlaceOptions(list);
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]"
           tabIndex={-1}
-          ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+          ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
           onKeyDown={async (e) => {
             if (e.key === "Escape") { e.preventDefault(); setConfirmChange(null); return; }
             if (e.key === "Enter") {
@@ -33295,11 +33564,12 @@ setCopyPlaceOptions(list);
           {(() => {
             const isBlack = warningPopup.status === "블랙";
             const isCaution = warningPopup.status === "주의";
-            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-[#1B2B4B]";
-            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
-            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
-            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
-            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : "text-[#1B2B4B]";
+            const isDeparture = warningPopup.status === "이탈";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
             return (
               <>
             <div className={`px-6 py-4 flex items-center gap-3 ${headerCls}`}>
@@ -33312,7 +33582,7 @@ setCopyPlaceOptions(list);
                 {warningPopup.status && (
                   <div className="flex items-center">
                     <span className="text-gray-500">등급</span>
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : "bg-orange-400"}`}>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-red-600"}`}>
                       {warningPopup.status}
                     </span>
                   </div>
@@ -33760,6 +34030,9 @@ setCopyPlaceOptions(list);
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -34207,8 +34480,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label>상차일</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={newOrder.상차일}
                 onChange={(e) => handleChange("상차일", e.target.value)}
                 className="border p-2 rounded w-full"
@@ -34264,8 +34536,7 @@ function NewOrderPopup({
 
 <div>
   <label>하차일</label>
-  <input
-    type="date"
+  <CustomDatePicker
     value={newOrder.하차일}
     onChange={(e) => handleChange("하차일", e.target.value)}
     className="border p-2 rounded w-full"
@@ -37856,19 +38127,23 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
 const checkWarningStatus = (name, type) => {
   name = String(name || "").trim();
   if (!name) return;
-  const foundClient = (clients || []).find(c => String(c.거래처명 || "").trim() === name);
-  if (foundClient) {
+  const foundClient = (clients || []).find(c => String(c.업체명 || c.거래처명 || "").trim() === name);
+  if (foundClient && foundClient.팝업표시 !== false) {
     const status = foundClient.업체상태 || foundClient.등급;
-    if (status === "블랙" || status === "주의") {
-      setWarningPopup({ name, status, type, info: foundClient });
+    const note = foundClient.오더메모;
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || foundClient.메모 || "" } });
       return;
     }
   }
   const foundPlace = (places || []).find(p => String(p.업체명 || "").trim() === name);
-  if (foundPlace) {
+  if (foundPlace && foundPlace.팝업표시 !== false) {
     const status = foundPlace.업체상태 || foundPlace.등급;
-    if (status === "블랙" || status === "주의") {
-      setWarningPopup({ name, status, type, info: foundPlace });
+    const note = foundPlace.오더메모;
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || foundPlace.메모 || "" } });
     }
   }
 };
@@ -38087,9 +38362,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
           />
           <div className="flex items-center gap-1">
-            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-gray-400 text-[13px]">~</span>
-            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className="flex items-center gap-1">
             <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400">
@@ -38411,16 +38686,16 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       {warningPopup && (
   <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
-        <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
-        <h3 className="text-white text-lg font-bold">{warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림</h3>
+      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>
+        <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : warningPopup.status === "주의" ? "⚠️" : "⛔"}</span>
+        <h3 className="text-white text-lg font-bold">{warningPopup.status || "메모"} 거래처 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
+        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : warningPopup.status === "주의" ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-200"}`}>
           <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
           <div className="flex items-center">
             <span className="text-gray-500">등급</span>
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>{warningPopup.status}</span>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>{warningPopup.status}</span>
           </div>
           {warningPopup.info?.지정일 && (
             <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
@@ -38429,13 +38704,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <div><span className="text-gray-500">주소</span><span className="ml-2">{warningPopup.info.주소}</span></div>
           )}
           {warningPopup.info?.메모 && (
-            <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.info.메모}</span></div>
+            <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.info.메모}</span></div>
           )}
         </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
+        <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
       </div>
       <div className="px-6 pb-5">
-        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
       </div>
     </div>
   </div>
@@ -38554,7 +38829,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <div className="space-y-4">
                       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
                       <Field label="상차일">
-                        <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                        <Field label="상차시간">
                         <TimeAmPmPicker
@@ -38565,10 +38840,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         />
                        </Field>
                       <Field label="상차방법">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
-                        </select>
+                        </CustomSelect>
                       </Field>
                       <Field label="상차지명">
                         <div className="relative">
@@ -38620,7 +38895,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       </Field>
                       <Field label="상차지주소">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="상차지 담당자명">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -38641,7 +38916,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <div className="space-y-4">
                       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
                       <Field label="하차일">
-                        <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                        <Field label="하차시간">
                         <TimeAmPmPicker
@@ -38652,10 +38927,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         />
                        </Field>
                       <Field label="하차방법">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
-                        </select>
+                        </CustomSelect>
                       </Field>
                       <Field label="하차지명">
                         <div className="relative">
@@ -38707,7 +38982,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       </Field>
                       <Field label="하차지주소">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="하차지 담당자명">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -38843,25 +39118,25 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="p-6">
                   <div className="grid grid-cols-3 gap-6">
                     <Field label="차량종류">
-                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                         <option value="">선택</option>
                         <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="냉장/냉동탑">냉장/냉동탑</option><option value="냉장/냉동윙">냉장/냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
-                      </select>
+                      </CustomSelect>
                     </Field>
                     <Field label="차량톤수">
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option><option value="톤">톤</option><option value="kg">kg</option>
-                        </select>
+                        </CustomSelect>
                       </div>
                     </Field>
                     <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
-                        </select>
+                        </CustomSelect>
                       </div>
                     </Field>
                   </div>
@@ -38882,19 +39157,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 기사운임: v})); }} />
                     </Field>
                     <Field label="수수료">
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-blue-700 text-center">
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-[#1B2B4B] text-center">
                         {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()}원
                       </div>
                     </Field>
                     <Field label="지급방식">
-                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}>
                         <option value="">선택</option><option value="계산서">계산서</option><option value="착불">착불</option><option value="선불">선불</option><option value="손실">손실</option><option value="개인">개인</option><option value="취소">취소</option>
-                      </select>
+                      </CustomSelect>
                     </Field>
                     <Field label="배차방식">
-                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
                         <option value="">선택</option><option value="24시">24시</option><option value="직접배차">직접배차</option><option value="인성">인성</option>
-                      </select>
+                      </CustomSelect>
                     </Field>
                   </div>
                 </div>
@@ -40514,11 +40789,11 @@ const handleBatchSettle = async (targetStatus) => {
               {/* ★ 기간 퀵셀렉트 */}
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">시작일</label>
-                <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={start} onChange={e => setStart(e.target.value)} />
+                <CustomDatePicker className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={start} onChange={e => setStart(e.target.value)} />
               </div>
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">종료일</label>
-                <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={end} onChange={e => setEnd(e.target.value)} />
+                <CustomDatePicker className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={end} onChange={e => setEnd(e.target.value)} />
               </div>
               <div className="flex gap-1">
                 <button onClick={setThisMonth} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">이번달</button>
@@ -43327,9 +43602,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">상차일</label>
             <div className="flex items-center gap-1">
-              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadStart} onChange={e => setLoadStart(e.target.value)} />
+              <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadStart} onChange={e => setLoadStart(e.target.value)} />
               <span className="text-gray-400 text-[12px]">~</span>
-              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadEnd} onChange={e => setLoadEnd(e.target.value)} />
+              <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadEnd} onChange={e => setLoadEnd(e.target.value)} />
             </div>
           </div>
           <div className="flex flex-col gap-1">
@@ -43366,7 +43641,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <div className="ml-auto flex items-end gap-2">
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-bold text-gray-500">지급일(적용)</label>
-              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={selectedPayDate} onChange={e => setSelectedPayDate(e.target.value)} />
+              <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={selectedPayDate} onChange={e => setSelectedPayDate(e.target.value)} />
             </div>
             <button onClick={() => bulkPay(Array.from(selectedIds), "지급완료")} disabled={!selectedIds.size}
               className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
@@ -43936,10 +44211,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         <h2 className="text-[18px] font-bold text-[#1B2B4B]">기사관리</h2>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAddForm(v=>!v)}
-            className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${showAddForm ? "bg-gray-200 text-gray-700" : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"}`}
+            onClick={() => setShowAddForm(true)}
+            className="px-4 py-2 rounded-lg text-[13px] font-bold transition bg-[#1B2B4B] text-white hover:bg-[#243a60]"
           >
-            {showAddForm ? "닫기" : "+ 기사 등록"}
+            + 기사 등록
           </button>
           <button
             onClick={() => { setShowAll(v=>!v); setQ(""); setSearched(false); setGradeFilter("전체"); }}
@@ -43983,44 +44258,49 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         ))}
       </div>
 
-      {/* 신규 등록 폼 */}
+      {/* 신규 등록 팝업 */}
       {showAddForm && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">신규 기사 등록</div>
-          <div className="grid grid-cols-5 gap-3">
-            {[
-              {label:"차량번호 *", key:"차량번호", placeholder:"예: 서울12가3456", border:"border-[#1B2B4B]"},
-              {label:"이름", key:"이름", placeholder:"기사명"},
-              {label:"전화번호", key:"전화번호", placeholder:"010-0000-0000"},
-              {label:"메모", key:"메모", placeholder:"메모"},
-            ].map(({label,key,placeholder,border}) => (
-              <div key={key}>
-                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">{label}</label>
-                <input
-                  className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
-                  placeholder={placeholder}
-                  value={newForm[key]}
-                  onChange={e => setNewForm(p => ({
-                    ...p,
-                    [key]: key==="전화번호" ? formatPhone(e.target.value) : e.target.value
-                  }))}
-                />
-              </div>
-            ))}
-            <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">등급</label>
-              <select className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
-                value={newForm.등급} onChange={e=>setNewForm(p=>({...p,등급:e.target.value}))}>
-                <option value="일반">일반</option>
-                <option value="지입">지입</option>
-                <option value="직영">직영</option>
-                <option value="블랙">블랙</option>
-              </select>
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowAddForm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white font-bold text-[15px]">신규 기사 등록</h3>
+              <button onClick={() => setShowAddForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
-          </div>
-          <div className="flex justify-end mt-3 gap-2">
-            <button onClick={()=>setShowAddForm(false)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold">취소</button>
-            <button onClick={addNew} className="px-6 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">등록</button>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+              {[
+                {label:"차량번호 *", key:"차량번호", placeholder:"예: 서울12가3456", border:"border-[#1B2B4B]"},
+                {label:"이름", key:"이름", placeholder:"기사명"},
+                {label:"전화번호", key:"전화번호", placeholder:"010-0000-0000"},
+                {label:"메모", key:"메모", placeholder:"메모"},
+              ].map(({label,key,placeholder,border}) => (
+                <div key={key}>
+                  <label className="text-[11px] font-semibold text-gray-400 mb-1 block">{label}</label>
+                  <input
+                    className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
+                    placeholder={placeholder}
+                    value={newForm[key]}
+                    onChange={e => setNewForm(p => ({
+                      ...p,
+                      [key]: key==="전화번호" ? formatPhone(e.target.value) : e.target.value
+                    }))}
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">등급</label>
+                <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                  value={newForm.등급} onChange={e=>setNewForm(p=>({...p,등급:e.target.value}))}>
+                  <option value="일반">일반</option>
+                  <option value="지입">지입</option>
+                  <option value="직영">직영</option>
+                  <option value="블랙">블랙</option>
+                </CustomSelect>
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex gap-3">
+              <button onClick={()=>setShowAddForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+              <button onClick={addNew} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">등록</button>
+            </div>
           </div>
         </div>
       )}
@@ -45210,11 +45490,9 @@ React.useEffect(() => {
               <span className="text-xs text-gray-400">검색결과 {filteredPlaces.length}건</span>
             )}
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => setShowNewPlaceForm(v => !v)}
-                className={`h-[34px] px-4 rounded-lg text-sm font-semibold border transition ${
-                  showNewPlaceForm ? "bg-gray-200 text-gray-700 border-gray-300" : "border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-                }`}>
-                {showNewPlaceForm ? "취소" : "+ 신규등록"}
+              <button onClick={() => setShowNewPlaceForm(true)}
+                className="h-[34px] px-4 rounded-lg text-sm font-semibold border transition border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white">
+                + 신규등록
               </button>
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
@@ -45233,49 +45511,55 @@ React.useEffect(() => {
             </div>
           </div>
 
-          {/* 신규 등록 폼 */}
+          {/* 신규 등록 팝업 */}
           {showNewPlaceForm && (
-            <div className="bg-white rounded-xl border-2 border-[#1B2B4B]/30 p-4">
-              <div className="text-sm font-bold text-[#1B2B4B] mb-3">신규 하차지 등록</div>
-              <div className="grid grid-cols-6 gap-3 items-end">
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">업체명 *</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.업체명} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))} />
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowNewPlaceForm(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[15px]">신규 하차지 등록</h3>
+                  <button onClick={() => setShowNewPlaceForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
                 </div>
-                <div className="col-span-2">
-                  <div className="text-xs text-gray-500 font-semibold mb-1">주소 *</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.주소} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))} />
+                <div className="px-6 py-5 grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">업체명 *</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.업체명} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">등급</div>
+                    <CustomSelect className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.등급} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 등급: e.target.value }))}>
+                      <option value="일반">일반</option>
+                      <option value="블랙">블랙</option>
+                      <option value="주의">주의</option>
+                      <option value="이탈">이탈</option>
+                    </CustomSelect>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-xs text-gray-500 font-semibold mb-1">주소 *</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.주소} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">담당자</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.담당자} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.메모} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))} />
+                  </div>
                 </div>
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">담당자</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.담당자} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))} />
+                <div className="px-6 pb-5 flex gap-3">
+                  <button onClick={() => setShowNewPlaceForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+                  <button onClick={addNewPlace} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">등록</button>
                 </div>
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">등급</div>
-                  <select className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.등급} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 등급: e.target.value }))}>
-                    <option value="일반">일반</option>
-                    <option value="블랙">블랙</option>
-                    <option value="주의">주의</option>
-                    <option value="이탈">이탈</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-3 items-end">
-                <div className="flex-1">
-                  <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.메모} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))} />
-                </div>
-                <button onClick={addNewPlace} className="px-6 py-2 rounded-lg bg-[#1B2B4B] text-white text-sm font-bold hover:bg-[#243a60] transition whitespace-nowrap">등록</button>
               </div>
             </div>
           )}
@@ -46404,7 +46688,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3 space-y-3">
               <div className="flex items-center gap-3">
                 <span className="text-[12px] font-semibold text-gray-500 w-16 flex-shrink-0">입사일</span>
-                <input type="date" value={hireDate} onChange={e => saveHireDate(e.target.value)}
+                <CustomDatePicker value={hireDate} onChange={e => saveHireDate(e.target.value)}
                   className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
                 {hireDateSaving && <span className="text-[11px] text-gray-400">저장 중...</span>}
               </div>

@@ -408,7 +408,7 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
   return (
     <div className="relative">
       <input
-        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
         placeholder={placeholder}
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
@@ -457,7 +457,7 @@ function ClientSearch({ value, onChange, clients }) {
   return (
     <div className="relative">
       <input
-        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
         placeholder="거래처 검색..."
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value === "" ? "전체" : e.target.value); setOpen(true); setActiveIdx(0); }}
@@ -488,24 +488,6 @@ function FareLevelBadge({ level }) {
   if (level === "TIGHT")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-700">▲ 상승</span>;
   if (level === "SPIKE")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700">프리미엄</span>;
   return <span className="px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-400">-</span>;
-}
-
-function StatCard({ label, value, sub, color = "blue" }) {
-  const colors = {
-    blue: "bg-blue-50 border-blue-200 text-blue-700",
-    green: "bg-emerald-50 border-emerald-200 text-emerald-700",
-    orange: "bg-orange-50 border-orange-200 text-orange-700",
-    red: "bg-red-50 border-red-200 text-red-700",
-    gray: "bg-gray-50 border-gray-200 text-gray-600",
-    navy: "bg-[#1B2B4B]/5 border-[#1B2B4B]/20 text-[#1B2B4B]",
-  };
-  return (
-    <div className={`border rounded-xl p-3 ${colors[color]}`}>
-      <div className="text-[11px] font-semibold opacity-70 mb-1">{label}</div>
-      <div className="text-[17px] font-bold">{value}</div>
-      {sub && <div className="text-[11px] font-medium opacity-60 mt-0.5">{sub}</div>}
-    </div>
-  );
 }
 
 // 차종별 운임 (1800-5017 79km 데이터 기준, 일반 카고)
@@ -545,6 +527,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const [activeTab, setActiveTab] = useState(embedded ? defaultTab : "표준운임"); // "표준운임" | "전국운임표"
 
   // 표준운임 상태
+  const [searchMode, setSearchMode] = useState(localStorage.getItem("sf_mode") || "client"); // "client" | "address"
   const [sortKey, setSortKey] = useState("date_desc");
   const [pickup, setPickup] = useState(localStorage.getItem("sf_pickup") || "");
   const [drop, setDrop] = useState(localStorage.getItem("sf_drop") || "");
@@ -555,7 +538,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const [dropAddr, setDropAddr] = useState(localStorage.getItem("sf_dropAddr") || "");
   const [client, setClient] = useState(localStorage.getItem("sf_client") || "전체");
   const [result, setResult] = useState([]);
-  const [aiFare, setAiFare] = useState(null);
   const [searched, setSearched] = useState(false);
   const [resetKey, setResetKey] = useState(0);
 
@@ -689,7 +671,14 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     };
 
     const unsub1 = onSnapshot(collection(db, "dispatch"), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
-    const unsub2 = onSnapshot(collection(db, "orders"), (snap) => { ordersCache = snap.docs.map(mapDoc); merge(); });
+    // "orders" 컬렉션에는 이 운송사가 직접 등록한 오더 외에, autoTransmitToShipper로
+    // 화주사 화면에 전송한 사본(source: "transport_transmit")도 함께 들어있다. 이
+    // 사본은 originId로 가리키는 원본이 "dispatch"(또는 "orders") 쪽에 이미 별도
+    // 문서로 존재하므로, 그대로 합치면 같은 오더가 서로 다른 id로 두 번 집계된다.
+    const unsub2 = onSnapshot(collection(db, "orders"), (snap) => {
+      ordersCache = snap.docs.map(mapDoc).filter(r => r.source !== "transport_transmit");
+      merge();
+    });
     return () => { unsub1(); unsub2(); };
   }, []);
 
@@ -703,7 +692,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     save("sf_pickupAddr", pickupAddr);
     save("sf_dropAddr", dropAddr);
     save("sf_client", client);
-  }, [pickup, drop, cargo, ton, vehicle, pickupAddr, dropAddr, client]);
+    save("sf_mode", searchMode);
+  }, [pickup, drop, cargo, ton, vehicle, pickupAddr, dropAddr, client, searchMode]);
 
   const clientList = useMemo(() =>
     [...new Set(dispatchData.map(r => r.거래처명).filter(Boolean))].sort(),
@@ -719,41 +709,42 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     [dispatchData]
   );
 
-  const calcAiFare = (rows) => {
-    if (!rows.length) return null;
-    const fares = rows.map(r => Number(String(r.청구운임||0).replace(/[^\d]/g,""))).filter(n=>n>0);
-    if (!fares.length) return null;
-    const avg = Math.round(fares.reduce((a,b)=>a+b,0)/fares.length);
-    const min = Math.min(...fares);
-    const max = Math.max(...fares);
-    const latest = rows.slice().sort((a,b)=>(toYMD(b.상차일)||"").localeCompare(toYMD(a.상차일)||""))[0];
-    const latestFare = Number(String(latest?.청구운임||0).replace(/[^\d]/g,""));
-    const latestLevel = classifyFare(latestFare, avg, latest);
-    let aiValue = avg;
-    let message = "";
-    if (latestLevel === "SPIKE") { aiValue = avg; message = "최근 운임은 연휴·수배 지연으로 일시적으로 상승한 프리미엄 운임입니다. 표준 운임 기준으로 견적을 산정하는 것을 권장합니다."; }
-    else if (latestLevel === "TIGHT") { aiValue = Math.round(avg*0.6+latestFare*0.4); message = "현재 차량 수급이 다소 빡빡한 구간입니다. 표준 운임 대비 소폭 상향 견적이 적정합니다."; }
-    else { aiValue = Math.round(avg*0.5+latestFare*0.5); message = "최근 운임 흐름이 안정적입니다. 표준 운임 기준 견적을 사용하셔도 무리가 없습니다."; }
-    return { avg, min, max, latestFare, aiValue, confidence: Math.min(95, 60+rows.length*5), message };
+  // _parseWaypointList와 동일한 파서를 써야 한다 — 경유목록이 배열이 아니라
+  // {0:{...},1:{...}} 형태의 인덱스 객체로 저장된 경우도 있는데, 예전에는 이 함수만
+  // 배열/JSON문자열만 인식하고 그 형태를 놓쳐서, 경유지가 실제로 있는 오더인데도
+  // "경유 없음"으로 취급되어 합산 화물내용/톤수 태깅이 빠지는 원인이 됐다.
+  const _viaName = s => typeof s==="string"?s:(s?.업체명||s?.지명||s?.하차지명||s?.상차지명||s?.주소||"");
+  const getPickupVias = r => [..._parseWaypointList(r.경유상차목록),..._parseWaypointList(r.경유지_상차),..._parseWaypointList(r.경유지상차)].map(_viaName).filter(Boolean);
+  const getDropVias = r => [..._parseWaypointList(r.경유하차목록),..._parseWaypointList(r.경유지_하차),..._parseWaypointList(r.경유지하차)].map(_viaName).filter(Boolean);
+
+  // 주소로 검색 모드에서 입력한 주소가 어떤 상/하차지명에 해당하는지 기존 이력에서
+  // 역으로 찾아준다 — 주소 텍스트 그대로 부분일치시키면 표기 차이나 다른 지점의
+  // 주소가 우연히 겹쳐 반대노선 이력이 실제와 다르게 뜨는 문제가 있어, 조회 기준은
+  // 항상 주소가 아니라 상/하차지명으로 삼는다.
+  const resolvePlaceName = (addr) => {
+    const a = clean(addr);
+    if (!a) return "";
+    for (const r of dispatchData) {
+      const pAddr = clean(r.상차지주소 || "");
+      if (pAddr && (pAddr.includes(a) || a.includes(pAddr)) && r.상차지명) return r.상차지명;
+      const dAddr = clean(r.하차지주소 || "");
+      if (dAddr && (dAddr.includes(a) || a.includes(dAddr)) && r.하차지명) return r.하차지명;
+    }
+    return "";
   };
 
-  const search = () => {
-    if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
-    if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
+  // 비교/표시 기준 화물내용·톤수는 경유지가 있으면 항상 본 오더 + 경유지 전체
+  // 합산값을 쓴다 — "경유포함" 토글은 검색어가 경유지명에도 매치될지만 결정한다.
+  const mergedCargoOf = r => mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
+  const mergedTonOf = r => mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
 
+  // 상/하차지(명·주소) + 화물/톤수/차량/거래처 조건으로 필터링만 하는 순수 함수 —
+  // 정방향 검색과 "반대 노선 이력 확인"에 동일하게 재사용한다.
+  const runFilter = (pk, pAddr, dr, dAddr) => {
     let list = [...dispatchData];
-    const _saVia = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
-    const _viaName = s => typeof s==="string"?s:(s?.업체명||s?.지명||s?.하차지명||s?.상차지명||s?.주소||"");
-    const getPickupVias = r => [..._saVia(r.경유상차목록||[]),..._saVia(r.경유지_상차||[]),..._saVia(r.경유지상차||[])].map(_viaName).filter(Boolean);
-    const getDropVias = r => [..._saVia(r.경유하차목록||[]),..._saVia(r.경유지_하차||[]),..._saVia(r.경유지하차||[])].map(_viaName).filter(Boolean);
-
-    // 경유지 포함 시 비교 기준 화물내용/톤수 = 본 오더 + 경유지 전체 합산
-    const mergedCargoOf = r => includeVia ? mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.화물내용 || "");
-    const mergedTonOf = r => includeVia ? mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.차량톤수 || "");
-
     list = list.filter(r => {
       const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
-      const p = clean(pickup), pa = clean(pickupAddr);
+      const p = clean(pk), pa = clean(pAddr);
       if (!p && !pa) return true;
       const mainMatches = (p && (name.includes(p)||addr.includes(p))) || (pa && (name.includes(pa)||addr.includes(pa)));
       if (mainMatches) return true;
@@ -762,7 +753,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     });
     list = list.filter(r => {
       const name = clean(r.하차지명||""), addr = clean(r.하차지주소||"");
-      const d = clean(drop), da = clean(dropAddr);
+      const d = clean(dr), da = clean(dAddr);
       if (!d && !da) return true;
       const mainMatches = (d && (name.includes(d)||addr.includes(d))) || (da && (name.includes(da)||addr.includes(da)));
       if (mainMatches) return true;
@@ -790,15 +781,13 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (client !== "전체" && client !== "") {
       list = list.filter(r => clean(r.거래처명) === clean(client));
     }
+    return list;
+  };
 
-    // 경유지 없는 직접 노선만 (토글 꺼진 경우)
-    list = list.filter(r => {
-      if (!includeVia && (getPickupVias(r).length > 0 || getDropVias(r).length > 0)) return false;
-      return true;
-    });
-
+  // 필터링된 목록에 경유지 태깅 + 운임레벨 계산 + 정렬까지 마치고 화면 상태에 반영
+  const applyResult = (rawList) => {
     // 결과 표시용: 경유지 목록 + 경유지 포함 합산 화물/톤수 태깅
-    list = list.map(r => {
+    const list = rawList.map(r => {
       const vias = [...getPickupVias(r), ...getDropVias(r)];
       if (!vias.length) return r;
       return { ...r, _viaNames: vias, _mergedCargo: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]), _mergedTon: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) };
@@ -843,14 +832,54 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     });
 
     setResult(withLevel.filter(r => Number(String(r.청구운임||0).replace(/[^\d]/g,"")) > 0));
-    setAiFare(calcAiFare(baseGroup));
     setSearched(true);
-    if (withLevel.length === 0) alert("조회된 데이터가 없습니다.");
+    return withLevel.length;
+  };
+
+  const search = () => {
+    if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
+    if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
+
+    // 검색 모드를 전환해도 이전 모드에 입력했던 값(예: 주소로 검색 모드의 상/하차
+    // 주소)이 state에 그대로 남아있어, runFilter의 name/address OR 매칭 때문에
+    // 현재 모드와 무관한 이력까지 섞여 나오는 문제가 있었다 — 현재 모드에 해당하는
+    // 입력값만 매칭에 사용한다.
+    const pArg = searchMode === "address" ? "" : pickup;
+    const paArg = searchMode === "address" ? pickupAddr : "";
+    const dArg = searchMode === "address" ? "" : drop;
+    const daArg = searchMode === "address" ? dropAddr : "";
+
+    const forward = runFilter(pArg, paArg, dArg, daArg);
+    if (forward.length === 0) {
+      // 정방향 이력이 없으면, 상/하차지를 뒤바꾼 반대 노선 이력이 있는지 같은
+      // 화물/톤수/차량/거래처 조건으로 한 번 더 확인해 물어봐준다. 매칭 자체는
+      // (주소로 검색 모드에서도 넓은 지역 검색이 되도록) 원래대로 주소 부분일치도
+      // 허용하되, 팝업에 보여줄 노선 이름은 주소 텍스트 그대로가 아니라 그 주소와
+      // 일치하는 기존 이력의 상/하차지명으로 표시한다.
+      const reverse = runFilter(dArg, daArg, pArg, paArg);
+      if (reverse.length > 0) {
+        const fromLabel = pickup || resolvePlaceName(pickupAddr) || pickupAddr;
+        const toLabel = drop || resolvePlaceName(dropAddr) || dropAddr;
+        const ok = window.confirm(
+          `"${fromLabel} → ${toLabel}" 노선의 이력은 없습니다.\n\n` +
+          `반대 노선 "${toLabel} → ${fromLabel}"의 운임 이력이 ${reverse.length}건 있습니다.\n` +
+          `반대 노선으로 조회할까요?`
+        );
+        if (ok) {
+          setPickup(drop); setDrop(pickup);
+          setPickupAddr(dropAddr); setDropAddr(pickupAddr);
+          applyResult(reverse);
+          return;
+        }
+      }
+    }
+    const count = applyResult(forward);
+    if (count === 0) alert("조회된 데이터가 없습니다.");
   };
 
   const reset = () => {
     setPickup(""); setDrop(""); setCargo(""); setTon(""); setVehicle("전체");
-    setPickupAddr(""); setDropAddr(""); setClient("전체"); setResult([]); setAiFare(null); setSearched(false);
+    setPickupAddr(""); setDropAddr(""); setClient("전체"); setResult([]); setSearched(false);
     setIncludeVia(false);
     setResetKey(k => k + 1);
     ["sf_pickup","sf_drop","sf_cargo","sf_ton","sf_vehicle","sf_pickupAddr","sf_dropAddr","sf_client"].forEach(k=>localStorage.removeItem(k));
@@ -868,8 +897,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike };
   }, [result]);
 
-  const inputCls = "w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition";
-  const labelCls = "block text-[12px] font-semibold text-gray-500 mb-0.5";
+  const inputCls = "w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition";
+  const labelCls = "block text-[12px] font-bold text-gray-900 mb-1";
   const cat = VEHICLE_CATEGORIES[nfVehicleCategory];
 
   return (
@@ -906,205 +935,202 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
       {/* ====== 표준운임 조회 탭 ====== */}
       {activeTab === "표준운임" && (
-        <>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4">
-            <div className="p-4">
-              <div className="mb-3">
-                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">노선 정보</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                    <div className="text-[11px] font-bold text-[#1B2B4B] mb-2 uppercase tracking-wider">상차지</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={labelCls}>지명 <span className="text-red-400">*</span></label>
-                        <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>주소 (선택)</label>
-                        <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                    <div className="text-[11px] font-bold text-[#1B2B4B] mb-2 uppercase tracking-wider">하차지</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={labelCls}>지명 <span className="text-red-400">*</span></label>
-                        <PlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 유통센터" onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>주소 (선택)</label>
-                        <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIncludeVia(v => !v)}
-                    className={`px-3 py-1.5 text-[12px] font-semibold rounded border transition ${
-                      includeVia
-                        ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                        : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                    }`}
-                  >
-                    경유포함
-                  </button>
-                </div>
-              </div>
+        <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
 
-              <div className="mb-3">
-                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">조건</div>
-                <div className="grid grid-cols-5 gap-2">
-                  <div>
-                    <label className={labelCls}>거래처</label>
-                    <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>차량종류</label>
-                    <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
-                      {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>차량톤수</label>
-                    <input className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>화물내용</label>
-                    <input className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>정렬방식</label>
-                    <select className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
-                      <option value="date_desc">최신순</option>
-                      <option value="date_asc">오래된순</option>
-                      <option value="cargo_asc">화물내용 (숫자순)</option>
-                      <option value="vehicle_asc">차량종류순</option>
-                      <option value="fare_desc">청구운임 높은순</option>
-                      <option value="fare_asc">청구운임 낮은순</option>
-                      <option value="level">운임레벨 (표준→프리미엄)</option>
-                      <option value="level_spike">운임레벨 (프리미엄우선)</option>
-                      <option value="driver_desc">기사운임 높은순</option>
-                      <option value="fee_desc">수수료 높은순</option>
-                    </select>
-                  </div>
+          {/* ───────── 왼쪽: 검색 패널 ───────── */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+
+            {/* 검색 모드 토글 */}
+            <div className="flex gap-1.5 mb-5">
+              <button
+                type="button"
+                onClick={() => setSearchMode("client")}
+                className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
+                  searchMode === "client" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                }`}
+              >
+                거래처로 검색
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode("address")}
+                className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
+                  searchMode === "address" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                }`}
+              >
+                주소로 검색
+              </button>
+            </div>
+
+            {searchMode === "client" ? (
+              <div className="space-y-4 mb-4">
+                <div>
+                  <label className={labelCls}>거래처</label>
+                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
+                </div>
+                <div>
+                  <label className={labelCls}>상차지명 <span className="text-red-400">*</span></label>
+                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
+                <div>
+                  <label className={labelCls}>하차지명 <span className="text-red-400">*</span></label>
+                  <PlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 유통센터" onKeyDown={e=>e.key==="Enter"&&search()} />
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <button onClick={search} className="px-6 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
-                <button onClick={reset} className="px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
-                <span className="text-[12px] text-gray-400 ml-1">Enter 키로도 조회</span>
-                {searched && stats && (
-                  <span className="ml-auto text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
-                    총 <b className="text-[#1B2B4B]">{stats.count}</b>건 조회됨
-                  </span>
-                )}
+            ) : (
+              <div className="space-y-4 mb-4">
+                <div>
+                  <label className={labelCls}>거래처</label>
+                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
+                </div>
+                <div>
+                  <label className={labelCls}>상차지 주소 <span className="text-red-400">*</span></label>
+                  <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
+                <div>
+                  <label className={labelCls}>하차지 주소 <span className="text-red-400">*</span></label>
+                  <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
               </div>
+            )}
+
+            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">경유지명도 검색에 포함</span>
+            </label>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <label className={labelCls}>차량종류</label>
+                <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
+                  {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>차량톤수</label>
+                <input className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+              </div>
+              <div>
+                <label className={labelCls}>화물내용</label>
+                <input className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+              </div>
+              <div>
+                <label className={labelCls}>정렬방식</label>
+                <select className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
+                  <option value="date_desc">최신순</option>
+                  <option value="date_asc">오래된순</option>
+                  <option value="cargo_asc">화물내용 (숫자순)</option>
+                  <option value="vehicle_asc">차량종류순</option>
+                  <option value="fare_desc">청구운임 높은순</option>
+                  <option value="fare_asc">청구운임 낮은순</option>
+                  <option value="level">운임레벨 (표준→프리미엄)</option>
+                  <option value="level_spike">운임레벨 (프리미엄우선)</option>
+                  <option value="driver_desc">기사운임 높은순</option>
+                  <option value="fee_desc">수수료 높은순</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button onClick={search} className="px-6 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
+              <button onClick={reset} className="px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
+              <span className="text-[12px] text-gray-400 ml-1">Enter 키로도 조회</span>
             </div>
           </div>
 
-          {stats && (
-            <div className="grid grid-cols-6 gap-3 mb-4">
-              <StatCard label="조회 건수" value={`${stats.count}건`} color="gray" />
-              <StatCard label="평균 청구운임" value={`${stats.avg.toLocaleString()}원`} color="navy" />
-              <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="navy" />
-              <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="navy" />
-              <StatCard label="평균 기사운임" value={`${stats.avgDriver.toLocaleString()}원`} sub={`마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원`} color="gray" />
-              <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color="gray" />
-            </div>
-          )}
+          {/* ───────── 오른쪽: 결과 패널 ───────── */}
+          <div className="space-y-3 min-w-0">
+            {!searched && (
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-400">
+                <div className="text-[14px] font-semibold mb-1">왼쪽에서 조건을 입력하고 조회하세요</div>
+                <div className="text-[12px]">노선·거래처·차량 조건에 맞는 운임 히스토리를 보여드립니다</div>
+              </div>
+            )}
 
-          {aiFare && (
-            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[13px] font-bold text-[#1B2B4B]">AI 추천 운임</span>
-                    <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full font-semibold">신뢰도 {aiFare.confidence}%</span>
+            {stats && (
+              <div className="bg-[#1B2B4B] rounded-lg flex items-stretch divide-x divide-white/15 overflow-hidden">
+                {[
+                  { label: "조회 건수", value: `${stats.count}건` },
+                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원` },
+                  { label: "최저 운임", value: `${stats.min.toLocaleString()}원` },
+                  { label: "최고 운임", value: `${stats.max.toLocaleString()}원` },
+                  { label: "평균 기사운임", value: `${stats.avgDriver.toLocaleString()}원`, sub: `마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원` },
+                  { label: "프리미엄 건수", value: `${stats.spike}건`, sub: `표준 ${stats.normal}건` },
+                ].map((s, i) => (
+                  <div key={i} className="flex-1 min-w-0 px-2.5 py-2 text-center">
+                    <div className="text-[10px] font-bold text-white/70 truncate">{s.label}</div>
+                    <div className="text-[13px] font-bold text-white truncate">{s.value}</div>
+                    {s.sub && <div className="text-[10px] font-semibold text-white/60 truncate">{s.sub}</div>}
                   </div>
-                  <p className="text-[12px] text-gray-500 leading-relaxed">{aiFare.message}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[11px] text-gray-400 mb-0.5">추천 운임</div>
-                  <div className="text-[20px] font-bold text-[#1B2B4B]">{aiFare.aiValue.toLocaleString()}원</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">범위: {aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}원</div>
-                </div>
+                ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {searched && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1500px] text-[13px]">
-                  <thead>
-                    <tr className="bg-[#1B2B4B]">
-                      {["상차일","긴급","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
-                        <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.length === 0 ? (
-                      <tr><td colSpan={16} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
-                    ) : (
-                      result.map((r, i) => {
-                        // 경유지 정보 조합
-                        const _extractViaNames = (arr) => {
-                          let list = arr;
-                          if (typeof arr === "string" && arr.trim().startsWith("[")) {
-                            try { list = JSON.parse(arr); } catch { list = []; }
-                          }
-                          return Array.isArray(list)
-                            ? list.map(v => typeof v === "string" ? v : (v?.업체명 || v?.지명 || v?.하차지명 || v?.상차지명 || v?.주소 || "")).filter(Boolean)
-                            : [];
-                        };
-                        const _allViaNames = [
-                          ..._extractViaNames(r.경유지_상차),
-                          ..._extractViaNames(r.경유상차목록),
-                          ..._extractViaNames(r.경유지상차),
-                          ..._extractViaNames(r.경유지_하차),
-                          ..._extractViaNames(r.경유하차목록),
-                          ..._extractViaNames(r.경유지하차),
-                        ];
-                        const waypointText = [...new Set(_allViaNames)].join(" → ");
-                        return (
-                          <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
-                            <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
-                            <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                              {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-300">-</span>}
-                            </td>
-                            <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
-                            <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.하차지명}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.하차지주소}>{r.하차지주소}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-center max-w-[120px] truncate" title={waypointText}>
-                              {waypointText ? (
-                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-semibold">{waypointText}</span>
-                              ) : <span className="text-gray-300">-</span>}
-                            </td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedCargo || r.화물내용}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedTon || r.차량톤수}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
-                            <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
-                            <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
-                            <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
-                            <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
-                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+            {searched && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="overflow-auto max-h-[calc(100vh-360px)]">
+                  <table className="w-full min-w-[1500px] text-[13px]">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-[#1B2B4B]">
+                        {["상차일","긴급","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
+                          <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.length === 0 ? (
+                        <tr><td colSpan={16} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                      ) : (
+                        result.map((r, i) => {
+                          // 경유지 정보 조합 — search()의 getPickupVias/getDropVias와 동일한
+                          // _parseWaypointList를 써서, 경유목록이 배열이 아니라 인덱스 객체로
+                          // 저장된 경우도 놓치지 않는다.
+                          const _extractViaNames = (arr) =>
+                            _parseWaypointList(arr).map(v => typeof v === "string" ? v : (v?.업체명 || v?.지명 || v?.하차지명 || v?.상차지명 || v?.주소 || "")).filter(Boolean);
+                          const _allViaNames = [
+                            ..._extractViaNames(r.경유지_상차),
+                            ..._extractViaNames(r.경유상차목록),
+                            ..._extractViaNames(r.경유지상차),
+                            ..._extractViaNames(r.경유지_하차),
+                            ..._extractViaNames(r.경유하차목록),
+                            ..._extractViaNames(r.경유지하차),
+                          ];
+                          const waypointText = [...new Set(_allViaNames)].join(" → ");
+                          return (
+                            <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                              <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
+                              <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-300">-</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
+                              <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.하차지명}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.하차지주소}>{r.하차지주소}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-center max-w-[120px] truncate" title={waypointText}>
+                                {waypointText ? (
+                                  <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-semibold">{waypointText}</span>
+                                ) : <span className="text-gray-300">-</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedCargo || r.화물내용}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedTon || r.차량톤수}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
+                              <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
+                              <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
-        </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ====== 전국운임 조회 탭 (T-Map 도로거리 기반) ====== */}

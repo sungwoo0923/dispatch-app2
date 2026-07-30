@@ -8543,18 +8543,8 @@ function MobileOrderDetail({
   const goEditWithFare = (claim, drv) => {
     setShowDetailFareHistory(false);
     setDetailFareDetailItem(null);
-    const _pendingContactItems = [];
-    [
-      { fieldName: order.상차지명, type: "pickup" },
-      { fieldName: order.하차지명, type: "drop" },
-    ].forEach(({ fieldName, type }) => {
-      if (!fieldName) return;
-      const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
-      if (!found) return;
-      const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
-      const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
-      if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
-    });
+    // 수정 진입 시에는 담당자 선택 팝업을 자동으로 띄우지 않는다 — 상/하차지명을
+    // 드롭다운에서 다시 선택할 때만(pickPickup/pickDrop) 뜨면 된다.
     window.scrollTo(0, 0);
     setPrevPage("detail");
     setPage("form");
@@ -8595,7 +8585,6 @@ function MobileOrderDetail({
       source: order.source || "",
       _editId: order.id,
       _returnToDetail: true,
-      _pendingContactItems,
     });
   };
 
@@ -8927,15 +8916,8 @@ const handleAssignClick = () => {
     }
   };
   const handleGoToEdit = () => {
-    const _pendingContactItems = [];
-    [{ fieldName: order.상차지명, type: "pickup" }, { fieldName: order.하차지명, type: "drop" }].forEach(({ fieldName, type }) => {
-      if (!fieldName) return;
-      const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
-      if (!found) return;
-      const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
-      const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
-      if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
-    });
+    // 수정 진입 시에는 담당자 선택 팝업을 자동으로 띄우지 않는다 — 상/하차지명을
+    // 드롭다운에서 다시 선택할 때만(pickPickup/pickDrop) 뜨면 된다.
     window.scrollTo(0, 0);
     setPrevPage("detail");
     setPage("form");
@@ -8959,7 +8941,7 @@ const handleAssignClick = () => {
       경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
       경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
       source: order.source || "",
-      _editId: order.id, _returnToDetail: true, _pendingContactItems,
+      _editId: order.id, _returnToDetail: true,
     });
   };
 
@@ -13926,7 +13908,8 @@ ${_dStopsTextMd ? _dStopsTextMd+"\n\n" : ""}${_dNumMd}하차 : ${order.하차지
 ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainDTonMd}
 하차방법 : ${order.하차방법||"-"}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전달사항.trim()}` : ""}
 
-화물 : ${_totTonMd}${_totCargoMd?` / ${_totCargoMd}`:""} ${order.차량종류||order.차종||""}${noticeBlock?`\n\n${noticeBlock}`:""}
+화물 : ${_totTonMd}${_totCargoMd?` / ${_totCargoMd}`:""} ${order.차량종류||order.차종||""}
+결제방법 : ${order.지급방식 === "계산서" ? `계산서(${order.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (order.지급방식 || "-")}${noticeBlock?`\n\n${noticeBlock}`:""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드
 ※ 거래명세서${isColdVeh ? "/타코메타 기록지" : ""} 함께 촬영

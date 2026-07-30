@@ -152,7 +152,12 @@ export default function UploadPage() {
             setStatus("locked");
             return;
           }
-          if (data.업로드잠금) {
+          // 운송사 담당자가 첨부파일 팝업에서 "재업로드 허용"을 누르면 이 만료시각이
+          // 30분 뒤로 찍힌다 — 아직 지나지 않았으면 잠긴 상태라도 예전 링크를 그대로
+          // 다시 쓸 수 있게 해준다(새 링크를 재발급/재전송할 필요 없음).
+          const unlockExpiry = data.업로드잠금해제만료 ? new Date(data.업로드잠금해제만료).getTime() : 0;
+          const tempUnlocked = unlockExpiry > Date.now();
+          if (data.업로드잠금 && !tempUnlocked) {
             setStatus("locked");
             return;
           }
@@ -236,7 +241,7 @@ export default function UploadPage() {
         updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 위치공유중: false }).catch(() => {});
       }
     };
-  }, [sharingLoc, order, isManual, orderId]);
+  }, [sharingLoc, order, isManual, orderId, locConsent]);
 
   // ── 파일 선택 처리 ───────────────────────────────────────
   // 같은 사진(내용이 동일한 파일)을 중복으로 추가하려 하면 막고 안내한다
@@ -441,12 +446,14 @@ export default function UploadPage() {
       } catch(e) { console.error("카운트 업데이트 실패:", e); }
 
       // 안내 팝업에서 "등록"을 눌러 업로드가 완료되면, 이 링크(토큰)로는 다시
-      // 접속할 수 없도록 잠근다 — 재업로드가 필요하면 운송사가 새 링크를 발급해야 한다.
+      // 접속할 수 없도록 잠근다 — 재업로드가 필요하면 운송사가 새 링크를 발급하거나
+      // 첨부파일 팝업의 "재업로드 허용"으로 임시로 다시 열어줘야 한다. 임시 해제로
+      // 들어와서 재업로드를 마친 경우 그 해제창을 즉시 닫아 바로 재잠금되게 한다.
       try {
         const parentRef = doc(db, targetCol, targetId);
-        await updateDoc(parentRef, { 업로드잠금: true });
+        await updateDoc(parentRef, { 업로드잠금: true, 업로드잠금해제만료: null });
         if (mirrorTarget) {
-          await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 업로드잠금: true }).catch(() => {});
+          await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 업로드잠금: true, 업로드잠금해제만료: null }).catch(() => {});
         }
       } catch (e) { console.error("업로드 잠금 처리 실패:", e); }
     }
