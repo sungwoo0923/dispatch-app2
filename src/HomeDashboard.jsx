@@ -693,7 +693,7 @@ React.useEffect(() => {
           ) : (
             <div className="relative" style={{ minHeight: 220 }}>
               {/* column headers — 위 제목 영역과 같은 네이비, 바로 이어붙임 */}
-              <div className="grid text-[12px] font-bold text-white bg-[#1B2B4B] w-full"
+              <div className="grid divide-x divide-white/20 text-[12px] font-bold text-white bg-[#1B2B4B] w-full"
                 style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}>
                 {["상차일","상차시간","하차일","하차시간","거래처명","상차지명","하차지명","화물내용","차량종류","톤수","배차상태"].map(h => (
                   <span key={h} className="text-center px-2 py-2.5 whitespace-nowrap">{h}</span>
@@ -711,7 +711,7 @@ React.useEffect(() => {
                   return (
                     <div
                       key={i}
-                      className={`grid items-center border-b border-gray-100 hover:bg-blue-50/30 cursor-pointer transition w-full ${i % 2 ? "bg-gray-50/50" : "bg-white"}`}
+                      className={`grid divide-x divide-gray-200 items-center border-b border-gray-100 hover:bg-blue-50/30 cursor-pointer transition w-full ${i % 2 ? "bg-gray-50/50" : "bg-white"}`}
                       style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}
                       onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
                     >

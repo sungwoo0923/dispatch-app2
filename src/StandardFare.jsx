@@ -490,26 +490,6 @@ function FareLevelBadge({ level }) {
   return <span className="px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-400">-</span>;
 }
 
-function StatCard({ label, value, sub, color = "blue" }) {
-  const colors = {
-    blue: "bg-blue-50 border-blue-200 text-blue-700",
-    green: "bg-emerald-50 border-emerald-200 text-emerald-700",
-    orange: "bg-orange-50 border-orange-200 text-orange-700",
-    red: "bg-red-50 border-red-200 text-red-700",
-    gray: "bg-gray-50 border-gray-200 text-gray-600",
-    navy: "bg-[#1B2B4B]/5 border-[#1B2B4B]/20 text-[#1B2B4B]",
-    navySolid: "bg-[#1B2B4B] border-[#1B2B4B] text-white",
-  };
-  const isSolid = color === "navySolid";
-  return (
-    <div className={`border rounded-xl p-3 ${colors[color]}`}>
-      <div className={`text-[11px] mb-1 ${isSolid ? "font-bold text-white/80" : "font-semibold opacity-70"}`}>{label}</div>
-      <div className={`text-[17px] font-bold ${isSolid ? "text-white" : ""}`}>{value}</div>
-      {sub && <div className={`text-[11px] mt-0.5 ${isSolid ? "font-semibold text-white/70" : "font-medium opacity-60"}`}>{sub}</div>}
-    </div>
-  );
-}
-
 // 차종별 운임 (1800-5017 79km 데이터 기준, 일반 카고)
 const FARE_TYPES = [
   { label: "라보",   base: 44000,  perKm: 380  },
@@ -692,7 +672,14 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     };
 
     const unsub1 = onSnapshot(collection(db, "dispatch"), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
-    const unsub2 = onSnapshot(collection(db, "orders"), (snap) => { ordersCache = snap.docs.map(mapDoc); merge(); });
+    // "orders" 컬렉션에는 이 운송사가 직접 등록한 오더 외에, autoTransmitToShipper로
+    // 화주사 화면에 전송한 사본(source: "transport_transmit")도 함께 들어있다. 이
+    // 사본은 originId로 가리키는 원본이 "dispatch"(또는 "orders") 쪽에 이미 별도
+    // 문서로 존재하므로, 그대로 합치면 같은 오더가 서로 다른 id로 두 번 집계된다.
+    const unsub2 = onSnapshot(collection(db, "orders"), (snap) => {
+      ordersCache = snap.docs.map(mapDoc).filter(r => r.source !== "transport_transmit");
+      merge();
+    });
     return () => { unsub1(); unsub2(); };
   }, []);
 
@@ -748,6 +735,22 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const _viaName = s => typeof s==="string"?s:(s?.업체명||s?.지명||s?.하차지명||s?.상차지명||s?.주소||"");
   const getPickupVias = r => [..._parseWaypointList(r.경유상차목록),..._parseWaypointList(r.경유지_상차),..._parseWaypointList(r.경유지상차)].map(_viaName).filter(Boolean);
   const getDropVias = r => [..._parseWaypointList(r.경유하차목록),..._parseWaypointList(r.경유지_하차),..._parseWaypointList(r.경유지하차)].map(_viaName).filter(Boolean);
+
+  // 주소로 검색 모드에서 입력한 주소가 어떤 상/하차지명에 해당하는지 기존 이력에서
+  // 역으로 찾아준다 — 주소 텍스트 그대로 부분일치시키면 표기 차이나 다른 지점의
+  // 주소가 우연히 겹쳐 반대노선 이력이 실제와 다르게 뜨는 문제가 있어, 조회 기준은
+  // 항상 주소가 아니라 상/하차지명으로 삼는다.
+  const resolvePlaceName = (addr) => {
+    const a = clean(addr);
+    if (!a) return "";
+    for (const r of dispatchData) {
+      const pAddr = clean(r.상차지주소 || "");
+      if (pAddr && (pAddr.includes(a) || a.includes(pAddr)) && r.상차지명) return r.상차지명;
+      const dAddr = clean(r.하차지주소 || "");
+      if (dAddr && (dAddr.includes(a) || a.includes(dAddr)) && r.하차지명) return r.하차지명;
+    }
+    return "";
+  };
 
   // 비교/표시 기준 화물내용·톤수는 경유지가 있으면 항상 본 오더 + 경유지 전체
   // 합산값을 쓴다 — "경유포함" 토글은 검색어가 경유지명에도 매치될지만 결정한다.
@@ -857,13 +860,21 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
     if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
 
-    const forward = runFilter(pickup, pickupAddr, drop, dropAddr);
+    // 주소로 검색 모드라도, 조회/반대노선 확인의 매칭 기준은 항상 주소가 아니라
+    // 상/하차지명이어야 한다 — 입력한 주소로 기존 이력에서 지명을 먼저 찾고, 찾으면
+    // 그 지명으로만 매칭한다(주소는 보조 fallback으로만 남긴다).
+    const pName = pickup.trim() || resolvePlaceName(pickupAddr);
+    const dName = drop.trim() || resolvePlaceName(dropAddr);
+    const pAddrArg = pName ? "" : pickupAddr;
+    const dAddrArg = dName ? "" : dropAddr;
+
+    const forward = runFilter(pName, pAddrArg, dName, dAddrArg);
     if (forward.length === 0) {
       // 정방향 이력이 없으면, 상/하차지를 뒤바꾼 반대 노선 이력이 있는지 같은
       // 화물/톤수/차량/거래처 조건으로 한 번 더 확인해 물어봐준다.
-      const reverse = runFilter(drop, dropAddr, pickup, pickupAddr);
+      const reverse = runFilter(dName, dAddrArg, pName, pAddrArg);
       if (reverse.length > 0) {
-        const fromLabel = pickup || pickupAddr, toLabel = drop || dropAddr;
+        const fromLabel = pName || pickupAddr, toLabel = dName || dropAddr;
         const ok = window.confirm(
           `"${fromLabel} → ${toLabel}" 노선의 이력은 없습니다.\n\n` +
           `반대 노선 "${toLabel} → ${fromLabel}"의 운임 이력이 ${reverse.length}건 있습니다.\n` +
@@ -1051,20 +1062,22 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
             )}
 
-            {searched && stats && (
-              <div className="text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 w-fit">
-                총 <b className="text-[#1B2B4B]">{stats.count}</b>건 조회됨
-              </div>
-            )}
-
             {stats && (
-              <div className="grid grid-cols-3 gap-2">
-                <StatCard label="조회 건수" value={`${stats.count}건`} color="navySolid" />
-                <StatCard label="평균 청구운임" value={`${stats.avg.toLocaleString()}원`} color="navySolid" />
-                <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="navySolid" />
-                <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="navySolid" />
-                <StatCard label="평균 기사운임" value={`${stats.avgDriver.toLocaleString()}원`} sub={`마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원`} color="navySolid" />
-                <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color="navySolid" />
+              <div className="bg-[#1B2B4B] rounded-lg flex items-stretch divide-x divide-white/15 overflow-hidden">
+                {[
+                  { label: "조회 건수", value: `${stats.count}건` },
+                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원` },
+                  { label: "최저 운임", value: `${stats.min.toLocaleString()}원` },
+                  { label: "최고 운임", value: `${stats.max.toLocaleString()}원` },
+                  { label: "평균 기사운임", value: `${stats.avgDriver.toLocaleString()}원`, sub: `마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원` },
+                  { label: "프리미엄 건수", value: `${stats.spike}건`, sub: `표준 ${stats.normal}건` },
+                ].map((s, i) => (
+                  <div key={i} className="flex-1 min-w-0 px-2.5 py-2 text-center">
+                    <div className="text-[10px] font-bold text-white/70 truncate">{s.label}</div>
+                    <div className="text-[13px] font-bold text-white truncate">{s.value}</div>
+                    {s.sub && <div className="text-[10px] font-semibold text-white/60 truncate">{s.sub}</div>}
+                  </div>
+                ))}
               </div>
             )}
 
