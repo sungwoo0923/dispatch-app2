@@ -107,7 +107,7 @@ const inputStyle =
   "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] text-gray-800 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
   const Field = ({ label, children }) => (
     <div className="space-y-1">
-      <div className="text-xs font-semibold text-slate-500">
+      <div className="text-[13px] font-bold text-gray-900">
         {label}
       </div>
       {children}
@@ -13584,8 +13584,7 @@ setConfirmChange(null);
           {Array.from({ length: multiCount }, (_, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={orderDates[i] || form.상차일 || ""}
                 onChange={e => {
                   const next = [...orderDates];
@@ -13600,8 +13599,7 @@ setConfirmChange(null);
                 }}
                 className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
               />
-              <input
-                type="date"
+              <CustomDatePicker
                 value={orderDropDates[i] || orderDates[i] || form.상차일 || ""}
                 onChange={e => {
                   const nd = [...orderDropDates];
@@ -16003,14 +16001,14 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
   const needsError = showError && ampm === null && !!value;
 
   return (
-    <div className="flex items-center gap-1">
-      <button type="button" disabled={disabled} className={`${btnBase} ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}>오전</button>
-      <button type="button" disabled={disabled} className={`${btnBase} ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}>오후</button>
+    <div className="flex items-center gap-1 flex-nowrap">
+      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}>오전</button>
+      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}>오후</button>
       <select
         value={value || ""}
         disabled={disabled}
         onChange={e => onChange(e.target.value)}
-        className={(selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]") + " disabled:bg-gray-100 disabled:text-gray-400"}
+        className={(selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]").replace(/\bw-full\b/, "w-[108px]") + " shrink-0 disabled:bg-gray-100 disabled:text-gray-400"}
       >
         <option value="">시간 선택</option>
         {times.map(t => (
@@ -17140,14 +17138,14 @@ const lastWarnedRef = React.useRef(null);
 const checkWarningStatus = (name, type) => {
   const now = Date.now();
   if (lastWarnedRef.current?.name === name && now - lastWarnedRef.current.time < 3000) return;
-    const foundClient = (clients || []).find(c => c.거래처명 === name);
+    const foundClient = (clients || []).find(c => (c.업체명 || c.거래처명) === name);
     if (foundClient && foundClient.팝업표시 !== false) {
       const status = foundClient.업체상태 || foundClient.등급;
       const note = foundClient.오더메모;
       if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
         const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
-        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
+        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || foundClient.메모 || "" } });
         return;
       }
     }
@@ -17158,7 +17156,7 @@ const checkWarningStatus = (name, type) => {
       if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
         const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
-        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
+        setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || foundPlace.메모 || "" } });
       }
     }
   };
@@ -20383,10 +20381,9 @@ const handleCloseFileUpload = async (e) => {
 
     if (key === "상차일" || key === "하차일") {
       return (
-        <input
-          type="date"
+        <CustomDatePicker
           className="border p-1 rounded w-full"
-          defaultValue={val || ""}
+          value={val || ""}
           onChange={(e) => handleEditChange(rowId, key, e.target.value)}
         />
       );
@@ -21358,9 +21355,8 @@ checkWarningStatus(c.거래처명, "거래처");
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
           className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
@@ -21535,9 +21531,8 @@ checkWarningStatus(c.거래처명, "거래처");
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
           className={inputStyle}
           value={copyTarget?.하차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
@@ -22866,8 +22861,7 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 상차일 ================= */}
   <div>
     <label>상차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.상차일 || ""}
@@ -22905,8 +22899,7 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 하차일 ================= */}
   <div>
     <label>하차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.하차일 || ""}
@@ -25719,11 +25712,11 @@ setConfirmChange(null);
             const isBlack = warningPopup.status === "블랙";
             const isCaution = warningPopup.status === "주의";
             const isDeparture = warningPopup.status === "이탈";
-            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
             const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
             const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
-            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
-            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-yellow-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
             return (
               <>
             {/* 헤더 */}
@@ -25742,7 +25735,7 @@ setConfirmChange(null);
                 {warningPopup.status && (
                   <div className="flex items-center">
                     <span className="text-gray-500">등급</span>
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-red-600"}`}>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-red-600"}`}>
                       {warningPopup.status}
                     </span>
                   </div>
@@ -25771,7 +25764,7 @@ setConfirmChange(null);
 
               <p className="text-sm text-gray-600 text-center font-semibold">
                 {warningPopup.status
-                  ? <>해당 거래처는 <span className={`font-bold ${isBlack ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</>
+                  ? <>해당 거래처는 <span className={`font-bold ${isBlack ? "text-red-600" : isCaution ? "text-orange-500" : "text-red-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</>
                   : "해당 거래처에 등록된 메모를 확인해주세요."}
               </p>
             </div>
@@ -26325,14 +26318,14 @@ const checkWarningStatus = (name, type) => {
   if (lastWarnedRef.current?.name === name && now - lastWarnedRef.current.time < 3000) return;
 
   // 거래처 목록 체크
-  const foundClient = (clients || []).find(c => c.거래처명 === name);
+  const foundClient = (clients || []).find(c => (c.업체명 || c.거래처명) === name);
   if (foundClient && foundClient.팝업표시 !== false) {
     const status = foundClient.업체상태 || foundClient.등급;
     const note = foundClient.오더메모;
     if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
       const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
-      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || foundClient.메모 || "" } });
       return;
     }
   }
@@ -26346,7 +26339,7 @@ const checkWarningStatus = (name, type) => {
     if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
       const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
-      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || foundPlace.메모 || "" } });
     }
   }
 };
@@ -30051,8 +30044,7 @@ return (
   {/* 상차일 */}
   <div>
     <label className="text-sm font-medium">상차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full"
       value={editTarget.상차일 || ""}
       onChange={(e) =>
@@ -30095,8 +30087,7 @@ return (
   {/* 하차일 */}
   <div>
     <label className="text-sm font-medium">하차일</label>
-    <input
-      type="date"
+    <CustomDatePicker
       className="border p-2 rounded w-full"
       value={editTarget.하차일 || ""}
       onChange={(e) =>
@@ -31363,9 +31354,8 @@ setCopyTarget(prev=>({
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
           className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
@@ -31522,9 +31512,8 @@ setCopyPlaceOptions(list);
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
-        <input
+        <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          type="date"
           className={inputStyle}
           value={copyTarget?.하차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
@@ -33488,10 +33477,10 @@ setCopyPlaceOptions(list);
             const isBlack = warningPopup.status === "블랙";
             const isCaution = warningPopup.status === "주의";
             const isDeparture = warningPopup.status === "이탈";
-            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
             const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
             const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
-            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
             const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
             return (
               <>
@@ -33505,7 +33494,7 @@ setCopyPlaceOptions(list);
                 {warningPopup.status && (
                   <div className="flex items-center">
                     <span className="text-gray-500">등급</span>
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-red-600"}`}>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-red-600"}`}>
                       {warningPopup.status}
                     </span>
                   </div>
@@ -34400,8 +34389,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label>상차일</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={newOrder.상차일}
                 onChange={(e) => handleChange("상차일", e.target.value)}
                 className="border p-2 rounded w-full"
@@ -34457,8 +34445,7 @@ function NewOrderPopup({
 
 <div>
   <label>하차일</label>
-  <input
-    type="date"
+  <CustomDatePicker
     value={newOrder.하차일}
     onChange={(e) => handleChange("하차일", e.target.value)}
     className="border p-2 rounded w-full"
@@ -38049,19 +38036,23 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
 const checkWarningStatus = (name, type) => {
   name = String(name || "").trim();
   if (!name) return;
-  const foundClient = (clients || []).find(c => String(c.거래처명 || "").trim() === name);
-  if (foundClient) {
+  const foundClient = (clients || []).find(c => String(c.업체명 || c.거래처명 || "").trim() === name);
+  if (foundClient && foundClient.팝업표시 !== false) {
     const status = foundClient.업체상태 || foundClient.등급;
-    if (status === "블랙" || status === "주의") {
-      setWarningPopup({ name, status, type, info: foundClient });
+    const note = foundClient.오더메모;
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || foundClient.메모 || "" } });
       return;
     }
   }
   const foundPlace = (places || []).find(p => String(p.업체명 || "").trim() === name);
-  if (foundPlace) {
+  if (foundPlace && foundPlace.팝업표시 !== false) {
     const status = foundPlace.업체상태 || foundPlace.등급;
-    if (status === "블랙" || status === "주의") {
-      setWarningPopup({ name, status, type, info: foundPlace });
+    const note = foundPlace.오더메모;
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
+      setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || foundPlace.메모 || "" } });
     }
   }
 };
@@ -38604,16 +38595,16 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       {warningPopup && (
   <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-400" : "bg-red-600"}`}>
+      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>
         <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : warningPopup.status === "주의" ? "⚠️" : "⛔"}</span>
         <h3 className="text-white text-lg font-bold">{warningPopup.status || "메모"} 거래처 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : warningPopup.status === "주의" ? "bg-yellow-50 border-yellow-200" : "bg-red-50 border-red-200"}`}>
+        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : warningPopup.status === "주의" ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-200"}`}>
           <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
           <div className="flex items-center">
             <span className="text-gray-500">등급</span>
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-400" : "bg-red-600"}`}>{warningPopup.status}</span>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>{warningPopup.status}</span>
           </div>
           {warningPopup.info?.지정일 && (
             <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
@@ -38622,13 +38613,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <div><span className="text-gray-500">주소</span><span className="ml-2">{warningPopup.info.주소}</span></div>
           )}
           {warningPopup.info?.메모 && (
-            <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.info.메모}</span></div>
+            <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.info.메모}</span></div>
           )}
         </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
+        <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
       </div>
       <div className="px-6 pb-5">
-        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-400" : "bg-red-600"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
       </div>
     </div>
   </div>
@@ -38747,7 +38738,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <div className="space-y-4">
                       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
                       <Field label="상차일">
-                        <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                        <Field label="상차시간">
                         <TimeAmPmPicker
@@ -38834,7 +38825,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <div className="space-y-4">
                       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
                       <Field label="하차일">
-                        <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                        <Field label="하차시간">
                         <TimeAmPmPicker
@@ -40707,11 +40698,11 @@ const handleBatchSettle = async (targetStatus) => {
               {/* ★ 기간 퀵셀렉트 */}
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">시작일</label>
-                <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={start} onChange={e => setStart(e.target.value)} />
+                <CustomDatePicker className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={start} onChange={e => setStart(e.target.value)} />
               </div>
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">종료일</label>
-                <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={end} onChange={e => setEnd(e.target.value)} />
+                <CustomDatePicker className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={end} onChange={e => setEnd(e.target.value)} />
               </div>
               <div className="flex gap-1">
                 <button onClick={setThisMonth} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">이번달</button>
@@ -43520,9 +43511,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">상차일</label>
             <div className="flex items-center gap-1">
-              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadStart} onChange={e => setLoadStart(e.target.value)} />
+              <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadStart} onChange={e => setLoadStart(e.target.value)} />
               <span className="text-gray-400 text-[12px]">~</span>
-              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadEnd} onChange={e => setLoadEnd(e.target.value)} />
+              <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadEnd} onChange={e => setLoadEnd(e.target.value)} />
             </div>
           </div>
           <div className="flex flex-col gap-1">
@@ -43559,7 +43550,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <div className="ml-auto flex items-end gap-2">
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-bold text-gray-500">지급일(적용)</label>
-              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={selectedPayDate} onChange={e => setSelectedPayDate(e.target.value)} />
+              <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={selectedPayDate} onChange={e => setSelectedPayDate(e.target.value)} />
             </div>
             <button onClick={() => bulkPay(Array.from(selectedIds), "지급완료")} disabled={!selectedIds.size}
               className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
@@ -46597,7 +46588,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3 space-y-3">
               <div className="flex items-center gap-3">
                 <span className="text-[12px] font-semibold text-gray-500 w-16 flex-shrink-0">입사일</span>
-                <input type="date" value={hireDate} onChange={e => saveHireDate(e.target.value)}
+                <CustomDatePicker value={hireDate} onChange={e => saveHireDate(e.target.value)}
                   className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
                 {hireDateSaving && <span className="text-[11px] text-gray-400">저장 중...</span>}
               </div>
