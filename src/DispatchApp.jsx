@@ -853,10 +853,10 @@ const CustomSelect = React.forwardRef(function CustomSelect(
               className={`px-3 py-2 text-[13px] cursor-pointer whitespace-nowrap ${
                 o.disabled
                   ? "text-gray-300 cursor-not-allowed"
-                  : String(o.value) === String(value ?? "")
-                  ? "bg-[#1B2B4B] text-white font-semibold"
                   : i === activeIdx
-                  ? "bg-gray-100 text-gray-800"
+                  ? "bg-[#1B2B4B] text-white font-semibold"
+                  : String(o.value) === String(value ?? "")
+                  ? "bg-gray-100 text-gray-800 font-semibold"
                   : "text-gray-700"
               }`}
             >
@@ -7626,18 +7626,20 @@ const findClientAlertTarget = (name) => {
   // 먼저 보면, 아직 서로 동기화되지 않은 옛 하차지거래처 문서(팝업표시가 켜진 채로
   // 남아있는)가 이겨버려서 기본거래처에서 분명히 꺼둔 팝업이 거래처명 필드에서만
   // 다시 뜨는 문제가 있었다.
+  const isWarnGrade = (g) => g === "블랙" || g === "주의" || g === "이탈";
   const clientTarget = (clients || []).find(
-    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (c.등급 === "블랙" || c.등급 === "주의" || hasNote(c))
+    (c) => (c.업체명 || c.거래처명 || "") === trimmed && (isWarnGrade(c.등급) || hasNote(c))
   );
   if (clientTarget) {
     // 팝업 렌더링 쪽은 target.메모를 그대로 표시하므로, 오더메모 내용을 메모 자리에 실어 보낸다.
-    return clientTarget.팝업표시 === false ? null : { ...clientTarget, 메모: clientTarget.오더메모 || "" };
+    // 오더메모가 비어 있으면(예: 예전에 일반메모에만 적어둔 경우) 일반메모라도 참고할 수 있게 넣어준다.
+    return clientTarget.팝업표시 === false ? null : { ...clientTarget, 메모: clientTarget.오더메모 || clientTarget.메모 || "" };
   }
   const placeTarget = (placeRows || []).find(
-    (p) => (p.업체명 || "") === trimmed && (p.등급 === "블랙" || p.등급 === "주의" || hasNote(p))
+    (p) => (p.업체명 || "") === trimmed && (isWarnGrade(p.등급) || hasNote(p))
   );
   if (!placeTarget || placeTarget.팝업표시 === false) return null;
-  return { ...placeTarget, 메모: placeTarget.오더메모 || "" };
+  return { ...placeTarget, 메모: placeTarget.오더메모 || placeTarget.메모 || "" };
 };
 // 드롭다운에서 "특정 항목"을 직접 선택한 경우 전용 — 같은 업체명이라도 기본거래처와
 // 하차지거래처, 혹은 주소가 다른 하차지거래처가 각각 따로 존재할 수 있으므로, 이름으로
@@ -7646,8 +7648,8 @@ const getAlertTargetForSelectedPlace = (place) => {
   if (!place || place.팝업표시 === false) return null;
   const note = place.오더메모;
   const hasNote = note && String(note).trim();
-  if (place.등급 !== "블랙" && place.등급 !== "주의" && !hasNote) return null;
-  return { ...place, 메모: note || "" };
+  if (place.등급 !== "블랙" && place.등급 !== "주의" && place.등급 !== "이탈" && !hasNote) return null;
+  return { ...place, 메모: note || place.메모 || "" };
 };
 // 하위호환용 — 기존 호출부에서 그대로 쓸 수 있도록 남겨둠 (단일 대상만 체크)
 const checkClientGrade = (name, nextFocusId = null) => {
@@ -12530,7 +12532,7 @@ className={`
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el && editingContactIdx === null) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && editingContactIdx === null && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -12774,7 +12776,7 @@ className={`
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
    onKeyDown={(e) => {
       if (e.key === "Enter" || e.key === "Escape") {
         e.preventDefault();
@@ -12788,14 +12790,16 @@ className={`
       {(() => {
         const isBlack = clientAlert.등급 === "블랙";
         const isCaution = clientAlert.등급 === "주의";
+        const isDeparture = clientAlert.등급 === "이탈";
+        const isGraded = isBlack || isCaution || isDeparture;
         // 등급이 "일반"이라도 메모가 등록돼 있으면 참고할 수 있도록 같은 방식으로 안내한다.
-        const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-[#1B2B4B]";
-        const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
-        const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
-        const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
-        const badgeCls = isBlack ? "bg-gray-900 text-white" : isCaution ? "bg-orange-500 text-white" : "bg-[#1B2B4B] text-white";
-        const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : "text-[#1B2B4B]";
-        const footTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-500" : "text-[#1B2B4B]";
+        const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+        const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+        const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
+        const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+        const badgeCls = isBlack ? "bg-gray-900 text-white" : isCaution ? "bg-orange-500 text-white" : isDeparture ? "bg-red-600 text-white" : "bg-[#1B2B4B] text-white";
+        const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
+        const footTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-500" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
         return (
       <>
       <div className={`px-6 py-4 flex items-center gap-3 ${headerCls}`}>
@@ -12823,13 +12827,13 @@ className={`
           )}
         </div>
         <p className="text-sm text-gray-600 text-center font-semibold">
-          {isBlack || isCaution
+          {isGraded
             ? <>해당 거래처는 <span className={`font-bold ${footTextCls}`}>{clientAlert.등급}</span> 등급으로 지정된 거래처입니다.</>
             : "해당 거래처에 등록된 메모를 확인해주세요."}
         </p>
       </div>
       <div className="px-6 pb-5">
-        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : "bg-[#1B2B4B]"}`}
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]"}`}
           onClick={() => {
             setClientAlert(null);
             setTimeout(() => { advancePopupChain(); }, 50);
@@ -13193,7 +13197,7 @@ setConfirmChange(null);
       }
     }}
     tabIndex={0}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
   >
     <div className="bg-white rounded-xl shadow-xl w-[1300px] h-[650px] flex overflow-hidden border">
 
@@ -17140,9 +17144,9 @@ const checkWarningStatus = (name, type) => {
     if (foundClient && foundClient.팝업표시 !== false) {
       const status = foundClient.업체상태 || foundClient.등급;
       const note = foundClient.오더메모;
-      if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+      if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
-        const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+        const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
         setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
         return;
       }
@@ -17151,9 +17155,9 @@ const checkWarningStatus = (name, type) => {
     if (foundPlace && foundPlace.팝업표시 !== false) {
       const status = foundPlace.업체상태 || foundPlace.등급;
       const note = foundPlace.오더메모;
-      if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+      if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
         lastWarnedRef.current = { name, time: Date.now() };
-        const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+        const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
         setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
       }
     }
@@ -20693,7 +20697,7 @@ const head = isDark
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, visible4.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 1, 0)); }
@@ -21266,7 +21270,7 @@ flashRow(savedId);
     <div className="relative">
       <input
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.거래처명 ?? ""}
         onChange={(e)=>{
           const v = e.target.value;
@@ -21357,7 +21361,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
         />
@@ -21368,13 +21372,13 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
       <Field label="상차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.상차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
   >
@@ -21392,7 +21396,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -21471,11 +21475,12 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       {/* 🔥 다시 추가된 칸들 */}
-      <Field label="상차지주소">
-        <textarea
+      <Field label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.상차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
+        <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          rows={2}
-          className="inputStyle resize-none leading-snug"
+          className={inputStyle}
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
         />
@@ -21484,7 +21489,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label="상차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
         />
@@ -21493,7 +21498,7 @@ checkWarningStatus(c.거래처명, "거래처");
             <Field label="상차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
         />
@@ -21533,7 +21538,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
         />
@@ -21544,13 +21549,13 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
 <Field label="하차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.하차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
   >
@@ -21566,7 +21571,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -21645,11 +21650,12 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       {/* 🔥 다시 추가된 하차 칸들 */}
-      <Field label="하차지주소">
-        <textarea
+      <Field label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.하차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
+        <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          rows={2}
-          className="inputStyle resize-none leading-snug"
+          className={inputStyle}
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
         />
@@ -21658,7 +21664,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label="하차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
         />
@@ -21667,7 +21673,7 @@ checkWarningStatus(c.거래처명, "거래처");
            <Field label="하차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
         />
@@ -21742,7 +21748,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="차량번호">
       <input
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.차량번호 ?? ""}
 
         onKeyDown={(e) => {
@@ -21814,7 +21820,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="기사명">
       <input
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.이름 ?? ""}
         readOnly
       />
@@ -21822,7 +21828,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="전화번호">
       <input
-        className="inputStyle"
+        className={inputStyle}
         value={formatPhone(copyTarget?.전화번호 ?? "")}
         readOnly
       />
@@ -21839,7 +21845,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <Field label="차량종류">
       <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.차량종류 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
       >
@@ -21988,7 +21994,7 @@ value={copyTarget?.화물수량 || ""}
 
             <Field label="청구운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -22002,7 +22008,7 @@ value={copyTarget?.화물수량 || ""}
 
             <Field label="기사운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -22024,7 +22030,7 @@ value={copyTarget?.화물수량 || ""}
 <Field label="지급방식">
   <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.지급방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
   >
@@ -22040,7 +22046,7 @@ value={copyTarget?.화물수량 || ""}
 
 <Field label="배차방식">
   <CustomSelect
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
@@ -22052,10 +22058,8 @@ value={copyTarget?.화물수량 || ""}
 </Field>
           </div>
         </div>
-        </section>
 {/* ================= 메모 + 전달사항 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모 / 전달사항</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
   <div className="p-6 grid grid-cols-2 gap-4">
     <div>
       <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
@@ -25136,7 +25140,7 @@ setConfirmChange(null);
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100001]"
           tabIndex={-1}
-          ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+          ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
           onKeyDown={(e) => {
             if (e.key === "Escape") { e.preventDefault(); setDeliveryConfirm(null); return; }
             if (e.key === "Enter") {
@@ -25714,11 +25718,12 @@ setConfirmChange(null);
           {(() => {
             const isBlack = warningPopup.status === "블랙";
             const isCaution = warningPopup.status === "주의";
-            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-[#1B2B4B]";
-            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
-            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
-            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
-            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-yellow-600" : "text-[#1B2B4B]";
+            const isDeparture = warningPopup.status === "이탈";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-yellow-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
             return (
               <>
             {/* 헤더 */}
@@ -25737,7 +25742,7 @@ setConfirmChange(null);
                 {warningPopup.status && (
                   <div className="flex items-center">
                     <span className="text-gray-500">등급</span>
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : "bg-orange-400"}`}>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-red-600"}`}>
                       {warningPopup.status}
                     </span>
                   </div>
@@ -26324,9 +26329,9 @@ const checkWarningStatus = (name, type) => {
   if (foundClient && foundClient.팝업표시 !== false) {
     const status = foundClient.업체상태 || foundClient.등급;
     const note = foundClient.오더메모;
-    if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
-      const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
       setWarningPopup({ name, status: gradeStatus, type, info: { ...foundClient, 메모: note || "" } });
       return;
     }
@@ -26338,9 +26343,9 @@ const checkWarningStatus = (name, type) => {
   if (foundPlace && foundPlace.팝업표시 !== false) {
     const status = foundPlace.업체상태 || foundPlace.등급;
     const note = foundPlace.오더메모;
-    if (status === "블랙" || status === "주의" || (note && String(note).trim())) {
+    if (status === "블랙" || status === "주의" || status === "이탈" || (note && String(note).trim())) {
       lastWarnedRef.current = { name, time: Date.now() };
-      const gradeStatus = (status === "블랙" || status === "주의") ? status : null;
+      const gradeStatus = (status === "블랙" || status === "주의" || status === "이탈") ? status : null;
       setWarningPopup({ name, status: gradeStatus, type, info: { ...foundPlace, 메모: note || "" } });
     }
   }
@@ -29183,7 +29188,7 @@ return (
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, visible5.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 1, 0)); }
@@ -31272,7 +31277,7 @@ return (
     <div className="relative">
       <input
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.거래처명 ?? ""}
         onChange={(e)=>{
           const v = e.target.value;
@@ -31361,7 +31366,7 @@ setCopyTarget(prev=>({
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
         />
@@ -31372,13 +31377,13 @@ setCopyTarget(prev=>({
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
       <Field label="상차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.상차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
   >
@@ -31396,7 +31401,7 @@ setCopyTarget(prev=>({
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -31475,11 +31480,12 @@ setCopyPlaceOptions(list);
       </Field>
 
       {/* 🔥 다시 추가된 칸들 */}
-      <Field label="상차지주소">
-        <textarea
+      <Field label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.상차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
+        <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          rows={2}
-          className="inputStyle resize-none leading-snug"
+          className={inputStyle}
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
         />
@@ -31488,7 +31494,7 @@ setCopyPlaceOptions(list);
       <Field label="상차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
         />
@@ -31497,7 +31503,7 @@ setCopyPlaceOptions(list);
       <Field label="상차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
         />
@@ -31519,7 +31525,7 @@ setCopyPlaceOptions(list);
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           type="date"
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
         />
@@ -31530,13 +31536,13 @@ setCopyPlaceOptions(list);
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
-          selectCls="inputStyle"
+          selectCls={inputStyle}
         />
       </Field>
 <Field label="하차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.하차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
   >
@@ -31552,7 +31558,7 @@ setCopyPlaceOptions(list);
         <div className="relative">
           <input
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className="inputStyle"
+            className={inputStyle}
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -31631,11 +31637,12 @@ setCopyPlaceOptions(list);
       </Field>
 
       {/* 🔥 다시 추가된 하차 칸들 */}
-      <Field label="하차지주소">
-        <textarea
+      <Field label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
+        <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.하차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
+      )}</span>}>
+        <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          rows={2}
-          className="inputStyle resize-none leading-snug"
+          className={inputStyle}
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
         />
@@ -31644,7 +31651,7 @@ setCopyPlaceOptions(list);
       <Field label="하차지 담당자명">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
         />
@@ -31653,7 +31660,7 @@ setCopyPlaceOptions(list);
       <Field label="하차지 연락처">
         <input
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
         />
@@ -31710,7 +31717,7 @@ setCopyPlaceOptions(list);
 
    <Field label="차량번호">
 <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget?.차량번호 || ""}
 
   onKeyDown={(e)=>{
@@ -31789,7 +31796,7 @@ setCopyPlaceOptions(list);
 
     <Field label="기사명">
       <input
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.이름 || ""}
         readOnly
       />
@@ -31797,7 +31804,7 @@ setCopyPlaceOptions(list);
 
     <Field label="전화번호">
       <input
-        className="inputStyle"
+        className={inputStyle}
        value={formatPhone(copyTarget?.전화번호 || "")}
         readOnly
       />
@@ -31814,7 +31821,7 @@ setCopyPlaceOptions(list);
     <Field label="차량종류">
       <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="inputStyle"
+        className={inputStyle}
         value={copyTarget?.차량종류 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
       >
@@ -31936,7 +31943,7 @@ setCopyPlaceOptions(list);
 
             <Field label="청구운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -31950,7 +31957,7 @@ setCopyPlaceOptions(list);
 
             <Field label="기사운임">
               <input
-  className="inputStyle"
+  className={inputStyle}
   value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -31972,7 +31979,7 @@ setCopyPlaceOptions(list);
 <Field label="지급방식">
   <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.지급방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
   >
@@ -31988,7 +31995,7 @@ setCopyPlaceOptions(list);
 
 <Field label="배차방식">
   <CustomSelect
-    className="inputStyle"
+    className={inputStyle}
     value={copyTarget?.배차방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
@@ -32000,10 +32007,8 @@ setCopyPlaceOptions(list);
 </Field>
           </div>
 </div>
-        </section>
 {/* ================= 메모 + 전달사항 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모 / 전달사항</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
   <div className="p-6 grid grid-cols-2 gap-4">
     <div>
       <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
@@ -33041,7 +33046,7 @@ setCopyPlaceOptions(list);
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]"
           tabIndex={-1}
-          ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+          ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
           onKeyDown={async (e) => {
             if (e.key === "Escape") { e.preventDefault(); setConfirmChange(null); return; }
             if (e.key === "Enter") {
@@ -33482,11 +33487,12 @@ setCopyPlaceOptions(list);
           {(() => {
             const isBlack = warningPopup.status === "블랙";
             const isCaution = warningPopup.status === "주의";
-            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-[#1B2B4B]";
-            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : "📝";
-            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : "거래처 메모 안내";
-            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
-            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : "text-[#1B2B4B]";
+            const isDeparture = warningPopup.status === "이탈";
+            const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
+            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+            const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
+            const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-yellow-50 border-yellow-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
+            const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
             return (
               <>
             <div className={`px-6 py-4 flex items-center gap-3 ${headerCls}`}>
@@ -33499,7 +33505,7 @@ setCopyPlaceOptions(list);
                 {warningPopup.status && (
                   <div className="flex items-center">
                     <span className="text-gray-500">등급</span>
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : "bg-orange-400"}`}>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${isBlack ? "bg-gray-900" : isCaution ? "bg-orange-400" : "bg-red-600"}`}>
                       {warningPopup.status}
                     </span>
                   </div>
@@ -38598,16 +38604,16 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       {warningPopup && (
   <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
-        <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
-        <h3 className="text-white text-lg font-bold">{warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림</h3>
+      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-400" : "bg-red-600"}`}>
+        <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : warningPopup.status === "주의" ? "⚠️" : "⛔"}</span>
+        <h3 className="text-white text-lg font-bold">{warningPopup.status || "메모"} 거래처 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
+        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : warningPopup.status === "주의" ? "bg-yellow-50 border-yellow-200" : "bg-red-50 border-red-200"}`}>
           <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
           <div className="flex items-center">
             <span className="text-gray-500">등급</span>
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>{warningPopup.status}</span>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-400" : "bg-red-600"}`}>{warningPopup.status}</span>
           </div>
           {warningPopup.info?.지정일 && (
             <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
@@ -38622,7 +38628,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
         <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
       </div>
       <div className="px-6 pb-5">
-        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-400" : "bg-red-600"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
       </div>
     </div>
   </div>
