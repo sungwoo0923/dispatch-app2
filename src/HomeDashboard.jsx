@@ -682,12 +682,17 @@ React.useEffect(() => {
       <div className="grid grid-cols-3 gap-4">
         {/* 미배차 현황 ticker — col-span-2 */}
         <div className="col-span-2">
-        <SectionCard title={`미배차 현황 (${allPendingOrders.length}건)`}>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* 제목 + 컬럼명을 하나로 이어지는 네이비 영역으로 표시 (예전엔 사이에 여백이
+              있는 두 개의 네이비 바처럼 보였다) */}
+          <div className="bg-[#1B2B4B] px-5 pt-3 pb-0">
+            <h3 className="text-[14px] font-bold text-white pb-2.5">{`미배차 현황 (${allPendingOrders.length}건)`}</h3>
+          </div>
           {allPendingOrders.length === 0 ? (
             <div className="flex items-center justify-center h-[220px] text-[13px] text-gray-400">미배차 오더가 없습니다</div>
           ) : (
             <div className="relative" style={{ minHeight: 220 }}>
-              {/* column headers — navy, 카드 전체 너비 채움 */}
+              {/* column headers — 위 제목 영역과 같은 네이비, 바로 이어붙임 */}
               <div className="grid text-[12px] font-bold text-white bg-[#1B2B4B] w-full"
                 style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}>
                 {["상차일","상차시간","하차일","하차시간","거래처명","상차지명","하차지명","화물내용","차량종류","톤수","배차상태"].map(h => (
@@ -711,23 +716,23 @@ React.useEffect(() => {
                       onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
                     >
                       <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{상차일}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{d?.상차시간 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{하차일}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{d?.하차시간 || ""}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.상차시간 || ""}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{하차일}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.하차시간 || ""}</span>
                       <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.거래처명 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{d?.상차지명 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{d?.하차지명 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{d?.화물내용 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{d?.차량종류 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] text-gray-900 truncate">{d?.차량톤수 || ""}</span>
-                      <span className={`text-center px-2 py-2.5 text-[12px] font-bold truncate whitespace-nowrap ${status === "배차완료" ? "text-[#1B2B4B]" : status === "배차중" ? "text-[#1B2B4B]" : "text-[#1B2B4B]"}`}>{status}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.상차지명 || ""}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.하차지명 || ""}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.화물내용 || ""}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.차량종류 || ""}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.차량톤수 || ""}</span>
+                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate whitespace-nowrap">{status}</span>
                     </div>
                   );
                 })}
               </div>
               {/* page indicator */}
               {totalTickerPages > 1 && (
-                <div className="flex justify-center gap-1 pt-2">
+                <div className="flex justify-center gap-1 py-2.5">
                   {Array.from({ length: Math.min(totalTickerPages, 12) }).map((_, i) => (
                     <div
                       key={i}
@@ -750,7 +755,7 @@ React.useEffect(() => {
               to   { opacity: 1; transform: translateY(0); }
             }
           `}</style>
-        </SectionCard>
+        </div>
         </div>
 
         {/* Top5 거래처 */}

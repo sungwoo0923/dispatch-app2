@@ -408,7 +408,7 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
   return (
     <div className="relative">
       <input
-        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
         placeholder={placeholder}
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
@@ -457,7 +457,7 @@ function ClientSearch({ value, onChange, clients }) {
   return (
     <div className="relative">
       <input
-        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
         placeholder="거래처 검색..."
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value === "" ? "전체" : e.target.value); setOpen(true); setActiveIdx(0); }}
@@ -498,12 +498,14 @@ function StatCard({ label, value, sub, color = "blue" }) {
     red: "bg-red-50 border-red-200 text-red-700",
     gray: "bg-gray-50 border-gray-200 text-gray-600",
     navy: "bg-[#1B2B4B]/5 border-[#1B2B4B]/20 text-[#1B2B4B]",
+    navySolid: "bg-[#1B2B4B] border-[#1B2B4B] text-white",
   };
+  const isSolid = color === "navySolid";
   return (
     <div className={`border rounded-xl p-3 ${colors[color]}`}>
-      <div className="text-[11px] font-semibold opacity-70 mb-1">{label}</div>
-      <div className="text-[17px] font-bold">{value}</div>
-      {sub && <div className="text-[11px] font-medium opacity-60 mt-0.5">{sub}</div>}
+      <div className={`text-[11px] mb-1 ${isSolid ? "font-bold text-white/80" : "font-semibold opacity-70"}`}>{label}</div>
+      <div className={`text-[17px] font-bold ${isSolid ? "text-white" : ""}`}>{value}</div>
+      {sub && <div className={`text-[11px] mt-0.5 ${isSolid ? "font-semibold text-white/70" : "font-medium opacity-60"}`}>{sub}</div>}
     </div>
   );
 }
@@ -739,24 +741,26 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     return { avg, min, max, latestFare, aiValue, confidence: Math.min(95, 60+rows.length*5), message };
   };
 
-  const search = () => {
-    if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
-    if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
+  // _parseWaypointList와 동일한 파서를 써야 한다 — 경유목록이 배열이 아니라
+  // {0:{...},1:{...}} 형태의 인덱스 객체로 저장된 경우도 있는데, 예전에는 이 함수만
+  // 배열/JSON문자열만 인식하고 그 형태를 놓쳐서, 경유지가 실제로 있는 오더인데도
+  // "경유 없음"으로 취급되어 합산 화물내용/톤수 태깅이 빠지는 원인이 됐다.
+  const _viaName = s => typeof s==="string"?s:(s?.업체명||s?.지명||s?.하차지명||s?.상차지명||s?.주소||"");
+  const getPickupVias = r => [..._parseWaypointList(r.경유상차목록),..._parseWaypointList(r.경유지_상차),..._parseWaypointList(r.경유지상차)].map(_viaName).filter(Boolean);
+  const getDropVias = r => [..._parseWaypointList(r.경유하차목록),..._parseWaypointList(r.경유지_하차),..._parseWaypointList(r.경유지하차)].map(_viaName).filter(Boolean);
 
+  // 비교/표시 기준 화물내용·톤수는 경유지가 있으면 항상 본 오더 + 경유지 전체
+  // 합산값을 쓴다 — "경유포함" 토글은 검색어가 경유지명에도 매치될지만 결정한다.
+  const mergedCargoOf = r => mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
+  const mergedTonOf = r => mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
+
+  // 상/하차지(명·주소) + 화물/톤수/차량/거래처 조건으로 필터링만 하는 순수 함수 —
+  // 정방향 검색과 "반대 노선 이력 확인"에 동일하게 재사용한다.
+  const runFilter = (pk, pAddr, dr, dAddr) => {
     let list = [...dispatchData];
-    const _saVia = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
-    const _viaName = s => typeof s==="string"?s:(s?.업체명||s?.지명||s?.하차지명||s?.상차지명||s?.주소||"");
-    const getPickupVias = r => [..._saVia(r.경유상차목록||[]),..._saVia(r.경유지_상차||[]),..._saVia(r.경유지상차||[])].map(_viaName).filter(Boolean);
-    const getDropVias = r => [..._saVia(r.경유하차목록||[]),..._saVia(r.경유지_하차||[]),..._saVia(r.경유지하차||[])].map(_viaName).filter(Boolean);
-
-    // 비교/표시 기준 화물내용·톤수는 경유지가 있으면 항상 본 오더 + 경유지 전체
-    // 합산값을 쓴다 — "경유포함" 토글은 검색어가 경유지명에도 매치될지만 결정한다.
-    const mergedCargoOf = r => mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
-    const mergedTonOf = r => mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]);
-
     list = list.filter(r => {
       const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
-      const p = clean(pickup), pa = clean(pickupAddr);
+      const p = clean(pk), pa = clean(pAddr);
       if (!p && !pa) return true;
       const mainMatches = (p && (name.includes(p)||addr.includes(p))) || (pa && (name.includes(pa)||addr.includes(pa)));
       if (mainMatches) return true;
@@ -765,7 +769,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     });
     list = list.filter(r => {
       const name = clean(r.하차지명||""), addr = clean(r.하차지주소||"");
-      const d = clean(drop), da = clean(dropAddr);
+      const d = clean(dr), da = clean(dAddr);
       if (!d && !da) return true;
       const mainMatches = (d && (name.includes(d)||addr.includes(d))) || (da && (name.includes(da)||addr.includes(da)));
       if (mainMatches) return true;
@@ -793,9 +797,13 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (client !== "전체" && client !== "") {
       list = list.filter(r => clean(r.거래처명) === clean(client));
     }
+    return list;
+  };
 
+  // 필터링된 목록에 경유지 태깅 + 운임레벨 계산 + 정렬까지 마치고 화면 상태에 반영
+  const applyResult = (rawList) => {
     // 결과 표시용: 경유지 목록 + 경유지 포함 합산 화물/톤수 태깅
-    list = list.map(r => {
+    const list = rawList.map(r => {
       const vias = [...getPickupVias(r), ...getDropVias(r)];
       if (!vias.length) return r;
       return { ...r, _viaNames: vias, _mergedCargo: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]), _mergedTon: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) };
@@ -842,7 +850,35 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     setResult(withLevel.filter(r => Number(String(r.청구운임||0).replace(/[^\d]/g,"")) > 0));
     setAiFare(calcAiFare(baseGroup));
     setSearched(true);
-    if (withLevel.length === 0) alert("조회된 데이터가 없습니다.");
+    return withLevel.length;
+  };
+
+  const search = () => {
+    if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
+    if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
+
+    const forward = runFilter(pickup, pickupAddr, drop, dropAddr);
+    if (forward.length === 0) {
+      // 정방향 이력이 없으면, 상/하차지를 뒤바꾼 반대 노선 이력이 있는지 같은
+      // 화물/톤수/차량/거래처 조건으로 한 번 더 확인해 물어봐준다.
+      const reverse = runFilter(drop, dropAddr, pickup, pickupAddr);
+      if (reverse.length > 0) {
+        const fromLabel = pickup || pickupAddr, toLabel = drop || dropAddr;
+        const ok = window.confirm(
+          `"${fromLabel} → ${toLabel}" 노선의 이력은 없습니다.\n\n` +
+          `반대 노선 "${toLabel} → ${fromLabel}"의 운임 이력이 ${reverse.length}건 있습니다.\n` +
+          `반대 노선으로 조회할까요?`
+        );
+        if (ok) {
+          setPickup(drop); setDrop(pickup);
+          setPickupAddr(dropAddr); setDropAddr(pickupAddr);
+          applyResult(reverse);
+          return;
+        }
+      }
+    }
+    const count = applyResult(forward);
+    if (count === 0) alert("조회된 데이터가 없습니다.");
   };
 
   const reset = () => {
@@ -865,8 +901,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike };
   }, [result]);
 
-  const inputCls = "w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition";
-  const labelCls = "block text-[12px] font-semibold text-gray-500 mb-0.5";
+  const inputCls = "w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition";
+  const labelCls = "block text-[12px] font-bold text-gray-900 mb-1";
   const cat = VEHICLE_CATEGORIES[nfVehicleCategory];
 
   return (
@@ -903,13 +939,13 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
       {/* ====== 표준운임 조회 탭 ====== */}
       {activeTab === "표준운임" && (
-        <div className="grid grid-cols-2 gap-4 items-start">
+        <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
 
           {/* ───────── 왼쪽: 검색 패널 ───────── */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
 
             {/* 검색 모드 토글 */}
-            <div className="flex gap-1.5 mb-3">
+            <div className="flex gap-1.5 mb-5">
               <button
                 type="button"
                 onClick={() => setSearchMode("client")}
@@ -931,8 +967,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
             </div>
 
             {searchMode === "client" ? (
-              <div className="grid grid-cols-2 gap-2 mb-2.5">
-                <div className="col-span-2">
+              <div className="space-y-4 mb-4">
+                <div>
                   <label className={labelCls}>거래처</label>
                   <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
                 </div>
@@ -946,8 +982,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2 mb-2.5">
-                <div className="col-span-2">
+              <div className="space-y-4 mb-4">
+                <div>
                   <label className={labelCls}>거래처</label>
                   <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
                 </div>
@@ -962,12 +998,12 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
             )}
 
-            <label className="flex items-center gap-1.5 mb-3 cursor-pointer select-none w-fit">
+            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit">
               <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
               <span className="text-[12px] font-semibold text-gray-600">경유지명도 검색에 포함</span>
             </label>
 
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="space-y-4 mb-5">
               <div>
                 <label className={labelCls}>차량종류</label>
                 <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
@@ -1023,12 +1059,12 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
             {stats && (
               <div className="grid grid-cols-3 gap-2">
-                <StatCard label="조회 건수" value={`${stats.count}건`} color="gray" />
-                <StatCard label="평균 청구운임" value={`${stats.avg.toLocaleString()}원`} color="navy" />
-                <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="navy" />
-                <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="navy" />
-                <StatCard label="평균 기사운임" value={`${stats.avgDriver.toLocaleString()}원`} sub={`마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원`} color="gray" />
-                <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color="gray" />
+                <StatCard label="조회 건수" value={`${stats.count}건`} color="navySolid" />
+                <StatCard label="평균 청구운임" value={`${stats.avg.toLocaleString()}원`} color="navySolid" />
+                <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="navySolid" />
+                <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="navySolid" />
+                <StatCard label="평균 기사운임" value={`${stats.avgDriver.toLocaleString()}원`} sub={`마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원`} color="navySolid" />
+                <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color="navySolid" />
               </div>
             )}
 
@@ -1053,9 +1089,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
             {searched && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="overflow-auto max-h-[calc(100vh-360px)]">
                   <table className="w-full min-w-[1500px] text-[13px]">
-                    <thead>
+                    <thead className="sticky top-0 z-10">
                       <tr className="bg-[#1B2B4B]">
                         {["상차일","긴급","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
                           <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
@@ -1067,16 +1103,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                         <tr><td colSpan={16} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                       ) : (
                         result.map((r, i) => {
-                          // 경유지 정보 조합
-                          const _extractViaNames = (arr) => {
-                            let list = arr;
-                            if (typeof arr === "string" && arr.trim().startsWith("[")) {
-                              try { list = JSON.parse(arr); } catch { list = []; }
-                            }
-                            return Array.isArray(list)
-                              ? list.map(v => typeof v === "string" ? v : (v?.업체명 || v?.지명 || v?.하차지명 || v?.상차지명 || v?.주소 || "")).filter(Boolean)
-                              : [];
-                          };
+                          // 경유지 정보 조합 — search()의 getPickupVias/getDropVias와 동일한
+                          // _parseWaypointList를 써서, 경유목록이 배열이 아니라 인덱스 객체로
+                          // 저장된 경우도 놓치지 않는다.
+                          const _extractViaNames = (arr) =>
+                            _parseWaypointList(arr).map(v => typeof v === "string" ? v : (v?.업체명 || v?.지명 || v?.하차지명 || v?.상차지명 || v?.주소 || "")).filter(Boolean);
                           const _allViaNames = [
                             ..._extractViaNames(r.경유지_상차),
                             ..._extractViaNames(r.경유상차목록),
