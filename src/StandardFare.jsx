@@ -538,7 +538,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const [dropAddr, setDropAddr] = useState(localStorage.getItem("sf_dropAddr") || "");
   const [client, setClient] = useState(localStorage.getItem("sf_client") || "전체");
   const [result, setResult] = useState([]);
-  const [aiFare, setAiFare] = useState(null);
   const [searched, setSearched] = useState(false);
   const [resetKey, setResetKey] = useState(0);
 
@@ -710,24 +709,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     [dispatchData]
   );
 
-  const calcAiFare = (rows) => {
-    if (!rows.length) return null;
-    const fares = rows.map(r => Number(String(r.청구운임||0).replace(/[^\d]/g,""))).filter(n=>n>0);
-    if (!fares.length) return null;
-    const avg = Math.round(fares.reduce((a,b)=>a+b,0)/fares.length);
-    const min = Math.min(...fares);
-    const max = Math.max(...fares);
-    const latest = rows.slice().sort((a,b)=>(toYMD(b.상차일)||"").localeCompare(toYMD(a.상차일)||""))[0];
-    const latestFare = Number(String(latest?.청구운임||0).replace(/[^\d]/g,""));
-    const latestLevel = classifyFare(latestFare, avg, latest);
-    let aiValue = avg;
-    let message = "";
-    if (latestLevel === "SPIKE") { aiValue = avg; message = "최근 운임은 연휴·수배 지연으로 일시적으로 상승한 프리미엄 운임입니다. 표준 운임 기준으로 견적을 산정하는 것을 권장합니다."; }
-    else if (latestLevel === "TIGHT") { aiValue = Math.round(avg*0.6+latestFare*0.4); message = "현재 차량 수급이 다소 빡빡한 구간입니다. 표준 운임 대비 소폭 상향 견적이 적정합니다."; }
-    else { aiValue = Math.round(avg*0.5+latestFare*0.5); message = "최근 운임 흐름이 안정적입니다. 표준 운임 기준 견적을 사용하셔도 무리가 없습니다."; }
-    return { avg, min, max, latestFare, aiValue, confidence: Math.min(95, 60+rows.length*5), message };
-  };
-
   // _parseWaypointList와 동일한 파서를 써야 한다 — 경유목록이 배열이 아니라
   // {0:{...},1:{...}} 형태의 인덱스 객체로 저장된 경우도 있는데, 예전에는 이 함수만
   // 배열/JSON문자열만 인식하고 그 형태를 놓쳐서, 경유지가 실제로 있는 오더인데도
@@ -851,7 +832,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     });
 
     setResult(withLevel.filter(r => Number(String(r.청구운임||0).replace(/[^\d]/g,"")) > 0));
-    setAiFare(calcAiFare(baseGroup));
     setSearched(true);
     return withLevel.length;
   };
@@ -860,21 +840,17 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
     if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
 
-    // 주소로 검색 모드라도, 조회/반대노선 확인의 매칭 기준은 항상 주소가 아니라
-    // 상/하차지명이어야 한다 — 입력한 주소로 기존 이력에서 지명을 먼저 찾고, 찾으면
-    // 그 지명으로만 매칭한다(주소는 보조 fallback으로만 남긴다).
-    const pName = pickup.trim() || resolvePlaceName(pickupAddr);
-    const dName = drop.trim() || resolvePlaceName(dropAddr);
-    const pAddrArg = pName ? "" : pickupAddr;
-    const dAddrArg = dName ? "" : dropAddr;
-
-    const forward = runFilter(pName, pAddrArg, dName, dAddrArg);
+    const forward = runFilter(pickup, pickupAddr, drop, dropAddr);
     if (forward.length === 0) {
       // 정방향 이력이 없으면, 상/하차지를 뒤바꾼 반대 노선 이력이 있는지 같은
-      // 화물/톤수/차량/거래처 조건으로 한 번 더 확인해 물어봐준다.
-      const reverse = runFilter(dName, dAddrArg, pName, pAddrArg);
+      // 화물/톤수/차량/거래처 조건으로 한 번 더 확인해 물어봐준다. 매칭 자체는
+      // (주소로 검색 모드에서도 넓은 지역 검색이 되도록) 원래대로 주소 부분일치도
+      // 허용하되, 팝업에 보여줄 노선 이름은 주소 텍스트 그대로가 아니라 그 주소와
+      // 일치하는 기존 이력의 상/하차지명으로 표시한다.
+      const reverse = runFilter(drop, dropAddr, pickup, pickupAddr);
       if (reverse.length > 0) {
-        const fromLabel = pName || pickupAddr, toLabel = dName || dropAddr;
+        const fromLabel = pickup || resolvePlaceName(pickupAddr) || pickupAddr;
+        const toLabel = drop || resolvePlaceName(dropAddr) || dropAddr;
         const ok = window.confirm(
           `"${fromLabel} → ${toLabel}" 노선의 이력은 없습니다.\n\n` +
           `반대 노선 "${toLabel} → ${fromLabel}"의 운임 이력이 ${reverse.length}건 있습니다.\n` +
@@ -894,7 +870,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
   const reset = () => {
     setPickup(""); setDrop(""); setCargo(""); setTon(""); setVehicle("전체");
-    setPickupAddr(""); setDropAddr(""); setClient("전체"); setResult([]); setAiFare(null); setSearched(false);
+    setPickupAddr(""); setDropAddr(""); setClient("전체"); setResult([]); setSearched(false);
     setIncludeVia(false);
     setResetKey(k => k + 1);
     ["sf_pickup","sf_drop","sf_cargo","sf_ton","sf_vehicle","sf_pickupAddr","sf_dropAddr","sf_client"].forEach(k=>localStorage.removeItem(k));
@@ -1078,25 +1054,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                     {s.sub && <div className="text-[10px] font-semibold text-white/60 truncate">{s.sub}</div>}
                   </div>
                 ))}
-              </div>
-            )}
-
-            {aiFare && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-[13px] font-bold text-[#1B2B4B]">AI 추천 운임</span>
-                      <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full font-semibold">신뢰도 {aiFare.confidence}%</span>
-                    </div>
-                    <p className="text-[12px] text-gray-500 leading-relaxed">{aiFare.message}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-[11px] text-gray-400 mb-0.5">추천 운임</div>
-                    <div className="text-[20px] font-bold text-[#1B2B4B]">{aiFare.aiValue.toLocaleString()}원</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">범위: {aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}원</div>
-                  </div>
-                </div>
               </div>
             )}
 

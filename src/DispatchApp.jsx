@@ -8012,8 +8012,18 @@ function checkDuplicateDispatch(form, dispatchData) {
       if (!f.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
       if (!f.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
       if (!f.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
-      if (!String(f.화물내용 || "").trim()) { miss.push("화물내용"); missKeys.push("화물내용"); }
-      if (!String(f.차량톤수 || "").trim()) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
+      // 화물내용/차량톤수는 파레트·박스 등 타입 드롭다운만 고르고 숫자를 안 넣으면
+      // "파레트"/"톤" 같은 단위 문자열만 저장되어 겉으로는 비어있지 않은 것처럼
+      // 보인다 — 실제 값(숫자)이 있는지까지 확인해야 한다.
+      const 화물내용본문 = String(f.화물내용 || "").split("+")[0];
+      const 화물내용비어있음 = f.화물타입 && f.화물타입 !== "없음"
+        ? !/\d/.test(화물내용본문)
+        : !화물내용본문.trim();
+      if (화물내용비어있음) { miss.push("화물내용"); missKeys.push("화물내용"); }
+      const 차량톤수비어있음 = f.톤수타입
+        ? !String(f.톤수값 || "").trim()
+        : !String(f.차량톤수 || "").trim();
+      if (차량톤수비어있음) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
       if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
       if (miss.length) {
         setRequiredErrors(new Set(missKeys));
@@ -18290,18 +18300,26 @@ React.useEffect(() => {
     const targetClient = row ? String(row.거래처 || "").trim() : "";
     const _todayKstAddr4 = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const base = (dispatchData || []).filter(r => {
+    const matchDir = (pk, dk) => (dispatchData || []).filter(r => {
       if ((r.상차일 || "").slice(0, 10) === _todayKstAddr4) return false;
       if (!r.청구운임) return false;
       const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
       const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
-      if (!rPickup.includes(pickupKw)) return false;
-      if (!rDrop.includes(dropKw)) return false;
+      if (!rPickup.includes(pk)) return false;
+      if (!rDrop.includes(dk)) return false;
       const rGroup = getVehicleGroup(r.차량종류);
       if (rGroup !== targetGroup) return false;
       if (!ctxAddrAllClients4 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
       return true;
     });
+
+    // 입력한 방향으로 이력이 없으면, 상/하차 지역을 뒤바꾼 반대노선 이력도 확인한다.
+    let base = matchDir(pickupKw, dropKw);
+    let reversedMatch = false;
+    if (!base.length) {
+      base = matchDir(dropKw, pickupKw);
+      reversedMatch = base.length > 0;
+    }
 
     if (!base.length) {
       setCtxAddrResults4([]);
@@ -18317,6 +18335,7 @@ React.useEffect(() => {
         ton: row && getTotalTonFromOrder(row) != null && getTotalTonFromOrder(r) === getTotalTonFromOrder(row),
       },
       _time: r.updatedAt || r.등록일 || 0,
+      _reverseRoute: reversedMatch,
     }));
     scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
 
@@ -18331,6 +18350,9 @@ React.useEffect(() => {
     setCtxAddrResults4(scored);
     setCtxAddrSearch4Open(false);
     setCtxFare4PanelOpen(true);
+    if (reversedMatch) {
+      showAlert(`"${pickupKw} → ${dropKw}" 노선 이력은 없어, 반대 노선 "${dropKw} → ${pickupKw}" 이력 ${scored.length}건을 표시합니다.`);
+    }
   };
 
   // 🔵 동일 노선 추천 리스트
@@ -22288,6 +22310,9 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -22659,6 +22684,9 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -24786,6 +24814,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -29086,17 +29117,25 @@ const save = {
     const targetGroup = row ? getVehicleGroup5(row.차량종류) : "general";
     const targetClient = row ? String(row.거래처 || "").trim() : "";
 
-    const base = (dispatchData || []).filter(r => {
+    const matchDir = (pk, dk) => (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
       const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
       const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
-      if (!rPickup.includes(pickupKw)) return false;
-      if (!rDrop.includes(dropKw)) return false;
+      if (!rPickup.includes(pk)) return false;
+      if (!rDrop.includes(dk)) return false;
       const rGroup = getVehicleGroup5(r.차량종류);
       if (rGroup !== targetGroup) return false;
       if (!ctxAddrAllClients5 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
       return true;
     });
+
+    // 입력한 방향으로 이력이 없으면, 상/하차 지역을 뒤바꾼 반대노선 이력도 확인한다.
+    let base = matchDir(pickupKw, dropKw);
+    let reversedMatch = false;
+    if (!base.length) {
+      base = matchDir(dropKw, pickupKw);
+      reversedMatch = base.length > 0;
+    }
 
     if (!base.length) {
       setCtxAddrResults5([]);
@@ -29112,6 +29151,7 @@ const save = {
         ton: row && getTotalTonFromOrder(row) != null && getTotalTonFromOrder(r) === getTotalTonFromOrder(row),
       },
       _time: r.updatedAt || r.등록일 || 0,
+      _reverseRoute: reversedMatch,
     }));
     scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
 
@@ -29126,6 +29166,9 @@ const save = {
     setCtxAddrResults5(scored);
     setCtxAddrSearch5Open(false);
     setCtxFare5PanelOpen(true);
+    if (reversedMatch) {
+      showAlert(`"${pickupKw} → ${dropKw}" 노선 이력은 없어, 반대 노선 "${dropKw} → ${pickupKw}" 이력 ${scored.length}건을 표시합니다.`);
+    }
   };
 
   if (!loaded) return null;
@@ -32231,6 +32274,9 @@ setCopyPlaceOptions(list);
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
@@ -33984,6 +34030,9 @@ setCopyPlaceOptions(list);
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
+                          {rec._reverseRoute && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-purple-600 text-white">반대노선</span>
+                          )}
                           {rec.긴급 === true && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>
                           )}
