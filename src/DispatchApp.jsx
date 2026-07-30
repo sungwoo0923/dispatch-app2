@@ -44120,10 +44120,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         <h2 className="text-[18px] font-bold text-[#1B2B4B]">기사관리</h2>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAddForm(v=>!v)}
-            className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${showAddForm ? "bg-gray-200 text-gray-700" : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"}`}
+            onClick={() => setShowAddForm(true)}
+            className="px-4 py-2 rounded-lg text-[13px] font-bold transition bg-[#1B2B4B] text-white hover:bg-[#243a60]"
           >
-            {showAddForm ? "닫기" : "+ 기사 등록"}
+            + 기사 등록
           </button>
           <button
             onClick={() => { setShowAll(v=>!v); setQ(""); setSearched(false); setGradeFilter("전체"); }}
@@ -44167,44 +44167,49 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         ))}
       </div>
 
-      {/* 신규 등록 폼 */}
+      {/* 신규 등록 팝업 */}
       {showAddForm && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">신규 기사 등록</div>
-          <div className="grid grid-cols-5 gap-3">
-            {[
-              {label:"차량번호 *", key:"차량번호", placeholder:"예: 서울12가3456", border:"border-[#1B2B4B]"},
-              {label:"이름", key:"이름", placeholder:"기사명"},
-              {label:"전화번호", key:"전화번호", placeholder:"010-0000-0000"},
-              {label:"메모", key:"메모", placeholder:"메모"},
-            ].map(({label,key,placeholder,border}) => (
-              <div key={key}>
-                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">{label}</label>
-                <input
-                  className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
-                  placeholder={placeholder}
-                  value={newForm[key]}
-                  onChange={e => setNewForm(p => ({
-                    ...p,
-                    [key]: key==="전화번호" ? formatPhone(e.target.value) : e.target.value
-                  }))}
-                />
-              </div>
-            ))}
-            <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">등급</label>
-              <select className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
-                value={newForm.등급} onChange={e=>setNewForm(p=>({...p,등급:e.target.value}))}>
-                <option value="일반">일반</option>
-                <option value="지입">지입</option>
-                <option value="직영">직영</option>
-                <option value="블랙">블랙</option>
-              </select>
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowAddForm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white font-bold text-[15px]">신규 기사 등록</h3>
+              <button onClick={() => setShowAddForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
-          </div>
-          <div className="flex justify-end mt-3 gap-2">
-            <button onClick={()=>setShowAddForm(false)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold">취소</button>
-            <button onClick={addNew} className="px-6 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">등록</button>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+              {[
+                {label:"차량번호 *", key:"차량번호", placeholder:"예: 서울12가3456", border:"border-[#1B2B4B]"},
+                {label:"이름", key:"이름", placeholder:"기사명"},
+                {label:"전화번호", key:"전화번호", placeholder:"010-0000-0000"},
+                {label:"메모", key:"메모", placeholder:"메모"},
+              ].map(({label,key,placeholder,border}) => (
+                <div key={key}>
+                  <label className="text-[11px] font-semibold text-gray-400 mb-1 block">{label}</label>
+                  <input
+                    className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
+                    placeholder={placeholder}
+                    value={newForm[key]}
+                    onChange={e => setNewForm(p => ({
+                      ...p,
+                      [key]: key==="전화번호" ? formatPhone(e.target.value) : e.target.value
+                    }))}
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">등급</label>
+                <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                  value={newForm.등급} onChange={e=>setNewForm(p=>({...p,등급:e.target.value}))}>
+                  <option value="일반">일반</option>
+                  <option value="지입">지입</option>
+                  <option value="직영">직영</option>
+                  <option value="블랙">블랙</option>
+                </CustomSelect>
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex gap-3">
+              <button onClick={()=>setShowAddForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+              <button onClick={addNew} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">등록</button>
+            </div>
           </div>
         </div>
       )}
@@ -45394,11 +45399,9 @@ React.useEffect(() => {
               <span className="text-xs text-gray-400">검색결과 {filteredPlaces.length}건</span>
             )}
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => setShowNewPlaceForm(v => !v)}
-                className={`h-[34px] px-4 rounded-lg text-sm font-semibold border transition ${
-                  showNewPlaceForm ? "bg-gray-200 text-gray-700 border-gray-300" : "border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-                }`}>
-                {showNewPlaceForm ? "취소" : "+ 신규등록"}
+              <button onClick={() => setShowNewPlaceForm(true)}
+                className="h-[34px] px-4 rounded-lg text-sm font-semibold border transition border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white">
+                + 신규등록
               </button>
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
@@ -45417,49 +45420,55 @@ React.useEffect(() => {
             </div>
           </div>
 
-          {/* 신규 등록 폼 */}
+          {/* 신규 등록 팝업 */}
           {showNewPlaceForm && (
-            <div className="bg-white rounded-xl border-2 border-[#1B2B4B]/30 p-4">
-              <div className="text-sm font-bold text-[#1B2B4B] mb-3">신규 하차지 등록</div>
-              <div className="grid grid-cols-6 gap-3 items-end">
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">업체명 *</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.업체명} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))} />
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowNewPlaceForm(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[15px]">신규 하차지 등록</h3>
+                  <button onClick={() => setShowNewPlaceForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
                 </div>
-                <div className="col-span-2">
-                  <div className="text-xs text-gray-500 font-semibold mb-1">주소 *</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.주소} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))} />
+                <div className="px-6 py-5 grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">업체명 *</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.업체명} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">등급</div>
+                    <CustomSelect className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.등급} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 등급: e.target.value }))}>
+                      <option value="일반">일반</option>
+                      <option value="블랙">블랙</option>
+                      <option value="주의">주의</option>
+                      <option value="이탈">이탈</option>
+                    </CustomSelect>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-xs text-gray-500 font-semibold mb-1">주소 *</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.주소} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">담당자</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.담당자} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
+                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                      value={placeNewForm.메모} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))} />
+                  </div>
                 </div>
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">담당자</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.담당자} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))} />
+                <div className="px-6 pb-5 flex gap-3">
+                  <button onClick={() => setShowNewPlaceForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+                  <button onClick={addNewPlace} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">등록</button>
                 </div>
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500 font-semibold mb-1">등급</div>
-                  <select className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.등급} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 등급: e.target.value }))}>
-                    <option value="일반">일반</option>
-                    <option value="블랙">블랙</option>
-                    <option value="주의">주의</option>
-                    <option value="이탈">이탈</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-3 items-end">
-                <div className="flex-1">
-                  <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
-                  <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                    value={placeNewForm.메모} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))} />
-                </div>
-                <button onClick={addNewPlace} className="px-6 py-2 rounded-lg bg-[#1B2B4B] text-white text-sm font-bold hover:bg-[#243a60] transition whitespace-nowrap">등록</button>
               </div>
             </div>
           )}
