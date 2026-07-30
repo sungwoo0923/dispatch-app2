@@ -104,7 +104,7 @@ const cellBase = "border px-2 py-1 text-center whitespace-nowrap align-middle mi
 const headBase = "border px-2 py-2 whitespace-nowrap bg-gray-100";
 const inputBase = "border p-1 rounded w-36 text-center";
 const inputStyle =
-  "w-full h-[42px] border border-slate-300 rounded-lg px-3 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition";
+  "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] text-gray-800 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
   const Field = ({ label, children }) => (
     <div className="space-y-1">
       <div className="text-xs font-semibold text-slate-500">
@@ -794,7 +794,12 @@ const CustomSelect = React.forwardRef(function CustomSelect(
               let next = i;
               for (let k = i + 1; k < options.length; k++) { if (!options[k].disabled) { next = k; break; } }
               const o = options[next];
-              if (o && !o.disabled) onChange?.({ target: { value: o.value } });
+              // 값이 빈 문자열("없음"/"선택" 등 플레이스홀더성 옵션)로 지나가는 중에는
+              // onChange를 쏘지 않는다 — 일부 필드는 값이 비워지는 순간 다른 입력창으로
+              // 포커스를 옮기는 등의 부수효과가 있어, 단순히 화살표로 훑고 지나가기만
+              // 해도 그 부수효과가 실행되어 방향키 탐색이 끊겨버렸다. 빈 값은 Enter나
+              // 클릭으로 확정할 때만 반영한다.
+              if (o && !o.disabled && o.value !== "") onChange?.({ target: { value: o.value } });
               return next;
             });
           } else if (e.key === "ArrowUp") {
@@ -802,10 +807,12 @@ const CustomSelect = React.forwardRef(function CustomSelect(
               let next = i;
               for (let k = i - 1; k >= 0; k--) { if (!options[k].disabled) { next = k; break; } }
               const o = options[next];
-              if (o && !o.disabled) onChange?.({ target: { value: o.value } });
+              if (o && !o.disabled && o.value !== "") onChange?.({ target: { value: o.value } });
               return next;
             });
           } else if (e.key === "Enter") {
+            const o = options[activeIdx];
+            if (o && !o.disabled) onChange?.({ target: { value: o.value } });
             setOpen(false);
           } else if (e.key === "Escape") setOpen(false);
         }}
@@ -867,7 +874,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
 // 연/월 이동이 불편하다는 피드백에 따라 배차현황 검색 필터에 사용한다. CustomSelect와
 // 동일하게 트리거는 그대로 두고 달력 패널만 document.body에 fixed 포지션 portal로 띄운다.
 const CustomDatePicker = React.forwardRef(function CustomDatePicker(
-  { value, onChange, className = "", placeholder = "날짜 선택", disabled = false },
+  { value, onChange, className = "", placeholder = "날짜 선택", disabled = false, showIcon = false },
   ref
 ) {
   const [open, setOpen] = React.useState(false);
@@ -946,9 +953,14 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
         ref={btnRef}
         disabled={disabled}
         onClick={() => { if (disabled) return; setOpen((v) => !v); }}
-        className={`${className} text-left`}
+        className={`${className} text-left ${showIcon ? "flex items-center justify-between gap-1.5" : ""}`}
       >
-        {value || <span className="text-gray-400">{placeholder}</span>}
+        <span>{value || <span className="text-gray-400">{placeholder}</span>}</span>
+        {showIcon && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        )}
       </button>
       {open && menuRect && createPortal(
         <div
@@ -9669,9 +9681,9 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 
 {/* ================= 상차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B]">상차</label>
-  <input
-    type="date"
+  <CustomDatePicker
     value={form.상차일 || ""}
+    showIcon
     className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
     onChange={(e) => onChange("상차일", e.target.value)}
   />
@@ -9743,9 +9755,9 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
  {/* ================= 하차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B] ml-4">하차</label>
   <div className="relative">
-    <input
-      type="date"
+    <CustomDatePicker
       value={form.하차일 || ""}
+      showIcon
       className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
       onChange={(e) => onChange("하차일", e.target.value)}
     />
@@ -10630,7 +10642,7 @@ className={`
       <label className={labelCls}>수수료</label>
       <input
         className={`${inputCls} bg-gray-100`}
-        value={form.수수료}
+        value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
         readOnly
       />
     </div>
@@ -21460,9 +21472,10 @@ checkWarningStatus(c.거래처명, "거래처");
 
       {/* 🔥 다시 추가된 칸들 */}
       <Field label="상차지주소">
-        <input
+        <textarea
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          rows={2}
+          className="inputStyle resize-none leading-snug"
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
         />
@@ -21633,9 +21646,10 @@ checkWarningStatus(c.거래처명, "거래처");
 
       {/* 🔥 다시 추가된 하차 칸들 */}
       <Field label="하차지주소">
-        <input
+        <textarea
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          rows={2}
+          className="inputStyle resize-none leading-snug"
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
         />
@@ -21690,8 +21704,8 @@ checkWarningStatus(c.거래처명, "거래처");
 </div>
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">기사 스마트 검색</h3></div>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
 <div className="p-4">
     <div className="relative" style={{overflow: "visible"}}>
       <input
@@ -21719,11 +21733,9 @@ checkWarningStatus(c.거래처명, "거래처");
       )}
     </div>
   </div>
-</section>
 
 {/* ================= 기사정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">기사정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
@@ -21802,7 +21814,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="기사명">
       <input
-        className="inputStyle bg-gray-100"
+        className="inputStyle"
         value={copyTarget?.이름 ?? ""}
         readOnly
       />
@@ -21810,7 +21822,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
     <Field label="전화번호">
       <input
-        className="inputStyle bg-gray-100"
+        className="inputStyle"
         value={formatPhone(copyTarget?.전화번호 ?? "")}
         readOnly
       />
@@ -21818,10 +21830,8 @@ checkWarningStatus(c.거래처명, "거래처");
 
   </div>
 </div>
-</section>
 {/* ================= 화물정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">화물정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
@@ -21881,9 +21891,9 @@ checkWarningStatus(c.거래처명, "거래처");
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="
           px-3 py-2
-          bg-blue-50
-          text-blue-700
-          border-l
+          bg-[#1B2B4B]
+          text-white
+          font-bold
           outline-none
           cursor-pointer
         "
@@ -21939,9 +21949,9 @@ value={copyTarget?.화물수량 || ""}
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="
         px-3 py-2
-        bg-blue-50
-        text-blue-700
-        border-l
+        bg-[#1B2B4B]
+        text-white
+        font-bold
         outline-none
         cursor-pointer
       "
@@ -21970,10 +21980,8 @@ value={copyTarget?.화물수량 || ""}
 
   </div>
 </div>
-</section>
         {/* ================= 결제 정보 ================= */}
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">결제 정보</h3></div>
+          <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
           <div className="p-6">
 
           <div className="grid grid-cols-5 gap-8">
@@ -22008,7 +22016,7 @@ value={copyTarget?.화물수량 || ""}
 
             <Field label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-blue-700"}`}>
+              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
@@ -31468,9 +31476,10 @@ setCopyPlaceOptions(list);
 
       {/* 🔥 다시 추가된 칸들 */}
       <Field label="상차지주소">
-        <input
+        <textarea
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          rows={2}
+          className="inputStyle resize-none leading-snug"
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
         />
@@ -31623,9 +31632,10 @@ setCopyPlaceOptions(list);
 
       {/* 🔥 다시 추가된 하차 칸들 */}
       <Field label="하차지주소">
-        <input
+        <textarea
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className="inputStyle"
+          rows={2}
+          className="inputStyle resize-none leading-snug"
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
         />
@@ -31662,8 +31672,8 @@ setCopyPlaceOptions(list);
 </div>
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">기사 스마트 검색</h3></div>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
   <div className="p-4">
     <div className="relative">
       <input
@@ -31691,11 +31701,9 @@ setCopyPlaceOptions(list);
       )}
     </div>
   </div>
-</section>
 
 {/* ================= 기사정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">기사정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
@@ -31781,7 +31789,7 @@ setCopyPlaceOptions(list);
 
     <Field label="기사명">
       <input
-        className="inputStyle bg-gray-100"
+        className="inputStyle"
         value={copyTarget?.이름 || ""}
         readOnly
       />
@@ -31789,7 +31797,7 @@ setCopyPlaceOptions(list);
 
     <Field label="전화번호">
       <input
-        className="inputStyle bg-gray-100"
+        className="inputStyle"
        value={formatPhone(copyTarget?.전화번호 || "")}
         readOnly
       />
@@ -31797,10 +31805,8 @@ setCopyPlaceOptions(list);
 
   </div>
 </div>
-</section>
 {/* ================= 화물정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">화물정보</h3></div>
+  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
@@ -31855,7 +31861,7 @@ setCopyPlaceOptions(list);
     {/* 단위 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
+      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
       value={copyTarget?.톤수타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -31900,7 +31906,7 @@ setCopyPlaceOptions(list);
     {/* 타입 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
+      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -31922,10 +31928,8 @@ setCopyPlaceOptions(list);
 
   </div>
 </div>
-</section>
         {/* ================= 결제 정보 ================= */}
-      <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">결제 정보</h3></div>
+          <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
           <div className="p-6">
 
           <div className="grid grid-cols-5 gap-8">
@@ -31960,7 +31964,7 @@ setCopyPlaceOptions(list);
 
             <Field label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-blue-700"}`}>
+              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
@@ -38803,7 +38807,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       </Field>
                       <Field label="상차지주소">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="상차지 담당자명">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -38890,7 +38894,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       </Field>
                       <Field label="하차지주소">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="하차지 담당자명">
                         <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -39034,7 +39038,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <Field label="차량톤수">
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <CustomSelect className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option><option value="톤">톤</option><option value="kg">kg</option>
                         </CustomSelect>
                       </div>
@@ -39042,7 +39046,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <CustomSelect className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
                         </CustomSelect>
                       </div>
@@ -39065,7 +39069,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 기사운임: v})); }} />
                     </Field>
                     <Field label="수수료">
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-blue-700 text-center">
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-[#1B2B4B] text-center">
                         {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()}원
                       </div>
                     </Field>
