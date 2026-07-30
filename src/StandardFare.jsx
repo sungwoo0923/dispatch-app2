@@ -840,14 +840,23 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
     if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
 
-    const forward = runFilter(pickup, pickupAddr, drop, dropAddr);
+    // 검색 모드를 전환해도 이전 모드에 입력했던 값(예: 주소로 검색 모드의 상/하차
+    // 주소)이 state에 그대로 남아있어, runFilter의 name/address OR 매칭 때문에
+    // 현재 모드와 무관한 이력까지 섞여 나오는 문제가 있었다 — 현재 모드에 해당하는
+    // 입력값만 매칭에 사용한다.
+    const pArg = searchMode === "address" ? "" : pickup;
+    const paArg = searchMode === "address" ? pickupAddr : "";
+    const dArg = searchMode === "address" ? "" : drop;
+    const daArg = searchMode === "address" ? dropAddr : "";
+
+    const forward = runFilter(pArg, paArg, dArg, daArg);
     if (forward.length === 0) {
       // 정방향 이력이 없으면, 상/하차지를 뒤바꾼 반대 노선 이력이 있는지 같은
       // 화물/톤수/차량/거래처 조건으로 한 번 더 확인해 물어봐준다. 매칭 자체는
       // (주소로 검색 모드에서도 넓은 지역 검색이 되도록) 원래대로 주소 부분일치도
       // 허용하되, 팝업에 보여줄 노선 이름은 주소 텍스트 그대로가 아니라 그 주소와
       // 일치하는 기존 이력의 상/하차지명으로 표시한다.
-      const reverse = runFilter(drop, dropAddr, pickup, pickupAddr);
+      const reverse = runFilter(dArg, daArg, pArg, paArg);
       if (reverse.length > 0) {
         const fromLabel = pickup || resolvePlaceName(pickupAddr) || pickupAddr;
         const toLabel = drop || resolvePlaceName(dropAddr) || dropAddr;
