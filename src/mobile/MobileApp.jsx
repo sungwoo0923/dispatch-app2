@@ -13926,7 +13926,8 @@ ${_dStopsTextMd ? _dStopsTextMd+"\n\n" : ""}${_dNumMd}하차 : ${order.하차지
 ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainDTonMd}
 하차방법 : ${order.하차방법||"-"}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전달사항.trim()}` : ""}
 
-화물 : ${_totTonMd}${_totCargoMd?` / ${_totCargoMd}`:""} ${order.차량종류||order.차종||""}${noticeBlock?`\n\n${noticeBlock}`:""}
+화물 : ${_totTonMd}${_totCargoMd?` / ${_totCargoMd}`:""} ${order.차량종류||order.차종||""}
+결제방법 : ${order.지급방식 === "계산서" ? `계산서(${order.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (order.지급방식 || "-")}${noticeBlock?`\n\n${noticeBlock}`:""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드
 ※ 거래명세서${isColdVeh ? "/타코메타 기록지" : ""} 함께 촬영

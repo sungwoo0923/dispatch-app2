@@ -701,6 +701,20 @@ const CustomSelect = React.forwardRef(function CustomSelect(
   const current = options.find((o) => String(o.value) === String(value ?? ""));
   const [activeIdx, setActiveIdx] = React.useState(-1);
 
+  // 옵션 글자 길이에 맞춰 드롭다운 목록 폭을 넉넉히 잡는다 — 트리거(닫힌 버튼)가
+  // 좁은 칸에 들어있어도(예: 오더복사수정패널의 그리드 칸) 목록을 열었을 때 긴
+  // 옵션명("냉장/냉동탑", "24시(외부업체)" 등)이 잘리지 않게 한다.
+  const menuMaxContentWidth = React.useMemo(() => {
+    let maxLen = 0;
+    options.forEach((o) => {
+      const text = typeof o.label === "string" ? o.label : "";
+      let w = 0;
+      for (const ch of text) w += /[ㄱ-힝]/.test(ch) ? 14 : 8;
+      if (w > maxLen) maxLen = w;
+    });
+    return Math.min(480, Math.max(200, maxLen + 56));
+  }, [options]);
+
   // 옵션 목록은 트리거 바로 아래가 아니라 document.body에 fixed로 올려서 그린다 —
   // 이전에는 트리거의 부모를 기준으로 absolute 배치했는데, 부모가 스크롤 가능한
   // 패널(오더복사/수정 패널 등)이면 그 패널의 overflow에 목록이 잘려서 안 보이거나
@@ -775,18 +789,30 @@ const CustomSelect = React.forwardRef(function CustomSelect(
           if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(e.key)) e.preventDefault();
           if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { setOpen(true); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); return; }
           if (!open) return;
-          if (e.key === "ArrowDown") setActiveIdx((i) => Math.min(i + 1, options.length - 1));
-          else if (e.key === "ArrowUp") setActiveIdx((i) => Math.max(i - 1, 0));
-          else if (e.key === "Enter") {
-            const o = options[activeIdx];
-            if (o && !o.disabled) { onChange?.({ target: { value: o.value } }); }
+          if (e.key === "ArrowDown") {
+            setActiveIdx((i) => {
+              let next = i;
+              for (let k = i + 1; k < options.length; k++) { if (!options[k].disabled) { next = k; break; } }
+              const o = options[next];
+              if (o && !o.disabled) onChange?.({ target: { value: o.value } });
+              return next;
+            });
+          } else if (e.key === "ArrowUp") {
+            setActiveIdx((i) => {
+              let next = i;
+              for (let k = i - 1; k >= 0; k--) { if (!options[k].disabled) { next = k; break; } }
+              const o = options[next];
+              if (o && !o.disabled) onChange?.({ target: { value: o.value } });
+              return next;
+            });
+          } else if (e.key === "Enter") {
             setOpen(false);
           } else if (e.key === "Escape") setOpen(false);
         }}
         className={`${className}${needsRelative ? " relative" : ""} text-left overflow-hidden text-ellipsis whitespace-nowrap`}
       >
-        <span className="pr-2.5">{current ? current.label : (placeholder || "")}</span>
-        <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60">
+        <span className="pr-4">{current ? current.label : (placeholder || "")}</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-80">
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
@@ -799,7 +825,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             top: menuRect.top,
             bottom: menuRect.bottom,
             minWidth: menuRect.width,
-            maxWidth: Math.max(menuRect.width, 320),
+            maxWidth: Math.max(menuRect.width, menuMaxContentWidth),
             maxHeight: menuRect.maxHeight,
           }}
           className="z-[999999] overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1"
@@ -834,6 +860,155 @@ const CustomSelect = React.forwardRef(function CustomSelect(
         document.body
       )}
     </div>
+  );
+});
+
+// 브라우저 기본 달력(type="date")을 대체하는 커스텀 날짜 선택기 — 숫자가 작고
+// 연/월 이동이 불편하다는 피드백에 따라 배차현황 검색 필터에 사용한다. CustomSelect와
+// 동일하게 트리거는 그대로 두고 달력 패널만 document.body에 fixed 포지션 portal로 띄운다.
+const CustomDatePicker = React.forwardRef(function CustomDatePicker(
+  { value, onChange, className = "", placeholder = "날짜 선택", disabled = false },
+  ref
+) {
+  const [open, setOpen] = React.useState(false);
+  const [viewYear, setViewYear] = React.useState(() => (value ? new Date(value).getFullYear() : new Date().getFullYear()));
+  const [viewMonth, setViewMonth] = React.useState(() => (value ? new Date(value).getMonth() : new Date().getMonth()));
+  const [menuRect, setMenuRect] = React.useState(null);
+  const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+  React.useImperativeHandle(ref, () => ({ focus: () => btnRef.current?.focus() }));
+
+  const updateMenuRect = React.useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < 360 && r.top > spaceBelow;
+    setMenuRect({
+      left: r.left,
+      top: openUp ? undefined : r.bottom + 4,
+      bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    if (value) {
+      const d = new Date(value);
+      if (!isNaN(d)) { setViewYear(d.getFullYear()); setViewMonth(d.getMonth()); }
+    }
+    updateMenuRect();
+    const close = () => setOpen(false);
+    const onDocDown = (e) => {
+      if (btnRef.current && btnRef.current.contains(e.target)) return;
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDocDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open, updateMenuRect, value]);
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+  const now = new Date();
+  const todayStr = fmt(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const yearOptions = [];
+  for (let y = now.getFullYear() - 6; y <= now.getFullYear() + 3; y++) yearOptions.push(y);
+
+  const goMonth = (delta) => {
+    setViewMonth((m) => {
+      let nm = m + delta;
+      let ny = viewYear;
+      if (nm < 0) { nm = 11; ny -= 1; }
+      else if (nm > 11) { nm = 0; ny += 1; }
+      setViewYear(ny);
+      return nm;
+    });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={btnRef}
+        disabled={disabled}
+        onClick={() => { if (disabled) return; setOpen((v) => !v); }}
+        className={`${className} text-left`}
+      >
+        {value || <span className="text-gray-400">{placeholder}</span>}
+      </button>
+      {open && menuRect && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: "fixed", left: menuRect.left, top: menuRect.top, bottom: menuRect.bottom }}
+          className="z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl p-3 w-[290px]"
+        >
+          <div className="flex items-center justify-between mb-2 gap-1">
+            <button type="button" onClick={() => goMonth(-1)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-lg font-bold shrink-0">‹</button>
+            <div className="flex items-center gap-1.5">
+              <select value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))}
+                className="text-[14px] font-bold text-[#1B2B4B] border border-gray-200 rounded-md px-1.5 py-1 outline-none cursor-pointer">
+                {yearOptions.map((y) => <option key={y} value={y}>{y}년</option>)}
+              </select>
+              <select value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))}
+                className="text-[14px] font-bold text-[#1B2B4B] border border-gray-200 rounded-md px-1.5 py-1 outline-none cursor-pointer">
+                {Array.from({ length: 12 }, (_, i) => i).map((m) => <option key={m} value={m}>{m + 1}월</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={() => goMonth(1)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-lg font-bold shrink-0">›</button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
+              <div key={w} className={`text-center text-[11px] font-bold py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{w}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {cells.map((d, i) => {
+              if (d == null) return <div key={i} />;
+              const dateStr = fmt(viewYear, viewMonth, d);
+              const isSelected = dateStr === value;
+              const isToday = dateStr === todayStr;
+              return (
+                <button key={i} type="button"
+                  onClick={() => { onChange?.({ target: { value: dateStr } }); setOpen(false); }}
+                  className={`h-9 rounded-lg text-[13px] font-semibold transition ${
+                    isSelected ? "bg-[#1B2B4B] text-white" :
+                    isToday ? "border-2 border-[#1B2B4B] text-[#1B2B4B]" :
+                    "hover:bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
+            <button type="button"
+              onClick={() => { onChange?.({ target: { value: todayStr } }); setOpen(false); }}
+              className="text-[12px] font-bold text-[#1B2B4B] hover:underline">오늘</button>
+            <button type="button"
+              onClick={() => { onChange?.({ target: { value: "" } }); setOpen(false); }}
+              className="text-[12px] font-semibold text-gray-400 hover:underline">지우기</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 });
 
@@ -17312,7 +17487,7 @@ ${r.하차지주소 || ""}${(() => { const line = buildContactLine(r.하차지�
 하차방법 : ${r.하차방법 || "-"}
 
 화물 : ${_totTon4d}${_totCargo4d ? ` / ${_totCargo4d}` : ""} ${r.차량종류 || r.차종}
-결제방법 : ${r.지급방식 || "-"}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
+결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식 || "-")}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드필수
 KPP/아주파렛트 상차시 각각 전표업로드 필수
@@ -19054,13 +19229,21 @@ const driverPanelCallbackRef = React.useRef(null);
       );
     }
 
-    // 검색
+    // 검색 — 예전에는 row 객체의 모든 필드(Object.values)를 통째로 훑어서, id/history/
+    // 내부 플래그 등 화면에 보이지도 않는 값에 검색어가 우연히 포함되기만 해도 전혀
+    // 상관없는 오더가 결과에 섞여 나왔다(배차현황/5파트는 이미 아래처럼 실제 표시되는
+    // 필드만 검색해 이 문제가 없었다). 사용자가 보고 검색할 만한 필드로만 제한한다.
     if (q.trim()) {
       const key = q.toLowerCase();
+      const get = (v) => String(v || "").toLowerCase();
       data = data.filter((r) =>
-        Object.values(r).some((v) =>
-          String(v || "").toLowerCase().includes(key)
-        )
+        get(r.거래처명).includes(key) ||
+        get(r.상차지명).includes(key) ||
+        get(r.하차지명).includes(key) ||
+        get(r.차량번호).includes(key) ||
+        get(r.이름).includes(key) ||
+        get(r.지급방식).includes(key) ||
+        get(r.배차방식).includes(key)
       );
     }
 
@@ -27577,7 +27760,7 @@ ${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자
 하차방법 : ${r.하차방법||"-"}
 
 화물 : ${_totTon5d}${_totCargo5d?` / ${_totCargo5d}`:""} ${r.차량종류||"-"}
-결제방법 : ${r.지급방식||"-"}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}
+결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식||"-")}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드필수
 KPP/아주파렛트 상차시 각각 전표업로드 필수
@@ -29163,9 +29346,9 @@ return (
             적용된다. (예전에는 날짜를 하나만 골라도 바로 필터링되어, 시작일만
             고르고 종료일을 고르는 중에도 목록이 계속 바뀌어 보였다. 조회 버튼이
             날짜용/검색어용 2개로 따로 있던 것도 혼란스러워 하나로 합쳤다.) */}
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
+        <CustomDatePicker className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0 bg-white" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
         <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
+        <CustomDatePicker className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0 bg-white" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
 
         {/* 검색창 (통합) — 조회 버튼이 날짜/검색어 공용이라, 날짜만 바꾸고 아직
             조회를 누르지 않은 상태면 천천히 깜빡여 클릭을 유도한다. */}
@@ -38087,9 +38270,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
           />
           <div className="flex items-center gap-1">
-            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-gray-400 text-[13px]">~</span>
-            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className="flex items-center gap-1">
             <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400">
@@ -38565,10 +38748,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         />
                        </Field>
                       <Field label="상차방법">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
-                        </select>
+                        </CustomSelect>
                       </Field>
                       <Field label="상차지명">
                         <div className="relative">
@@ -38652,10 +38835,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         />
                        </Field>
                       <Field label="하차방법">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
-                        </select>
+                        </CustomSelect>
                       </Field>
                       <Field label="하차지명">
                         <div className="relative">
@@ -38843,25 +39026,25 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="p-6">
                   <div className="grid grid-cols-3 gap-6">
                     <Field label="차량종류">
-                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                         <option value="">선택</option>
                         <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="냉장/냉동탑">냉장/냉동탑</option><option value="냉장/냉동윙">냉장/냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
-                      </select>
+                      </CustomSelect>
                     </Field>
                     <Field label="차량톤수">
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option><option value="톤">톤</option><option value="kg">kg</option>
-                        </select>
+                        </CustomSelect>
                       </div>
                     </Field>
                     <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                        <CustomSelect className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
-                        </select>
+                        </CustomSelect>
                       </div>
                     </Field>
                   </div>
@@ -38887,14 +39070,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </div>
                     </Field>
                     <Field label="지급방식">
-                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}>
                         <option value="">선택</option><option value="계산서">계산서</option><option value="착불">착불</option><option value="선불">선불</option><option value="손실">손실</option><option value="개인">개인</option><option value="취소">취소</option>
-                      </select>
+                      </CustomSelect>
                     </Field>
                     <Field label="배차방식">
-                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
                         <option value="">선택</option><option value="24시">24시</option><option value="직접배차">직접배차</option><option value="인성">인성</option>
-                      </select>
+                      </CustomSelect>
                     </Field>
                   </div>
                 </div>
