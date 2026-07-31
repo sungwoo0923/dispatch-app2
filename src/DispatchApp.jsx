@@ -46645,17 +46645,19 @@ React.useEffect(() => {
                           <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <input autoComplete="off" type="checkbox" checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} />
                           </td>
-                          <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate">{r.업체명||""}</td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate">{r.주소||""}</td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-700">
+                          <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate text-center">{r.업체명||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate text-center">{r.주소||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-700 text-center">
                             {r.담당자||""}
                             {r._allContacts && r._allContacts.length > 1 && (
                               <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white">+{r._allContacts.length - 1}명</span>
                             )}
                           </td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-700">{r.담당자번호||""}</td>
-                          <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                            <div className="flex flex-col items-center gap-0.5">
+                          <td className="px-2 py-2.5 text-[13px] text-gray-700 text-center">{r.담당자번호||""}</td>
+                          <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}
+                            onDoubleClick={e => { e.stopPropagation(); if (r.등급변경일 && grade !== "일반") showAlert(`${grade} 등급 지정일: ${r.등급변경일}`); }}
+                            title={r.등급변경일 && grade !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
+                            <div className="flex items-center justify-center">
                               <select
                                 className={`px-2 py-1 rounded text-xs font-bold cursor-pointer w-[68px] ${등급색상(grade)}`}
                                 value={grade}
@@ -46665,13 +46667,10 @@ React.useEffect(() => {
                                 <option value="주의">주의</option>
                                 <option value="이탈">이탈</option>
                               </select>
-                              {r.등급변경일 && grade !== "일반" && (
-                                <div className="text-[10px] text-gray-400">{r.등급변경일}</div>
-                              )}
                             </div>
                           </td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.메모||""}</td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate">{r.오더메모||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.메모||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.오더메모||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
                               if (!confirm("삭제하시겠습니까?")) return;
@@ -47233,7 +47232,10 @@ React.useEffect(() => {
                               <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
                             </td>
                           ))}
-                          <td className="px-2 py-2.5 text-center">
+                          <td className="px-2 py-2.5 text-center"
+                            onClick={e => { if (r.등급변경일 && r.등급 && r.등급 !== "일반") e.stopPropagation(); }}
+                            onDoubleClick={e => { if (r.등급변경일 && r.등급 && r.등급 !== "일반") { e.stopPropagation(); showAlert(`${r.등급} 등급 지정일: ${r.등급변경일}`); } }}
+                            title={r.등급변경일 && r.등급 && r.등급 !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
                             <span className={`text-[12px] font-bold ${r.등급 === "블랙" ? "text-gray-900" : r.등급 === "주의" ? "text-orange-700" : r.등급 === "이탈" ? "text-red-600" : "text-[#1B2B4B]"}`}>
                               {r.등급 || "일반"}
                             </span>
