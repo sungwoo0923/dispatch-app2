@@ -17313,6 +17313,9 @@ const playNotifSound = React.useCallback(() => {
 const [blackAlert, setBlackAlert] = React.useState(null);
 const [memoAlert, setMemoAlert] = React.useState(null);
 const notificationsEnabled = useNotificationsEnabled();
+const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
+const [newClientModalData, setNewClientModalData] = React.useState({ name: "", addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" });
+const openNewClientModal = (name) => { setNewClientModalData({ name: (name || "").trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" }); setNewClientModalOpen(true); };
 const [alertMsg, setAlertMsg] = React.useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
 React.useEffect(() => {
@@ -21044,6 +21047,113 @@ const head = isDark
     db={db}
   />
 )}
+{/* ================= 거래처 신규등록 팝업 ================= */}
+{newClientModalOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+    <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
+      onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
+        </div>
+        <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
+      </div>
+      <div className="px-6 py-5 space-y-4">
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">업체명 <span className="text-red-500">*</span></label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="업체명 입력"
+            value={newClientModalData.name}
+            onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="주소 입력 (선택)"
+            value={newClientModalData.addr}
+            onChange={e => setNewClientModalData(p => ({ ...p, addr: e.target.value }))}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+              placeholder="담당자명 (선택)"
+              value={newClientModalData.manager}
+              onChange={e => setNewClientModalData(p => ({ ...p, manager: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+              placeholder="010-0000-0000 (선택)"
+              value={newClientModalData.phone}
+              onChange={e => setNewClientModalData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="example@email.com (선택)"
+            value={newClientModalData.email}
+            onChange={e => setNewClientModalData(p => ({ ...p, email: e.target.value }))}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+            <CustomSelect
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
+              value={newClientModalData.grade}
+              onChange={e => setNewClientModalData(p => ({ ...p, grade: e.target.value }))}
+            >
+              <option value="일반">일반</option>
+              <option value="블랙">블랙</option>
+              <option value="주의">주의</option>
+              <option value="이탈">이탈</option>
+            </CustomSelect>
+          </div>
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+          <textarea
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
+            placeholder="메모 (선택)"
+            rows={2}
+            value={newClientModalData.memo}
+            onChange={e => setNewClientModalData(p => ({ ...p, memo: e.target.value }))}
+          />
+        </div>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+          onClick={() => setNewClientModalOpen(false)}>
+          취소
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
+          onClick={async () => {
+            if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
+            await upsertClient({ 거래처명: newClientModalData.name.trim(), 주소: newClientModalData.addr, 담당자: newClientModalData.manager, 연락처: newClientModalData.phone, 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
+            showAlert("신규 거래처 등록이 완료되었습니다.");
+            setNewClientModalOpen(false);
+          }}>
+          등록 완료
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 {/* 🚫 블랙 기사 알림 팝업 */}
 {notificationsEnabled && blackAlert && (
   <div
@@ -21686,7 +21796,8 @@ flashRow(savedId);
   <div className="p-6">
 
   <Field label="거래처명">
-    <div className="relative">
+    <div className="flex gap-2">
+    <div className="relative flex-1">
       <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className={inputStyle}
@@ -21775,6 +21886,11 @@ checkWarningStatus(c.거래처명, "거래처");
           ))}
         </div>
       )}
+    <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
+      className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
+      + 신규등록
+    </button>
+    </div>
     </div>
   </Field>
   </div>
@@ -23234,8 +23350,10 @@ value={copyTarget?.화물수량 || ""}
             {/* 🔵 거래처명 */}
             {/* ------------------------------------------------ */}
             {/* ===================== 거래처명 ===================== */}
-            <div className="mb-3 relative">
+            <div className="mb-3">
               <label>거래처명</label>
+              <div className="flex gap-2">
+              <div className="relative flex-1">
               <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
@@ -23345,6 +23463,12 @@ value={copyTarget?.화물수량 || ""}
                   )}
                 </div>
               )}
+            </div>
+            <button type="button" onClick={() => openNewClientModal(editTarget?.거래처명)}
+              className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
+              + 신규등록
+            </button>
+            </div>
             </div>
             {/* ------------------------------------------------ */}
 {/* 🔵 상/하차일 & 시간 */}
@@ -26823,6 +26947,9 @@ const [liveLocViewer, setLiveLocViewer] = React.useState(null);
 const [orderInfoRow5, setOrderInfoRow5] = React.useState(null);
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
+const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
+const [newClientModalData, setNewClientModalData] = React.useState({ name: "", addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" });
+const openNewClientModal = (name) => { setNewClientModalData({ name: (name || "").trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" }); setNewClientModalOpen(true); };
 const [blackAlert, setBlackAlert] = React.useState(null);
 const [memoAlert, setMemoAlert] = React.useState(null);
 const notificationsEnabled = useNotificationsEnabled();
@@ -29698,6 +29825,113 @@ return (
     db={db}
   />
 )}
+{/* ================= 거래처 신규등록 팝업 ================= */}
+{newClientModalOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+    <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
+      onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
+        </div>
+        <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
+      </div>
+      <div className="px-6 py-5 space-y-4">
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">업체명 <span className="text-red-500">*</span></label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="업체명 입력"
+            value={newClientModalData.name}
+            onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="주소 입력 (선택)"
+            value={newClientModalData.addr}
+            onChange={e => setNewClientModalData(p => ({ ...p, addr: e.target.value }))}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+              placeholder="담당자명 (선택)"
+              value={newClientModalData.manager}
+              onChange={e => setNewClientModalData(p => ({ ...p, manager: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+              placeholder="010-0000-0000 (선택)"
+              value={newClientModalData.phone}
+              onChange={e => setNewClientModalData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="example@email.com (선택)"
+            value={newClientModalData.email}
+            onChange={e => setNewClientModalData(p => ({ ...p, email: e.target.value }))}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+            <CustomSelect
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
+              value={newClientModalData.grade}
+              onChange={e => setNewClientModalData(p => ({ ...p, grade: e.target.value }))}
+            >
+              <option value="일반">일반</option>
+              <option value="블랙">블랙</option>
+              <option value="주의">주의</option>
+              <option value="이탈">이탈</option>
+            </CustomSelect>
+          </div>
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+          <textarea
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
+            placeholder="메모 (선택)"
+            rows={2}
+            value={newClientModalData.memo}
+            onChange={e => setNewClientModalData(p => ({ ...p, memo: e.target.value }))}
+          />
+        </div>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+          onClick={() => setNewClientModalOpen(false)}>
+          취소
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
+          onClick={async () => {
+            if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
+            await upsertClient({ 거래처명: newClientModalData.name.trim(), 주소: newClientModalData.addr, 담당자: newClientModalData.manager, 연락처: newClientModalData.phone, 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
+            showAlert("신규 거래처 등록이 완료되었습니다.");
+            setNewClientModalOpen(false);
+          }}>
+          등록 완료
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 {notificationsEnabled && blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
@@ -30556,8 +30790,10 @@ return (
             {/* ------------------------------------------------ */}
             {/* 🔵 거래처명 */}
             {/* ------------------------------------------------ */}
-            <div className="mb-3 relative">
+            <div className="mb-3">
               <label>거래처명</label>
+              <div className="flex gap-2">
+              <div className="relative flex-1">
               <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
@@ -30642,6 +30878,12 @@ return (
                   ))}
                 </div>
               )}
+            </div>
+            <button type="button" onClick={() => openNewClientModal(editTarget?.거래처명)}
+              className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
+              + 신규등록
+            </button>
+            </div>
             </div>
             {/* ------------------------------------------------ */}
 {/* 🔵 상/하차일 & 시간 (선택수정) */}
@@ -31908,7 +32150,8 @@ return (
   <div className="p-6">
 
   <Field label="거래처명">
-    <div className="relative">
+    <div className="flex gap-2">
+    <div className="relative flex-1">
       <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className={inputStyle}
@@ -31995,6 +32238,11 @@ setCopyTarget(prev=>({
           ))}
         </div>
       )}
+    </div>
+    <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
+      className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
+      + 신규등록
+    </button>
     </div>
   </Field>
   </div>
@@ -38620,6 +38868,9 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [warningPopup, setWarningPopup] = React.useState(null);
   const warningPopupRef = React.useRef(null);
   const notificationsEnabled = useNotificationsEnabled();
+  const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
+  const [newClientModalData, setNewClientModalData] = React.useState({ name: "", addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" });
+  const openNewClientModal = (name) => { setNewClientModalData({ name: (name || "").trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" }); setNewClientModalOpen(true); };
   const [blackDriverAlert, setBlackDriverAlert] = React.useState(null);
   const [newDriverPopupOpen, setNewDriverPopupOpen] = React.useState(false);
   const [newDriverData, setNewDriverData] = React.useState({ 이름: "", 전화번호: "", 차량번호: "" });
@@ -39292,6 +39543,114 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
         </div>
       )}
 
+      {/* ================= 거래처 신규등록 팝업 ================= */}
+      {newClientModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+          <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
+            onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
+              </div>
+              <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">업체명 <span className="text-red-500">*</span></label>
+                <input autoComplete="off"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                  placeholder="업체명 입력"
+                  value={newClientModalData.name}
+                  onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+                <input autoComplete="off"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                  placeholder="주소 입력 (선택)"
+                  value={newClientModalData.addr}
+                  onChange={e => setNewClientModalData(p => ({ ...p, addr: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+                  <input autoComplete="off"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                    placeholder="담당자명 (선택)"
+                    value={newClientModalData.manager}
+                    onChange={e => setNewClientModalData(p => ({ ...p, manager: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+                  <input autoComplete="off"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                    placeholder="010-0000-0000 (선택)"
+                    value={newClientModalData.phone}
+                    onChange={e => setNewClientModalData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+                <input autoComplete="off"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                  placeholder="example@email.com (선택)"
+                  value={newClientModalData.email}
+                  onChange={e => setNewClientModalData(p => ({ ...p, email: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+                  <CustomSelect
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
+                    value={newClientModalData.grade}
+                    onChange={e => setNewClientModalData(p => ({ ...p, grade: e.target.value }))}
+                  >
+                    <option value="일반">일반</option>
+                    <option value="블랙">블랙</option>
+                    <option value="주의">주의</option>
+                    <option value="이탈">이탈</option>
+                  </CustomSelect>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+                <textarea
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
+                  placeholder="메모 (선택)"
+                  rows={2}
+                  value={newClientModalData.memo}
+                  onChange={e => setNewClientModalData(p => ({ ...p, memo: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex gap-3">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+                onClick={() => setNewClientModalOpen(false)}>
+                취소
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
+                onClick={async () => {
+                  if (!newClientModalData.name.trim()) { alert("업체명을 입력하세요."); return; }
+                  await upsertClient({ 거래처명: newClientModalData.name.trim(), 주소: newClientModalData.addr, 담당자: newClientModalData.manager, 연락처: newClientModalData.phone, 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
+                  alert("신규 거래처 등록이 완료되었습니다.");
+                  setNewClientModalOpen(false);
+                }}>
+                등록 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 블랙 기사 경고 팝업 */}
       {notificationsEnabled && blackDriverAlert && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]" tabIndex={-1} ref={(el) => el && setTimeout(() => el.focus(), 0)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}>
@@ -39407,7 +39766,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 </div>
                 <div className="p-6">
                   <Field label="거래처명">
-                    <div className="relative">
+                    <div className="flex gap-2">
+                    <div className="relative flex-1">
                       <input autoComplete="off"
                       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
@@ -39448,6 +39808,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           })}
                         </div>
                       )}
+                    </div>
+                    <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
+                      className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
+                      + 신규등록
+                    </button>
                     </div>
                   </Field>
                 </div>
