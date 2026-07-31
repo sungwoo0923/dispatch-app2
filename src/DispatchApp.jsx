@@ -20755,14 +20755,14 @@ const handleCloseFileUpload = async (e) => {
   const editableInput = (key, val, rowId) => {
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
     //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
-    if (isShipperFieldLocked(key, rowId)) return val;
+    if (isShipperFieldLocked(key, rowId)) return key === "상차일" ? <span className="font-bold">{val}</span> : val;
 
     // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
     if (
       !canEdit(key, rowId) &&
       !["차량종류", "지급방식", "배차방식"].includes(key)
     ) {
-      return val;
+      return key === "상차일" ? <span className="font-bold">{val}</span> : val;
     }
 
     if (key === "상차일" || key === "하차일") {
@@ -30226,7 +30226,9 @@ return (
   const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
   return mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || "";
-})() : (
+})() : key === "상차일" ? (
+  <span className="font-bold">{row.상차일 || ""}</span>
+) : (
   row[key]
 )}
   </td>
@@ -39053,7 +39055,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           return <span className="text-amber-600 text-[12px]">{d}일</span>;
                         })() : ""}
                       </td>
-                      <td className={cellBase}>{r.상차일 || ""}</td>
+                      <td className={`${cellBase} font-bold`}>{r.상차일 || ""}</td>
                       <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : ""}</td>
                       <td className={cellBase}>{r.하차일 || ""}</td>
                       <td className={cellBase}>{r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : ""}</td>
