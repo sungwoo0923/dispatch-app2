@@ -12771,7 +12771,7 @@ className={`
           onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
         />
       </div>
-      <div ref={contactListRef} className="relative p-5 grid grid-flow-col grid-rows-[repeat(8,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[420px]">
+      <div ref={contactListRef} className="relative p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[70vh]">
         {visible.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
@@ -12829,7 +12829,7 @@ className={`
                   onClick={() => closeContactPopup(c)}
                 >
                   <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
-                  <span className="text-[11px] text-gray-400 truncate">{c.phone || "-"}</span>
+                  <span className="text-[11px] font-bold text-gray-900 truncate">{c.phone || "-"}</span>
                 </div>
                 <div className="flex gap-1">
                   <button
@@ -21096,7 +21096,7 @@ const head = isDark
           onChange={e => { setPanelContactSearch4(e.target.value); setPanelContactActive4(0); }}
         />
       </div>
-      <div ref={panelContactListRef4} className="relative p-5 grid grid-flow-col grid-rows-[repeat(8,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[420px]">
+      <div ref={panelContactListRef4} className="relative p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[70vh]">
         {visible4.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
@@ -21111,7 +21111,7 @@ const head = isDark
             }}>
             <div className="flex items-baseline gap-1.5 min-w-0">
               <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
-              <span className="text-[11px] text-gray-400 truncate">{c.phone || "-"}</span>
+              <span className="text-[11px] font-bold text-gray-900 truncate">{c.phone || "-"}</span>
             </div>
           </div>
         ))}
@@ -29745,7 +29745,7 @@ return (
           onChange={e => { setPanelContactSearch5(e.target.value); setPanelContactActive5(0); }}
         />
       </div>
-      <div ref={panelContactListRef5} className="relative p-5 grid grid-flow-col grid-rows-[repeat(8,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[420px]">
+      <div ref={panelContactListRef5} className="relative p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[70vh]">
         {visible5.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
@@ -29760,7 +29760,7 @@ return (
             }}>
             <div className="flex items-baseline gap-1.5 min-w-0">
               <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
-              <span className="text-[11px] text-gray-400 truncate">{c.phone || "-"}</span>
+              <span className="text-[11px] font-bold text-gray-900 truncate">{c.phone || "-"}</span>
             </div>
           </div>
         ))}
