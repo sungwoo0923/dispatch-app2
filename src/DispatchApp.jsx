@@ -756,6 +756,23 @@ const CustomSelect = React.forwardRef(function CustomSelect(
     };
   }, [open, updateMenuRect]);
 
+  // 방향키로 activeIdx가 바뀔 때마다, 목록이 길어 스크롤이 생겼어도 항상 활성
+  // 항목이 보이는 위치로 자동 스크롤한다 — 이게 없으면 방향키를 눌러도 상태(하이라이트
+  // 위치)는 바뀌지만 화면에 보이는 스크롤 위치는 그대로라 "방향키가 안 먹는 것"처럼 보인다.
+  React.useEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    if (!menu) return;
+    const item = menu.children[activeIdx];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = menu.scrollTop;
+    const viewBottom = viewTop + menu.clientHeight;
+    if (itemBottom > viewBottom) menu.scrollTop = itemBottom - menu.clientHeight;
+    if (itemTop < viewTop) menu.scrollTop = itemTop;
+  }, [activeIdx, open]);
+
   // className에 이미 absolute/fixed/relative/sticky 중 하나가 있으면(위치 지정 기준을
   // 이미 스스로 정하고 있는 경우, 예: 배차현황 선택수정 패널처럼 셀렉트 자체가
   // absolute로 입력창 위에 겹쳐지는 구조) 여기서 relative를 추가로 붙이면 안 된다 —
@@ -4131,6 +4148,20 @@ React.useEffect(() => {
 
   const blockedMenus = role === "test" ? testBlockedMenus : isViewer ? viewerBlockedMenus : userBlockedMenus;
 
+  // ⌨️ F1/F2/F3 단축키로 자주 쓰는 메뉴(배차관리/실시간배차현황/배차현황) 바로 이동
+  useEffect(() => {
+    const handler = (e) => {
+      const map = { F1: "배차관리", F2: "실시간배차현황", F3: "배차현황" };
+      const target = map[e.key];
+      if (!target) return;
+      e.preventDefault();
+      if (role === "test" && testBlockedMenus.includes(target)) return;
+      setMenu(target);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [role]);
+
   // 매출관리 비밀번호 - 회사별 Firestore 로드
   useEffect(() => {
     const co = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
@@ -6131,6 +6162,7 @@ const [isCopyMode, setIsCopyMode] = React.useState(false);
 
     const [clientActive, setClientActive] = React.useState(0);
     const comboRef = React.useRef(null);
+    const clientDropdownListRef = React.useRef(null);
     React.useEffect(() => {
       const onDocClick = (e) => {
         if (!comboRef.current) return;
@@ -6139,6 +6171,20 @@ const [isCopyMode, setIsCopyMode] = React.useState(false);
       document.addEventListener("mousedown", onDocClick);
       return () => document.removeEventListener("mousedown", onDocClick);
     }, []);
+    // 방향키로 활성 항목이 바뀌면, 목록이 길어 스크롤이 생겼을 때도 항상
+    // 활성 항목이 보이는 위치로 자동 스크롤한다 (CustomSelect와 동일한 동작).
+    React.useEffect(() => {
+      const list = clientDropdownListRef.current;
+      if (!list) return;
+      const item = list.children[clientActive];
+      if (!item) return;
+      const itemTop = item.offsetTop;
+      const itemBottom = itemTop + item.offsetHeight;
+      const viewTop = list.scrollTop;
+      const viewBottom = viewTop + list.clientHeight;
+      if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+      if (itemTop < viewTop) list.scrollTop = itemTop;
+    }, [clientActive]);
 // ⭐ 상차지 자동완성 상태 분리
 const [showPickupDropdown, setShowPickupDropdown] = React.useState(false);
 const [pickupOptions, setPickupOptions] = React.useState([]);
@@ -6159,12 +6205,51 @@ React.useEffect(() => {
   }
 }, [vehicleActive, showVehicleDropdown]);
 const [pickupActive, setPickupActive] = React.useState(0);
+const pickupDropdownListRef = React.useRef(null);
+React.useEffect(() => {
+  const list = pickupDropdownListRef.current;
+  if (!list) return;
+  const item = list.children[pickupActive];
+  if (!item) return;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+  if (itemTop < viewTop) list.scrollTop = itemTop;
+}, [pickupActive]);
 
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 const [placeOptions, setPlaceOptions] = React.useState([]);
 const [placeActive, setPlaceActive] = React.useState(0);
+const placeDropdownListRef = React.useRef(null);
+React.useEffect(() => {
+  const list = placeDropdownListRef.current;
+  if (!list) return;
+  const item = list.children[placeActive];
+  if (!item) return;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+  if (itemTop < viewTop) list.scrollTop = itemTop;
+}, [placeActive]);
 const [stopPlaceOptions, setStopPlaceOptions] = React.useState([]);
 const [stopPlaceActive, setStopPlaceActive] = React.useState(0);
+const stopPlaceDropdownListRef = React.useRef(null);
+React.useEffect(() => {
+  const list = stopPlaceDropdownListRef.current;
+  if (!list) return;
+  const item = list.children[stopPlaceActive];
+  if (!item) return;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+  if (itemTop < viewTop) list.scrollTop = itemTop;
+}, [stopPlaceActive]);
 const [showStopDropdown, setShowStopDropdown] = React.useState(false);
 
     // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
@@ -7571,6 +7656,21 @@ const [contactQueue, setContactQueue] = React.useState([]);
 const [editingContactIdx, setEditingContactIdx] = React.useState(null);
 const [editContactData, setEditContactData] = React.useState({ name: "", phone: "" });
 const [contactSearchQ, setContactSearchQ] = React.useState("");
+const contactListRef = React.useRef(null);
+// 방향키(←/→)로 활성 카드가 바뀌면, 담당자가 많아 가로 스크롤이 생겼을 때도
+// 항상 활성 카드가 보이는 위치로 자동 스크롤한다.
+React.useEffect(() => {
+  const list = contactListRef.current;
+  if (!list) return;
+  const item = list.children[contactActive];
+  if (!item) return;
+  const itemLeft = item.offsetLeft;
+  const itemRight = itemLeft + item.offsetWidth;
+  const viewLeft = list.scrollLeft;
+  const viewRight = viewLeft + list.clientWidth;
+  if (itemRight > viewRight) list.scrollLeft = itemRight - list.clientWidth;
+  if (itemLeft < viewLeft) list.scrollLeft = itemLeft;
+}, [contactActive]);
 const [clientAlert, setClientAlert] = React.useState(null);
 
 // 상/하차지 오더메모 버튼 — 상/하차지명에 입력된 거래처의 오더메모를 바로 보고
@@ -7807,6 +7907,19 @@ React.useEffect(() => {
 const [driverDropdownOpen, setDriverDropdownOpen] = React.useState(false);
 const [driverCandidates, setDriverCandidates] = React.useState([]);
 const [driverActive, setDriverActive] = React.useState(0);
+const driverDropdownListRef = React.useRef(null);
+React.useEffect(() => {
+  const list = driverDropdownListRef.current;
+  if (!list) return;
+  const item = list.children[driverActive];
+  if (!item) return;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+  if (itemTop < viewTop) list.scrollTop = itemTop;
+}, [driverActive]);
     const handleCarNoChange = (value) => {
   const clean = (value || "").trim().replace(/\s+/g, "");
 
@@ -8984,7 +9097,10 @@ const applyCopy = (r) => {
     지급방식: r.지급방식 || "",
     배차방식: "",
     메모: r.메모 || "",
-    전달사항: r.전달사항 || "",
+    // 전달사항은 원본에서 "고정"을 눌러둔 경우에만 복사본으로 함께 넘어와야 한다 —
+    // 고정하지 않고 저장한 오더의 전달사항은 그 오더에만 해당하는 일회성 내용이라
+    // 오더복사/동일 노선 재입력 시 그대로 따라와서는 안 된다.
+    전달사항: r.전달사항고정 === true ? (r.전달사항 || "") : "",
     전달사항고정: r.전달사항고정 === true,
     운행유형: r.운행유형 || "편도",
     긴급: r.긴급 === true,
@@ -9990,7 +10106,7 @@ shadow-sm
 
         />
         {isClientOpen && (
-          <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded-lg shadow-xl z-50">
+          <div ref={clientDropdownListRef} className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded-lg shadow-xl z-50">
             {filteredClients.length === 0 ? (
               <div className="px-3 py-2 text-sm text-gray-500">
                 검색 결과 없음
@@ -10000,18 +10116,18 @@ shadow-sm
                 <div
                   key={p.업체명 + "_" + idx}
                   className={`px-3 py-2 text-sm cursor-pointer ${
-                    idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"
+                    idx === clientActive ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
                   }`}
                   onMouseEnter={() => setClientActive(idx)}
                   onMouseDown={(e) => {
-                    
+
                     e.preventDefault();
                     applyClientSelect(p.업체명);
                   }}
                 >
                   <div className="font-medium">{p.업체명}</div>
                   {p.주소 && (
-                    <div className="text-[11px] text-gray-500">{p.주소}</div>
+                    <div className={`text-[11px] ${idx === clientActive ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                   )}
                 </div>
               ))
@@ -10101,7 +10217,7 @@ const similar = placeList.filter(p => {
     />
 
     {showPickupDropdown && pickupOptions.length > 0 && (
-  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+  <div ref={pickupDropdownListRef} className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
     {pickupOptions.map((p, i) => (
       <div
         key={i}
@@ -10245,7 +10361,7 @@ className={`
   />
 
   {showPlaceDropdown && placeOptions.length > 0 && (
-    <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+    <div ref={placeDropdownListRef} className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
       {placeOptions.map((p, i) => (
         <div
           key={p.업체명 + "_" + i}
@@ -10867,7 +10983,7 @@ className={`
 
           {/* 드롭다운 */}
           {activeStopIdx === idx && stopPlaceOptions.length > 0 && (
-            <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+            <div ref={stopPlaceDropdownListRef} className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
               {stopPlaceOptions.map((p, i) => (
                 <div
                   key={p.업체명 + "_" + i}
@@ -11389,7 +11505,7 @@ className={`
   {driverDropdownOpen &&
     driverCandidates &&
     driverCandidates.length > 1 && (
-      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+      <div ref={driverDropdownListRef} className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
         {driverCandidates.map((d, i) => (
           <div
             key={i}
@@ -12585,7 +12701,7 @@ className={`
           onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
         />
       </div>
-      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+      <div ref={contactListRef} className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
         {visible.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
         )}
@@ -14849,30 +14965,30 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
   return (
     <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-4"
       onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col"
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}>
 
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-[#1B2B4B] flex items-center justify-center shrink-0">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
               </svg>
             </div>
-            <div>
-              <div className="font-bold text-[15px] text-[#1B2B4B]">
+            <div className="min-w-0">
+              <div className="font-bold text-[15px] text-[#1B2B4B] whitespace-nowrap">
                 첨부파일 <span className="text-[13px] font-normal text-gray-400">{loading ? "" : `${items.length}장`}</span>
               </div>
-              <div className="text-[12px] text-gray-400 mt-0.5 truncate max-w-[320px]">
+              <div className="text-[12px] text-gray-400 mt-0.5 truncate max-w-[220px]">
                 {row.상차지명} → {row.하차지명}{row.이름 ? ` · ${row.이름}` : ""}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {!isViewer && row.업로드잠금 && (
               unlockedUntil ? (
-                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[12px] font-bold rounded-lg">
+                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0">
                   ✓ 30분간 재업로드 허용됨
                 </span>
               ) : (
@@ -14880,14 +14996,14 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
                   onClick={handleAllowReupload}
                   disabled={unlocking}
                   title="기사가 갖고 있는 기존 업로드 링크를 30분간 다시 열어줍니다"
-                  className="px-3 py-1.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50"
+                  className="px-3 py-1.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50 whitespace-nowrap shrink-0"
                 >
                   {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
                 </button>
               )
             )}
             {!isViewer && (
-              <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer">
+              <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer whitespace-nowrap shrink-0">
                 파일 추가
                 <input type="file" multiple accept="image/*,.pdf" className="hidden"
                   onChange={e => handleUpload(Array.from(e.target.files))} />
@@ -14897,13 +15013,13 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
               <button
                 onClick={handleDownloadAll}
                 disabled={zipLoading}
-                className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition disabled:opacity-50"
+                className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap shrink-0"
               >
                 {zipLoading ? "압축중..." : `전체저장 (${items.length}장)`}
               </button>
             )}
             <button onClick={onClose}
-              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 text-lg transition">
+              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 text-lg transition shrink-0">
               ×
             </button>
           </div>
@@ -15447,6 +15563,19 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   const [placeOpts, setPlaceOpts] = React.useState([]);
   const [activeIdx, setActiveIdx] = React.useState(null);
   const [placeActive, setPlaceActive] = React.useState(0);
+  const placeDropdownListRef = React.useRef(null);
+  React.useEffect(() => {
+    const list = placeDropdownListRef.current;
+    if (!list) return;
+    const item = list.children[placeActive];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+    if (itemTop < viewTop) list.scrollTop = itemTop;
+  }, [placeActive]);
   const [deleteIdx, setDeleteIdx] = React.useState(null);
   const [contactPickerIdx, setContactPickerIdx] = React.useState(null);
   const [contactPickerOpts, setContactPickerOpts] = React.useState([]);
@@ -15591,7 +15720,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 onBlur={() => setTimeout(()=>setActiveIdx(null),200)}
               />
               {activeIdx===idx && placeOpts.length>0 && (
-                <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+                <div ref={placeDropdownListRef} className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
                   {placeOpts.map((p,i)=>(
                     <div key={p.업체명+"_"+i}
                       className={`px-2 py-1 cursor-pointer ${i===placeActive?"bg-blue-50":"hover:bg-gray-50"}`}
@@ -16404,6 +16533,8 @@ onDoubleClick={(e) => {
     화물타입: cargoType,    // ✅ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
+    // 고정하지 않은 전달사항은 복사본에 넘어오면 안 된다.
+    전달사항: latest?.전달사항고정 === true ? (latest.전달사항 || "") : "",
   });
 
   setCopyPanelOpen(true);
@@ -17219,8 +17350,34 @@ const checkWarningStatus = (name, type) => {
   const [showEditPlaceDropdown, setShowEditPlaceDropdown] = React.useState(false);
   const [editPlaceType, setEditPlaceType] = React.useState(null); // "pickup" | "drop"
   const [editActiveIndex, setEditActiveIndex] = React.useState(0);
+  const editPlaceDropdownListRef = React.useRef(null);
+  React.useEffect(() => {
+    const list = editPlaceDropdownListRef.current;
+    if (!list) return;
+    const item = list.children[editActiveIndex];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+    if (itemTop < viewTop) list.scrollTop = itemTop;
+  }, [editActiveIndex]);
   const [panelContactPopup4, setPanelContactPopup4] = React.useState(null);
   const [panelContactActive4, setPanelContactActive4] = React.useState(0);
+  const panelContactListRef4 = React.useRef(null);
+  React.useEffect(() => {
+    const list = panelContactListRef4.current;
+    if (!list) return;
+    const item = list.children[panelContactActive4];
+    if (!item) return;
+    const itemLeft = item.offsetLeft;
+    const itemRight = itemLeft + item.offsetWidth;
+    const viewLeft = list.scrollLeft;
+    const viewRight = viewLeft + list.clientWidth;
+    if (itemRight > viewRight) list.scrollLeft = itemRight - list.clientWidth;
+    if (itemLeft < viewLeft) list.scrollLeft = itemLeft;
+  }, [panelContactActive4]);
   const [panelContactSearch4, setPanelContactSearch4] = React.useState("");
   React.useEffect(() => { setPanelContactSearch4(""); }, [panelContactPopup4]);
 
@@ -17273,6 +17430,19 @@ const checkWarningStatus = (name, type) => {
   const [editClientOptions, setEditClientOptions] = React.useState([]);
   const [showEditClientDropdown, setShowEditClientDropdown] = React.useState(false);
   const [editClientActiveIndex, setEditClientActiveIndex] = React.useState(0);
+  const editClientDropdownListRef = React.useRef(null);
+  React.useEffect(() => {
+    const list = editClientDropdownListRef.current;
+    if (!list) return;
+    const item = list.children[editClientActiveIndex];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+    if (itemTop < viewTop) list.scrollTop = itemTop;
+  }, [editClientActiveIndex]);
   const [warningPopup, setWarningPopup] = React.useState(null);
 
   // ------------------------
@@ -18142,6 +18312,19 @@ const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
 const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
 const [copyPlaceType, setCopyPlaceType] = React.useState(null); // "pickup" | "drop"
 const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+const copyPlaceDropdownListRef = React.useRef(null);
+React.useEffect(() => {
+  const list = copyPlaceDropdownListRef.current;
+  if (!list) return;
+  const item = list.children[copyActiveIndex];
+  if (!item) return;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+  if (itemTop < viewTop) list.scrollTop = itemTop;
+}, [copyActiveIndex]);
   const [editTarget, setEditTarget] = React.useState(null);
   const [farePanelOpen, setFarePanelOpen] = React.useState(false);
   const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
@@ -20780,7 +20963,7 @@ const head = isDark
           onChange={e => { setPanelContactSearch4(e.target.value); setPanelContactActive4(0); }}
         />
       </div>
-      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+      <div ref={panelContactListRef4} className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
         {visible4.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
         )}
@@ -21380,7 +21563,7 @@ checkWarningStatus(c.거래처명, "거래처");
       />
 
       {showCopyClientDropdown && (
-        <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+        <div ref={copyClientListRef} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
           {copyClientOptions.map((c,i)=>(
             <div
               key={i}
@@ -21502,7 +21685,7 @@ checkWarningStatus(c.거래처명, "거래처");
           />
 
           {showCopyPlaceDropdown && copyPlaceType==="pickup" && (
-            <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+            <div ref={copyPlaceDropdownListRef} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
               {copyPlaceOptions.map((p,i)=>(
                 <div
                   key={i}
@@ -21676,7 +21859,7 @@ checkWarningStatus(c.거래처명, "거래처");
           />
 
           {showCopyPlaceDropdown && copyPlaceType==="drop" && (
-            <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+            <div ref={copyPlaceDropdownListRef} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
               {copyPlaceOptions.map((p,i)=>(
                 <div
                   key={i}
@@ -22886,7 +23069,7 @@ value={copyTarget?.화물수량 || ""}
               />
 
               {showEditClientDropdown && (
-                <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+                <div ref={editClientDropdownListRef} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
                   {editClientOptions.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-gray-400">
                       검색 결과 없음
@@ -23067,7 +23250,7 @@ value={copyTarget?.화물수량 || ""}
               />
 
               {showEditPlaceDropdown && editPlaceType === "pickup" && (
-                <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+                <div ref={editPlaceDropdownListRef} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
                   {editPlaceOptions.map((p, i) => (
                     <div
                       key={i}
@@ -23214,7 +23397,7 @@ value={copyTarget?.화물수량 || ""}
               />
 
               {showEditPlaceDropdown && editPlaceType === "drop" && (
-                <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+                <div ref={editPlaceDropdownListRef} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
                   {editPlaceOptions.map((p, i) => (
                     <div
                       key={i}
@@ -27059,6 +27242,19 @@ const [copyTarget, setCopyTarget] = React.useState(null);
 const [copyClientOptions, setCopyClientOptions] = React.useState([]);
 const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
 const [copyClientIndex, setCopyClientIndex] = React.useState(0);
+const copyClientListRef5 = React.useRef(null);
+React.useEffect(() => {
+  const list = copyClientListRef5.current;
+  if (!list) return;
+  const item = list.children[copyClientIndex];
+  if (!item) return;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+  if (itemTop < viewTop) list.scrollTop = itemTop;
+}, [copyClientIndex]);
 const [clientApplyPopup, setClientApplyPopup] = React.useState(null);
 React.useEffect(() => {
   if (!copyTarget?.차량톤수) return;
@@ -27079,8 +27275,34 @@ const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
 const [copyPlaceType, setCopyPlaceType] = React.useState(null); // pickup | drop
 const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
 const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+const copyPlaceDropdownListRef5 = React.useRef(null);
+React.useEffect(() => {
+  const list = copyPlaceDropdownListRef5.current;
+  if (!list) return;
+  const item = list.children[copyActiveIndex];
+  if (!item) return;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+  if (itemTop < viewTop) list.scrollTop = itemTop;
+}, [copyActiveIndex]);
 const [panelContactPopup5, setPanelContactPopup5] = React.useState(null);
 const [panelContactActive5, setPanelContactActive5] = React.useState(0);
+const panelContactListRef5 = React.useRef(null);
+React.useEffect(() => {
+  const list = panelContactListRef5.current;
+  if (!list) return;
+  const item = list.children[panelContactActive5];
+  if (!item) return;
+  const itemLeft = item.offsetLeft;
+  const itemRight = itemLeft + item.offsetWidth;
+  const viewLeft = list.scrollLeft;
+  const viewRight = viewLeft + list.clientWidth;
+  if (itemRight > viewRight) list.scrollLeft = itemRight - list.clientWidth;
+  if (itemLeft < viewLeft) list.scrollLeft = itemLeft;
+}, [panelContactActive5]);
 const [panelContactSearch5, setPanelContactSearch5] = React.useState("");
 React.useEffect(() => { setPanelContactSearch5(""); }, [panelContactPopup5]);
 
@@ -29288,7 +29510,7 @@ return (
           onChange={e => { setPanelContactSearch5(e.target.value); setPanelContactActive5(0); }}
         />
       </div>
-      <div className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
+      <div ref={panelContactListRef5} className="p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[240px] gap-2 overflow-x-auto max-h-[420px]">
         {visible5.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[240px]">검색 결과가 없습니다</div>
         )}
@@ -29595,6 +29817,8 @@ return (
     화물타입: _cType,       // ✅ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
+    // 고정하지 않은 전달사항은 복사본에 넘어오면 안 된다.
+    전달사항: row?.전달사항고정 === true ? (row.전달사항 || "") : "",
   });
 
   setCopyPanelOpen(true);
@@ -31400,7 +31624,7 @@ setCopyTarget(prev=>({
       />
 
       {showCopyClientDropdown && (
-        <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+        <div ref={copyClientListRef5} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
           {copyClientOptions.map((c,i)=>(
             <div
               key={i}
@@ -31522,7 +31746,7 @@ setCopyPlaceOptions(list);
           />
 
           {showCopyPlaceDropdown && copyPlaceType==="pickup" && (
-            <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+            <div ref={copyPlaceDropdownListRef5} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
               {copyPlaceOptions.map((p,i)=>(
                 <div
                   key={i}
@@ -31678,7 +31902,7 @@ setCopyPlaceOptions(list);
           />
 
           {showCopyPlaceDropdown && copyPlaceType==="drop" && (
-            <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+            <div ref={copyPlaceDropdownListRef5} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
               {copyPlaceOptions.map((p,i)=>(
                 <div
                   key={i}
@@ -33635,7 +33859,7 @@ setCopyPlaceOptions(list);
               if (!_cType) { _cNum = rawCargo; _cType = ""; }
               const rawTon = String(r.차량톤수 || "");
               const tonMatch = rawTon.match(/([\d.]+)(.*)/);
-              setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: _cNum, 화물타입: _cType, 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
+              setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: _cNum, 화물타입: _cType, 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "", 전달사항: r?.전달사항고정 === true ? (r.전달사항 || "") : "" });
               setSelected(new Set([getId(r)]));
               setCopyModalOpen(true);
               setContextMenuDS(null);
@@ -38018,10 +38242,35 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
   const [copyClientIndex, setCopyClientIndex] = React.useState(0);
   const copyClientListRef = React.useRef(null);
+  React.useEffect(() => {
+    const list = copyClientListRef.current;
+    if (!list) return;
+    const item = list.children[copyClientIndex];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+    if (itemTop < viewTop) list.scrollTop = itemTop;
+  }, [copyClientIndex]);
   const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
   const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
   const [copyPlaceType, setCopyPlaceType] = React.useState(null);
   const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+  const copyPlaceDropdownListRefU = React.useRef(null);
+  React.useEffect(() => {
+    const list = copyPlaceDropdownListRefU.current;
+    if (!list) return;
+    const item = list.children[copyActiveIndex];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+    if (itemTop < viewTop) list.scrollTop = itemTop;
+  }, [copyActiveIndex]);
   const clientListRef = React.useRef(null);
   const loadPlaceListRef = React.useRef(null);
   const unloadPlaceListRef = React.useRef(null);
@@ -38436,6 +38685,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           화물타입: cargoMatch ? cargoMatch[2].trim() : "",
                           톤수값: tonMatch ? tonMatch[1] : "",
                           톤수타입: tonMatch ? tonMatch[2] : "",
+                          // 고정하지 않은 전달사항은 복사본에 넘어오면 안 된다.
+                          전달사항: latest?.전달사항고정 === true ? (latest.전달사항 || "") : "",
                         });
                         setCopyPanelOpen(true);
                       }}
@@ -38801,7 +39052,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         onBlur={() => setTimeout(() => setShowCopyClientDropdown(false), 150)}
                       />
                       {showCopyClientDropdown && copyClientOptions.length > 0 && (
-                        <div className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
+                        <div ref={copyClientListRef} className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
                           {copyClientOptions.map((c, i) => {
                             const name = c.거래처명 || c.업체명 || "";
                             return (
@@ -38882,7 +39133,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
                           />
                           {showCopyPlaceDropdown && copyPlaceType === "pickup" && copyPlaceOptions.length > 0 && (
-                            <div className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
+                            <div ref={copyPlaceDropdownListRefU} className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
                               {copyPlaceOptions.map((p, i) => (
                                 <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
                                   onMouseDown={() => { setCopyTarget(prev => ({...prev, 상차지명: p.업체명 || "", 상차지주소: p.주소 || "", 상차지담당자: getManagerName(p), 상차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "상차지"); }}>
@@ -38969,7 +39220,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
                           />
                           {showCopyPlaceDropdown && copyPlaceType === "drop" && copyPlaceOptions.length > 0 && (
-                            <div className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
+                            <div ref={copyPlaceDropdownListRefU} className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
                               {copyPlaceOptions.map((p, i) => (
                                 <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
                                   onMouseDown={() => { setCopyTarget(prev => ({...prev, 하차지명: p.업체명 || "", 하차지주소: p.주소 || "", 하차지담당자: getManagerName(p), 하차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "하차지"); }}>

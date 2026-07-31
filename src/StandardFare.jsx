@@ -1031,10 +1031,12 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button onClick={search} className="px-6 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
-              <button onClick={reset} className="px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
-              <span className="text-[12px] text-gray-400 ml-1">Enter 키로도 조회</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <button onClick={search} className="flex-1 px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
+                <button onClick={reset} className="flex-1 px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
+              </div>
+              <div className="text-[12px] text-gray-400">Enter 키로도 조회</div>
             </div>
           </div>
 

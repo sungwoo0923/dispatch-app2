@@ -3286,6 +3286,12 @@ const deleteSingleOrder = async (order) => {
   배차상태: "배차중",
   상태: "배차중",
   배차완료일시: null,
+  // 배차완료 → 배차중으로 되돌아가는 건 보통 재배차 상황이라, 이전에 전달된
+  // 전달상태(화주사/기사 전달)도 함께 초기화해야 다시 전달 확인을 받을 수 있다.
+  업체전달상태: "미전달",
+  정보전달완료: false,
+  정보전달상태: "미전달",
+  전달완료일시: null,
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
 };
@@ -3301,6 +3307,9 @@ const deleteSingleOrder = async (order) => {
           기사명: "",
           차량번호: "",
           전화번호: "",
+          업체전달상태: "미전달",
+          정보전달완료: false,
+          정보전달상태: "미전달",
         }
         : prev
     );
@@ -7612,6 +7621,8 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
       await updateDoc(doc(db, order.__col || "orders", order.id), {
         차량번호: "", 이름: "", 전화번호: "",
         기사취소요청: false, 기사취소요청일시: deleteField(),
+        // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
+        업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null,
       });
     } catch {}
     setShowRequestModal(false);
@@ -8640,9 +8651,10 @@ function MobileOrderDetail({
   };
   const approveDriverSwap = async () => {
     try {
-      const patch = { 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 기사취소요청일시: deleteField() };
+      // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
+      const patch = { 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 기사취소요청일시: deleteField(), 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null };
       await updateDoc(doc(db, order.__col || "orders", order.id), patch);
-      setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false } : prev));
+      setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달" } : prev));
     } catch {}
     setShowRequestModal(false);
   };
