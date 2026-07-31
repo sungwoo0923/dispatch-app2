@@ -7167,8 +7167,8 @@ function CardAttachViewer({ order, onClose }) {
         {liveLock?.업로드잠금 && liveLock?.재업로드완료알림 !== true && (
           <div className="mx-4 mt-3 shrink-0">
             {isUnlockActive ? (
-              <div className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 text-[12px] font-bold rounded-lg w-fit">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg w-fit">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                 재업로드 대기중 · {fmtRemain(unlockRemainMs)}
               </div>
             ) : (

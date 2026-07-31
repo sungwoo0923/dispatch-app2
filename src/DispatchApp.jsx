@@ -7665,19 +7665,21 @@ const [editingContactIdx, setEditingContactIdx] = React.useState(null);
 const [editContactData, setEditContactData] = React.useState({ name: "", phone: "" });
 const [contactSearchQ, setContactSearchQ] = React.useState("");
 const contactListRef = React.useRef(null);
-// 방향키로 활성 카드가 바뀌면, 담당자가 많아 세로 스크롤이 생겼을 때도
-// 항상 활성 카드(맨 아래 담당자 포함)가 보이는 위치로 자동 스크롤한다.
+// 방향키(←/→)로 활성 카드가 바뀌면, 담당자가 많아 가로 스크롤이 생겼을 때도
+// 항상 활성 카드가 보이는 위치로 자동 스크롤한다. 컨테이너 자체에 position이
+// 없으면(static) offsetLeft가 이 리스트 기준이 아니라 더 바깥 조상 기준으로
+// 계산돼 스크롤 위치가 엉뚱하게 튀었다 — relative를 반드시 함께 줘야 한다.
 React.useEffect(() => {
   const list = contactListRef.current;
   if (!list) return;
   const item = list.children[contactActive];
   if (!item) return;
-  const itemTop = item.offsetTop;
-  const itemBottom = itemTop + item.offsetHeight;
-  const viewTop = list.scrollTop;
-  const viewBottom = viewTop + list.clientHeight;
-  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
-  if (itemTop < viewTop) list.scrollTop = itemTop;
+  const itemLeft = item.offsetLeft;
+  const itemRight = itemLeft + item.offsetWidth;
+  const viewLeft = list.scrollLeft;
+  const viewRight = viewLeft + list.clientWidth;
+  if (itemRight > viewRight) list.scrollLeft = itemRight - list.clientWidth;
+  if (itemLeft < viewLeft) list.scrollLeft = itemLeft;
 }, [contactActive]);
 const [clientAlert, setClientAlert] = React.useState(null);
 
@@ -12769,14 +12771,14 @@ className={`
           onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
         />
       </div>
-      <div ref={contactListRef} className="p-5 flex flex-col gap-2 overflow-y-auto max-h-[420px]">
+      <div ref={contactListRef} className="relative p-5 grid grid-flow-col grid-rows-[repeat(8,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[420px]">
         {visible.length === 0 && (
-          <div className="text-sm text-gray-400 text-center py-10">검색 결과가 없습니다</div>
+          <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
         {visible.map(({ c, i }) => (
           <div
             key={i}
-            className={`rounded-xl border-2 transition ${
+            className={`rounded-lg border-2 px-2.5 py-2 transition ${
               i === contactActive
                 ? "border-blue-500 bg-blue-50"
                 : "border-gray-200"
@@ -12785,7 +12787,7 @@ className={`
           >
             {editingContactIdx === i ? (
               /* ── 인라인 수정 폼 ── */
-              <div className="px-3 py-2.5 space-y-1.5" onClick={e => e.stopPropagation()}>
+              <div className="space-y-1.5" onClick={e => e.stopPropagation()}>
                 <input
                   autoFocus
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
@@ -12820,20 +12822,18 @@ className={`
                 </div>
               </div>
             ) : (
-              /* ── 일반 표시 ── */
-              <div className="flex flex-col h-full">
-                {/* 선택 영역 */}
+              /* ── 일반 표시: 이름/전화번호/수정/삭제만 간단히 ── */
+              <div>
                 <div
-                  className="flex-1 px-3 py-2.5 cursor-pointer min-w-0"
+                  className="flex items-baseline gap-1.5 mb-1.5 cursor-pointer min-w-0"
                   onClick={() => closeContactPopup(c)}
                 >
-                  <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
-                  <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
+                  <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
+                  <span className="text-[11px] text-gray-400 truncate">{c.phone || "-"}</span>
                 </div>
-                {/* 수정/삭제 버튼 */}
-                <div className="flex gap-1 px-2.5 pb-2 shrink-0">
+                <div className="flex gap-1">
                   <button
-                    className="flex-1 py-1 rounded-lg bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-[11px] font-semibold transition"
+                    className="flex-1 py-1 rounded bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-[10px] font-semibold transition"
                     onClick={e => {
                       e.stopPropagation();
                       setEditContactData({ name: c.name || "", phone: c.phone || "" });
@@ -12842,7 +12842,7 @@ className={`
                     }}
                   >수정</button>
                   <button
-                    className="flex-1 py-1 rounded-lg bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-[11px] font-semibold transition"
+                    className="flex-1 py-1 rounded bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-[10px] font-semibold transition"
                     onClick={async e => {
                       e.stopPropagation();
                       if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
@@ -15104,8 +15104,8 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
             )}
             {!isViewer && lockState?.업로드잠금 && lockState?.재업로드완료알림 !== true && (
               isUnlockActive ? (
-                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                   재업로드 대기중 · {fmtRemain(unlockRemainMs)}
                 </span>
               ) : (
@@ -17504,12 +17504,12 @@ const checkWarningStatus = (name, type) => {
     if (!list) return;
     const item = list.children[panelContactActive4];
     if (!item) return;
-    const itemTop = item.offsetTop;
-    const itemBottom = itemTop + item.offsetHeight;
-    const viewTop = list.scrollTop;
-    const viewBottom = viewTop + list.clientHeight;
-    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
-    if (itemTop < viewTop) list.scrollTop = itemTop;
+    const itemLeft = item.offsetLeft;
+    const itemRight = itemLeft + item.offsetWidth;
+    const viewLeft = list.scrollLeft;
+    const viewRight = viewLeft + list.clientWidth;
+    if (itemRight > viewRight) list.scrollLeft = itemRight - list.clientWidth;
+    if (itemLeft < viewLeft) list.scrollLeft = itemLeft;
   }, [panelContactActive4]);
   const [panelContactSearch4, setPanelContactSearch4] = React.useState("");
   React.useEffect(() => { setPanelContactSearch4(""); }, [panelContactPopup4]);
@@ -21096,21 +21096,23 @@ const head = isDark
           onChange={e => { setPanelContactSearch4(e.target.value); setPanelContactActive4(0); }}
         />
       </div>
-      <div ref={panelContactListRef4} className="p-5 flex flex-col gap-2 overflow-y-auto max-h-[420px]">
+      <div ref={panelContactListRef4} className="relative p-5 grid grid-flow-col grid-rows-[repeat(8,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[420px]">
         {visible4.length === 0 && (
-          <div className="text-sm text-gray-400 text-center py-10">검색 결과가 없습니다</div>
+          <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
         {visible4.map(({ c, i }) => (
           <div key={i}
-            className={`rounded-xl border-2 px-3 py-2.5 cursor-pointer transition min-w-0 ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            className={`rounded-lg border-2 px-2.5 py-2 cursor-pointer transition min-w-0 ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
             onMouseEnter={() => setPanelContactActive4(i)}
             onClick={() => {
               const key = panelContactPopup4.type === "pickup" ? "상차" : "하차";
               panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
               setPanelContactPopup4(null);
             }}>
-            <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
-            <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
+              <span className="text-[11px] text-gray-400 truncate">{c.phone || "-"}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -27529,12 +27531,12 @@ React.useEffect(() => {
   if (!list) return;
   const item = list.children[panelContactActive5];
   if (!item) return;
-  const itemTop = item.offsetTop;
-  const itemBottom = itemTop + item.offsetHeight;
-  const viewTop = list.scrollTop;
-  const viewBottom = viewTop + list.clientHeight;
-  if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
-  if (itemTop < viewTop) list.scrollTop = itemTop;
+  const itemLeft = item.offsetLeft;
+  const itemRight = itemLeft + item.offsetWidth;
+  const viewLeft = list.scrollLeft;
+  const viewRight = viewLeft + list.clientWidth;
+  if (itemRight > viewRight) list.scrollLeft = itemRight - list.clientWidth;
+  if (itemLeft < viewLeft) list.scrollLeft = itemLeft;
 }, [panelContactActive5]);
 const [panelContactSearch5, setPanelContactSearch5] = React.useState("");
 React.useEffect(() => { setPanelContactSearch5(""); }, [panelContactPopup5]);
@@ -29743,21 +29745,23 @@ return (
           onChange={e => { setPanelContactSearch5(e.target.value); setPanelContactActive5(0); }}
         />
       </div>
-      <div ref={panelContactListRef5} className="p-5 flex flex-col gap-2 overflow-y-auto max-h-[420px]">
+      <div ref={panelContactListRef5} className="relative p-5 grid grid-flow-col grid-rows-[repeat(8,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[420px]">
         {visible5.length === 0 && (
-          <div className="text-sm text-gray-400 text-center py-10">검색 결과가 없습니다</div>
+          <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
         {visible5.map(({ c, i }) => (
           <div key={i}
-            className={`rounded-xl border-2 px-3 py-2.5 cursor-pointer transition min-w-0 ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            className={`rounded-lg border-2 px-2.5 py-2 cursor-pointer transition min-w-0 ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
             onMouseEnter={() => setPanelContactActive5(i)}
             onClick={() => {
               const key = panelContactPopup5.type === "pickup" ? "상차" : "하차";
               panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
               setPanelContactPopup5(null);
             }}>
-            <div className="font-bold text-gray-900 text-[13px] truncate">{c.name || "-"}</div>
-            <div className="text-[12px] text-gray-500 mt-0.5 truncate">{c.phone || "-"}</div>
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
+              <span className="text-[11px] text-gray-400 truncate">{c.phone || "-"}</span>
+            </div>
           </div>
         ))}
       </div>
