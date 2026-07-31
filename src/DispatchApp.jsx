@@ -16326,7 +16326,7 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
     <div className="flex items-center gap-1 flex-nowrap">
       <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}>오전</button>
       <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}>오후</button>
-      <select
+      <CustomSelect
         value={value || ""}
         disabled={disabled}
         onChange={e => onChange(e.target.value)}
@@ -16336,7 +16336,7 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
         {times.map(t => (
           <option key={t} value={t}>{t.replace(/^오전 |^오후 /, "")}</option>
         ))}
-      </select>
+      </CustomSelect>
     </div>
   );
 }
