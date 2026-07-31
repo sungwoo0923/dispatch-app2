@@ -4522,7 +4522,7 @@ return (
               </button>
             </div>
             <div className="px-4">
-              <FleetManagement />
+              <FleetManagement dispatchData={dispatchDataFiltered} />
             </div>
           </div>
         )}
