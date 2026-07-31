@@ -21716,7 +21716,7 @@ checkWarningStatus(c.거래처명, "거래처");
             <div
               key={i}
               className={`px-3 py-2 cursor-pointer ${
-                i===copyClientIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                i===copyClientIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
               }`}
               onMouseDown={()=>{
                 setCopyTarget(prev=>({
@@ -21730,7 +21730,7 @@ checkWarningStatus(c.거래처명, "거래처");
               }}
             >
               <div className="font-semibold">{c.거래처명}</div>
-              <div className="text-xs text-gray-500">{c.주소}</div>
+              <div className={`text-xs ${i===copyClientIndex ? "text-white/70" : "text-gray-500"}`}>{c.주소}</div>
             </div>
           ))}
         </div>
@@ -21855,7 +21855,7 @@ checkWarningStatus(c.거래처명, "거래처");
                 <div
                   key={i}
                   className={`px-3 py-2 cursor-pointer ${
-                    i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                    i===copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
                     const cts4c = (p.contacts || []).filter(c => c.name?.trim());
@@ -21874,7 +21874,7 @@ checkWarningStatus(c.거래처명, "거래처");
                   }}
                 >
                   <div className="font-semibold">{p.업체명}</div>
-                  <div className="text-xs text-gray-500">{p.주소}</div>
+                  <div className={`text-xs ${i===copyActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                 </div>
               ))}
             </div>
@@ -22046,7 +22046,7 @@ checkWarningStatus(c.거래처명, "거래처");
                 <div
                   key={i}
                   className={`px-3 py-2 cursor-pointer ${
-                    i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                    i===copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
                     const cts4cd2 = (p.contacts || []).filter(c => c.name?.trim());
@@ -22065,7 +22065,7 @@ checkWarningStatus(c.거래처명, "거래처");
                   }}
                 >
                   <div className="font-semibold">{p.업체명}</div>
-                  <div className="text-xs text-gray-500 truncate">{p.주소}</div>
+                  <div className={`text-xs truncate ${i===copyActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                 </div>
               ))}
             </div>
@@ -23277,7 +23277,7 @@ value={copyTarget?.화물수량 || ""}
                     editClientOptions.map((c, i) => (
                       <div
                         key={i}
-                        className={`px-3 py-1 cursor-pointer ${i === editClientActiveIndex ? "bg-blue-100" : ""
+                        className={`px-3 py-1 cursor-pointer ${i === editClientActiveIndex ? "bg-[#1B2B4B] text-white" : ""
                           }`}
                         onMouseDown={() => {
                           setEditTarget((prev) => ({
@@ -23298,7 +23298,7 @@ value={copyTarget?.화물수량 || ""}
                       >
                         <div className="font-semibold">{c.거래처명}</div>
                         {c.주소 && (
-                          <div className="text-xs text-gray-500">{c.주소}</div>
+                          <div className={`text-xs ${i === editClientActiveIndex ? "text-white/70" : "text-gray-500"}`}>{c.주소}</div>
                         )}
                       </div>
                     ))
@@ -23471,7 +23471,7 @@ value={copyTarget?.화물수량 || ""}
                   {editPlaceOptions.map((p, i) => (
                     <div
                       key={i}
-                      className={`px-3 py-1 cursor-pointer ${i === editActiveIndex ? "bg-blue-100" : ""
+                      className={`px-3 py-1 cursor-pointer ${i === editActiveIndex ? "bg-[#1B2B4B] text-white" : ""
                         }`}
                       onMouseDown={() => {
                         const cts4 = (p.contacts || []).filter(c => c.name?.trim());
@@ -23490,7 +23490,7 @@ value={copyTarget?.화물수량 || ""}
                       }}
                     >
                       <div className="font-semibold">{p.업체명}</div>
-                      <div className="text-xs text-gray-500">{p.주소}</div>
+                      <div className={`text-xs ${i === editActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                     </div>
                   ))}
                 </div>
@@ -23636,7 +23636,7 @@ value={copyTarget?.화물수량 || ""}
                   {editPlaceOptions.map((p, i) => (
                     <div
                       key={i}
-                      className={`px-3 py-1 cursor-pointer ${i === editActiveIndex ? "bg-blue-100" : ""
+                      className={`px-3 py-1 cursor-pointer ${i === editActiveIndex ? "bg-[#1B2B4B] text-white" : ""
                         }`}
                       onMouseDown={() => {
                         const cts4d = (p.contacts || []).filter(c => c.name?.trim());
@@ -23655,7 +23655,7 @@ value={copyTarget?.화물수량 || ""}
                       }}
                     >
                       <div className="font-semibold">{p.업체명}</div>
-                      <div className="text-xs text-gray-500">{p.주소}</div>
+                      <div className={`text-xs ${i === editActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                     </div>
                   ))}
                 </div>
@@ -30577,7 +30577,7 @@ return (
                     <div
                       key={i}
                       className={`px-3 py-1 cursor-pointer ${
-                        i === clientActiveIndex ? "bg-blue-100" : "hover:bg-gray-100"
+                        i === clientActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-100"
                       }`}
                       onMouseDown={() => {
                         setEditTarget((prev) => ({
@@ -30592,7 +30592,7 @@ return (
                     >
                       <div className="font-semibold">{c.거래처명}</div>
                       {c.주소 && (
-                        <div className="text-xs text-gray-500">{c.주소}</div>
+                        <div className={`text-xs ${i === clientActiveIndex ? "text-white/70" : "text-gray-500"}`}>{c.주소}</div>
                       )}
                     </div>
                   ))}
@@ -30780,7 +30780,7 @@ return (
                       key={idx}
                       className={
                         "px-3 py-1 cursor-pointer " +
-                        (idx === placeActiveIndex ? "bg-blue-100" : "hover:bg-gray-100")
+                        (idx === placeActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-100")
                       }
                       onMouseDown={() => {
                         const cts5 = (p.contacts || []).filter(c => c.name?.trim());
@@ -30799,7 +30799,7 @@ return (
                       }}
                     >
                       <div className="font-medium">{p.업체명}</div>
-                      <div className="text-xs text-gray-500">{p.주소}</div>
+                      <div className={`text-xs ${idx === placeActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                     </div>
                   ))}
                 </div>
@@ -30948,7 +30948,7 @@ return (
                       key={idx}
                       className={
                         "px-3 py-1 cursor-pointer " +
-                        (idx === placeActiveIndex ? "bg-blue-100" : "hover:bg-gray-100")
+                        (idx === placeActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-100")
                       }
                      onMouseDown={() => {
                         const cts5d = (p.contacts || []).filter(c => c.name?.trim());
@@ -30967,7 +30967,7 @@ return (
                       }}
                     >
                       <div className="font-medium">{p.업체명}</div>
-                      <div className="text-xs text-gray-500">{p.주소}</div>
+                      <div className={`text-xs ${idx === placeActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                     </div>
                   ))}
                 </div>
@@ -31932,7 +31932,7 @@ setCopyTarget(prev=>({
             <div
               key={i}
               className={`px-3 py-2 cursor-pointer ${
-                i===copyClientIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                i===copyClientIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
               }`}
               onMouseDown={()=>{
                 setCopyTarget(prev=>({
@@ -31946,7 +31946,7 @@ setCopyTarget(prev=>({
               }}
             >
               <div className="font-semibold">{c.거래처명}</div>
-              <div className="text-xs text-gray-500">{c.주소}</div>
+              <div className={`text-xs ${i===copyClientIndex ? "text-white/70" : "text-gray-500"}`}>{c.주소}</div>
             </div>
           ))}
         </div>
@@ -32071,7 +32071,7 @@ setCopyPlaceOptions(list);
                 <div
                   key={i}
                   className={`px-3 py-2 cursor-pointer ${
-                    i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                    i===copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
                     const cts5c = (p.contacts || []).filter(c => c.name?.trim());
@@ -32090,7 +32090,7 @@ setCopyPlaceOptions(list);
                   }}
                 >
                   <div className="font-semibold">{p.업체명}</div>
-                  <div className="text-xs text-gray-500">{p.주소}</div>
+                  <div className={`text-xs ${i===copyActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                 </div>
               ))}
             </div>
@@ -32244,7 +32244,7 @@ setCopyPlaceOptions(list);
                 <div
                   key={i}
                   className={`px-3 py-2 cursor-pointer ${
-                    i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                    i===copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
                     const cts5cd2 = (p.contacts || []).filter(c => c.name?.trim());
@@ -32263,7 +32263,7 @@ setCopyPlaceOptions(list);
                   }}
                 >
                   <div className="font-semibold">{p.업체명}</div>
-                  <div className="text-xs text-gray-500 truncate">{p.주소}</div>
+                  <div className={`text-xs truncate ${i===copyActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                 </div>
               ))}
             </div>
@@ -39394,9 +39394,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           {copyClientOptions.map((c, i) => {
                             const name = c.거래처명 || c.업체명 || "";
                             return (
-                              <div key={c._id || c.id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyClientIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`} onMouseDown={() => { setCopyTarget(prev => ({...prev, 거래처명: name})); setShowCopyClientDropdown(false); checkWarningStatus(name, "거래처"); }}>
+                              <div key={c._id || c.id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyClientIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"}`} onMouseDown={() => { setCopyTarget(prev => ({...prev, 거래처명: name})); setShowCopyClientDropdown(false); checkWarningStatus(name, "거래처"); }}>
                                 <div className="font-semibold">{name}</div>
-                                <div className={`text-xs ${i === copyClientIndex ? "text-blue-100" : "text-gray-400"}`}>{c.주소}</div>
+                                <div className={`text-xs ${i === copyClientIndex ? "text-white/70" : "text-gray-400"}`}>{c.주소}</div>
                               </div>
                             );
                           })}
@@ -39481,10 +39481,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           {showCopyPlaceDropdown && copyPlaceType === "pickup" && copyPlaceOptions.length > 0 && (
                             <div ref={copyPlaceDropdownListRefU} className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
                               {copyPlaceOptions.map((p, i) => (
-                                <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
+                                <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"}`}
                                   onMouseDown={() => { setCopyTarget(prev => ({...prev, 상차지명: p.업체명 || "", 상차지주소: p.주소 || "", 상차지담당자: getManagerName(p), 상차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "상차지"); }}>
                                   <div className="font-semibold">{p.업체명}</div>
-                                  <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-400"}`}>{p.주소}</div>
+                                  <div className={`text-xs ${i === copyActiveIndex ? "text-white/70" : "text-gray-400"}`}>{p.주소}</div>
                                 </div>
                               ))}
                             </div>
@@ -39576,10 +39576,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           {showCopyPlaceDropdown && copyPlaceType === "drop" && copyPlaceOptions.length > 0 && (
                             <div ref={copyPlaceDropdownListRefU} className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
                               {copyPlaceOptions.map((p, i) => (
-                                <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
+                                <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"}`}
                                   onMouseDown={() => { setCopyTarget(prev => ({...prev, 하차지명: p.업체명 || "", 하차지주소: p.주소 || "", 하차지담당자: getManagerName(p), 하차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "하차지"); }}>
                                   <div className="font-semibold">{p.업체명}</div>
-                                  <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-400"}`}>{p.주소}</div>
+                                  <div className={`text-xs ${i === copyActiveIndex ? "text-white/70" : "text-gray-400"}`}>{p.주소}</div>
                                 </div>
                               ))}
                             </div>
