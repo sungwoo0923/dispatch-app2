@@ -10242,7 +10242,7 @@ const similar = placeList.filter(p => {
       <div
         key={i}
         className={`px-2 py-1 cursor-pointer ${
-          i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
+          i === pickupActive ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
         }`}
         onMouseDown={() => {
           applyPlaceToForm(p, "pickup", "pickup-place-input");
@@ -10392,7 +10392,7 @@ className={`
         <div
           key={p.업체명 + "_" + i}
           className={`px-2 py-1 cursor-pointer ${
-            i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
+            i === placeActive ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
           }`}
           onMouseEnter={() => setPlaceActive(i)}
           onMouseDown={() => {
@@ -10653,7 +10653,7 @@ className={`
           key={`${v}-${i}`}
           ref={(el) => (vehicleItemRefs.current[i] = el)}
           className={`px-3 py-2 cursor-pointer text-sm ${
-            i === vehicleActive ? "bg-blue-50" : "hover:bg-gray-50"
+            i === vehicleActive ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
           }`}
           onMouseEnter={() => setVehicleActive(i)}
           onMouseDown={() => {
@@ -11045,7 +11045,7 @@ className={`
                 <div
                   key={p.업체명 + "_" + i}
                   className={`px-2 py-1 cursor-pointer ${
-                    i === stopPlaceActive ? "bg-blue-50" : "hover:bg-gray-50"
+                    i === stopPlaceActive ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
                   }`}
                   onMouseEnter={() => setStopPlaceActive(i)}
                   onMouseDown={() => {
@@ -15853,7 +15853,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 <div ref={placeDropdownListRef} className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
                   {placeOpts.map((p,i)=>(
                     <div key={p.업체명+"_"+i}
-                      className={`px-2 py-1 cursor-pointer ${i===placeActive?"bg-blue-50":"hover:bg-gray-50"}`}
+                      className={`px-2 py-1 cursor-pointer ${i===placeActive?"bg-[#1B2B4B] text-white":"hover:bg-gray-50"}`}
                       onMouseEnter={()=>setPlaceActive(i)}
                       onMouseDown={()=>{
                         const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
