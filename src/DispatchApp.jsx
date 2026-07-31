@@ -3822,16 +3822,7 @@ useEffect(() => {
       }
     }).catch(() => {});
   }, [user?.uid]);
-  const [darkMode, setDarkMode] = useState(
-    localStorage.getItem("theme") === "dark"
-  );
-  const toggleTheme = () => {
-    setDarkMode(prev => {
-      const next = !prev;
-      localStorage.setItem("theme", next ? "dark" : "light");
-      return next;
-    });
-  };
+  const darkMode = false;
 
   // ★ 글씨 크기 조절
   const [fontScale, setFontScale] = useState(() => {
@@ -4378,10 +4369,23 @@ return (
               👤
             </button>
             <button
-              onClick={toggleTheme}
-              className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
+              onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm flex items-center justify-center transition relative"
+              title={notificationsEnabled ? "알림 켜짐 (클릭 시 끄기)" : "알림 꺼짐 (클릭 시 켜기)"}
             >
-              {darkMode ? "☀️" : "🌙"}
+              {notificationsEnabled ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  <path d="M18.63 13A17.89 17.89 0 0 1 18 8a6 6 0 0 0-9.33-5" />
+                  <path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+              )}
             </button>
 
             {/* 글씨 크기 조절 버튼 */}
@@ -5125,35 +5129,6 @@ return (
           </button>
           {calcOpen && <FloatingCalculator onClose={() => setCalcOpen(false)} />}
         </>
-
-      {/* 알림 설정 플로팅 버튼 — 모든 탭에 표시 */}
-      <button
-        onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-        title={notificationsEnabled ? "알림 켜짐 (클릭 시 끄기)" : "알림 꺼짐 (클릭 시 켜기)"}
-        style={{
-          position: "fixed", bottom: 152, right: 24,
-          zIndex: 99998, width: 56, height: 56,
-          borderRadius: "50%", background: notificationsEnabled ? "#1B2B4B" : "#9CA3AF",
-          color: "white", border: "none", cursor: "pointer",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          transition: "background 0.2s",
-        }}
-      >
-        {notificationsEnabled ? (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-        ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            <path d="M18.63 13A17.89 17.89 0 0 1 18 8a6 6 0 0 0-9.33-5" />
-            <path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14" />
-            <line x1="1" y1="1" x2="23" y2="23" />
-          </svg>
-        )}
-      </button>
 
 {/* ── 화주사 수정요청 승인/거절 팝업 (T161) ── */}
 {editReqPopup && (
@@ -21049,7 +21024,7 @@ const head = isDark
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
 {newClientModalOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setNewClientModalOpen(false)}>
     <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -21795,9 +21770,13 @@ flashRow(savedId);
   <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
   <div className="p-6">
 
-  <Field label="거래처명">
-    <div className="flex gap-2">
-    <div className="relative flex-1">
+  <div className="space-y-1">
+    <div className="flex items-center justify-between">
+      <div className="text-[13px] font-bold text-gray-900">거래처명</div>
+      <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
+        className="text-[11px] font-bold text-[#1B2B4B] hover:underline">+ 신규등록</button>
+    </div>
+    <div className="relative">
       <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className={inputStyle}
@@ -21886,13 +21865,8 @@ checkWarningStatus(c.거래처명, "거래처");
           ))}
         </div>
       )}
-    <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
-      className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
-      + 신규등록
-    </button>
     </div>
-    </div>
-  </Field>
+  </div>
   </div>
 </section>
         {/* ================= 상하차 정보 ================= */}
@@ -23351,9 +23325,12 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             {/* ===================== 거래처명 ===================== */}
             <div className="mb-3">
-              <label>거래처명</label>
-              <div className="flex gap-2">
-              <div className="relative flex-1">
+              <div className="flex items-center justify-between">
+                <label>거래처명</label>
+                <button type="button" onClick={() => openNewClientModal(editTarget?.거래처명)}
+                  className="text-[11px] font-bold text-[#1B2B4B] hover:underline">+ 신규등록</button>
+              </div>
+              <div className="relative">
               <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
@@ -23463,11 +23440,6 @@ value={copyTarget?.화물수량 || ""}
                   )}
                 </div>
               )}
-            </div>
-            <button type="button" onClick={() => openNewClientModal(editTarget?.거래처명)}
-              className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
-              + 신규등록
-            </button>
             </div>
             </div>
             {/* ------------------------------------------------ */}
@@ -29827,7 +29799,7 @@ return (
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
 {newClientModalOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setNewClientModalOpen(false)}>
     <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -30791,9 +30763,12 @@ return (
             {/* 🔵 거래처명 */}
             {/* ------------------------------------------------ */}
             <div className="mb-3">
-              <label>거래처명</label>
-              <div className="flex gap-2">
-              <div className="relative flex-1">
+              <div className="flex items-center justify-between">
+                <label>거래처명</label>
+                <button type="button" onClick={() => openNewClientModal(editTarget?.거래처명)}
+                  className="text-[11px] font-bold text-[#1B2B4B] hover:underline">+ 신규등록</button>
+              </div>
+              <div className="relative">
               <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
@@ -30878,11 +30853,6 @@ return (
                   ))}
                 </div>
               )}
-            </div>
-            <button type="button" onClick={() => openNewClientModal(editTarget?.거래처명)}
-              className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
-              + 신규등록
-            </button>
             </div>
             </div>
             {/* ------------------------------------------------ */}
@@ -32149,9 +32119,13 @@ return (
   <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
   <div className="p-6">
 
-  <Field label="거래처명">
-    <div className="flex gap-2">
-    <div className="relative flex-1">
+  <div className="space-y-1">
+    <div className="flex items-center justify-between">
+      <div className="text-[13px] font-bold text-gray-900">거래처명</div>
+      <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
+        className="text-[11px] font-bold text-[#1B2B4B] hover:underline">+ 신규등록</button>
+    </div>
+    <div className="relative">
       <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className={inputStyle}
@@ -32239,12 +32213,7 @@ setCopyTarget(prev=>({
         </div>
       )}
     </div>
-    <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
-      className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
-      + 신규등록
-    </button>
-    </div>
-  </Field>
+  </div>
   </div>
 </section>
         {/* ================= 상하차 정보 ================= */}
@@ -39545,7 +39514,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
       {/* ================= 거래처 신규등록 팝업 ================= */}
       {newClientModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setNewClientModalOpen(false)}>
           <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
             onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -39765,9 +39734,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   <h3 className="text-[14px] font-bold text-white">거래처 정보</h3>
                 </div>
                 <div className="p-6">
-                  <Field label="거래처명">
-                    <div className="flex gap-2">
-                    <div className="relative flex-1">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[13px] font-bold text-gray-900">거래처명</div>
+                      <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
+                        className="text-[11px] font-bold text-[#1B2B4B] hover:underline">+ 신규등록</button>
+                    </div>
+                    <div className="relative">
                       <input autoComplete="off"
                       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
@@ -39809,12 +39782,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       )}
                     </div>
-                    <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
-                      className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-[12px] bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap shrink-0">
-                      + 신규등록
-                    </button>
-                    </div>
-                  </Field>
+                  </div>
                 </div>
               </div>
 
@@ -46655,8 +46623,8 @@ React.useEffect(() => {
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-700 text-center">{r.담당자번호||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}
-                            onDoubleClick={e => { e.stopPropagation(); if (r.등급변경일 && grade !== "일반") showAlert(`${grade} 등급 지정일: ${r.등급변경일}`); }}
-                            title={r.등급변경일 && grade !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
+                            onDoubleClick={e => { e.stopPropagation(); if (grade === "일반") return; showAlert(r.등급변경일 ? `${grade} 등급 지정일: ${r.등급변경일}` : `${grade} 등급으로 지정되어 있으나 지정일 기록이 없습니다.`); }}
+                            title={grade !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
                             <div className="flex items-center justify-center">
                               <select
                                 className={`px-2 py-1 rounded text-xs font-bold cursor-pointer w-[68px] ${등급색상(grade)}`}
@@ -47233,9 +47201,9 @@ React.useEffect(() => {
                             </td>
                           ))}
                           <td className="px-2 py-2.5 text-center"
-                            onClick={e => { if (r.등급변경일 && r.등급 && r.등급 !== "일반") e.stopPropagation(); }}
-                            onDoubleClick={e => { if (r.등급변경일 && r.등급 && r.등급 !== "일반") { e.stopPropagation(); showAlert(`${r.등급} 등급 지정일: ${r.등급변경일}`); } }}
-                            title={r.등급변경일 && r.등급 && r.등급 !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
+                            onClick={e => { if (r.등급 && r.등급 !== "일반") e.stopPropagation(); }}
+                            onDoubleClick={e => { if (!r.등급 || r.등급 === "일반") return; e.stopPropagation(); showAlert(r.등급변경일 ? `${r.등급} 등급 지정일: ${r.등급변경일}` : `${r.등급} 등급으로 지정되어 있으나 지정일 기록이 없습니다.`); }}
+                            title={r.등급 && r.등급 !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
                             <span className={`text-[12px] font-bold ${r.등급 === "블랙" ? "text-gray-900" : r.등급 === "주의" ? "text-orange-700" : r.등급 === "이탈" ? "text-red-600" : "text-[#1B2B4B]"}`}>
                               {r.등급 || "일반"}
                             </span>
