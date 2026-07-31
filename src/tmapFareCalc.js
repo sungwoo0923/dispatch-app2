@@ -65,7 +65,10 @@ export async function geocodeAddress(rawAddr) {
       const data = await res.json();
       const coord = data?.coordinateInfo?.coordinate?.[0];
       if (!coord) return null;
-      return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+      const lat = parseFloat(coord.lat);
+      const lon = parseFloat(coord.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return null;
+      return { lat, lon };
     } catch {
       return null;
     }
@@ -101,6 +104,8 @@ export async function estimateDistanceFare({ pickupAddr, dropAddr, vehicleText, 
   const avg = Math.round(surcharged / 5000) * 5000;
   const min = Math.round(avg * 0.85 / 5000) * 5000;
   const max = Math.round(avg * 1.15 / 5000) * 5000;
+
+  if (![roadDist, min, max, avg].every(Number.isFinite)) return null;
 
   return { distance: roadDist, min, max, avg, vehicleId: vt.id };
 }

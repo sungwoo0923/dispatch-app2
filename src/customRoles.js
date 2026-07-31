@@ -18,6 +18,34 @@ export function defaultMenuAccess() {
   return m;
 }
 
+// 이미 있는 내장 역할 중, 이 화면에서 최고관리자가 메뉴별 권한을 직접 편집할 수 있는
+// 목록. totalMaster/admin은 잠금 사고를 막기 위해 편집 대상에서 제외한다. driver/shipper는
+// 이 PC 화면(DispatchApp)이 아니라 별도의 모바일/화주 앱을 쓰므로 여기서는 제외한다.
+export const BUILTIN_EDITABLE_ROLES = [
+  { key: "hrManager", label: "인사관리자" },
+  { key: "user", label: "실무자" },
+  { key: "test", label: "경리/회계" },
+  { key: "viewer", label: "조회전용" },
+];
+
+// 내장 역할을 처음 편집할 때, 기존 하드코딩 로직과 최대한 비슷한 값에서 시작하도록
+// 하는 기본값 — DispatchApp.jsx의 userBlockedMenus/testBlockedMenus/viewerBlockedMenus와
+// 동일한 기준.
+export function builtinDefaultMenuAccess(roleKey) {
+  const write = {};
+  CUSTOMIZABLE_MENUS.forEach(k => { write[k] = "write"; });
+  if (roleKey === "test") {
+    return { ...write, "배차관리": "hidden", "실시간배차현황": "hidden", "단가표": "hidden" };
+  }
+  if (roleKey === "viewer") {
+    const read = {};
+    CUSTOMIZABLE_MENUS.forEach(k => { read[k] = "read"; });
+    return read;
+  }
+  // user, hrManager (기존 로직상 hrManager도 user와 동일한 차단 목록을 따름)
+  return { ...write, "매출관리": "hidden", "정산관리": "hidden" };
+}
+
 export function useCustomRoles() {
   const [customRoles, setCustomRoles] = React.useState([]);
   React.useEffect(() => {

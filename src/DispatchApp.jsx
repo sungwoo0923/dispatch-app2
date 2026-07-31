@@ -5092,16 +5092,22 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
 React.useEffect(() => {
   let cancelled = false;
   setLoading(true);
-  const timer = setTimeout(() => setLoading(false), 8000); // 8초 타임아웃
+  const timer = setTimeout(() => setLoading(false), 10000); // 10초 타임아웃
   // 서버리스 함수 콜드스타트/일시적 타임아웃(504) 등으로 첫 시도가 실패해도, 한 번은
   // 재시도해서 "유가 정보 없음"으로 넘어가기 전에 회복할 기회를 준다.
   async function fetchOnce() {
-    const res = await fetch(`/api/fuel?area=${area || "01"}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
-    if (!oil.length) throw new Error("empty OIL");
-    return oil;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 3500);
+    try {
+      const res = await fetch(`/api/fuel?area=${area || "01"}`, { signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
+      if (!oil.length) throw new Error("empty OIL");
+      return oil;
+    } finally {
+      clearTimeout(tid);
+    }
   }
   async function loadFuel() {
     try {
@@ -5563,9 +5569,23 @@ if (!sigungu && clean.length >= 2) {
 // 🔍 두 주소가 같은 지역인지 판단
 // ================================
 function isAreaMatch(inputAddr, rowAddr) {
-  const inputTokens = extractAreaTokens(inputAddr);
   const rowText = String(rowAddr || "").replace(/\s+/g, "");
+  const clean = String(inputAddr || "").replace(/[^\w가-힣]/g, "");
 
+  // 시/군/구 단위가 있으면 반드시 그 단위로 매칭해야 한다 — 예전에는 "인천"(시/도)
+  // 토큰까지 후보에 포함시켜 놓고 .some()으로 아무 토큰이나 하나만 맞아도 통과시켰기
+  // 때문에, "인천 서구" 입력이 "인천 남동구", "인천 연수구" 등 서구가 아닌 인천
+  // 전역의 이력과도 매칭되어 통계/이력이 실제 노선과 무관하게 부풀려지는 문제가 있었다.
+  const sigungu = clean.match(/([가-힣]+시|[가-힣]+군|[가-힣]+구)/)?.[1];
+  if (sigungu) return rowText.includes(sigungu);
+
+  const sido = clean.match(
+    /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/
+  )?.[1];
+  if (sido) return rowText.includes(sido);
+
+  // 시/도, 시/군/구를 못 찾은 특이한 입력(예: 동 이름만 입력)은 예전처럼 토큰 전체로 폴백
+  const inputTokens = extractAreaTokens(inputAddr);
   return inputTokens.some(t => rowText.includes(t));
 }
  // ================================
