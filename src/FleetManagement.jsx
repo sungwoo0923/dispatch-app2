@@ -1079,6 +1079,149 @@ function RegistrationTab({ usersMap, myCompanyName }) {
 
 // ─── HistoryTab ──────────────────────────────────────────────────────────────
 
+// ─── 노선관리 탭 (지입/직영 차량별 배차 노선) ──────────────────────────────────
+// 왼쪽: 지입/직영 차량 검색 목록, 오른쪽: 선택한 차량의 배차(오더) 내역 + 금액.
+// dispatchData는 부모(DispatchApp)의 실시간 배차 데이터를 그대로 받으므로,
+// 실시간배차현황/배차현황에서 지입/직영 기사에게 배차되는 순간 자동으로 반영된다.
+function RouteManagementTab({ drivers, dispatchData }) {
+  const [q, setQ] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+
+  const filteredDrivers = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return drivers;
+    return drivers.filter(d =>
+      (d.이름 || "").toLowerCase().includes(query) ||
+      (d.차량번호 || "").toLowerCase().includes(query)
+    );
+  }, [drivers, q]);
+
+  const selectedDriver = drivers.find(d => d.id === selectedId) || null;
+
+  const driverOrders = useMemo(() => {
+    if (!selectedDriver) return [];
+    const name = (selectedDriver.이름 || "").trim();
+    const plate = (selectedDriver.차량번호 || "").trim();
+    if (!name && !plate) return [];
+    return (dispatchData || [])
+      .filter(r => {
+        const rName = (r.이름 || "").trim();
+        const rPlate = (r.차량번호 || "").trim();
+        return (!!name && rName === name) || (!!plate && rPlate === plate);
+      })
+      .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
+  }, [selectedDriver, dispatchData]);
+
+  const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
+  const totalFare = driverOrders.reduce((s, r) => s + toWon(r.청구운임), 0);
+  const totalDriverFare = driverOrders.reduce((s, r) => s + toWon(r.기사운임), 0);
+
+  return (
+    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+      {/* 왼쪽: 검색 */}
+      <div style={{ width: 300, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+        <div style={{ padding: 14, borderBottom: "1px solid #e5e7eb" }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, marginBottom: 8 }}>지입/직영 차량 검색</div>
+          <input
+            placeholder="기사명 또는 차량번호 검색"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+          />
+        </div>
+        <div style={{ maxHeight: 560, overflowY: "auto" }}>
+          {filteredDrivers.length === 0 ? (
+            <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
+              지입/직영 등급 기사가 없습니다.<br />기사관리에서 등급을 지정해주세요.
+            </div>
+          ) : filteredDrivers.map(d => (
+            <div
+              key={d.id}
+              onClick={() => setSelectedId(d.id)}
+              style={{
+                padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6",
+                background: selectedId === d.id ? "#eef1f7" : "#fff",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{d.이름}</div>
+                <div style={{ fontSize: 12, color: "#6b7280", fontFamily: "monospace" }}>{d.차량번호}</div>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, flexShrink: 0,
+                background: d.등급 === "직영" ? NAVY : "#e5e9f2", color: d.등급 === "직영" ? "#fff" : NAVY,
+              }}>{d.등급}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 오른쪽: 오더 내역 */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {!selectedDriver ? (
+          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
+            왼쪽에서 지입/직영 차량을 선택하면 배차 노선(오더) 내역이 표시됩니다.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>{selectedDriver.이름}</div>
+                <div style={{ fontSize: 13, color: "#6b7280", fontFamily: "monospace" }}>{selectedDriver.차량번호} · {selectedDriver.등급}</div>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 24 }}>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#9ca3af" }}>오더 건수</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: NAVY }}>{driverOrders.length}건</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#9ca3af" }}>청구운임 합계</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: NAVY }}>{totalFare.toLocaleString()}원</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#9ca3af" }}>기사운임 합계</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#10b981" }}>{totalDriverFare.toLocaleString()}원</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: NAVY }}>
+                    {["상차일", "거래처명", "상차지명", "하차지명", "차량종류", "배차상태", "청구운임", "기사운임"].map(h => (
+                      <th key={h} style={{ padding: "10px 8px", color: "#fff", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {driverOrders.length === 0 ? (
+                    <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>배차 이력이 없습니다.</td></tr>
+                  ) : driverOrders.map((r, i) => (
+                    <tr key={r._id || i} style={{ borderTop: "1px solid #f3f4f6", background: i % 2 ? "#fafbfc" : "#fff" }}>
+                      <td style={{ padding: "9px 8px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || ""}</td>
+                      <td style={{ padding: "9px 8px", textAlign: "center" }}>{r.거래처명 || ""}</td>
+                      <td style={{ padding: "9px 8px", textAlign: "center" }}>{r.상차지명 || ""}</td>
+                      <td style={{ padding: "9px 8px", textAlign: "center" }}>{r.하차지명 || ""}</td>
+                      <td style={{ padding: "9px 8px", textAlign: "center", whiteSpace: "nowrap" }}>{r.차량종류 || ""}</td>
+                      <td style={{ padding: "9px 8px", textAlign: "center", whiteSpace: "nowrap" }}>{r.배차상태 || ""}</td>
+                      <td style={{ padding: "9px 8px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>{toWon(r.청구운임).toLocaleString()}원</td>
+                      <td style={{ padding: "9px 8px", textAlign: "center", color: "#10b981", fontWeight: 700, whiteSpace: "nowrap" }}>{toWon(r.기사운임).toLocaleString()}원</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HistoryTab({ drivers, defaultDriverId }) {
   const todayStr = kstDateStr();
 
@@ -2002,7 +2145,7 @@ function CargoCameraTab({ drivers }) {
   document.head.appendChild(s);
 })();
 
-export default function FleetManagement() {
+export default function FleetManagement({ dispatchData = [] }) {
   // Tab persistence across parent-tab switches → sessionStorage
   const [mainTab, setMainTab] = useState(() => sfGet("fm_tab", "tracking"));
 
@@ -2255,7 +2398,7 @@ export default function FleetManagement() {
   // ── 합성 drivers ─────────────────────────────────────────────────────────
   // Only include drivers who registered via DriverRegister (have usersMap entry)
   // AND have been approved. Filters out all old/orphaned drivers collection docs.
-  const drivers = useMemo(() => {
+  const allFleetDrivers = useMemo(() => {
     return driversRaw
       .filter(raw => {
         const u = usersMap[raw.id];
@@ -2271,6 +2414,7 @@ export default function FleetManagement() {
           차량번호: (u.carNo || raw.carNo || "").trim() || "-",
           vehicleType: u.vehicleType || raw.vehicleType || "-",
           phone: u.phone || raw.phone || "-",
+          등급: raw.등급 || "일반",
           approved: true,
           상태: raw.status || raw.mainStatus || raw.state || "대기",
           location: raw.location || null,
@@ -2286,6 +2430,15 @@ export default function FleetManagement() {
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
   }, [driversRaw, usersMap]);
+
+  // 지입차관리는 기사관리에서 등급을 "지입"/"직영"으로 지정한 기사만 대상으로 한다 —
+  // 일반/블랙 등급 기사는 여기 표시되지 않고, 기사관리에서 등급을 바꾸면 실시간으로
+  // 이 화면들(관제현황/이력조회/출근기록부/온도관제/적재함카메라/기사등록관리/노선관리)에
+  // 자동으로 반영/제외된다.
+  const drivers = useMemo(
+    () => allFleetDrivers.filter(d => d.등급 === "지입" || d.등급 === "직영"),
+    [allFleetDrivers]
+  );
 
   const driversMap = useMemo(() => {
     const m = {};
@@ -2651,29 +2804,46 @@ export default function FleetManagement() {
         </div>
       </div>
 
-      {/* ═══ 메인 탭 ═══ */}
-      <div style={{ display: "flex", gap: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", padding: 4, position: "relative", zIndex: 10 }}>
-        {[["tracking", "관제현황"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["temperature", "온도 관제"], ["cargo-camera", "적재함 카메라"], ["registration", "기사 등록 관리"]].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setMainTab(key)}
-            style={{
-              flex: 1, padding: "10px 18px", border: "none", borderRadius: 7,
-              background: mainTab === key ? NAVY : "transparent",
-              color: mainTab === key ? "#fff" : "#6b7280",
-              fontSize: 14, fontWeight: 700, cursor: "pointer", transition: "all .15s",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            }}
-          >
-            {label}
-            {key === "registration" && pendingCount > 0 && (
-              <span style={{ background: "#ef4444", color: "white", fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 99 }}>
-                {pendingCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* ═══ 메인 레이아웃: 왼쪽 메뉴 + 오른쪽 콘텐츠 ═══ */}
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        {/* ── 왼쪽 메뉴 ── */}
+        <div style={{
+          width: 190, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb",
+          borderRadius: 10, padding: 6, display: "flex", flexDirection: "column", gap: 2,
+          position: "sticky", top: 12,
+        }}>
+          {[
+            ["tracking", "관제현황"],
+            ["route", "노선관리"],
+            ["history", "이력 조회"],
+            ["attendance", "출근기록부"],
+            ["temperature", "온도 관제"],
+            ["cargo-camera", "적재함 카메라"],
+            ["registration", "기사 등록 관리"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setMainTab(key)}
+              style={{
+                padding: "11px 14px", border: "none", borderRadius: 7, textAlign: "left",
+                background: mainTab === key ? NAVY : "transparent",
+                color: mainTab === key ? "#fff" : "#374151",
+                fontSize: 14, fontWeight: 700, cursor: "pointer", transition: "all .15s",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+              }}
+            >
+              {label}
+              {key === "registration" && pendingCount > 0 && (
+                <span style={{ background: "#ef4444", color: "white", fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 99 }}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── 오른쪽 콘텐츠 ── */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
 
       {/* ─── 긴급 알림 배너 (모든 탭에서 상시 표시) ─── */}
       {emergencyAlerts.length > 0 && (
@@ -2938,6 +3108,9 @@ export default function FleetManagement() {
         </>
       )}
 
+      {/* ═══ 노선관리 ═══ */}
+      {mainTab === "route" && <RouteManagementTab drivers={drivers} dispatchData={dispatchData} />}
+
       {/* ═══ 이력 조회 ═══ */}
       {mainTab === "history" && <HistoryTab drivers={drivers} defaultDriverId={historyPreselect} />}
       {mainTab === "attendance" && <AttendanceTab drivers={drivers} />}
@@ -2950,6 +3123,9 @@ export default function FleetManagement() {
 
       {/* ═══ 기사 등록 관리 ═══ */}
       {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} />}
+
+        </div>
+      </div>
 
       <style>{`
         @keyframes fmLivePulse { 0%,100%{opacity:1} 50%{opacity:.3} }

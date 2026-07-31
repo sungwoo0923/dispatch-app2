@@ -3286,6 +3286,12 @@ const deleteSingleOrder = async (order) => {
   배차상태: "배차중",
   상태: "배차중",
   배차완료일시: null,
+  // 배차완료 → 배차중으로 되돌아가는 건 보통 재배차 상황이라, 이전에 전달된
+  // 전달상태(화주사/기사 전달)도 함께 초기화해야 다시 전달 확인을 받을 수 있다.
+  업체전달상태: "미전달",
+  정보전달완료: false,
+  정보전달상태: "미전달",
+  전달완료일시: null,
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
 };
@@ -3301,6 +3307,9 @@ const deleteSingleOrder = async (order) => {
           기사명: "",
           차량번호: "",
           전화번호: "",
+          업체전달상태: "미전달",
+          정보전달완료: false,
+          정보전달상태: "미전달",
         }
         : prev
     );
@@ -4307,7 +4316,7 @@ onGoAttendance={() => {
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="text-[11px] text-gray-400 mb-1">시작일</div>
-            <input
+            <input autoComplete="off"
               type="date"
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
               value={scheduleForm.start}
@@ -4316,7 +4325,7 @@ onGoAttendance={() => {
           </div>
           <div>
             <div className="text-[11px] text-gray-400 mb-1">종료일</div>
-            <input
+            <input autoComplete="off"
               type="date"
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
               value={scheduleForm.end}
@@ -4599,7 +4608,7 @@ onGoAttendance={() => {
         <option value="">받는 사람 선택</option>
         {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
       </select>
-      <input
+      <input autoComplete="off"
         type="date"
         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
         value={handoverForm.date}
@@ -4656,7 +4665,7 @@ onGoAttendance={() => {
             <option value="">받는 사람 선택</option>
             {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
           </select>
-          <input
+          <input autoComplete="off"
             type="date"
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
             value={handoverForm.date}
@@ -5229,7 +5238,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
             <div className="text-white/40 text-[11px]">{monthLabel} 실적</div>
           </div>
           <div className="ml-auto">
-            <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
+            <input autoComplete="off" type="month" value={month} onChange={e=>setMonth(e.target.value)}
               className="bg-white/10 text-white text-[12px] border border-white/20 rounded-lg px-2 py-1 outline-none" />
           </div>
         </div>
@@ -5922,7 +5931,7 @@ function MobileSideMenu({
             <div className="px-5 py-3 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
                 <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input
+                <input autoComplete="off"
                   autoFocus
                   value={codeLookupQuery}
                   onChange={e => setCodeLookupQuery(e.target.value)}
@@ -6482,7 +6491,7 @@ const summary = useMemo(() => {
               <div className="flex items-center gap-2 text-sm">
                 <div className="relative flex-1">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
-                  <input
+                  <input autoComplete="off"
                     type="date"
                     className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={startDate}
@@ -6492,7 +6501,7 @@ const summary = useMemo(() => {
                 <span className={`text-xs ${icon}`}>~</span>
                 <div className="relative flex-1">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
-                  <input
+                  <input autoComplete="off"
                     type="date"
                     className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={endDate}
@@ -6560,7 +6569,7 @@ const summary = useMemo(() => {
                 </div>
                 <div className="relative flex-1">
                   <IconSearch className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
-                  <input
+                  <input autoComplete="off"
                     className={`w-full rounded-xl pl-8 pr-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     placeholder={
                       searchType === "상차지주소" ? "상차지 주소 검색"
@@ -7030,16 +7039,77 @@ function CardAttachViewer({ order, onClose }) {
     try { return JSON.parse(localStorage.getItem(attachStorageKey) || "{}"); } catch { return {}; }
   });
   const [confirmItem, setConfirmItem] = useState(null);
+  const [unlocking, setUnlocking] = useState(false);
+
+  const col = order.__col || order._col || "dispatch";
+  const docId = order._id || order.id;
 
   useEffect(() => {
-    const col = order.__col || order._col || "dispatch";
-    const docId = order._id || order.id;
     setLoading(true);
     const unsub = onSnapshot(collection(db, col, docId, "attachments"), snap => {
       setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
     return () => unsub();
+  }, [order]);
+
+  // PC 첨부파일 팝업과 동일하게, 잠금 관련 필드는 문서를 직접 구독해 실시간으로
+  // 반영한다(30분 재업로드 카운트다운 / 기사 재업로드 완료 알림).
+  const [liveLock, setLiveLock] = useState(null);
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, col, docId), snap => {
+      const d = snap.data();
+      if (d) setLiveLock({ 업로드잠금: d.업로드잠금, 업로드잠금해제만료: d.업로드잠금해제만료 ?? null, 재업로드완료알림: d.재업로드완료알림 === true });
+    });
+    return () => unsub();
+  }, [order]);
+
+  const getMirrorTarget = () => {
+    if (order._transmittedOrderId) return { col: "orders", id: order._transmittedOrderId };
+    if (order.originCol && order.originId) return { col: order.originCol, id: order.originId };
+    return null;
+  };
+
+  const [nowTick, setNowTick] = useState(Date.now());
+  const unlockExpiryTs = liveLock?.업로드잠금해제만료 ? new Date(liveLock.업로드잠금해제만료).getTime() : 0;
+  const unlockRemainMs = unlockExpiryTs - nowTick;
+  const isUnlockActive = unlockExpiryTs > 0 && unlockRemainMs > 0;
+  useEffect(() => {
+    if (!isUnlockActive) return;
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isUnlockActive, unlockExpiryTs]);
+  const fmtRemain = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+
+  const handleAllowReupload = async () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    try {
+      const until = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      await updateDoc(doc(db, col, docId), { 업로드잠금해제만료: until });
+      const mirror = getMirrorTarget();
+      if (mirror) await updateDoc(doc(db, mirror.col, mirror.id), { 업로드잠금해제만료: until }).catch(() => {});
+    } catch (e) {
+      alert("재업로드 허용 실패: " + e.message);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  // 재업로드 완료 알림은 팝업이 열려있는 동안 계속 보여주고, 닫을 때 확인 처리한다.
+  const liveLockRef = React.useRef(liveLock);
+  liveLockRef.current = liveLock;
+  useEffect(() => {
+    return () => {
+      const ls = liveLockRef.current;
+      if (!ls?.재업로드완료알림) return;
+      updateDoc(doc(db, col, docId), { 재업로드완료알림: false }).catch(() => {});
+      const mirror = getMirrorTarget();
+      if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { 재업로드완료알림: false }).catch(() => {});
+    };
   }, [order]);
 
   const doSave = (item) => {
@@ -7089,6 +7159,29 @@ function CardAttachViewer({ order, onClose }) {
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-bold">×</button>
         </div>
+        {liveLock?.재업로드완료알림 === true && (
+          <div className="mx-4 mt-3 flex items-center gap-1.5 px-3 py-2 bg-emerald-500 text-white text-[12px] font-bold rounded-lg shrink-0 animate-pulse">
+            ✓ 기사가 재업로드를 완료했습니다
+          </div>
+        )}
+        {liveLock?.업로드잠금 && liveLock?.재업로드완료알림 !== true && (
+          <div className="mx-4 mt-3 shrink-0">
+            {isUnlockActive ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg w-fit">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                재업로드 대기중 · {fmtRemain(unlockRemainMs)}
+              </div>
+            ) : (
+              <button
+                onClick={handleAllowReupload}
+                disabled={unlocking}
+                className="px-3 py-2 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg disabled:opacity-50"
+              >
+                {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-4">
           {loading && (
             <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
@@ -7443,11 +7536,11 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className={labelCls}>청구운임</label>
-            <input type="text" className={inputCls} placeholder="0" inputMode="numeric" value={claim} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setClaim(v ? Number(v).toLocaleString() : ""); }} />
+            <input autoComplete="off" type="text" className={inputCls} placeholder="0" inputMode="numeric" value={claim} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setClaim(v ? Number(v).toLocaleString() : ""); }} />
           </div>
           <div>
             <label className={labelCls}>기사운임</label>
-            <input type="text" className={inputCls} placeholder="0" inputMode="numeric" value={fee} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setFee(v ? Number(v).toLocaleString() : ""); }} />
+            <input autoComplete="off" type="text" className={inputCls} placeholder="0" inputMode="numeric" value={fee} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setFee(v ? Number(v).toLocaleString() : ""); }} />
           </div>
         </div>
 
@@ -7512,15 +7605,15 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         <div className="grid grid-cols-3 gap-2 mb-5">
           <div>
             <label className={labelCls}>차량번호</label>
-            <input className={inputCls} value={carNo} onChange={e => setCarNo(e.target.value)} placeholder="00가0000" />
+            <input autoComplete="off" className={inputCls} value={carNo} onChange={e => setCarNo(e.target.value)} placeholder="00가0000" />
           </div>
           <div>
             <label className={labelCls}>기사명</label>
-            <input className={inputCls} value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="이름" />
+            <input autoComplete="off" className={inputCls} value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="이름" />
           </div>
           <div>
             <label className={labelCls}>연락처</label>
-            <input className={inputCls} value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" />
+            <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" />
           </div>
         </div>
 
@@ -7612,6 +7705,8 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
       await updateDoc(doc(db, order.__col || "orders", order.id), {
         차량번호: "", 이름: "", 전화번호: "",
         기사취소요청: false, 기사취소요청일시: deleteField(),
+        // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
+        업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null,
       });
     } catch {}
     setShowRequestModal(false);
@@ -7700,6 +7795,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             >
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               {(order.attachCount > 0) ? order.attachCount : "-"}
+              {order.업로드잠금해제만료 && new Date(order.업로드잠금해제만료).getTime() > Date.now() && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              )}
+              {order.재업로드완료알림 === true && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              )}
             </button>
             {isUrgentOrder(order) && (
               <span className="text-[0.68em] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded shrink-0">긴급</span>
@@ -7951,6 +8052,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   >
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
     {(order.attachCount > 0) ? order.attachCount : "-"}
+    {order.업로드잠금해제만료 && new Date(order.업로드잠금해제만료).getTime() > Date.now() && (
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+    )}
+    {order.재업로드완료알림 === true && (
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+    )}
   </button>
 
   <div className="relative inline-block shrink-0">
@@ -8640,9 +8747,10 @@ function MobileOrderDetail({
   };
   const approveDriverSwap = async () => {
     try {
-      const patch = { 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 기사취소요청일시: deleteField() };
+      // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
+      const patch = { 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 기사취소요청일시: deleteField(), 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null };
       await updateDoc(doc(db, order.__col || "orders", order.id), patch);
-      setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false } : prev));
+      setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달" } : prev));
     } catch {}
     setShowRequestModal(false);
   };
@@ -9271,8 +9379,8 @@ const handleAssignClick = () => {
                     {editingDriverId === (d.id || i) ? (
                       <div className="px-4 py-3 bg-blue-50">
                         <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
-                        <input className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
-                        <input className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
                         <div className="flex gap-2">
                           <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                             onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
@@ -9318,9 +9426,9 @@ const handleAssignClick = () => {
               <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
             </div>
           )}
-          <input className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} />
-          <input className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
-          <input className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
+          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} />
+          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
+          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
         </div>
       )}
       {phone && (
@@ -11223,7 +11331,7 @@ const pickDrop = (c) => {
   input={
     <div className="space-y-1.5">
       <div className="flex flex-wrap gap-1.5 min-w-0">
-        <input
+        <input autoComplete="off"
           type="date"
           className="flex-1 min-w-[100px] border rounded px-2 py-1 text-sm"
           value={form.상차일}
@@ -11265,7 +11373,7 @@ const pickDrop = (c) => {
   input={
     <div className="space-y-1.5">
       <div className="flex flex-wrap gap-1.5 min-w-0">
-        <input
+        <input autoComplete="off"
           type="date"
           className="flex-1 min-w-[100px] border rounded px-2 py-1 text-sm"
           value={form.하차일}
@@ -11309,7 +11417,7 @@ const pickDrop = (c) => {
   <div className="text-[11px] text-gray-500 mb-1">거래처명</div>
   <div className="flex gap-2">
     <div className="relative flex-1 min-w-0">
-      <input
+      <input autoComplete="off"
         ref={clientNameInputRef}
         className={`w-full border rounded px-2 py-1.5 text-[13px] transition ${
           clientNameError ? "border-red-500 ring-2 ring-red-300 animate-pulse" : ""
@@ -11399,7 +11507,7 @@ const pickDrop = (c) => {
 
         {/* 상차지명 + 드롭다운 전용 */}
         <div className="relative">
-          <input
+          <input autoComplete="off"
             className="w-full border rounded px-2 py-1 text-sm"
             value={form.상차지명}
             onChange={(e) => {
@@ -11462,7 +11570,7 @@ const pickDrop = (c) => {
           )}
         </div>
 
-        <input
+        <input autoComplete="off"
           className="w-full border rounded px-2 py-1 text-xs"
           placeholder="상차지 주소"
           value={form.상차지주소}
@@ -11471,7 +11579,7 @@ const pickDrop = (c) => {
           }
         />
 
-        <input
+        <input autoComplete="off"
           className="w-full border rounded px-2 py-1 text-xs"
           placeholder="상차지 담당자"
           value={form.상차지담당자 || ""}
@@ -11480,7 +11588,7 @@ const pickDrop = (c) => {
           }
         />
 
-        <input
+        <input autoComplete="off"
           className="w-full border rounded px-2 py-1 text-xs"
           placeholder="상차지 담당자번호"
           value={form.상차지담당자번호 || ""}
@@ -11549,7 +11657,7 @@ const pickDrop = (c) => {
 
         {/* 하차지명 + 드롭다운 전용 */}
         <div className="relative">
-          <input
+          <input autoComplete="off"
             className="w-full border rounded px-2 py-1 text-sm"
             value={form.하차지명}
             onChange={(e) => {
@@ -11618,7 +11726,7 @@ const pickDrop = (c) => {
           )}
         </div>
 
-        <input
+        <input autoComplete="off"
           className="w-full border rounded px-2 py-1 text-xs"
           placeholder="하차지 주소"
           value={form.하차지주소}
@@ -11627,7 +11735,7 @@ const pickDrop = (c) => {
           }
         />
 
-        <input
+        <input autoComplete="off"
           className="w-full border rounded px-2 py-1 text-xs"
           placeholder="하차지 담당자"
           value={form.하차지담당자 || ""}
@@ -11636,7 +11744,7 @@ const pickDrop = (c) => {
           }
         />
 
-        <input
+        <input autoComplete="off"
           className="w-full border rounded px-2 py-1 text-xs"
           placeholder="하차지 담당자번호"
           value={form.하차지담당자번호 || ""}
@@ -11707,7 +11815,7 @@ const pickDrop = (c) => {
           label="톤수"
           input={
             <div className="flex items-stretch border border-gray-300 rounded-lg overflow-hidden focus-within:border-[#1B2B4B]">
-              <input
+              <input autoComplete="off"
                 className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
                 placeholder="예: 1"
                 inputMode={톤수타입 ? "decimal" : "text"}
@@ -11747,7 +11855,7 @@ const pickDrop = (c) => {
                 <button type="button" className={`px-1.5 py-0.5 text-[10px] font-bold rounded text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`} onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>
               </div>
               <div className="flex items-stretch border border-gray-300 rounded-lg overflow-hidden focus-within:border-[#1B2B4B]">
-                <input
+                <input autoComplete="off"
                   className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
                   placeholder="예: 3"
                   inputMode={화물타입 ? "decimal" : "text"}
@@ -11791,7 +11899,7 @@ const pickDrop = (c) => {
               </div>
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-4">
-                  <input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                  <input autoComplete="off" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                     placeholder="수량 (예: 2)" inputMode={mCargoAddType ? "decimal" : "text"}
                     value={mCargoAddQty}
                     onChange={e => setMCargoAddQty(mCargoAddType ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)}
@@ -11906,7 +12014,7 @@ const pickDrop = (c) => {
           input={
             <div className="flex gap-4 items-center text-sm">
               <label className="flex items-center gap-1">
-                <input
+                <input autoComplete="off"
                   type="radio"
                   name="mix"
                   value="혼적"
@@ -11916,7 +12024,7 @@ const pickDrop = (c) => {
                 혼적
               </label>
               <label className="flex items-center gap-1">
-                <input
+                <input autoComplete="off"
                   type="radio"
                   name="mix"
                   value="독차"
@@ -11979,7 +12087,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="청구운임"
           input={
-            <input
+            <input autoComplete="off"
               className="w-full border rounded px-2 py-1 text-right text-sm"
               inputMode="numeric"
               value={form.청구운임 ? Number(form.청구운임).toLocaleString() : ""}
@@ -11992,7 +12100,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="기사운임"
           input={
-            <input
+            <input autoComplete="off"
               className="w-full border rounded px-2 py-1 text-right text-sm"
               inputMode="numeric"
               value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
@@ -12005,7 +12113,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="수수료"
           input={
-            <input
+            <input autoComplete="off"
               className="w-full border rounded px-2 py-1 text-right text-sm bg-gray-50"
               value={form.수수료 || 0}
               readOnly
@@ -12059,7 +12167,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="차량번호"
           input={
-            <input
+            <input autoComplete="off"
               className="w-full border rounded px-2 py-1 text-sm"
               value={form.차량번호}
               onChange={(e) => {
@@ -12100,7 +12208,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="기사명"
           input={
-            <input
+            <input autoComplete="off"
               className="w-full border rounded px-2 py-1 text-sm"
               value={form.기사명 || ""}
               onChange={(e) => update("기사명", e.target.value)}
@@ -12113,7 +12221,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="연락처"
           input={
-            <input
+            <input autoComplete="off"
               className="w-full border rounded px-2 py-1 text-sm"
               value={form.전화번호 || ""}
               onChange={(e) => update("전화번호", e.target.value)}
@@ -12219,7 +12327,7 @@ const pickDrop = (c) => {
                   {Array.from({ length: multiCount }, (_, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
-                      <input
+                      <input autoComplete="off"
                         type="date"
                         value={orderDates[i] || form.상차일 || ""}
                         onChange={e => {
@@ -12234,7 +12342,7 @@ const pickDrop = (c) => {
                         }}
                         className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
                       />
-                      <input
+                      <input autoComplete="off"
                         type="date"
                         value={orderDropDates[i] || orderDates[i] || form.상차일 || ""}
                         onChange={e => {
@@ -12886,7 +12994,7 @@ const pickDrop = (c) => {
       <div className="space-y-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">거래처명</label>
-          <input
+          <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={newClientForm.거래처명}
             onChange={(e) => setNewClientForm((p) => ({ ...p, 거래처명: e.target.value }))}
@@ -12895,7 +13003,7 @@ const pickDrop = (c) => {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">주소</label>
-          <input
+          <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={newClientForm.주소}
             onChange={(e) => setNewClientForm((p) => ({ ...p, 주소: e.target.value }))}
@@ -12904,7 +13012,7 @@ const pickDrop = (c) => {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">담당자</label>
-          <input
+          <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={newClientForm.담당자}
             onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자: e.target.value }))}
@@ -12913,7 +13021,7 @@ const pickDrop = (c) => {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">담당자 번호</label>
-          <input
+          <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={newClientForm.담당자번호}
             onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: e.target.value }))}
@@ -13129,7 +13237,7 @@ const pickDrop = (c) => {
               return (
                 <div className="relative">
                   <div className="flex items-center gap-1">
-                    <input
+                    <input autoComplete="off"
                       className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
                       placeholder="업체명 / 경유지명"
                       value={stop.업체명 || ""}
@@ -13178,20 +13286,20 @@ const pickDrop = (c) => {
                 </div>
               );
             })()}
-            <input
+            <input autoComplete="off"
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
               placeholder="주소"
               value={stop.주소 || ""}
               onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 주소: e.target.value } : s))}
             />
             <div className="grid grid-cols-2 gap-2">
-              <input
+              <input autoComplete="off"
                 className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="담당자"
                 value={stop.담당자 || ""}
                 onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자: e.target.value } : s))}
               />
-              <input
+              <input autoComplete="off"
                 className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="연락처"
                 value={stop.담당자번호 || ""}
@@ -13200,7 +13308,7 @@ const pickDrop = (c) => {
             </div>
             {/* 화물내용 + 타입 */}
             <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">
-              <input
+              <input autoComplete="off"
                 className="flex-1 px-3 py-2 text-sm outline-none"
                 placeholder="화물내용 (예: 3)"
                 inputMode={stop.화물타입 ? "decimal" : "text"}
@@ -13224,7 +13332,7 @@ const pickDrop = (c) => {
             </div>
             {/* 톤수 */}
             <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">
-              <input
+              <input autoComplete="off"
                 className="flex-1 px-3 py-2 text-sm outline-none"
                 placeholder="톤수 (예: 1)"
                 inputMode={stop.톤수타입 ? "decimal" : "text"}
@@ -13285,7 +13393,7 @@ const pickDrop = (c) => {
               </select>
             </div>
             {/* 메모 */}
-            <input
+            <input autoComplete="off"
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
               placeholder="메모 (예: 백게이트 진입)"
               value={stop.메모 || ""}
@@ -13461,7 +13569,7 @@ const pickDrop = (c) => {
             <option value="차량번호">차량번호</option>
           </select>
 
-          <input
+          <input autoComplete="off"
             className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
             placeholder="검색어를 입력하세요"
             value={orderCopySearch}
@@ -13560,7 +13668,7 @@ const pickDrop = (c) => {
         <button onClick={() => setShowClientPickerModal(false)} className="text-gray-400 text-xl">✕</button>
       </div>
       <div className="px-4 py-2 border-b">
-        <input
+        <input autoComplete="off"
           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
           placeholder="업체명 또는 주소로 검색"
           value={clientPickerSearch}
@@ -14235,7 +14343,7 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder, onKeyDow
 
   return (
     <div className="relative">
-      <input
+      <input autoComplete="off"
         className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
         placeholder={placeholder}
         value={query}
@@ -15013,12 +15121,12 @@ function MobileFareInquiry({ cardVersionB = false }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="text-[11px] text-gray-400 mb-1">중량 (kg)</div>
-              <input type="number" className="w-full px-3 py-2 text-[13px] bg-gray-50 rounded-xl border border-gray-200 outline-none"
+              <input autoComplete="off" type="number" className="w-full px-3 py-2 text-[13px] bg-gray-50 rounded-xl border border-gray-200 outline-none"
                 placeholder="0" value={mixWeightKg} onChange={e=>setMixWeightKg(e.target.value)}/>
             </div>
             <div>
               <div className="text-[11px] text-gray-400 mb-1">CBM</div>
-              <input type="number" className="w-full px-3 py-2 text-[13px] bg-gray-50 rounded-xl border border-gray-200 outline-none"
+              <input autoComplete="off" type="number" className="w-full px-3 py-2 text-[13px] bg-gray-50 rounded-xl border border-gray-200 outline-none"
                 placeholder="0.0" value={mixCbm} onChange={e=>setMixCbm(e.target.value)}/>
             </div>
           </div>
@@ -15289,7 +15397,7 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder, onKeyDown
 
   return (
     <div className="relative">
-      <input
+      <input autoComplete="off"
         className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
         placeholder={placeholder}
         value={query}
@@ -15894,7 +16002,7 @@ const calcFareMobile = () => {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <div className="text-[10px] text-blue-400 mb-1">상차지주소</div>
-                <input
+                <input autoComplete="off"
                   className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
                   value={pickupAddr}
                   onChange={e => setPickupAddr(e.target.value)}
@@ -15904,7 +16012,7 @@ const calcFareMobile = () => {
               </div>
               <div>
                 <div className="text-[10px] text-blue-400 mb-1">하차지주소</div>
-                <input
+                <input autoComplete="off"
                   className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
                   value={dropAddr}
                   onChange={e => setDropAddr(e.target.value)}
@@ -15939,13 +16047,13 @@ const calcFareMobile = () => {
             </div>
             <div>
               <div className="text-[11px] font-bold text-gray-500 mb-1.5">톤수</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
                 placeholder="예: 1톤" value={ton} onChange={e=>setTon(e.target.value)}
                 onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
             </div>
             <div>
               <div className="text-[11px] font-bold text-gray-500 mb-1.5">화물</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
                 placeholder="예: 3파렛트" value={cargo} onChange={e=>setCargo(e.target.value)}
                 onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
             </div>
@@ -16340,11 +16448,11 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지역 *</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} />
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} />
             </div>
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지역 *</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} />
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} />
             </div>
           </div>
 
@@ -17497,7 +17605,7 @@ function ERPVehicleList({ drivers, cardVersionB, accent }) {
 
   return (
     <div>
-      <input
+      <input autoComplete="off"
         value={search}
         onChange={e => setSearch(e.target.value)}
         placeholder="기사명 · 차량번호 검색"
@@ -17535,7 +17643,7 @@ function ERPClientList({ clients, orders, cardVersionB, accent }) {
 
   return (
     <div>
-      <input
+      <input autoComplete="off"
         value={search}
         onChange={e => setSearch(e.target.value)}
         placeholder="거래처명 검색"

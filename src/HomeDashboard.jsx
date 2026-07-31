@@ -536,7 +536,7 @@ React.useEffect(() => {
       });
   }, [dispatchData]);
 
-  const TICKER_PAGE_SIZE = 4;
+  const TICKER_PAGE_SIZE = 6;
   const [tickerPage, setTickerPage] = useState(0);
   const totalTickerPages = Math.max(1, Math.ceil(allPendingOrders.length / TICKER_PAGE_SIZE));
 
@@ -689,9 +689,9 @@ React.useEffect(() => {
             <h3 className="text-[14px] font-bold text-white pb-2.5">{`미배차 현황 (${allPendingOrders.length}건)`}</h3>
           </div>
           {allPendingOrders.length === 0 ? (
-            <div className="flex items-center justify-center h-[220px] text-[13px] text-gray-400">미배차 오더가 없습니다</div>
+            <div className="flex items-center justify-center h-[300px] text-[13px] text-gray-400">미배차 오더가 없습니다</div>
           ) : (
-            <div className="relative" style={{ minHeight: 220 }}>
+            <div className="relative" style={{ minHeight: 300 }}>
               {/* column headers — 위 제목 영역과 같은 네이비, 바로 이어붙임 */}
               <div className="grid divide-x divide-white/20 text-[12px] font-bold text-white bg-[#1B2B4B] w-full"
                 style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}>

@@ -449,11 +449,16 @@ export default function UploadPage() {
       // 접속할 수 없도록 잠근다 — 재업로드가 필요하면 운송사가 새 링크를 발급하거나
       // 첨부파일 팝업의 "재업로드 허용"으로 임시로 다시 열어줘야 한다. 임시 해제로
       // 들어와서 재업로드를 마친 경우 그 해제창을 즉시 닫아 바로 재잠금되게 한다.
+      // 이미 한 번 잠겨있던 상태(=재업로드 허용창을 통해 다시 들어온 경우)였다면,
+      // 운송사 담당자가 첨부파일 팝업에서 "재업로드 완료"를 알 수 있게 알림 플래그도 남긴다.
+      const isReupload = order?.업로드잠금 === true;
       try {
         const parentRef = doc(db, targetCol, targetId);
-        await updateDoc(parentRef, { 업로드잠금: true, 업로드잠금해제만료: null });
+        const lockPatch = { 업로드잠금: true, 업로드잠금해제만료: null };
+        if (isReupload) lockPatch.재업로드완료알림 = true;
+        await updateDoc(parentRef, lockPatch);
         if (mirrorTarget) {
-          await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 업로드잠금: true, 업로드잠금해제만료: null }).catch(() => {});
+          await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), lockPatch).catch(() => {});
         }
       } catch (e) { console.error("업로드 잠금 처리 실패:", e); }
     }

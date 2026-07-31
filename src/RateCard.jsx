@@ -521,14 +521,14 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
       </td>
       <td class="td-price">
         <span class="view-cell">${s.avg.toLocaleString()}원</span>
-        <input class="edit-cell" type="text" style="display:none;width:120px;text-align:right;padding:4px;font-size:14px;font-weight:800;color:#2563EB;" value="${s.avg.toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'" onchange="this.parentElement.querySelector('.view-cell').textContent=this.value+'원'">
+        <input autoComplete="off" class="edit-cell" type="text" style="display:none;width:120px;text-align:right;padding:4px;font-size:14px;font-weight:800;color:#2563EB;" value="${s.avg.toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'" onchange="this.parentElement.querySelector('.view-cell').textContent=this.value+'원'">
       </td>
       <td>
         <span class="view-cell" style="color:#374151;font-size:13px;font-weight:600;">${roundDown10k(s.min).toLocaleString()} ~ ${roundDown10k(s.max).toLocaleString()}원</span>
         <span class="edit-cell" style="display:none;font-size:11px;">
-          <input type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.min).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
+          <input autoComplete="off" type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.min).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
           ~
-          <input type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.max).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
+          <input autoComplete="off" type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.max).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
           원
         </span>
       </td>
@@ -564,8 +564,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 
 
   const today=new Date().toLocaleDateString("ko-KR");
-  const inputCls="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 transition";
-  const labelCls="block text-[12px] font-semibold text-gray-500 mb-1";
+  const inputCls="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition";
+  const labelCls="block text-[12px] font-bold text-gray-900 mb-1";
 
   return (
     <div className="p-5 bg-gray-50 min-h-screen">
@@ -588,20 +588,20 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
         </div>
       </div>
 
-      {/* 검색 카드 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-5 overflow-hidden">
-        <div className="bg-[#1B2B4B] px-5 py-3"><h3 className="text-[13px] font-bold text-white">노선 조건 입력</h3></div>
-        <div className="p-5">
-          <div className="grid grid-cols-6 gap-3 mb-3">
-            {/* 상차지역 */}
+      {/* 좌우 분할: 왼쪽 검색/입력, 오른쪽 결과 (자사운임표와 동일한 레이아웃) */}
+      <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
+
+        {/* 왼쪽: 검색 패널 */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-4">노선 조건 입력</div>
+          <div className="space-y-4">
             <div>
               <label className={labelCls}>상차지역 <span className="text-red-400">*</span></label>
-              <input className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+              <input autoComplete="off" className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
             </div>
-            {/* 하차지역 */}
             <div>
               <label className={labelCls}>하차지역 <span className="text-red-400">*</span></label>
-              <input className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+              <input autoComplete="off" className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
             </div>
             <div>
               <label className={labelCls}>차량종류 <span className="text-red-400">*</span></label>
@@ -637,24 +637,18 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               <div className="flex gap-1 mt-1">
                 {[["청구운임","청구가"],["기사운임","기사운임"]].map(([val,label])=>(
                   <button key={val} type="button" onClick={()=>setFareField(val)}
-                    className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${fareField===val?"bg-blue-600 text-white border-blue-600":"bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+                    className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${fareField===val?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
                     {label}
                   </button>
                 ))}
               </div>
             </div>
-            <div className="flex items-end gap-2">
-              <button onClick={handleSearch} className="flex-1 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">단가표 생성</button>
-              <button onClick={()=>{setPickup("");setDrop("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);setPickupVias([]);setDropVias([]);setShowPickupViaInput(false);setShowDropViaInput(false);setPickupViaInput("");setDropViaInput("");}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
-            </div>
-          </div>
+
             {/* 🔥 거래처 제외 필터 */}
-          <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <label className={labelCls}>거래처 제외 (선택)</label>
-            <div className="flex items-start gap-3">
-              {/* 검색 입력 + 드롭다운 */}
-              <div className="relative w-64" ref={excludeRef}>
-                <input
+            <div>
+              <label className={labelCls}>거래처 제외 (선택)</label>
+              <div className="relative" ref={excludeRef}>
+                <input autoComplete="off"
                   className={inputCls}
                   placeholder="제외할 거래처 검색"
                   value={excludeQuery}
@@ -668,7 +662,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                       <button
                         key={name}
                         type="button"
-                        className="w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 transition flex items-center gap-2"
+                        className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-50 transition flex items-center gap-2"
                         onMouseDown={() => addExclude(name)}
                       >
                         <span className="w-4 h-4 rounded border border-gray-300 flex items-center justify-center text-[10px]">
@@ -680,38 +674,47 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                   </div>
                 )}
               </div>
-
-              {/* 선택된 제외 거래처 태그 */}
-              <div className="flex-1 flex flex-wrap gap-1.5 min-h-[36px] items-center">
-                {excludeList.length === 0 && (
-                  <span className="text-[12px] text-gray-400">제외할 거래처를 검색하여 선택하세요</span>
-                )}
-                {excludeList.map(name => (
-                  <span
-                    key={name}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 border border-red-200 text-[12px] font-semibold text-red-700"
-                  >
-                    {name}
-                    <button
-                      type="button"
-                      onClick={() => removeExclude(name)}
-                      className="text-red-400 hover:text-red-600 text-[14px] leading-none ml-0.5"
+              {excludeList.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {excludeList.map(name => (
+                    <span
+                      key={name}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 border border-red-200 text-[12px] font-semibold text-red-700"
                     >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-              </div>
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => removeExclude(name)}
+                        className="text-red-400 hover:text-red-600 text-[14px] leading-none ml-0.5"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-          <p className="text-[11px] text-gray-400">※ 냉장/냉동 통합 · 카고/윙바디 통합 · 다마스/라보 통합 &nbsp;|&nbsp; 단가는 1만원 단위 절사 · 데이터 수(건) 클릭 시 상세 오더 확인 가능
+
+          <div className="flex items-center gap-2 mt-5">
+            <button onClick={handleSearch} className="flex-1 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">단가표 생성</button>
+            <button onClick={()=>{setPickup("");setDrop("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">※ 냉장/냉동 통합 · 카고/윙바디 통합 · 다마스/라보 통합 · 단가는 1만원 단위 절사 · 데이터 수(건) 클릭 시 상세 오더 확인 가능
             {viewMode==="파렛수별" && " · 파렛수별 조회 시 화물내용에 파렛수가 입력된 데이터만 집계됩니다"}
           </p>
         </div>
-      </div>
 
-      {/* 결과 */}
-      {searched && result && (
+        {/* 오른쪽: 결과 패널 */}
+        <div className="min-w-0">
+          {!searched && (
+            <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-400">
+              <div className="text-[14px] font-semibold mb-1">왼쪽에서 노선 조건을 입력하고 단가표를 생성하세요</div>
+              <div className="text-[12px]">노선·차량 조건에 맞는 단가표를 자동으로 계산해 보여드립니다</div>
+            </div>
+          )}
+
+          {searched && result && (
         <div>
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-5 flex justify-between items-center">
@@ -824,13 +827,15 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             </div>
           </div>
         </div>
-      )}
+          )}
 
-      {searched && result && result.rows.length===0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm py-16 text-center text-gray-400 text-[13px]">
-          조건에 맞는 데이터가 없습니다. 상/하차 지역명을 더 넓게 입력하거나 혼적 여부를 "전체"로 변경해보세요.
+          {searched && result && result.rows.length===0 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm py-16 text-center text-gray-400 text-[13px]">
+              조건에 맞는 데이터가 없습니다. 상/하차 지역명을 더 넓게 입력하거나 혼적 여부를 "전체"로 변경해보세요.
+            </div>
+          )}
         </div>
-      )}
+      </div>
 {/* ===================== 직접 단가표 작성 모달 ===================== */}
       {manualModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setManualModal(false)}>
@@ -854,19 +859,19 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <div className="grid grid-cols-4 gap-3 mb-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">상차지역 <span className="text-red-400">*</span></label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">하차지역 <span className="text-red-400">*</span></label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 부산" value={manualInfo.drop} onChange={e => setManualInfo(p => ({ ...p, drop: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 부산" value={manualInfo.drop} onChange={e => setManualInfo(p => ({ ...p, drop: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량종류</label>
-                    <input list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
+                    <input autoComplete="off" list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -894,7 +899,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">특이사항 / 메모</label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="단가표 하단에 추가될 메모 (선택)" value={manualInfo.note} onChange={e => setManualInfo(p => ({ ...p, note: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="단가표 하단에 추가될 메모 (선택)" value={manualInfo.note} onChange={e => setManualInfo(p => ({ ...p, note: e.target.value }))} />
                   </div>
                 </div>
               </div>
@@ -923,7 +928,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                       {manualRows.map((row, i) => (
                         <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               list="manual-ton-options"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-center font-bold text-[#1B2B4B]"
                               placeholder="선택 또는 직접 입력"
@@ -932,7 +937,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right font-bold text-blue-700"
                               placeholder="예: 150,000"
                               value={row.avg}
@@ -940,7 +945,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right text-gray-600"
                               placeholder="예: 130,000"
                               value={row.min}
@@ -948,7 +953,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right text-gray-600"
                               placeholder="예: 180,000"
                               value={row.max}
@@ -1043,7 +1048,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                       <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${historySelected.has(i) ? "border-[#1B2B4B] bg-gray-50" : "border-gray-100 bg-white hover:bg-gray-50"}`}
                         onClick={() => setHistorySelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
                         onDoubleClick={() => setHistoryDetailModal(h)}>
-                        <input type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] shrink-0" />
+                        <input autoComplete="off" type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] shrink-0" />
                         <div className="mt-0.5 w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold flex-shrink-0 bg-gray-200 text-gray-600">
                           {h.source === "manual" ? "수" : "자"}
                         </div>
