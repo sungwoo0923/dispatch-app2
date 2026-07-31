@@ -460,6 +460,10 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     updatedAt: Date.now(),
     배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
     업체전달상태: "미전달",
+    // 전달사항은 패널을 열람하는 동안엔 항상 원본 그대로 보여주고(수정과 동일하게),
+    // 실제로 "복사 등록"으로 새 오더를 만드는 이 시점에만 고정 여부를 확인한다 —
+    // 고정을 켜둔 채로 복사한 경우에만 새 오더에도 전달사항이 함께 넘어간다.
+    전달사항: copyTarget.전달사항고정 === true ? (copyTarget.전달사항 || "") : "",
   };
   delete payload.화물수량;
   delete payload.화물타입;
@@ -16663,8 +16667,6 @@ onDoubleClick={(e) => {
     화물타입: cargoType,    // ✅ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
-    // 고정하지 않은 전달사항은 복사본에 넘어오면 안 된다.
-    전달사항: latest?.전달사항고정 === true ? (latest.전달사항 || "") : "",
   });
 
   setCopyPanelOpen(true);
@@ -18211,7 +18213,11 @@ const [movedRowId, setMovedRowId] = React.useState(null);
 React.useEffect(() => { setReady(true); }, []); // eslint-disable-line
  const [selected, setSelected] = React.useState([]);
 const selectedSet = React.useMemo(() => new Set(selected), [selected]);
-  
+  // 날짜 탭(어제/당일/내일)을 바꾸면 화면에 보이는 행 자체가 바뀌므로, 이전 날짜에서
+  // 선택해둔 체크박스가 그대로 남아있으면 안 보이는 행을 실수로 함께 삭제/처리하는
+  // 사고로 이어질 수 있다 — 탭이 바뀔 때마다 선택을 초기화한다.
+  React.useEffect(() => { setSelected([]); }, [dayMode]);
+
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
   // =======================
@@ -27471,6 +27477,9 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [tempSortKey, setTempSortKey] = React.useState("");
   const [tempSortDir, setTempSortDir] = React.useState("asc");
   const [selected, setSelected] = React.useState(new Set());
+  // 조회 날짜(기간)를 바꾸면 화면에 보이는 행이 바뀌므로, 이전 날짜에서 선택해둔
+  // 체크박스가 남아있으면 안 보이는 행을 실수로 삭제/처리하는 사고로 이어질 수 있다.
+  React.useEffect(() => { setSelected(new Set()); }, [appliedStartDate, appliedEndDate]);
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
@@ -30054,8 +30063,6 @@ return (
     화물타입: _cType,       // ✅ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
-    // 고정하지 않은 전달사항은 복사본에 넘어오면 안 된다.
-    전달사항: row?.전달사항고정 === true ? (row.전달사항 || "") : "",
   });
 
   setCopyPanelOpen(true);
@@ -34196,7 +34203,7 @@ setCopyPlaceOptions(list);
               if (!_cType) { _cNum = rawCargo; _cType = ""; }
               const rawTon = String(r.차량톤수 || "");
               const tonMatch = rawTon.match(/([\d.]+)(.*)/);
-              setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: _cNum, 화물타입: _cType, 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "", 전달사항: r?.전달사항고정 === true ? (r.전달사항 || "") : "" });
+              setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: _cNum, 화물타입: _cType, 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
               setSelected(new Set([getId(r)]));
               setCopyModalOpen(true);
               setContextMenuDS(null);
@@ -38545,6 +38552,9 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [endDate, setEndDate] = React.useState("");
   const [deleteMode, setDeleteMode] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState(new Set());
+  // 조회 날짜(기간)를 바꾸면 화면에 보이는 행이 바뀌므로, 이전 날짜에서 선택해둔
+  // 체크박스가 남아있으면 안 보이는 행을 실수로 삭제/처리하는 사고로 이어질 수 있다.
+  React.useEffect(() => { setSelectedIds(new Set()); }, [startDate, endDate]);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [filterType, setFilterType] = React.useState("거래처명");
   const [filterValue, setFilterValue] = React.useState("");
@@ -39022,8 +39032,6 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           화물타입: cargoMatch ? cargoMatch[2].trim() : "",
                           톤수값: tonMatch ? tonMatch[1] : "",
                           톤수타입: tonMatch ? tonMatch[2] : "",
-                          // 고정하지 않은 전달사항은 복사본에 넘어오면 안 된다.
-                          전달사항: latest?.전달사항고정 === true ? (latest.전달사항 || "") : "",
                         });
                         setCopyPanelOpen(true);
                       }}
