@@ -26,6 +26,7 @@ import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNAS
 import AttendanceBoard from "./AttendanceBoard";
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
+import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -4073,6 +4074,7 @@ useEffect(() => {
 
  const [menu, setMenu] = useState("HOME");
   const [activeTool, setActiveTool] = useState("none"); // "none" | "calculator" | "ai" | "messenger"
+  const notificationsEnabled = useNotificationsEnabled();
   const calcOpen = activeTool === "calculator";
   const setCalcOpen = (v) => setActiveTool(v ? "calculator" : "none");
   useEffect(() => {
@@ -5123,6 +5125,35 @@ return (
           </button>
           {calcOpen && <FloatingCalculator onClose={() => setCalcOpen(false)} />}
         </>
+
+      {/* 알림 설정 플로팅 버튼 — 모든 탭에 표시 */}
+      <button
+        onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+        title={notificationsEnabled ? "알림 켜짐 (클릭 시 끄기)" : "알림 꺼짐 (클릭 시 켜기)"}
+        style={{
+          position: "fixed", bottom: 152, right: 24,
+          zIndex: 99998, width: 56, height: 56,
+          borderRadius: "50%", background: notificationsEnabled ? "#1B2B4B" : "#9CA3AF",
+          color: "white", border: "none", cursor: "pointer",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "background 0.2s",
+        }}
+      >
+        {notificationsEnabled ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        ) : (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            <path d="M18.63 13A17.89 17.89 0 0 1 18 8a6 6 0 0 0-9.33-5" />
+            <path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </svg>
+        )}
+      </button>
 
 {/* ── 화주사 수정요청 승인/거절 팝업 (T161) ── */}
 {editReqPopup && (
@@ -7652,6 +7683,7 @@ function swapPickupDrop() {
 }, [drivers]);
 const [blackAlert, setBlackAlert] = React.useState(null);
 const [memoAlert, setMemoAlert] = React.useState(null);
+const notificationsEnabled = useNotificationsEnabled();
 const _menuRef = React.useRef(menu);
 React.useEffect(() => { _menuRef.current = menu; }, [menu]);
 React.useEffect(() => {
@@ -12873,7 +12905,7 @@ className={`
   </div>
   );
 })()}
-{blackAlert && (
+{notificationsEnabled && blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -12899,7 +12931,7 @@ className={`
     </div>
   </div>
 )}
-{memoAlert && (
+{notificationsEnabled && memoAlert && (
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -12970,7 +13002,7 @@ className={`
   </div>
 )}
 {/* 🚫 거래처 블랙/주의 알림 */}
-{clientAlert && (
+{notificationsEnabled && clientAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -17239,6 +17271,7 @@ React.useEffect(() => {
 }, []);
 
 const playNotifSound = React.useCallback(() => {
+  if (!isNotificationsEnabled()) return;
   try {
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -17279,6 +17312,7 @@ const playNotifSound = React.useCallback(() => {
 // 🚫 블랙 기사 알림 팝업 상태
 const [blackAlert, setBlackAlert] = React.useState(null);
 const [memoAlert, setMemoAlert] = React.useState(null);
+const notificationsEnabled = useNotificationsEnabled();
 const [alertMsg, setAlertMsg] = React.useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
 React.useEffect(() => {
@@ -21011,7 +21045,7 @@ const head = isDark
   />
 )}
 {/* 🚫 블랙 기사 알림 팝업 */}
-{blackAlert && (
+{notificationsEnabled && blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -21037,7 +21071,7 @@ const head = isDark
     </div>
   </div>
 )}
-{memoAlert && (
+{notificationsEnabled && memoAlert && (
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -21427,7 +21461,7 @@ const head = isDark
       <StickyHScrollbar targetRef={rtTableWrapRef} />
       </div>
 {/* ================= 임박 미배차 팝업 ================= */}
-{menu === "실시간배차현황" && urgentPopup.length > 0 && (
+{menu === "실시간배차현황" && notificationsEnabled && urgentPopup.length > 0 && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white w-[440px] rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
       <div className="bg-[#1B2B4B] px-5 py-4">
@@ -24404,7 +24438,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       
       {/* 첨부파일 업로드 알림 */}
       <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-[9999] pointer-events-none">
-        {uploadAlerts.map((a) => (
+        {notificationsEnabled && uploadAlerts.map((a) => (
           <div
             key={a.time}
             className="pointer-events-auto w-[300px] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden cursor-pointer"
@@ -26192,7 +26226,7 @@ setConfirmChange(null);
 `}</style>
 
 {/* 🔥 블랙/주의업체 팝업 */}
-      {warningPopup && (
+      {notificationsEnabled && warningPopup && (
         <div
           className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50"
           tabIndex={-1}
@@ -26791,6 +26825,7 @@ const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
 const [memoAlert, setMemoAlert] = React.useState(null);
+const notificationsEnabled = useNotificationsEnabled();
 React.useEffect(() => {
   const handler = (e) => setBlackAlert(e.detail);
   window.addEventListener("blackDriverDetected", handler);
@@ -29663,7 +29698,7 @@ return (
     db={db}
   />
 )}
-{blackAlert && (
+{notificationsEnabled && blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -29689,7 +29724,7 @@ return (
     </div>
   </div>
 )}
-{memoAlert && (
+{notificationsEnabled && memoAlert && (
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -34118,7 +34153,7 @@ setCopyPlaceOptions(list);
   </div>
 )}
     {/* 🔥 블랙/주의업체 팝업 */}
-      {warningPopup && (
+      {notificationsEnabled && warningPopup && (
         <div
           className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50"
           tabIndex={-1}
@@ -38584,6 +38619,7 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [unloadPlaceActiveIdx, setUnloadPlaceActiveIdx] = React.useState(0);
   const [warningPopup, setWarningPopup] = React.useState(null);
   const warningPopupRef = React.useRef(null);
+  const notificationsEnabled = useNotificationsEnabled();
   const [blackDriverAlert, setBlackDriverAlert] = React.useState(null);
   const [newDriverPopupOpen, setNewDriverPopupOpen] = React.useState(false);
   const [newDriverData, setNewDriverData] = React.useState({ 이름: "", 전화번호: "", 차량번호: "" });
@@ -39257,7 +39293,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       )}
 
       {/* 블랙 기사 경고 팝업 */}
-      {blackDriverAlert && (
+      {notificationsEnabled && blackDriverAlert && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]" tabIndex={-1} ref={(el) => el && setTimeout(() => el.focus(), 0)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}>
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
             <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
@@ -39281,7 +39317,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       )}
 
       {/* 블랙/주의 업체 경고 팝업 */}
-      {warningPopup && (
+      {notificationsEnabled && warningPopup && (
   <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>
