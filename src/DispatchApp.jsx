@@ -832,6 +832,14 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             if (o && !o.disabled) onChange?.({ target: { value: o.value } });
             setOpen(false);
           } else if (e.key === "Escape") setOpen(false);
+          else if (e.key === "Tab") {
+            // 드롭다운이 열린 채로 Tab을 누르면 선택 없이 바로 다음 칸으로 넘어가
+            // 버렸다 — 먼저 현재 활성 항목을 선택(Enter와 동일)한 뒤, Tab의 기본
+            // 동작(다음 입력창으로 포커스 이동)은 그대로 이어지게 둔다.
+            const o = options[activeIdx];
+            if (o && !o.disabled) onChange?.({ target: { value: o.value } });
+            setOpen(false);
+          }
         }}
         className={`${className}${needsRelative ? " relative" : ""} text-left overflow-hidden text-ellipsis whitespace-nowrap`}
       >
@@ -14739,9 +14747,53 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
   const [selected, setSelected] = React.useState(null);
   const [copyDone, setCopyDone] = React.useState(null);
   const [unlocking, setUnlocking] = React.useState(false);
-  const [unlockedUntil, setUnlockedUntil] = React.useState(null);
   const [zipLoading, setZipLoading] = React.useState(false);
   const [rotations, setRotations] = React.useState({});
+
+  // row prop은 팝업을 열 때의 스냅샷이라 이후 상태 변화(재업로드 허용/완료)가
+  // 반영되지 않는다 — 잠금 관련 필드만 문서를 직접 구독해 실시간으로 따라간다.
+  const [liveLock, setLiveLock] = React.useState(null);
+  React.useEffect(() => {
+    if (!row?._id) return;
+    const col = row.__col || "orders";
+    const unsub = onSnapshot(doc(db, col, row._id), (snap) => {
+      const d = snap.data();
+      if (d) setLiveLock({ 업로드잠금: d.업로드잠금, 업로드잠금해제만료: d.업로드잠금해제만료 ?? null, 재업로드완료알림: d.재업로드완료알림 === true });
+    });
+    return () => unsub();
+  }, [row?._id]);
+  const lockState = liveLock || row;
+
+  // 재업로드 허용 남은시간 실시간 카운트다운 — 위 구독으로 실시간 반영되는
+  // 업로드잠금해제만료가 미래 시각인 동안만 1초마다 다시 그린다.
+  const [nowTick, setNowTick] = React.useState(Date.now());
+  const unlockExpiryTs = lockState?.업로드잠금해제만료 ? new Date(lockState.업로드잠금해제만료).getTime() : 0;
+  const unlockRemainMs = unlockExpiryTs - nowTick;
+  const isUnlockActive = unlockExpiryTs > 0 && unlockRemainMs > 0;
+  React.useEffect(() => {
+    if (!isUnlockActive) return;
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isUnlockActive, unlockExpiryTs]);
+  const fmtRemain = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+
+  // 재업로드 완료 알림 확인(읽음) 처리 — 열려있는 동안은 배너를 계속 보여주고,
+  // 팝업을 닫을 때(언마운트) 비로소 확인 처리한다.
+  const lockStateRef = React.useRef(lockState);
+  lockStateRef.current = lockState;
+  React.useEffect(() => {
+    return () => {
+      const ls = lockStateRef.current;
+      if (!ls?.재업로드완료알림) return;
+      const col = row.__col || "orders";
+      updateDoc(doc(db, col, row._id), { 재업로드완료알림: false }).catch(() => {});
+      const mirror = getMirrorTarget();
+      if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { 재업로드완료알림: false }).catch(() => {});
+    };
+  }, [row?._id]);
 
   React.useEffect(() => {
     if (!row?._id) return;
@@ -14902,7 +14954,6 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
       if (mirror) {
         await updateDoc(doc(db, mirror.col, mirror.id), { 업로드잠금해제만료: until }).catch(() => {});
       }
-      setUnlockedUntil(until);
     } catch (e) {
       alert("재업로드 허용 실패: " + e.message);
     } finally {
@@ -14986,10 +15037,16 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {!isViewer && row.업로드잠금 && (
-              unlockedUntil ? (
-                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0">
-                  ✓ 30분간 재업로드 허용됨
+            {!isViewer && lockState?.재업로드완료알림 === true && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 text-white text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0 animate-pulse">
+                ✓ 기사가 재업로드를 완료했습니다
+              </span>
+            )}
+            {!isViewer && lockState?.업로드잠금 && lockState?.재업로드완료알림 !== true && (
+              isUnlockActive ? (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  재업로드 대기중 · {fmtRemain(unlockRemainMs)}
                 </span>
               ) : (
                 <button
@@ -16835,7 +16892,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
                     <button
                       onClick={() => { setAttachViewer(r); if (!r.attachViewed) { setRows(prev => prev.map(x => x._id === r._id ? { ...x, attachViewed: true } : x)); } updateDoc(doc(db, r.__col || "orders", r._id), { attachViewed: true }).catch(() => {}); }}
-                      className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                      className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto ${r.업로드잠금해제만료 && new Date(r.업로드잠금해제만료).getTime() > Date.now() ? "ring-2 ring-amber-400 animate-pulse" : ""}`}
                       title="첨부파일 보기"
                     >
                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -16848,6 +16905,9 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
                           {r.attachCount}
                         </span>
+                      )}
+                      {r.재업로드완료알림 === true && (
+                        <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white animate-pulse" />
                       )}
                     </button>
                     {r.차량번호 && (
@@ -30135,7 +30195,7 @@ return (
                   <td className="border text-center whitespace-nowrap">
                     <button
                       onClick={() => { setAttachViewer(row); if (!row.attachViewed) { const rid = getId(row); setLocalOverrides(prev => ({ ...prev, [rid]: { ...(prev[rid] || {}), attachViewed: true } })); } updateDoc(doc(db, row.__col || "orders", row._id), { attachViewed: true }).catch(() => {}); }}
-                      className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                      className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto ${row.업로드잠금해제만료 && new Date(row.업로드잠금해제만료).getTime() > Date.now() ? "ring-2 ring-amber-400 animate-pulse" : ""}`}
                       title="첨부파일 보기"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -30148,6 +30208,9 @@ return (
                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
                           {row.attachCount}
                         </span>
+                      )}
+                      {row.재업로드완료알림 === true && (
+                        <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white animate-pulse" />
                       )}
                     </button>
                     {row.차량번호 && (

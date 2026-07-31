@@ -7039,16 +7039,77 @@ function CardAttachViewer({ order, onClose }) {
     try { return JSON.parse(localStorage.getItem(attachStorageKey) || "{}"); } catch { return {}; }
   });
   const [confirmItem, setConfirmItem] = useState(null);
+  const [unlocking, setUnlocking] = useState(false);
+
+  const col = order.__col || order._col || "dispatch";
+  const docId = order._id || order.id;
 
   useEffect(() => {
-    const col = order.__col || order._col || "dispatch";
-    const docId = order._id || order.id;
     setLoading(true);
     const unsub = onSnapshot(collection(db, col, docId, "attachments"), snap => {
       setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
     return () => unsub();
+  }, [order]);
+
+  // PC 첨부파일 팝업과 동일하게, 잠금 관련 필드는 문서를 직접 구독해 실시간으로
+  // 반영한다(30분 재업로드 카운트다운 / 기사 재업로드 완료 알림).
+  const [liveLock, setLiveLock] = useState(null);
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, col, docId), snap => {
+      const d = snap.data();
+      if (d) setLiveLock({ 업로드잠금: d.업로드잠금, 업로드잠금해제만료: d.업로드잠금해제만료 ?? null, 재업로드완료알림: d.재업로드완료알림 === true });
+    });
+    return () => unsub();
+  }, [order]);
+
+  const getMirrorTarget = () => {
+    if (order._transmittedOrderId) return { col: "orders", id: order._transmittedOrderId };
+    if (order.originCol && order.originId) return { col: order.originCol, id: order.originId };
+    return null;
+  };
+
+  const [nowTick, setNowTick] = useState(Date.now());
+  const unlockExpiryTs = liveLock?.업로드잠금해제만료 ? new Date(liveLock.업로드잠금해제만료).getTime() : 0;
+  const unlockRemainMs = unlockExpiryTs - nowTick;
+  const isUnlockActive = unlockExpiryTs > 0 && unlockRemainMs > 0;
+  useEffect(() => {
+    if (!isUnlockActive) return;
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isUnlockActive, unlockExpiryTs]);
+  const fmtRemain = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+
+  const handleAllowReupload = async () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    try {
+      const until = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      await updateDoc(doc(db, col, docId), { 업로드잠금해제만료: until });
+      const mirror = getMirrorTarget();
+      if (mirror) await updateDoc(doc(db, mirror.col, mirror.id), { 업로드잠금해제만료: until }).catch(() => {});
+    } catch (e) {
+      alert("재업로드 허용 실패: " + e.message);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  // 재업로드 완료 알림은 팝업이 열려있는 동안 계속 보여주고, 닫을 때 확인 처리한다.
+  const liveLockRef = React.useRef(liveLock);
+  liveLockRef.current = liveLock;
+  useEffect(() => {
+    return () => {
+      const ls = liveLockRef.current;
+      if (!ls?.재업로드완료알림) return;
+      updateDoc(doc(db, col, docId), { 재업로드완료알림: false }).catch(() => {});
+      const mirror = getMirrorTarget();
+      if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { 재업로드완료알림: false }).catch(() => {});
+    };
   }, [order]);
 
   const doSave = (item) => {
@@ -7098,6 +7159,29 @@ function CardAttachViewer({ order, onClose }) {
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-bold">×</button>
         </div>
+        {liveLock?.재업로드완료알림 === true && (
+          <div className="mx-4 mt-3 flex items-center gap-1.5 px-3 py-2 bg-emerald-500 text-white text-[12px] font-bold rounded-lg shrink-0 animate-pulse">
+            ✓ 기사가 재업로드를 완료했습니다
+          </div>
+        )}
+        {liveLock?.업로드잠금 && liveLock?.재업로드완료알림 !== true && (
+          <div className="mx-4 mt-3 shrink-0">
+            {isUnlockActive ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 text-[12px] font-bold rounded-lg w-fit">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                재업로드 대기중 · {fmtRemain(unlockRemainMs)}
+              </div>
+            ) : (
+              <button
+                onClick={handleAllowReupload}
+                disabled={unlocking}
+                className="px-3 py-2 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg disabled:opacity-50"
+              >
+                {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-4">
           {loading && (
             <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
@@ -7711,6 +7795,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             >
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               {(order.attachCount > 0) ? order.attachCount : "-"}
+              {order.업로드잠금해제만료 && new Date(order.업로드잠금해제만료).getTime() > Date.now() && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              )}
+              {order.재업로드완료알림 === true && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              )}
             </button>
             {isUrgentOrder(order) && (
               <span className="text-[0.68em] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded shrink-0">긴급</span>
@@ -7962,6 +8052,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   >
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
     {(order.attachCount > 0) ? order.attachCount : "-"}
+    {order.업로드잠금해제만료 && new Date(order.업로드잠금해제만료).getTime() > Date.now() && (
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+    )}
+    {order.재업로드완료알림 === true && (
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+    )}
   </button>
 
   <div className="relative inline-block shrink-0">
