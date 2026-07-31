@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 
 import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
+import { CustomSelect } from "./CustomSelect";
 
 const todayStr = () => {
   const d = new Date();
@@ -828,39 +829,39 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           </div>
                         </div>
                       ) : (
-                        <div className="p-6">
-                          <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="p-5">
+                          <div className="grid grid-cols-2 gap-3 mb-4">
                             <div>
-                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">회사명</label>
+                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">회사명</label>
                               <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
                             </div>
                             <div>
-                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>
+                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">이름</label>
                               <input value={editName} onChange={e => setEditName(e.target.value)}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
                             </div>
                             <div>
-                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">직책</label>
-                              <select value={editPosition} onChange={e => setEditPosition(e.target.value)}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">직책</label>
+                              <CustomSelect value={editPosition} onChange={e => setEditPosition(e.target.value)}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
                                 <option value="">선택 안 함</option>
                                 {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
                                   <option value={editPosition}>{editPosition}</option>
                                 )}
                                 {POSITION_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                              </select>
+                              </CustomSelect>
                             </div>
                             <div>
-                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">부서</label>
-                              <select value={editTeam} onChange={e => setEditTeam(e.target.value)}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">부서</label>
+                              <CustomSelect value={editTeam} onChange={e => setEditTeam(e.target.value)}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
                                 <option value="">미배정</option>
                                 {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                              </select>
+                              </CustomSelect>
                             </div>
                             <div>
-                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">핸드폰번호</label>
+                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">핸드폰번호</label>
                               <input value={editPhone}
                                 onChange={e => {
                                   let v = e.target.value.replace(/[^0-9]/g, "");
@@ -868,23 +869,23 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                                   else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1-$2");
                                   setEditPhone(v);
                                 }}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
                             </div>
                             <div>
-                              <label className="block text-[12px] font-semibold text-gray-500 mb-1">권한</label>
-                              <select value={editRole} onChange={e => setEditRole(e.target.value)}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">권한</label>
+                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
                                 {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                              </select>
+                              </CustomSelect>
                             </div>
                           </div>
-                          <div className="flex gap-3">
+                          <div className="flex gap-2">
                             <button onClick={() => setEditMode(false)}
-                              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">
+                              className="flex-1 py-2 rounded-lg border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">
                               취소
                             </button>
                             <button onClick={saveEdit}
-                              className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
+                              className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
                               저장
                             </button>
                           </div>
