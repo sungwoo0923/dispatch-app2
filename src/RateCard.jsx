@@ -521,14 +521,14 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
       </td>
       <td class="td-price">
         <span class="view-cell">${s.avg.toLocaleString()}원</span>
-        <input class="edit-cell" type="text" style="display:none;width:120px;text-align:right;padding:4px;font-size:14px;font-weight:800;color:#2563EB;" value="${s.avg.toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'" onchange="this.parentElement.querySelector('.view-cell').textContent=this.value+'원'">
+        <input autoComplete="off" class="edit-cell" type="text" style="display:none;width:120px;text-align:right;padding:4px;font-size:14px;font-weight:800;color:#2563EB;" value="${s.avg.toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'" onchange="this.parentElement.querySelector('.view-cell').textContent=this.value+'원'">
       </td>
       <td>
         <span class="view-cell" style="color:#374151;font-size:13px;font-weight:600;">${roundDown10k(s.min).toLocaleString()} ~ ${roundDown10k(s.max).toLocaleString()}원</span>
         <span class="edit-cell" style="display:none;font-size:11px;">
-          <input type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.min).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
+          <input autoComplete="off" type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.min).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
           ~
-          <input type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.max).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
+          <input autoComplete="off" type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.max).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
           원
         </span>
       </td>
@@ -597,11 +597,11 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           <div className="space-y-4">
             <div>
               <label className={labelCls}>상차지역 <span className="text-red-400">*</span></label>
-              <input className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+              <input autoComplete="off" className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
             </div>
             <div>
               <label className={labelCls}>하차지역 <span className="text-red-400">*</span></label>
-              <input className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+              <input autoComplete="off" className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
             </div>
             <div>
               <label className={labelCls}>차량종류 <span className="text-red-400">*</span></label>
@@ -648,7 +648,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             <div>
               <label className={labelCls}>거래처 제외 (선택)</label>
               <div className="relative" ref={excludeRef}>
-                <input
+                <input autoComplete="off"
                   className={inputCls}
                   placeholder="제외할 거래처 검색"
                   value={excludeQuery}
@@ -859,19 +859,19 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <div className="grid grid-cols-4 gap-3 mb-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">상차지역 <span className="text-red-400">*</span></label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">하차지역 <span className="text-red-400">*</span></label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 부산" value={manualInfo.drop} onChange={e => setManualInfo(p => ({ ...p, drop: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 부산" value={manualInfo.drop} onChange={e => setManualInfo(p => ({ ...p, drop: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량종류</label>
-                    <input list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
+                    <input autoComplete="off" list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -899,7 +899,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">특이사항 / 메모</label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="단가표 하단에 추가될 메모 (선택)" value={manualInfo.note} onChange={e => setManualInfo(p => ({ ...p, note: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="단가표 하단에 추가될 메모 (선택)" value={manualInfo.note} onChange={e => setManualInfo(p => ({ ...p, note: e.target.value }))} />
                   </div>
                 </div>
               </div>
@@ -928,7 +928,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                       {manualRows.map((row, i) => (
                         <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               list="manual-ton-options"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-center font-bold text-[#1B2B4B]"
                               placeholder="선택 또는 직접 입력"
@@ -937,7 +937,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right font-bold text-blue-700"
                               placeholder="예: 150,000"
                               value={row.avg}
@@ -945,7 +945,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right text-gray-600"
                               placeholder="예: 130,000"
                               value={row.min}
@@ -953,7 +953,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <input
+                            <input autoComplete="off"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right text-gray-600"
                               placeholder="예: 180,000"
                               value={row.max}
@@ -1048,7 +1048,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                       <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${historySelected.has(i) ? "border-[#1B2B4B] bg-gray-50" : "border-gray-100 bg-white hover:bg-gray-50"}`}
                         onClick={() => setHistorySelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
                         onDoubleClick={() => setHistoryDetailModal(h)}>
-                        <input type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] shrink-0" />
+                        <input autoComplete="off" type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] shrink-0" />
                         <div className="mt-0.5 w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold flex-shrink-0 bg-gray-200 text-gray-600">
                           {h.source === "manual" ? "수" : "자"}
                         </div>

@@ -645,9 +645,9 @@ function ContactListEditor({ contacts, onChange }) {
         <div key={i} className="px-3 py-2">
           {editingIdx === i ? (
             <div className="flex items-center gap-2">
-              <input autoFocus className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
+              <input autoComplete="off" autoFocus className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
                 placeholder="이름" value={draft.name} onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} />
-              <input className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
+              <input autoComplete="off" className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
                 placeholder="전화번호" value={draft.phone} onChange={e => setDraft(p => ({ ...p, phone: formatPhone(e.target.value) }))} />
               <button onClick={saveEdit} className="shrink-0 px-2 py-1 rounded bg-[#1B2B4B] text-white text-[11px] font-bold">저장</button>
               <button onClick={() => setEditingIdx(null)} className="shrink-0 px-2 py-1 rounded bg-gray-100 text-gray-600 text-[11px] font-semibold">취소</button>
@@ -3383,16 +3383,16 @@ function FloatingCalculator({ onClose }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 파렛 수</div>
-                  <input type="number" min="0" placeholder="예: 27" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palTotal} onChange={e => setPalTotal(e.target.value)} />
+                  <input autoComplete="off" type="number" min="0" placeholder="예: 27" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palTotal} onChange={e => setPalTotal(e.target.value)} />
                 </div>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 톤수</div>
-                  <input type="number" min="0" step="0.01" placeholder="예: 12" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={tonTotal} onChange={e => setTonTotal(e.target.value)} />
+                  <input autoComplete="off" type="number" min="0" step="0.01" placeholder="예: 12" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={tonTotal} onChange={e => setTonTotal(e.target.value)} />
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>계산할 파렛 수</div>
-                <input type="number" min="0" placeholder="예: 16" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palPart} onChange={e => setPalPart(e.target.value)} />
+                <input autoComplete="off" type="number" min="0" placeholder="예: 16" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palPart} onChange={e => setPalPart(e.target.value)} />
               </div>
               <div style={{ background: tonResult !== null ? "#f0f9ff" : "#f8fafc", border: `1px solid ${tonResult !== null ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
                 {tonResult !== null ? (
@@ -3430,19 +3430,19 @@ function FloatingCalculator({ onClose }) {
                   파렛트 크기(mm)·수량을 입력 후 조회. 차량 클릭 시 배치도 확인.
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "end" }}>
-                  <div><label style={lblSt}>가로 (mm)</label><input type="number" min="0" placeholder="1100" style={inpSt} value={palW} onChange={e => setPalW(e.target.value)} /></div>
+                  <div><label style={lblSt}>가로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palW} onChange={e => setPalW(e.target.value)} /></div>
                   <div style={{ paddingBottom: 8, color: "#94a3b8", fontSize: 14, fontWeight: 700, textAlign: "center" }}>×</div>
-                  <div><label style={lblSt}>세로 (mm)</label><input type="number" min="0" placeholder="1100" style={inpSt} value={palD} onChange={e => setPalD(e.target.value)} /></div>
+                  <div><label style={lblSt}>세로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palD} onChange={e => setPalD(e.target.value)} /></div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                  <div><label style={lblSt}>수량 (개)</label><input type="number" min="0" placeholder="16" style={inpSt} value={palQty} onChange={e => setPalQty(e.target.value)} /></div>
+                  <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="16" style={inpSt} value={palQty} onChange={e => setPalQty(e.target.value)} /></div>
                   <div>
                     <label style={lblSt}>단수</label>
                     <select style={inpSt} value={palLayers} onChange={e => setPalLayers(e.target.value)}>
                       {[1,2,3].map(n => <option key={n} value={n}>{n}단</option>)}
                     </select>
                   </div>
-                  <div><label style={lblSt}>kg/파렛</label><input type="number" min="0" placeholder="선택" style={inpSt} value={palKg} onChange={e => setPalKg(e.target.value)} /></div>
+                  <div><label style={lblSt}>kg/파렛</label><input autoComplete="off" type="number" min="0" placeholder="선택" style={inpSt} value={palKg} onChange={e => setPalKg(e.target.value)} /></div>
                 </div>
                 <button onClick={handlePalletSearch} style={{ width: "100%", padding: "9px", background: "#1B2B4B", border: "none", borderRadius: 8, fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
 
@@ -3497,14 +3497,14 @@ function FloatingCalculator({ onClose }) {
                 <div>
                   <label style={lblSt}>박스 크기 (cm) — 가로 × 세로 × 높이</label>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", gap: 3, alignItems: "center" }}>
-                    <input type="number" min="0" placeholder="가로" style={inpSt} value={boxW} onChange={e => setBoxW(e.target.value)} />
+                    <input autoComplete="off" type="number" min="0" placeholder="가로" style={inpSt} value={boxW} onChange={e => setBoxW(e.target.value)} />
                     <span style={{ color: "#94a3b8", fontSize: 11, textAlign: "center" }}>×</span>
-                    <input type="number" min="0" placeholder="세로" style={inpSt} value={boxD} onChange={e => setBoxD(e.target.value)} />
+                    <input autoComplete="off" type="number" min="0" placeholder="세로" style={inpSt} value={boxD} onChange={e => setBoxD(e.target.value)} />
                     <span style={{ color: "#94a3b8", fontSize: 11, textAlign: "center" }}>×</span>
-                    <input type="number" min="0" placeholder="높이" style={inpSt} value={boxH} onChange={e => setBoxH(e.target.value)} />
+                    <input autoComplete="off" type="number" min="0" placeholder="높이" style={inpSt} value={boxH} onChange={e => setBoxH(e.target.value)} />
                   </div>
                 </div>
-                <div><label style={lblSt}>수량 (개)</label><input type="number" min="0" placeholder="예: 200" style={inpSt} value={boxQty} onChange={e => setBoxQty(e.target.value)} /></div>
+                <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="예: 200" style={inpSt} value={boxQty} onChange={e => setBoxQty(e.target.value)} /></div>
                 <button onClick={handleBoxSearch} style={{ width: "100%", padding: "9px", background: "#7c3aed", border: "none", borderRadius: 8, fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
 
                 {boxResults && (
@@ -4403,7 +4403,7 @@ return (
                       onClick={() => updateFontScale(Math.max(0.8, fontScale - 0.05))}
                       className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 font-bold text-base hover:bg-gray-200 flex items-center justify-center"
                     >−</button>
-                    <input
+                    <input autoComplete="off"
                       type="range" min="0.8" max="1.6" step="0.05"
                       value={fontScale}
                       onChange={e => updateFontScale(parseFloat(e.target.value))}
@@ -4774,7 +4774,7 @@ return (
                       setRevenuePassInput("");
                     }
                   }}>
-                    <input
+                    <input autoComplete="off"
                       type="password"
                       autoFocus
                       className="w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-center tracking-widest mb-3 focus:outline-none focus:border-[#1B2B4B] transition"
@@ -5005,7 +5005,7 @@ return (
               <div className="flex gap-2">
                 <label className={`flex-1 text-center py-2 rounded-lg border text-[13px] cursor-pointer font-semibold transition ${cardImageUploading ? "bg-gray-100 text-gray-400 border-gray-200" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
                   {cardImageUploading ? "업로드 중..." : "이미지 선택"}
-                  <input type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
+                  <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
                     onChange={(e) => {
                       const file = e.target.files[0];
                       if (!file || !user?.uid) return;
@@ -5204,7 +5204,7 @@ return (
         })()}
         <div className="text-[12px] font-semibold text-gray-500 mb-2">새 항목 추가</div>
         <div className="flex gap-2 mb-2">
-          <input
+          <input autoComplete="off"
             className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
             placeholder="수량 (예: 2)"
             value={_cargoAddQty}
@@ -10056,7 +10056,7 @@ shadow-sm
     <label className={labelCls}>거래처 {reqStar}</label>
     <div className="flex gap-2">
       <div className="relative flex-1" ref={comboRef}>
-        <input
+        <input autoComplete="off"
           className={inputCls}
           placeholder="거래처 검색/입력"
           value={clientQuery || form.거래처명}
@@ -10202,7 +10202,7 @@ const similar = placeList.filter(p => {
   </button>
 </label>
 
-    <input
+    <input autoComplete="off"
       id="pickup-place-input"
       className={inputCls}
       placeholder="상차지 검색"
@@ -10296,7 +10296,7 @@ className={`
 </button>
   </div>
 
-  <input
+  <input autoComplete="off"
     className={inputCls}
     value={form.상차지주소}
     onChange={(e) => handlePickupAddrManual(e.target.value)}
@@ -10312,7 +10312,7 @@ className={`
 
   {/* 담당자 입력 */}
   <div className="relative">
-        <input
+        <input autoComplete="off"
       id="pickup-manager"
       className={inputCls}
       value={form.상차지담당자}
@@ -10325,7 +10325,7 @@ className={`
 {/* 상차지 연락처 */}
 <div>
   <label className={labelCls}>상차지 연락처</label>
-  <input
+  <input autoComplete="off"
     id="pickup-phone"
     className={inputCls}
     value={form.상차지담당자번호}
@@ -10350,7 +10350,7 @@ className={`
     </button>
   </label>
 
-  <input
+  <input autoComplete="off"
     className={inputCls}
        id="drop-place-input"
     placeholder="하차지 검색"
@@ -10452,7 +10452,7 @@ className={`
 </button>
   </div>
 
-  <input
+  <input autoComplete="off"
     className={inputCls}
     value={form.하차지주소}
     onChange={(e) => handleDropAddrManual(e.target.value)}
@@ -10466,7 +10466,7 @@ className={`
     하차지 담당자
   </label>
 
-    <input
+    <input autoComplete="off"
     id="drop-manager"
     className={inputCls}
     value={form.하차지담당자}
@@ -10481,7 +10481,7 @@ className={`
 
 <div>
   <label className={labelCls}>하차지 연락처</label>
-  <input
+  <input autoComplete="off"
     id="drop-phone"
     className={inputCls}
     value={form.하차지담당자번호}
@@ -10510,7 +10510,7 @@ className={`
   <div className="relative">
 
     {/* 입력 */}
-    <input
+    <input autoComplete="off"
       ref={cargoInputRef}
       className={`${inputCls} pr-[62px] text-base${requiredErrors.has("화물내용") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`}
       placeholder={form.화물타입 ? "숫자만 입력" : "예: 2 또는 변압기"}
@@ -10600,7 +10600,7 @@ className={`
   </button>
 </div>
 
-  <input
+  <input autoComplete="off"
     className={inputCls}
     placeholder="차량종류 입력 또는 선택 (예: 냉동윙)"
     value={vehicleQuery || form.차량종류}
@@ -10681,7 +10681,7 @@ className={`
   <div className="relative">
 
     {/* 입력 */}
-    <input
+    <input autoComplete="off"
       ref={tonInputRef}
       className={`${inputCls} pr-[52px] text-base${requiredErrors.has("차량톤수") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`}
       placeholder={form.톤수타입 ? "예: 1" : "예: 5톤 또는 소형"}
@@ -10760,7 +10760,7 @@ className={`
         )}
       </label>
 
-      <input
+      <input autoComplete="off"
         className={inputCls}
         value={form.청구운임 ? Number(form.청구운임).toLocaleString() : ""}
         onChange={(e) => {
@@ -10792,7 +10792,7 @@ className={`
         )}
       </label>
 
-      <input
+      <input autoComplete="off"
         className={inputCls}
         value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
         onChange={(e) => {
@@ -10805,7 +10805,7 @@ className={`
     {/* 수수료 */}
     <div>
       <label className={labelCls}>수수료</label>
-      <input
+      <input autoComplete="off"
         className={`${inputCls} bg-gray-100`}
         value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
         readOnly
@@ -10937,7 +10937,7 @@ className={`
 
         {/* 경유지명 (자동완성) */}
         <div className="relative">
-          <input
+          <input autoComplete="off"
             className={inputCls}
             placeholder="경유지명"
             value={stop.업체명}
@@ -11087,7 +11087,7 @@ className={`
         </div>
 
         {/* 주소 */}
-        <input
+        <input autoComplete="off"
           className={inputCls}
           placeholder="주소"
           value={stop.주소}
@@ -11104,7 +11104,7 @@ className={`
 
         {/* 담당자 / 연락처 (한 줄) */}
         <div className="grid grid-cols-2 gap-2">
-          <input
+          <input autoComplete="off"
             className={inputCls}
             placeholder="담당자"
             value={stop.담당자}
@@ -11118,7 +11118,7 @@ className={`
               });
             }}
           />
-          <input
+          <input autoComplete="off"
             className={inputCls}
             placeholder="연락처"
             value={stop.담당자번호}
@@ -11158,7 +11158,7 @@ className={`
 
           {/* 화물내용 + 타입 드롭다운 */}
           <div className="relative">
-            <input
+            <input autoComplete="off"
               className={`${inputCls} pr-[62px]`}
               placeholder={stop.화물타입 ? "숫자만 입력" : "화물내용 (예: 2)"}
               value={stop.화물타입
@@ -11205,7 +11205,7 @@ className={`
 
           {/* 톤수 + 타입 드롭다운 */}
           <div className="relative">
-            <input
+            <input autoComplete="off"
               className={`${inputCls} pr-[52px]`}
               placeholder={stop.톤수타입 ? "톤수 (예: 1)" : "예: 5톤 또는 소형"}
               value={stop.톤수타입 ? (stop.톤수값 || "") : (stop.차량톤수 || "")}
@@ -11510,7 +11510,7 @@ className={`
 <div className="relative">
   <label className={labelCls}>차량번호</label>
 
-  <input
+  <input autoComplete="off"
     className={inputCls}
     value={form.차량번호}
     onChange={(e) => handleCarNoChange(e.target.value)}
@@ -11618,7 +11618,7 @@ className={`
 {/* ===== 기사명 (수정 가능) ===== */}
 <div>
   <label className={labelCls}>기사명</label>
-  <input
+  <input autoComplete="off"
     className={inputCls}
     value={form.이름}
     placeholder="기사명 입력"
@@ -11630,7 +11630,7 @@ className={`
 {/* ===== 전화번호 (수정 가능) ===== */}
 <div>
   <label className={labelCls}>전화번호</label>
-  <input
+  <input autoComplete="off"
     className={inputCls}
     value={form.전화번호}
     placeholder="전화번호 입력"
@@ -12142,7 +12142,7 @@ className={`
                       ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -12166,7 +12166,7 @@ className={`
                       ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -12189,7 +12189,7 @@ className={`
                     {[["차량톤수","cargoTon"],["차량종류","truckType"],["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -12204,7 +12204,7 @@ className={`
                     {[["청구운임","fare"],["기사운임","fee"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -12245,7 +12245,7 @@ className={`
                     {[["화주명","firstShipperNm"],["화주연락처","firstShipperInfo"],["사업자번호","firstShipperBizNo"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -12259,13 +12259,13 @@ className={`
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">24시콜 아이디 (ddID)</span>
-                      <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.ddID ?? ""} disabled={send24Sending}
                         onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddID: v })); }} />
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">24시콜 비밀번호 (ddPwd)</span>
-                      <input type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <input autoComplete="off" type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.ddPwd ?? ""} disabled={send24Sending}
                         onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddPwd: v })); }} />
                     </div>
@@ -12386,7 +12386,7 @@ className={`
                     <option value="하차지명">하차지명</option>
                     <option value="화물내용">화물내용</option>
                   </CustomSelect>
-                  <input
+                  <input autoComplete="off"
                     type="text"
                     placeholder="검색어를 입력하세요"
                     className="border border-gray-200 bg-white px-4 py-2 rounded-xl text-[13px] flex-1 outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]"
@@ -12491,7 +12491,7 @@ className={`
   }}
 >
                           <td className="px-3 py-3 text-center">
-                            <input
+                            <input autoComplete="off"
                               type="checkbox"
                               className="w-4 h-4 accent-[#1B2B4B] cursor-pointer"
                               checked={copySelected.includes(row)}
@@ -12768,7 +12768,7 @@ className={`
         <p className="text-white/60 text-[12px] mt-0.5">{contactPopup.place.업체명} · 총 {contactPopup.contacts.length}명</p>
       </div>
       <div className="px-5 pt-4">
-        <input
+        <input autoComplete="off"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
           placeholder="담당자 이름 또는 전화번호 검색"
           value={contactSearchQ}
@@ -12792,7 +12792,7 @@ className={`
             {editingContactIdx === i ? (
               /* ── 인라인 수정 폼 ── */
               <div className="space-y-1.5" onClick={e => e.stopPropagation()}>
-                <input
+                <input autoComplete="off"
                   autoFocus
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="이름"
@@ -12800,7 +12800,7 @@ className={`
                   onChange={e => setEditContactData(p => ({ ...p, name: e.target.value }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
-                <input
+                <input autoComplete="off"
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="전화번호"
                   value={editContactData.phone}
@@ -13245,7 +13245,7 @@ className={`
       <div className="space-y-3 text-sm">
         <div>
           <label className="block text-gray-600 mb-1">차량번호</label>
-          <input
+          <input autoComplete="off"
             className="border p-2 rounded w-full bg-gray-100"
             value={driverModal.carNo}
             readOnly
@@ -13254,7 +13254,7 @@ className={`
 
         <div>
           <label className="block text-gray-600 mb-1">기사명</label>
-          <input
+          <input autoComplete="off"
             className="border p-2 rounded w-full"
             placeholder="예: 홍길동"
             value={driverModal.name}
@@ -13273,7 +13273,7 @@ className={`
 
         <div>
           <label className="block text-gray-600 mb-1">전화번호</label>
-          <input
+          <input autoComplete="off"
             className="border p-2 rounded w-full"
             placeholder="숫자(하이픈) 입력"
             value={driverModal.phone}
@@ -13929,7 +13929,7 @@ setConfirmChange(null);
       <div className="px-6 py-5 space-y-4">
         <div>
           <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">업체명 <span className="text-red-500">*</span></label>
-          <input
+          <input autoComplete="off"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
             placeholder="업체명 입력"
             value={newClientModalData.name}
@@ -13940,7 +13940,7 @@ setConfirmChange(null);
         </div>
         <div>
           <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
-          <input
+          <input autoComplete="off"
             id="nc-addr"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
             placeholder="주소 입력 (선택)"
@@ -13952,7 +13952,7 @@ setConfirmChange(null);
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
-            <input
+            <input autoComplete="off"
               id="nc-manager"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
               placeholder="담당자명 (선택)"
@@ -13963,7 +13963,7 @@ setConfirmChange(null);
           </div>
           <div>
             <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
-            <input
+            <input autoComplete="off"
               id="nc-phone"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
               placeholder="010-0000-0000 (선택)"
@@ -13975,7 +13975,7 @@ setConfirmChange(null);
         </div>
         <div>
           <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
-          <input
+          <input autoComplete="off"
             id="nc-email"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
             placeholder="example@email.com (선택)"
@@ -14789,7 +14789,7 @@ function InlineEditCell({ value, placeholder, onSave }) {
 
   return (
     <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-      <input
+      <input autoComplete="off"
         ref={inputRef}
         className="border border-blue-400 rounded px-1.5 py-0.5 text-[12px] w-[100px] outline-none focus:ring-1 focus:ring-blue-300"
         value={draft}
@@ -15126,7 +15126,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
             {!isViewer && (
               <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer whitespace-nowrap shrink-0">
                 파일 추가
-                <input type="file" multiple accept="image/*,.pdf" className="hidden"
+                <input autoComplete="off" type="file" multiple accept="image/*,.pdf" className="hidden"
                   onChange={e => handleUpload(Array.from(e.target.files))} />
               </label>
             )}
@@ -15804,7 +15804,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
 
             {/* 경유지명 (자동완성) */}
             <div className="relative">
-              <input
+              <input autoComplete="off"
                 className={inputCls}
                 placeholder="경유지명"
                 value={stop.업체명}
@@ -15880,16 +15880,16 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             </div>
 
             {/* 주소 */}
-            <input className={inputCls} placeholder="주소" value={stop.주소}
+            <input autoComplete="off" className={inputCls} placeholder="주소" value={stop.주소}
               onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
               onChange={e=>{setEditList(prev=>{const c=[...prev];c[idx].주소=e.target.value;return c;});}} />
 
             {/* 담당자 / 연락처 */}
             <div className="grid grid-cols-2 gap-2">
-              <input className={inputCls} placeholder="담당자" value={stop.담당자}
+              <input autoComplete="off" className={inputCls} placeholder="담당자" value={stop.담당자}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
                 onChange={e=>{setEditList(prev=>{const c=[...prev];c[idx].담당자=e.target.value;return c;});}} />
-              <input className={inputCls} placeholder="연락처" value={stop.담당자번호}
+              <input autoComplete="off" className={inputCls} placeholder="연락처" value={stop.담당자번호}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
                 onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
             </div>
@@ -15916,7 +15916,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             {/* 화물내용 + 타입 / 톤수 + 타입 */}
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
-                <input className={`${inputCls} pr-[62px]`}
+                <input autoComplete="off" className={`${inputCls} pr-[62px]`}
                   placeholder={(stop.화물타입&&stop.화물타입!=="없음")?"숫자만 입력":"화물내용 (예: 2)"}
                   value={(stop.화물타입&&stop.화물타입!=="없음")
                     ?String(stop.화물내용||"").replace(/(파레트|파렛트|박스|통)$/,"").trim()
@@ -15943,7 +15943,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 </div>
               </div>
               <div className="relative">
-                <input className={`${inputCls} pr-[52px]`}
+                <input autoComplete="off" className={`${inputCls} pr-[52px]`}
                   placeholder={stop.톤수타입?"톤수 (예: 1)":"예: 5톤 또는 소형"}
                   value={stop.톤수타입?(stop.톤수값||""):(stop.차량톤수||"")}
                   onKeyDown={e=>{
@@ -16181,7 +16181,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
           <div className="space-y-3" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit("new"); } }}>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">차량번호</label>
-              <input
+              <input autoComplete="off"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] bg-slate-50 text-slate-700"
                 value={form.차량번호}
                 readOnly
@@ -16189,7 +16189,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
             </div>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">기사명 <span className="text-red-400">*</span></label>
-              <input
+              <input autoComplete="off"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="기사명 입력"
                 value={form.이름}
@@ -16198,7 +16198,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
             </div>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">전화번호</label>
-              <input
+              <input autoComplete="off"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="전화번호 입력"
                 inputMode="numeric"
@@ -16434,7 +16434,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-bold text-gray-700">거래처명</label>
-              <input type="text" value={clientQ} onChange={e => setClientQ(e.target.value)}
+              <input autoComplete="off" type="text" value={clientQ} onChange={e => setClientQ(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSearch()} placeholder="거래처명 입력"
                 className="border border-gray-300 rounded-lg px-3 py-2 text-[14px] outline-none focus:border-[#1B2B4B] w-[200px]" />
             </div>
@@ -16695,7 +16695,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   >
 
                   <td className={cell}>
-                    <input
+                    <input autoComplete="off"
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleSelect(r._id)}
@@ -16783,7 +16783,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   {/* 차량번호 */}
                   <td className={cell}>
-                    <input
+                    <input autoComplete="off"
                       name="차량번호"
                       data-id={r._id}
                       type="text"
@@ -16907,7 +16907,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   {/* 청구운임 */}
                   <td className={cell}>
                     {canEdit("청구운임", r._id) ? (
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         className="border p-1 rounded w-full"
                         defaultValue={r.청구운임 || ""}
@@ -16923,7 +16923,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   {/* 기사운임 */}
                   <td className={cell}>
                     {canEdit("기사운임", r._id) ? (
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         className="border p-1 rounded w-full"
                         defaultValue={r.기사운임 || ""}
@@ -20863,7 +20863,7 @@ const handleCloseFileUpload = async (e) => {
       );
     }
     return (
-      <input
+      <input autoComplete="off"
         type="text"
         className="border p-1 rounded w-full"
         defaultValue={val || ""}
@@ -20878,7 +20878,7 @@ const handleCloseFileUpload = async (e) => {
   const renderAddrCell = (key, val, rowId) => {
     if (canEdit(key, rowId)) {
       return (
-        <input
+        <input autoComplete="off"
           type="text"
           className="border p-1 rounded w-full"
           defaultValue={val || ""}
@@ -21095,7 +21095,7 @@ const head = isDark
         <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup4.place.업체명} · 총 {panelContactPopup4.contacts.length}명</p>
       </div>
       <div className="px-5 pt-4">
-        <input
+        <input autoComplete="off"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
           placeholder="담당자 이름 또는 전화번호 검색"
           value={panelContactSearch4}
@@ -21191,7 +21191,7 @@ const head = isDark
 <div className="flex items-center gap-1 flex-wrap mb-2 pb-0.5">
   {/* 검색창 */}
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
-    <input
+    <input autoComplete="off"
       type="text"
       value={qInput}
       onChange={(e) => setQInput(e.target.value)}
@@ -21653,7 +21653,7 @@ flashRow(savedId);
 
   <Field label="거래처명">
     <div className="relative">
-      <input
+      <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className={inputStyle}
         value={copyTarget?.거래처명 ?? ""}
@@ -21791,7 +21791,7 @@ checkWarningStatus(c.거래처명, "거래처");
       {/* 🔥 상차지명 자동완성 */}
       <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("pickup")} /></span>}>
         <div className="relative">
-          <input
+          <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
             className={inputStyle}
             value={copyTarget?.상차지명 ?? ""}
@@ -21892,7 +21892,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
         <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.상차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
       )}</span>}>
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지주소 ?? ""}
@@ -21901,7 +21901,7 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       <Field label="상차지 담당자명">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자 ?? ""}
@@ -21910,7 +21910,7 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
             <Field label="상차지 연락처">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
@@ -21982,7 +21982,7 @@ checkWarningStatus(c.거래처명, "거래처");
 </Field>
       <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("drop")} /></span>}>
         <div className="relative">
-          <input
+          <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
             className={inputStyle}
             value={copyTarget?.하차지명 ?? ""}
@@ -22083,7 +22083,7 @@ checkWarningStatus(c.거래처명, "거래처");
       <Field label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
         <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.하차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
       )}</span>}>
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지주소 ?? ""}
@@ -22092,7 +22092,7 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       <Field label="하차지 담당자명">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자 ?? ""}
@@ -22101,7 +22101,7 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
            <Field label="하차지 연락처">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
@@ -22144,7 +22144,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
 <div className="p-4">
     <div className="relative" style={{overflow: "visible"}}>
-      <input
+      <input autoComplete="off"
         className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ4}
@@ -22177,7 +22177,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량번호">
-      <input
+      <input autoComplete="off"
         className={inputStyle}
         value={copyTarget?.차량번호 ?? ""}
 
@@ -22249,7 +22249,7 @@ checkWarningStatus(c.거래처명, "거래처");
     </Field>
 
     <Field label="기사명">
-      <input
+      <input autoComplete="off"
         className={inputStyle}
         value={copyTarget?.이름 ?? ""}
         readOnly
@@ -22257,7 +22257,7 @@ checkWarningStatus(c.거래처명, "거래처");
     </Field>
 
     <Field label="전화번호">
-      <input
+      <input autoComplete="off"
         className={inputStyle}
         value={formatPhone(copyTarget?.전화번호 ?? "")}
         readOnly
@@ -22304,7 +22304,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
       {/* 입력 */}
-      <input
+      <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className="flex-1 px-3 py-2 outline-none"
         value={copyTarget?.톤수값 || ""}
@@ -22362,7 +22362,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
     {/* 입력 */}
-    <input
+    <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="flex-1 px-3 py-2 outline-none"
 value={copyTarget?.화물수량 || ""}
@@ -22423,7 +22423,7 @@ value={copyTarget?.화물수량 || ""}
           <div className="grid grid-cols-5 gap-8">
 
             <Field label="청구운임">
-              <input
+              <input autoComplete="off"
   className={inputStyle}
   value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
@@ -22437,7 +22437,7 @@ value={copyTarget?.화물수량 || ""}
             </Field>
 
             <Field label="기사운임">
-              <input
+              <input autoComplete="off"
   className={inputStyle}
   value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
@@ -23202,7 +23202,7 @@ value={copyTarget?.화물수량 || ""}
             {/* ===================== 거래처명 ===================== */}
             <div className="mb-3 relative">
               <label>거래처명</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.거래처명 || ""}
@@ -23399,7 +23399,7 @@ value={copyTarget?.화물수량 || ""}
             {/* ===================== 상차지 ===================== */}
             <div className="mb-3 relative">
               <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("pickup")} /></label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.상차지명 || ""}
@@ -23505,7 +23505,7 @@ value={copyTarget?.화물수량 || ""}
 
             <div className="mb-3">
               <label>상차지주소</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.상차지주소 || ""}
@@ -23517,11 +23517,11 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">상차지 담당자</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차지 연락처</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
@@ -23564,7 +23564,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3 relative">
               <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("drop")} /></label>
 
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.하차지명 || ""}
@@ -23670,7 +23670,7 @@ value={copyTarget?.화물수량 || ""}
 
             <div className="mb-3">
               <label>하차지주소</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.하차지주소 || ""}
@@ -23682,11 +23682,11 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">하차지 담당자</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차지 연락처</label>
-                <input className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
@@ -23738,7 +23738,7 @@ value={copyTarget?.화물수량 || ""}
 <div className="relative">
 
   {/* 입력 */}
-  <input
+  <input autoComplete="off"
     className="border p-2 rounded w-full pr-[110px] disabled:bg-gray-100 disabled:text-gray-400"
     disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
     value={editTarget.화물수량 || ""}
@@ -23817,7 +23817,7 @@ value={copyTarget?.화물수량 || ""}
   <div className="relative">
 
     {/* 🔹 입력창 */}
-    <input
+    <input autoComplete="off"
       className="border p-2 rounded w-full pr-[70px] disabled:bg-gray-100 disabled:text-gray-400"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.톤수값 || ""}
@@ -23874,7 +23874,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3">
               <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">기사 스마트 검색</label>
               <div className="relative">
-                <input
+                <input autoComplete="off"
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
                   placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
                   value={smartQ4}
@@ -23918,7 +23918,7 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             <div className="mb-3">
               <label>차량번호</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.차량번호 || ""}
                 placeholder="예: 93가1234"
@@ -24043,7 +24043,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label>기사명</label>
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full bg-gray-100"
                   value={editTarget.이름 || ""}
                   readOnly
@@ -24052,7 +24052,7 @@ value={copyTarget?.화물수량 || ""}
 
               <div>
                 <label>전화번호</label>
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full bg-gray-100"
                   value={editTarget.전화번호 || ""}
                   readOnly
@@ -24066,7 +24066,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label>청구운임</label>
-                <input
+                <input autoComplete="off"
   className="border p-2 rounded w-full"
   value={editTarget.청구운임 ? Number(editTarget.청구운임).toLocaleString() : ""}
   onChange={(e) => {
@@ -24090,7 +24090,7 @@ value={copyTarget?.화물수량 || ""}
 
               <div>
                 <label>기사운임</label>
-                <input
+                <input autoComplete="off"
   className="border p-2 rounded w-full"
   value={editTarget.기사운임 ? Number(editTarget.기사운임).toLocaleString() : ""}
   onChange={(e) => {
@@ -24114,7 +24114,7 @@ value={copyTarget?.화물수량 || ""}
 
               <div>
                 <label>수수료</label>
-                <input
+                <input autoComplete="off"
                   className={`border p-2 rounded w-full bg-gray-100 font-bold ${(editTarget.수수료 || 0) < 0 ? "text-red-600" : "text-blue-700"}`}
                   value={(editTarget.수수료 || 0).toLocaleString()}
                   readOnly
@@ -24692,7 +24692,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       <div className="p-4 space-y-2.5">
         <div>
           <label className="text-[11px] font-bold text-gray-500 block mb-1">기사명</label>
-          <input
+          <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
             placeholder="홍길동"
             value={quickRegName}
@@ -24719,7 +24719,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
         </div>
         <div>
           <label className="text-[11px] font-bold text-gray-500 block mb-1">전화번호</label>
-          <input
+          <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
             placeholder="010-0000-0000"
             value={quickRegPhone}
@@ -25039,7 +25039,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차 지역</label>
-            <input
+            <input autoComplete="off"
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
               placeholder="예: 서울 강남구"
               value={ctxAddrPickup4}
@@ -25049,7 +25049,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           </div>
           <div className="flex-1">
             <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차 지역</label>
-            <input
+            <input autoComplete="off"
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
               placeholder="예: 경기 화성시"
               value={ctxAddrDrop4}
@@ -25060,7 +25060,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
         </div>
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
+            <input autoComplete="off"
               type="checkbox"
               className="w-4 h-4 accent-[#1B2B4B]"
               checked={ctxAddrAllClients4}
@@ -25751,7 +25751,7 @@ setConfirmChange(null);
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition text-[12px] font-semibold text-gray-700">
                 <span>24시콜 파일 비교</span>
-                <input
+                <input autoComplete="off"
                   type="file"
                   accept=".xlsx,.xls,.csv"
                   className="hidden"
@@ -26118,7 +26118,7 @@ setConfirmChange(null);
                           {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
-                        <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
+                        <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
                       <button className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
                     </div>
@@ -29747,7 +29747,7 @@ return (
         <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup5.place.업체명} · 총 {panelContactPopup5.contacts.length}명</p>
       </div>
       <div className="px-5 pt-4">
-        <input
+        <input autoComplete="off"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
           placeholder="담당자 이름 또는 전화번호 검색"
           value={panelContactSearch5}
@@ -29923,7 +29923,7 @@ return (
             <option value="pay">지급방식</option>
             <option value="dispatch">배차방식</option>
           </CustomSelect>
-          <input className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
+          <input autoComplete="off" className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
             value={loaded?qInput:""} onChange={(e)=>{setQInput(e.target.value);}}
             onKeyDown={(e)=>{ if(e.key==="Enter"){ handleSearch(); } }} />
           <button
@@ -29948,7 +29948,7 @@ return (
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
           <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
-          <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
+          <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input autoComplete="off" type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
           <button className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}>선택초기화</button>
@@ -29998,7 +29998,7 @@ return (
               ].map((h) => (
                 <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
                   {h === "선택" ? (
-                    <input
+                    <input autoComplete="off"
                       type="checkbox"
                       onChange={() => toggleAll(filtered)}
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
@@ -30080,7 +30080,7 @@ return (
      style={String(row.운행유형||"").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}}
     >
       <td className="px-3 py-3 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0">
-        <input
+        <input autoComplete="off"
           type="checkbox"
           checked={selected.has(id)}
           onChange={() => toggleOne(id)}
@@ -30148,7 +30148,7 @@ return (
 
     ) : editMode && selected.has(id) && editableKeys.includes(key) && !(row.source === "shipper" || row.source === "shipper_mobile") ? (
       <div className="relative w-full">
-        <input
+        <input autoComplete="off"
           className="border rounded px-1 py-0.5 w-full text-center"
           defaultValue={row[key] || ""}
           onChange={(e) => {
@@ -30241,7 +30241,7 @@ return (
 
                   {/* 차량번호(항상 활성화) */}
                   <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px]">
-                    <input
+                    <input autoComplete="off"
                       className="border rounded px-1 py-0.5 text-center w-[118px]"
                       value={row.차량번호 || ""}
                       onChange={(e) => {
@@ -30306,7 +30306,7 @@ return (
                   {["청구운임", "기사운임"].map((key) => (
                     <td key={key} className="border text-right pr-2">
                       {editMode && selected.has(id) ? (
-                        <input
+                        <input autoComplete="off"
                           className="border rounded px-1 py-0.5 w-full text-right"
                           defaultValue={toInt(row[key])}
                           onChange={(e) => updateEdited(row, key, e.target.value)}
@@ -30523,7 +30523,7 @@ return (
             {/* ------------------------------------------------ */}
             <div className="mb-3 relative">
               <label>거래처명</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.거래처명 || ""}
@@ -30708,7 +30708,7 @@ return (
             {/* ================= 상차지명 ================= */}
             <div className="mb-3 relative">
               <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("pickup")} /></label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.상차지명 || ""}
 
@@ -30817,7 +30817,7 @@ return (
             {/* ================= 상차지주소 ================= */}
             <div className="mb-3">
               <label>상차지주소</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.상차지주소 || ""}
                 onChange={(e) =>
@@ -30830,7 +30830,7 @@ return (
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">상차지 담당자</label>
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.상차지담당자 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))}
@@ -30838,7 +30838,7 @@ return (
               </div>
               <div>
                 <label className="text-sm font-medium">상차지 연락처</label>
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.상차지담당자번호 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))}
@@ -30877,7 +30877,7 @@ return (
             {/* ================= 하차지명 ================= */}
             <div className="mb-3 relative">
               <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("drop")} /></label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.하차지명 || ""}
                 onChange={(e) => {
@@ -30985,7 +30985,7 @@ return (
             {/* ================= 하차지주소 ================= */}
             <div className="mb-3">
               <label>하차지주소</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.하차지주소 || ""}
                 onChange={(e) =>
@@ -30999,7 +30999,7 @@ return (
               <div>
                 <label className="text-sm font-medium">하차지 담당자</label>
 
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.하차지담당자 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))}
@@ -31007,7 +31007,7 @@ return (
               </div>
               <div>
                 <label className="text-sm font-medium">하차지 연락처</label>
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.하차지담당자번호 || ""}
                   onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))}
@@ -31047,7 +31047,7 @@ return (
 <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: editTarget?.화물내용||"", onCommit: (v) => setEditTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={editTarget?.화물내용} /></span>}>
   <div className="relative w-full">
 
-    <input
+    <input autoComplete="off"
       className="border p-2 rounded w-full pr-[95px]"
       value={
   editTarget?.화물수량 ||
@@ -31116,7 +31116,7 @@ return (
   <Field label="차량톤수">
     <div className="relative w-full">
 
-      <input
+      <input autoComplete="off"
         className="border p-2 rounded w-full pr-[95px]"
         value={editTarget?.톤수값 || ""}
         onChange={(e) => {
@@ -31160,7 +31160,7 @@ return (
             <div className="mb-3">
               <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">기사 스마트 검색</label>
               <div className="relative">
-                <input
+                <input autoComplete="off"
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
                   placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
                   value={smartQ5}
@@ -31204,7 +31204,7 @@ return (
             {/* ------------------------------------------------ */}
             <div className="mb-3">
               <label>차량번호</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.차량번호 || ""}
                 placeholder="예: 93가1234"
@@ -31328,7 +31328,7 @@ return (
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label>기사명</label>
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full bg-gray-100"
                   value={editTarget.이름 || ""}
                   readOnly
@@ -31337,7 +31337,7 @@ return (
 
               <div>
                 <label>전화번호</label>
-                <input
+                <input autoComplete="off"
                   className="border p-2 rounded w-full bg-gray-100"
                   value={formatPhone(editTarget.전화번호 || "")}
                   readOnly
@@ -31351,7 +31351,7 @@ return (
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label>청구운임</label>
-                <input
+                <input autoComplete="off"
   className="border p-2 rounded w-full"
   value={editTarget.청구운임 ? Number(editTarget.청구운임).toLocaleString() : ""}
   onChange={(e) => {
@@ -31375,7 +31375,7 @@ return (
 
               <div>
                 <label>기사운임</label>
-                <input
+                <input autoComplete="off"
   className="border p-2 rounded w-full"
   value={editTarget.기사운임 ? Number(editTarget.기사운임).toLocaleString() : ""}
   onChange={(e) => {
@@ -31398,7 +31398,7 @@ return (
               </div>
               <div>
                 <label>수수료</label>
-                <input
+                <input autoComplete="off"
                   className={`border p-2 rounded w-full bg-gray-100 font-bold ${(editTarget.수수료 || 0) < 0 ? "text-red-600" : "text-blue-700"}`}
                   value={(editTarget.수수료 || 0).toLocaleString()}
                   readOnly
@@ -31874,7 +31874,7 @@ return (
 
   <Field label="거래처명">
     <div className="relative">
-      <input
+      <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
         className={inputStyle}
         value={copyTarget?.거래처명 ?? ""}
@@ -32010,7 +32010,7 @@ setCopyTarget(prev=>({
       {/* 🔥 상차지명 자동완성 */}
       <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("pickup")} /></span>}>
         <div className="relative">
-          <input
+          <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
             className={inputStyle}
             value={copyTarget?.상차지명 ?? ""}
@@ -32111,7 +32111,7 @@ setCopyPlaceOptions(list);
       <Field label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
         <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.상차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
       )}</span>}>
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지주소 ?? ""}
@@ -32120,7 +32120,7 @@ setCopyPlaceOptions(list);
       </Field>
 
       <Field label="상차지 담당자명">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자 ?? ""}
@@ -32129,7 +32129,7 @@ setCopyPlaceOptions(list);
       </Field>
 
       <Field label="상차지 연락처">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
@@ -32183,7 +32183,7 @@ setCopyPlaceOptions(list);
 </Field>
       <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} /></span>}>
         <div className="relative">
-          <input
+          <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
             className={inputStyle}
             value={copyTarget?.하차지명 ?? ""}
@@ -32284,7 +32284,7 @@ setCopyPlaceOptions(list);
       <Field label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
         <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.하차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline">더보기</button>
       )}</span>}>
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지주소 ?? ""}
@@ -32293,7 +32293,7 @@ setCopyPlaceOptions(list);
       </Field>
 
       <Field label="하차지 담당자명">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자 ?? ""}
@@ -32302,7 +32302,7 @@ setCopyPlaceOptions(list);
       </Field>
 
       <Field label="하차지 연락처">
-        <input
+        <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
@@ -32327,7 +32327,7 @@ setCopyPlaceOptions(list);
   <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
   <div className="p-4">
     <div className="relative">
-      <input
+      <input autoComplete="off"
         className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ5}
@@ -32360,7 +32360,7 @@ setCopyPlaceOptions(list);
   <div className="grid grid-cols-3 gap-6">
 
    <Field label="차량번호">
-<input
+<input autoComplete="off"
   className={inputStyle}
   value={copyTarget?.차량번호 || ""}
 
@@ -32439,7 +32439,7 @@ setCopyPlaceOptions(list);
 </Field>
 
     <Field label="기사명">
-      <input
+      <input autoComplete="off"
         className={inputStyle}
         value={copyTarget?.이름 || ""}
         readOnly
@@ -32447,7 +32447,7 @@ setCopyPlaceOptions(list);
     </Field>
 
     <Field label="전화번호">
-      <input
+      <input autoComplete="off"
         className={inputStyle}
        value={formatPhone(copyTarget?.전화번호 || "")}
         readOnly
@@ -32491,7 +32491,7 @@ setCopyPlaceOptions(list);
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
     {/* 숫자 */}
-    <input
+    <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="flex-1 px-3 py-2 outline-none"
       value={copyTarget?.톤수값 || ""}
@@ -32540,7 +32540,7 @@ setCopyPlaceOptions(list);
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
     {/* 수량 */}
-    <input
+    <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
       className="flex-1 px-3 py-2 outline-none"
       value={copyTarget?.화물수량 || ""}
@@ -32586,7 +32586,7 @@ setCopyPlaceOptions(list);
           <div className="grid grid-cols-5 gap-8">
 
             <Field label="청구운임">
-              <input
+              <input autoComplete="off"
   className={inputStyle}
   value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
@@ -32600,7 +32600,7 @@ setCopyPlaceOptions(list);
             </Field>
 
             <Field label="기사운임">
-              <input
+              <input autoComplete="off"
   className={inputStyle}
   value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
@@ -33278,7 +33278,7 @@ setCopyPlaceOptions(list);
                   <div className="p-4 space-y-2.5">
                     <div>
                       <label className="text-[11px] font-bold text-gray-500 block mb-1">기사명</label>
-                      <input
+                      <input autoComplete="off"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         placeholder="홍길동"
                         value={quickRegName5}
@@ -33288,7 +33288,7 @@ setCopyPlaceOptions(list);
                     </div>
                     <div>
                       <label className="text-[11px] font-bold text-gray-500 block mb-1">전화번호</label>
-                      <input
+                      <input autoComplete="off"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         placeholder="010-0000-0000"
                         value={quickRegPhone5}
@@ -33793,7 +33793,7 @@ setCopyPlaceOptions(list);
                           {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
-                        <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
+                        <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
                       <button className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
                     </div>
@@ -33876,7 +33876,7 @@ setCopyPlaceOptions(list);
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition text-[12px] font-semibold text-gray-700">
                 <span>24시콜 파일 비교</span>
-                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleCloseFileUpload} />
+                <input autoComplete="off" type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleCloseFileUpload} />
               </label>
               {closeFileResult && (
                 <span className="text-[12px] text-gray-500">
@@ -34373,7 +34373,7 @@ setCopyPlaceOptions(list);
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차 지역</label>
-            <input
+            <input autoComplete="off"
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
               placeholder="예: 서울 강남구"
               value={ctxAddrPickup5}
@@ -34383,7 +34383,7 @@ setCopyPlaceOptions(list);
           </div>
           <div className="flex-1">
             <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차 지역</label>
-            <input
+            <input autoComplete="off"
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
               placeholder="예: 경기 화성시"
               value={ctxAddrDrop5}
@@ -34394,7 +34394,7 @@ setCopyPlaceOptions(list);
         </div>
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
+            <input autoComplete="off"
               type="checkbox"
               className="w-4 h-4 accent-[#1B2B4B]"
               checked={ctxAddrAllClients5}
@@ -34723,7 +34723,7 @@ setCopyPlaceOptions(list);
                   <div className="p-4 space-y-2.5">
                     <div>
                       <label className="text-[11px] font-bold text-gray-500 block mb-1">기사명</label>
-                      <input
+                      <input autoComplete="off"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         placeholder="홍길동"
                         value={quickRegName5}
@@ -34747,7 +34747,7 @@ setCopyPlaceOptions(list);
                     </div>
                     <div>
                       <label className="text-[11px] font-bold text-gray-500 block mb-1">전화번호</label>
-                      <input
+                      <input autoComplete="off"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         placeholder="010-0000-0000"
                         value={quickRegPhone5}
@@ -34985,7 +34985,7 @@ function NewOrderPopup({
           {/* 혼적/독차 */}
           <div className="flex gap-4 mb-2">
             <label className="flex items-center gap-2">
-              <input
+              <input autoComplete="off"
                 type="checkbox"
                 checked={newOrder.혼적}
                 onChange={(e) => handleChange("혼적", e.target.checked)}
@@ -35005,7 +35005,7 @@ function NewOrderPopup({
   {newOrder.운행유형 === "왕복" ? "왕복 ✓" : "편도"}
 </button>
             <label className="flex items-center gap-2">
-              <input
+              <input autoComplete="off"
                 type="checkbox"
                 checked={newOrder.독차}
                 onChange={(e) => handleChange("독차", e.target.checked)}
@@ -35017,7 +35017,7 @@ function NewOrderPopup({
           {/* 거래처명 */}
           <div>
             <label className="font-semibold text-sm">거래처명</label>
-            <input
+            <input autoComplete="off"
               type="text"
               value={newOrder.거래처명}
               onChange={(e) => handleChange("거래처명", e.target.value)}
@@ -35165,7 +35165,7 @@ function NewOrderPopup({
           {/* 상하차지 */}
           <div>
             <label>상차지명</label>
-            <input
+            <input autoComplete="off"
               className="border p-2 rounded w-full"
               value={newOrder.상차지명}
               onChange={(e) => handleChange("상차지명", e.target.value)}
@@ -35174,7 +35174,7 @@ function NewOrderPopup({
 
           <div>
             <label>상차지주소</label>
-            <input
+            <input autoComplete="off"
               className="border p-2 rounded w-full"
               value={newOrder.상차지주소}
               onChange={(e) => handleChange("상차지주소", e.target.value)}
@@ -35183,7 +35183,7 @@ function NewOrderPopup({
 
           <div>
             <label>하차지명</label>
-            <input
+            <input autoComplete="off"
               className="border p-2 rounded w-full"
               value={newOrder.하차지명}
               onChange={(e) => handleChange("하차지명", e.target.value)}
@@ -35192,7 +35192,7 @@ function NewOrderPopup({
 
           <div>
             <label>하차지주소</label>
-            <input
+            <input autoComplete="off"
               className="border p-2 rounded w-full"
               value={newOrder.하차지주소}
               onChange={(e) => handleChange("하차지주소", e.target.value)}
@@ -35203,7 +35203,7 @@ function NewOrderPopup({
           {/* 화물내용 - ★ 추가됨 */}
           <div>
             <label>화물내용</label>
-            <input
+            <input autoComplete="off"
               className="border p-2 rounded w-full"
               value={newOrder.화물내용}
               onChange={(e) => handleChange("화물내용", e.target.value)}
@@ -35241,7 +35241,7 @@ function NewOrderPopup({
 
             <div>
               <label>차량톤수</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={newOrder.차량톤수}
                 onChange={(e) => handleChange("차량톤수", e.target.value)}
@@ -35254,7 +35254,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label>청구운임</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={newOrder.청구운임}
                 onChange={(e) => handleChange("청구운임", e.target.value)}
@@ -35263,7 +35263,7 @@ function NewOrderPopup({
 
             <div>
               <label>기사운임</label>
-              <input
+              <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={newOrder.기사운임}
                 onChange={(e) => handleChange("기사운임", e.target.value)}
@@ -35522,7 +35522,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
     if (isEditing) {
       return (
         <td className="px-1 py-0.5 text-center border-r border-gray-100">
-          <input
+          <input autoComplete="off"
             type="number"
             defaultValue={val || ""}
             className="w-full text-center text-[12px] border border-blue-400 rounded px-1 outline-none"
@@ -35836,7 +35836,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
           </button>
           <label className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:opacity-90 transition cursor-pointer">
             엑셀 업로드
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
+            <input autoComplete="off" type="file" accept=".xlsx,.xls,.csv" className="hidden"
               onChange={e => { const f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; }} />
           </label>
           <div className="flex items-center gap-1 ml-2">
@@ -36518,7 +36518,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
             <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">입금 처리</div>
             <div className="text-[12px] text-gray-400 mb-4">{arModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미수금 잔액: <strong>{(arByClient.find(r => r.client === arModal)?.outstanding || 0).toLocaleString()}원</strong></div>
-            <input
+            <input autoComplete="off"
               type="number"
               value={arInput}
               onChange={e => setArInput(e.target.value)}
@@ -36546,7 +36546,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
             <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">지급 처리</div>
             <div className="text-[12px] text-gray-400 mb-4">{apModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미지급 잔액: <strong>{(apByDriver.find(r => r.driver === apModal)?.outstanding || 0).toLocaleString()}원</strong></div>
-            <input
+            <input autoComplete="off"
               type="number"
               value={apInput}
               onChange={e => setApInput(e.target.value)}
@@ -37177,13 +37177,13 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
                 {/* 조회 조건 */}
                 <div className="grid grid-cols-3 gap-3">
-                  <input
+                  <input autoComplete="off"
                     type="month"
                     value={rangeStart}
                     onChange={(e) => setRangeStart(e.target.value)}
                     className="border border-gray-200 rounded-lg p-2 text-[13px] focus:outline-none focus:border-blue-400"
                   />
-                  <input
+                  <input autoComplete="off"
                     type="month"
                     value={rangeEnd}
                     onChange={(e) => setRangeEnd(e.target.value)}
@@ -37191,7 +37191,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                   />
                   <div className="col-span-3 space-y-3">
                     <div className="text-[12px] font-semibold text-gray-600">거래처 검색</div>
-                    <input
+                    <input autoComplete="off"
                       type="text"
                       placeholder="거래처 검색 (예: 태영, 케이씨)"
                       value={clientSearch}
@@ -38291,7 +38291,7 @@ const tableData = React.useMemo(() => {
       {/* ── 검색 & 기준 안내 ── */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <input
+          <input autoComplete="off"
             type="text"
             placeholder="거래처 검색..."
             value={search}
@@ -38953,7 +38953,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       {/* 검색바 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <input autoComplete="off"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="통합검색 (거래처명 / 상차지명 / 차량번호 등)"
@@ -38969,7 +38969,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               <option value="거래처명">거래처명</option>
               <option value="차량종류">차량종류</option>
             </select>
-            <input value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+            <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
           </div>
           <button onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setFilterValue(""); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
             초기화
@@ -38999,7 +38999,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               <tr>
                 {deleteMode && (
                   <th className={headBase}>
-                    <input type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} />
+                    <input autoComplete="off" type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} />
                   </th>
                 )}
                 {headers.map((h) => (
@@ -39042,7 +39042,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     >
                       {deleteMode && (
                         <td className={cellBase}>
-                          <input type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} />
+                          <input autoComplete="off" type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} />
                         </td>
                       )}
                       <td className={cellBase}>{i + 1}</td>
@@ -39198,12 +39198,12 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <div className="text-sm mb-3 text-gray-600">
               <b>{selectedOrder.거래처명}</b> / {selectedOrder.상차지명} → {selectedOrder.하차지명}
             </div>
-            <input placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
-            <input placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
-            <input placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            <input autoComplete="off" placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
+            <input autoComplete="off" placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} className="border p-2 rounded w-full mb-2" />
             {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✔ 기존 등록 차량 / 기사 자동 매칭됨</div>}
             {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">➕ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
-            <input placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
+            <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
             <div className="flex justify-end gap-2">
               <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded">취소</button>
               <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-indigo-600 text-white rounded">배차완료</button>
@@ -39222,15 +39222,15 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호</label>
-                <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-100" value={newDriverData.차량번호} readOnly />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-100" value={newDriverData.차량번호} readOnly />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">기사명 *</label>
-                <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
-                <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: e.target.value}))} placeholder="010-0000-0000" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: e.target.value}))} placeholder="010-0000-0000" />
               </div>
             </div>
             <div className="flex gap-2 px-6 pb-6">
@@ -39372,7 +39372,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="p-6">
                   <Field label="거래처명">
                     <div className="relative">
-                      <input
+                      <input autoComplete="off"
                       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                         value={copyTarget?.거래처명 ?? ""}
@@ -39446,7 +39446,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </Field>
                       <Field label="상차지명">
                         <div className="relative">
-                          <input
+                          <input autoComplete="off"
                           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
                             value={copyTarget?.상차지명 ?? ""}
@@ -39505,10 +39505,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="상차지 담당자명">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="상차지 연락처">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       {/* 경유 상차지 */}
                       {(() => {
@@ -39541,7 +39541,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </Field>
                       <Field label="하차지명">
                         <div className="relative">
-                          <input
+                          <input autoComplete="off"
                           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
                             value={copyTarget?.하차지명 ?? ""}
@@ -39600,10 +39600,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="하차지 담당자명">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="하차지 연락처">
-                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       {/* 경유 하차지 */}
                       {(() => {
@@ -39643,13 +39643,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                               {editingDriver7Id === (d.id || i) ? (
                                 <div className="px-4 py-3 bg-blue-50">
                                   <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
-                                  <input
+                                  <input autoComplete="off"
                                     className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-1.5 focus:outline-none focus:border-blue-400"
                                     placeholder="기사 이름"
                                     value={editingDriver7Data.이름}
                                     onChange={e => setEditingDriver7Data(p => ({ ...p, 이름: e.target.value }))}
                                   />
-                                  <input
+                                  <input autoComplete="off"
                                     className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-blue-400"
                                     placeholder="전화번호"
                                     value={editingDriver7Data.전화번호}
@@ -39692,7 +39692,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   <div className="grid grid-cols-3 gap-6">
                     <Field label="차량번호">
                       <div className="flex gap-2">
-                        <input
+                        <input autoComplete="off"
                           className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
                           value={copyTarget?.차량번호 ?? ""}
                           onChange={(e) => {
@@ -39716,10 +39716,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       )}
                     </Field>
                     <Field label="기사명">
-                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={copyTarget?.이름 ?? ""} readOnly />
+                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={copyTarget?.이름 ?? ""} readOnly />
                     </Field>
                     <Field label="전화번호">
-                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={formatPhone(copyTarget?.전화번호 ?? "")} readOnly />
+                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={formatPhone(copyTarget?.전화번호 ?? "")} readOnly />
                     </Field>
                   </div>
                 </div>
@@ -39740,7 +39740,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     </Field>
                     <Field label="차량톤수">
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
-                        <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                         <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option><option value="톤">톤</option><option value="kg">kg</option>
                         </CustomSelect>
@@ -39748,7 +39748,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     </Field>
                     <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
-                        <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                         <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
                         </CustomSelect>
@@ -39766,10 +39766,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="p-6">
                   <div className="grid grid-cols-5 gap-6">
                     <Field label="청구운임">
-                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 청구운임: v})); }} />
+                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 청구운임: v})); }} />
                     </Field>
                     <Field label="기사운임">
-                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 기사운임: v})); }} />
+                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 기사운임: v})); }} />
                     </Field>
                     <Field label="수수료">
                       <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-[#1B2B4B] text-center">
@@ -41356,7 +41356,7 @@ const handleBatchSettle = async (targetStatus) => {
                     <option value="거래처명">거래처명</option>
                     <option value="기사명">기사명</option>
                   </select>
-                  <input
+                  <input autoComplete="off"
                     ref={inputRef}
                     className="px-3 h-full text-[13px] w-52 outline-none"
                     placeholder={`${searchType} 입력 (자동완성)`}
@@ -41565,7 +41565,7 @@ const handleBatchSettle = async (targetStatus) => {
                           }}
                         >
                           <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input
+                            <input autoComplete="off"
                               type="checkbox"
                               checked={checked}
                               onChange={() => {
@@ -41828,7 +41828,7 @@ const handleBatchSettle = async (targetStatus) => {
                   ].map(({ key, label }) => (
                     <div key={key}>
                       <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{label}</label>
-                      <input
+                      <input autoComplete="off"
                         className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                         value={orderPopupEdit[key] || ""}
                         onChange={e => setOrderPopupEdit(prev => ({ ...prev, [key]: e.target.value }))}
@@ -41892,7 +41892,7 @@ const handleBatchSettle = async (targetStatus) => {
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
                     <div className="relative">
                       <div className="flex gap-2">
-                        <input className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
+                        <input autoComplete="off" className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
                           placeholder="이메일 주소 (여러 명: 쉼표로 구분)" value={generalEmailTo} onChange={e => setGeneralEmailTo(e.target.value)} />
                         <button type="button"
                           onClick={() => { setGeneralEmailAddrOpen(p => !p); setGeneralEmailAddrQuery(""); }}
@@ -41903,7 +41903,7 @@ const handleBatchSettle = async (targetStatus) => {
                       {generalEmailAddrOpen && (
                         <div className="absolute z-[200] top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
                           <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
-                            <input className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] outline-none"
+                            <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] outline-none"
                               placeholder="거래처명으로 검색" value={generalEmailAddrQuery}
                               onChange={e => setGeneralEmailAddrQuery(e.target.value)} autoFocus />
                           </div>
@@ -41932,7 +41932,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">제목</label>
-                    <input className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
+                    <input autoComplete="off" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
                       placeholder="이메일 제목 입력" value={generalEmailSubject} onChange={e => setGeneralEmailSubject(e.target.value)} />
                   </div>
                   <div>
@@ -41949,7 +41949,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <label className="flex items-center gap-2 cursor-pointer text-[13px] text-blue-600 hover:text-blue-700">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                         파일 선택 (이미지, PDF, Excel 등)
-                        <input type="file" multiple accept="image/*,.pdf,.xlsx,.xls,.doc,.docx" className="hidden"
+                        <input autoComplete="off" type="file" multiple accept="image/*,.pdf,.xlsx,.xls,.doc,.docx" className="hidden"
                           onChange={e => {
                             const files = Array.from(e.target.files);
                             const compressFile = (f) => new Promise(res => {
@@ -42089,7 +42089,7 @@ const handleBatchSettle = async (targetStatus) => {
             <div className="text-[11px] text-gray-500 mb-1.5">
               공급가: {(item.totals?.공급가||0).toLocaleString()}원 / 세액: {(item.totals?.세액||0).toLocaleString()}원 / 합계: {((item.totals?.공급가||0)+(item.totals?.세액||0)).toLocaleString()}원
             </div>
-            <input
+            <input autoComplete="off"
               className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
               placeholder="수신 이메일"
               value={item.email}
@@ -42251,7 +42251,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 수신 이메일 */}
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
-                    <input
+                    <input autoComplete="off"
                       className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
                       placeholder="거래처 이메일 입력"
                       value={emailTo}
@@ -42451,7 +42451,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 거래처명 - 자동완성 드롭다운 */}
                   <div className="relative">
                     <label className="text-[12px] font-semibold text-gray-500 mb-1 block">거래처명 (검색하면 정보 자동 입력)</label>
-                    <input className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                       value={editInfo["거래처명"]||""}
                       onChange={e => { setEditInfo(p=>({...p, 거래처명: e.target.value})); setEditInfoClientDropOpen(true); }}
                       onFocus={() => setEditInfoClientDropOpen(true)}
@@ -42498,7 +42498,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {["사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(k=>(
                     <div key={k}>
                       <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{k}</label>
-                      <input className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                      <input autoComplete="off" className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                         value={editInfo[k]||""} onChange={e=>setEditInfo({...editInfo,[k]:e.target.value})} />
                     </div>
                   ))}
@@ -42524,7 +42524,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">거래처</label>
                 <div className="relative" ref={arDropRef}>
-                  <input
+                  <input autoComplete="off"
                     ref={arInputRef}
                     className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none min-w-[200px]"
                     placeholder="거래처 검색"
@@ -42610,7 +42610,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">엑셀</button>
                 <label className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition cursor-pointer">
                   입금확인(엑셀)
-                  <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
+                  <input autoComplete="off" type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
                 </label>
                 <button
                   onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
@@ -42686,7 +42686,7 @@ const handleBatchSettle = async (targetStatus) => {
                     className="px-2 py-3 text-white text-center cursor-pointer select-none"
                     onClick={() => toggleAllMonths(monthRows)}
                   >
-                    <input
+                    <input autoComplete="off"
                       type="checkbox"
                       onChange={() => toggleAllMonths(monthRows)}
                       checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
@@ -42710,7 +42710,7 @@ const handleBatchSettle = async (targetStatus) => {
                         className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
                         onClick={() => toggleMonthSelect(row.yyyymm)}
                       >
-                        <input
+                        <input autoComplete="off"
                           type="checkbox"
                           checked={selectedMonths.has(row.yyyymm)}
                           onChange={() => toggleMonthSelect(row.yyyymm)}
@@ -42737,7 +42737,7 @@ const handleBatchSettle = async (targetStatus) => {
                       </td>
                       <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{row.정산일||"-"}</td>
                       <td className="px-3 py-3 border-b border-gray-100">
-                        <input
+                        <input autoComplete="off"
                           className="border rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
                           placeholder="메모 입력"
                           value={memoMap[row.yyyymm]||""}
@@ -42908,7 +42908,7 @@ const handleBatchSettle = async (targetStatus) => {
         {arReportMode === "selected" && (
           <>
             <div className="flex items-center gap-2 mb-2">
-              <input
+              <input autoComplete="off"
                 className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                 placeholder="거래처명 검색..."
                 value={arReportClientQ}
@@ -43091,7 +43091,7 @@ const handleBatchSettle = async (targetStatus) => {
                       {batchClients.size === batchEligibleClients.length ? "전체 해제" : "전체 선택"}
                     </button>
                   </div>
-                  <input
+                  <input autoComplete="off"
                     className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] mb-2"
                     placeholder="거래처명 검색..."
                     value={batchClientQ}
@@ -43366,7 +43366,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 수신 이메일 */}
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
-                    <input
+                    <input autoComplete="off"
                       className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
                       placeholder="거래처 이메일 입력"
                       value={emailTo}
@@ -43591,7 +43591,7 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
               {/* 검색 */}
               <div className="relative">
-                <input
+                <input autoComplete="off"
                   className="border-2 border-gray-200 rounded-lg pl-8 pr-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] min-w-[220px]"
                   placeholder="제목, 본문, 받는사람, 거래처 검색..."
                   value={mailSearch}
@@ -43645,7 +43645,7 @@ const handleBatchSettle = async (targetStatus) => {
             {/* 왼쪽: 메일 목록 */}
             <div className="w-[320px] shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
               <div className="bg-[#1B2B4B] px-4 py-2.5 text-white font-bold text-[13px] flex items-center gap-2">
-                <input
+                <input autoComplete="off"
                   type="checkbox"
                   checked={filteredMails.length > 0 && selectedMails.size === filteredMails.length}
                   onChange={() => {
@@ -43680,7 +43680,7 @@ const handleBatchSettle = async (targetStatus) => {
                           : "hover:bg-gray-50 border-l-4 border-l-transparent"
                       }`}
                     >
-                      <input
+                      <input autoComplete="off"
                         type="checkbox"
                         checked={selectedMails.has(log.id)}
                         onChange={e => {
@@ -44174,14 +44174,14 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         <div className="flex gap-2 items-center flex-wrap">
           <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-[12px]">
             <span className="text-gray-500 font-semibold">산재보험료율</span>
-            <input type="number" min={0} max={10} step={0.01}
+            <input autoComplete="off" type="number" min={0} max={10} step={0.01}
               className="w-16 border border-gray-200 rounded px-2 py-0.5 text-[12px] text-center outline-none focus:border-[#1B2B4B]"
               value={insuranceRate} onChange={e => setInsuranceRate(Number(e.target.value))} />
             <span className="text-gray-400">%</span>
           </div>
           <label className="px-4 py-2 rounded-lg bg-amber-600 text-white text-[13px] font-semibold hover:bg-amber-700 transition cursor-pointer">
             엑셀 업로드 (지급매칭)
-            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handlePayExcelUpload} />
+            <input autoComplete="off" type="file" accept=".xlsx,.xls" className="hidden" onChange={handlePayExcelUpload} />
           </label>
           <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀 다운로드</button>
         </div>
@@ -44256,9 +44256,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               {DISPATCH_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
-          <input placeholder="차량번호" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={carNoQ} onChange={e => setCarNoQ(e.target.value)} />
-          <input placeholder="기사명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-24 outline-none focus:border-[#1B2B4B]" value={nameQ} onChange={e => setNameQ(e.target.value)} />
-          <input placeholder="거래처명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={clientQ} onChange={e => setClientQ(e.target.value)} />
+          <input autoComplete="off" placeholder="차량번호" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={carNoQ} onChange={e => setCarNoQ(e.target.value)} />
+          <input autoComplete="off" placeholder="기사명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-24 outline-none focus:border-[#1B2B4B]" value={nameQ} onChange={e => setNameQ(e.target.value)} />
+          <input autoComplete="off" placeholder="거래처명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={clientQ} onChange={e => setClientQ(e.target.value)} />
           <button onClick={() => setSearched(true)}
             className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">조회</button>
           <button onClick={() => { setStatusFilter("전체"); setPayMethodFilter("전체"); setDispatchMethodFilter("전체"); setCarNoQ(""); setNameQ(""); setClientQ(""); setSearched(false); }}
@@ -44288,7 +44288,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         {/* 선택 상태 */}
         {activeTab === "list" && (
           <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
-            <input type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} className="w-4 h-4" />
+            <input autoComplete="off" type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} className="w-4 h-4" />
             <span className="text-[12px] text-gray-500">전체선택</span>
             {selectedIds.size > 0 && <span className="text-[12px] font-bold text-[#1B2B4B]">{selectedIds.size}건 선택됨</span>}
           </div>
@@ -44318,7 +44318,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   return (
                     <tr key={r._id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
-                        <input type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} className="w-4 h-4" />
+                        <input autoComplete="off" type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} className="w-4 h-4" />
                       </td>
                       <td className="px-3 py-2.5 text-center text-gray-400 border-b border-gray-100">{i + 1}</td>
                       <td className="px-3 py-2.5 text-center whitespace-nowrap border-b border-gray-100">{r.상차일 || ""}</td>
@@ -44851,7 +44851,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           </button>
           <label className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold cursor-pointer hover:bg-[#1B2B4B] hover:text-white transition">
             엑셀 업로드
-            <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
+            <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
           </label>
           <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition">
             엑셀 다운로드
@@ -44902,7 +44902,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               ].map(({label,key,placeholder,border}) => (
                 <div key={key}>
                   <label className="text-[11px] font-semibold text-gray-400 mb-1 block">{label}</label>
-                  <input
+                  <input autoComplete="off"
                     className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
                     placeholder={placeholder}
                     value={newForm[key]}
@@ -44945,7 +44945,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             <option value="기사명">기사명</option>
             <option value="연락처">연락처</option>
           </select>
-          <input
+          <input autoComplete="off"
             className="px-3 h-full text-[13px] w-48 outline-none"
             placeholder="검색어 입력..."
             value={q}
@@ -44984,7 +44984,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             <thead>
               <tr className="bg-[#1B2B4B]">
                 <th className="px-3 py-3 text-white text-center w-10">
-                  <input
+                  <input autoComplete="off"
                     type="checkbox"
                     onChange={toggleAll}
                     checked={filtered.length > 0 && selected.size === filtered.length}
@@ -45012,7 +45012,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     className={`border-b border-gray-100 transition hover:bg-blue-50/40 cursor-pointer ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
                     onDoubleClick={() => setEditDriverModal({ ...r })}>
                     <td className="px-3 py-2.5 text-center">
-                      <input type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
+                      <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
                     <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap">{r.차량번호||"-"}</td>
@@ -45063,19 +45063,19 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호 *</label>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={editDriverModal.차량번호||""}
                   onChange={(e) => setEditDriverModal(p => ({ ...p, 차량번호: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={editDriverModal.이름||""}
                   onChange={(e) => setEditDriverModal(p => ({ ...p, 이름: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호</label>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={formatPhone(editDriverModal.전화번호)||""}
                   onChange={(e) => setEditDriverModal(p => ({ ...p, 전화번호: e.target.value.replace(/[^\d]/g,"") }))} />
               </div>
@@ -45092,7 +45092,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={editDriverModal.메모||""}
                   onChange={(e) => setEditDriverModal(p => ({ ...p, 메모: e.target.value }))} />
               </div>
@@ -45163,7 +45163,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                   <option value="기사명">기사명</option>
                   <option value="연락처">연락처</option>
                 </select>
-                <input className="px-3 h-full text-[13px] w-44 outline-none"
+                <input autoComplete="off" className="px-3 h-full text-[13px] w-44 outline-none"
                   placeholder="검색어 입력..."
                   value={cleanupQ}
                   onChange={e => setCleanupQ(e.target.value)} />
@@ -45267,7 +45267,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                             <thead>
                               <tr className="border-b border-gray-100">
                                 <th className="px-3 py-2 text-center w-8">
-                                  <input type="checkbox"
+                                  <input autoComplete="off" type="checkbox"
                                     checked={sorted.slice(1).every(d => d.id && cleanupSelected.has(d.id))}
                                     onChange={e => {
                                       const ids = sorted.slice(1).map(d => d.id).filter(Boolean);
@@ -45291,7 +45291,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                                     {di === 0 ? (
                                       <span className="text-[11px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/10 px-1.5 py-0.5 rounded">유지</span>
                                     ) : (
-                                      <input type="checkbox"
+                                      <input autoComplete="off" type="checkbox"
                                         checked={!!d.id && cleanupSelected.has(d.id)}
                                         onChange={e => {
                                           if (!d.id) return;
@@ -46114,7 +46114,7 @@ React.useEffect(() => {
                 <option value="업체명">업체명</option>
                 <option value="주소">주소</option>
               </select>
-              <input className="px-3 h-full text-[13px] w-56 outline-none"
+              <input autoComplete="off" className="px-3 h-full text-[13px] w-56 outline-none"
                 placeholder="검색 후 Enter"
                 value={placeQ}
                 onChange={(e) => { setPlaceQ(e.target.value); setPlaceSearched(false); }}
@@ -46132,7 +46132,7 @@ React.useEffect(() => {
               </button>
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
-                <input type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
+                <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
               </label>
               <button onClick={downloadPlaceExcel}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
@@ -46158,7 +46158,7 @@ React.useEffect(() => {
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-xs text-gray-500 font-semibold mb-1">업체명 *</div>
-                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.업체명} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))} />
                   </div>
                   <div>
@@ -46173,22 +46173,22 @@ React.useEffect(() => {
                   </div>
                   <div className="col-span-2">
                     <div className="text-xs text-gray-500 font-semibold mb-1">주소 *</div>
-                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.주소} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))} />
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 font-semibold mb-1">담당자</div>
-                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.담당자} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))} />
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
-                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
                     <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
-                    <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.메모} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))} />
                   </div>
                 </div>
@@ -46218,7 +46218,7 @@ React.useEffect(() => {
                   <thead>
                     <tr className="bg-[#1B2B4B]">
                       <th className="px-3 py-3 text-white font-bold text-center w-10">
-                        <input type="checkbox" onChange={togglePlaceAll}
+                        <input autoComplete="off" type="checkbox" onChange={togglePlaceAll}
                           checked={filteredPlaces.length > 0 && placeSelected.size === filteredPlaces.length} />
                       </th>
                       {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","삭제"].map((h) => (
@@ -46242,7 +46242,7 @@ React.useEffect(() => {
                             grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
                           }`}>
                           <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                            <input type="checkbox" checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} />
+                            <input autoComplete="off" type="checkbox" checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} />
                           </td>
                           <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate">{r.업체명||""}</td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate">{r.주소||""}</td>
@@ -46429,7 +46429,7 @@ React.useEffect(() => {
                         <tr key={p.id} className={`border-b border-gray-100 ${pi === 0 ? "bg-blue-50/40" : ""}`}>
                           <td className="px-3 py-2 text-center">
                             {pi > 0 && (
-                              <input type="checkbox" checked={placeDupSelected.has(p.id)}
+                              <input autoComplete="off" type="checkbox" checked={placeDupSelected.has(p.id)}
                                 onChange={() => setPlaceDupSelected(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })} />
                             )}
                           </td>
@@ -46477,7 +46477,7 @@ React.useEffect(() => {
                           {group.map((p, i) => (
                             <tr key={p.id} className={i === 0 ? "bg-gray-50 text-gray-700" : "bg-white text-gray-600"}>
                               <td className="border px-3 py-2 w-16 text-center font-bold text-xs">
-                                <input type="checkbox" checked={dupSelected.has(p.id)}
+                                <input autoComplete="off" type="checkbox" checked={dupSelected.has(p.id)}
                                   onChange={() => setDupSelected((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })} />
                               </td>
                               <td className="border px-3 py-2">{p.주소}</td>
@@ -46512,7 +46512,7 @@ React.useEffect(() => {
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
               <span className="px-3 bg-[#1B2B4B] text-white text-[12px] font-semibold h-full flex items-center">검색</span>
-              <input className="px-3 h-full text-[13px] w-56 outline-none"
+              <input autoComplete="off" className="px-3 h-full text-[13px] w-56 outline-none"
                 placeholder="거래처명, 사업자번호, 담당자..."
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
@@ -46535,7 +46535,7 @@ React.useEffect(() => {
               )}
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
                 엑셀 업로드
-                <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
+                <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
               </label>
               <button onClick={downloadClientExcel}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
@@ -46573,14 +46573,14 @@ React.useEffect(() => {
                   {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["담당자","담당자"],["연락처","연락처"],["이메일","이메일"]].map(([label, key]) => (
                     <div key={key}>
                       <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
-                      <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                         value={newForm[key]||""}
                         onChange={(e) => setNewForm(p => ({ ...p, [key]: e.target.value }))} />
                     </div>
                   ))}
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={newForm.주소||""}
                       onChange={(e) => setNewForm(p => ({ ...p, 주소: e.target.value }))} />
                   </div>
@@ -46597,13 +46597,13 @@ React.useEffect(() => {
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={newForm.메모||""}
                       onChange={(e) => setNewForm(p => ({ ...p, 메모: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
                       value={newForm.오더메모||""}
                       onChange={(e) => setNewForm(p => ({ ...p, 오더메모: e.target.value }))} />
@@ -46631,14 +46631,14 @@ React.useEffect(() => {
                   {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["이메일","이메일"]].map(([label, key]) => (
                     <div key={key}>
                       <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
-                      <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                         value={editClientModal[key]||""}
                         onChange={(e) => setEditClientModal(p => ({ ...p, [key]: e.target.value }))} />
                     </div>
                   ))}
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.주소||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 주소: e.target.value }))} />
                   </div>
@@ -46662,13 +46662,13 @@ React.useEffect(() => {
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 메모: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
-                    <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
                       value={editClientModal.오더메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 오더메모: e.target.value }))} />
@@ -46701,7 +46701,7 @@ React.useEffect(() => {
                       }}
                       onClick={() => document.getElementById("clientFileInput").click()}
                     >
-                      <input id="clientFileInput" type="file" accept="image/*,.pdf" className="hidden"
+                      <input autoComplete="off" id="clientFileInput" type="file" accept="image/*,.pdf" className="hidden"
                         onChange={(e) => {
                           handleClientFile(e.target.files[0]);
                           e.target.value = "";
@@ -46784,7 +46784,7 @@ React.useEffect(() => {
                   <thead>
                     <tr className="bg-[#1B2B4B]">
                       <th className="px-3 py-3 text-white font-bold text-center w-10">
-                        <input type="checkbox" onChange={toggleAll}
+                        <input autoComplete="off" type="checkbox" onChange={toggleAll}
                           checked={filtered.length > 0 && selected.size === filtered.length} />
                       </th>
                       {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","일반메모","오더메모"].map(h => (
@@ -46806,7 +46806,7 @@ React.useEffect(() => {
                               : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []),
                           })}>
                           <td className="px-3 py-2.5 text-center">
-                            <input type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
+                            <input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
                           </td>
                           {["거래처명","사업자번호"].map(key => (
                             <td key={key} className="px-2 py-2.5 text-center">
@@ -46884,7 +46884,7 @@ React.useEffect(() => {
               {[["업체명 *","업체명"]].map(([label, key]) => (
                 <div key={key}>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
-                  <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                  <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                     value={editPlaceModal[key]||""}
                     onChange={(e) => setEditPlaceModal(p => ({ ...p, [key]: e.target.value }))} />
                 </div>
@@ -46909,19 +46909,19 @@ React.useEffect(() => {
               </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={editPlaceModal.주소||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 주소: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   value={editPlaceModal.메모||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 메모: e.target.value }))} />
               </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                   placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
                   value={editPlaceModal.오더메모||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 오더메모: e.target.value }))} />
@@ -46980,7 +46980,7 @@ React.useEffect(() => {
                     const id = m.client.id || m.client.거래처명;
                     return (
                       <label key={id} className="flex items-start gap-3 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50">
-                        <input type="checkbox" className="mt-1" checked={mismatchSelected.has(id)}
+                        <input autoComplete="off" type="checkbox" className="mt-1" checked={mismatchSelected.has(id)}
                           onChange={() => setMismatchSelected(prev => {
                             const n = new Set(prev);
                             n.has(id) ? n.delete(id) : n.add(id);
@@ -47026,7 +47026,7 @@ React.useEffect(() => {
             <div className="px-5 pt-4 shrink-0">
               <div className="text-[12px] font-semibold text-gray-500 mb-1.5">업체명 검색 후 선택 (방향키 / 엔터)</div>
               <div className="relative" ref={importDropRef}>
-                <input
+                <input autoComplete="off"
                   ref={importInputRef}
                   autoFocus
                   className="w-full border-2 border-[#1B2B4B] rounded-lg px-4 py-2.5 text-[13px] outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 placeholder:text-gray-400"
@@ -47193,18 +47193,18 @@ function RevenuePasswordSection({ companyName }) {
               {changeMode && (
                 <div>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">현재 비밀번호</label>
-                  <input type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  <input autoComplete="off" type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                     placeholder="현재 비밀번호" value={oldPw} onChange={e => { setOldPw(e.target.value); setMsg(""); }} />
                 </div>
               )}
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">새 비밀번호</label>
-                <input type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                <input autoComplete="off" type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="새 비밀번호" value={newPw} onChange={e => { setNewPw(e.target.value); setMsg(""); }} />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">비밀번호 확인</label>
-                <input type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                <input autoComplete="off" type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="비밀번호 확인" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setMsg(""); }} />
               </div>
               <div className="flex gap-2">
@@ -47378,7 +47378,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             <div className="flex gap-2">
               <label className={`px-4 py-2 rounded-xl border text-[13px] font-semibold cursor-pointer transition ${cardImageUploading ? "bg-gray-100 text-gray-400 border-gray-200" : "bg-white border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
                 {cardImageUploading ? "업로드 중..." : "이미지 선택"}
-                <input type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
+                <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
                   onChange={(e) => {
                     const file = e.target.files[0];
                     if (!file || !user?.uid) return;
@@ -47829,7 +47829,7 @@ function HRManagementPage({ userCompany, role, userId }) {
         {items.map((it, i) => (
           <div key={i} className="flex gap-1.5 mb-1.5">
             {Object.keys(placeholder).map(f => (
-              <input key={f} value={it[f] || ""} placeholder={placeholder[f]}
+              <input autoComplete="off" key={f} value={it[f] || ""} placeholder={placeholder[f]}
                 onChange={e => setDraft(d => { const arr = [...d[key]]; arr[i] = { ...arr[i], [f]: e.target.value }; return { ...d, [key]: arr }; })}
                 className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]" />
             ))}
@@ -47846,7 +47846,7 @@ function HRManagementPage({ userCompany, role, userId }) {
       <div className="w-[300px] flex-shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col" style={{ maxHeight: 780 }}>
         <div className="p-3 border-b border-gray-100">
           <h2 className="text-[16px] font-black text-[#1B2B4B] mb-2">인사관리부</h2>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
+          <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
             className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B] mb-2" />
           <div className="flex flex-wrap gap-1">
             {["전체", ...TEAM_OPTIONS, "미배정"].map(t => (
@@ -47938,19 +47938,19 @@ function HRManagementPage({ userCompany, role, userId }) {
                         {canEditThis && (
                           <label className={`absolute bottom-0 inset-x-0 text-center text-[10px] py-1 cursor-pointer ${photoUploading ? "bg-gray-200 text-gray-400" : "bg-black/60 text-white hover:bg-black/75"}`}>
                             {photoUploading ? "업로드중" : "사진 변경"}
-                            <input type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={handlePhotoUpload} />
+                            <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={handlePhotoUpload} />
                           </label>
                         )}
                       </div>
                       <div className="flex-1 grid grid-cols-2 gap-2 text-[12.5px]">
                         <div><div className="text-gray-400 text-[11px] mb-0.5">성명</div><div className="font-bold text-gray-800">{selected.name}</div></div>
                         <div><div className="text-gray-400 text-[11px] mb-0.5">생년월일</div>
-                          {editMode ? <input value={draft.birthDate || ""} onChange={e => setDraft(d => ({ ...d, birthDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.birthDate || "-"}</div>}
+                          {editMode ? <input autoComplete="off" value={draft.birthDate || ""} onChange={e => setDraft(d => ({ ...d, birthDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.birthDate || "-"}</div>}
                         </div>
                         <div><div className="text-gray-400 text-[11px] mb-0.5">연락처</div><div className="font-semibold text-gray-700">{selected.phone || "-"}</div></div>
                         <div><div className="text-gray-400 text-[11px] mb-0.5">이메일</div><div className="font-semibold text-gray-700">{selected.email || "-"}</div></div>
                         <div className="col-span-2"><div className="text-gray-400 text-[11px] mb-0.5">주소</div>
-                          {editMode ? <input value={draft.address || ""} onChange={e => setDraft(d => ({ ...d, address: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.address || "-"}</div>}
+                          {editMode ? <input autoComplete="off" value={draft.address || ""} onChange={e => setDraft(d => ({ ...d, address: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.address || "-"}</div>}
                         </div>
                         <div><div className="text-gray-400 text-[11px] mb-0.5">소속</div><div className="font-semibold text-gray-700">{selected.team} / {selected.position || "-"}</div></div>
                         <div><div className="text-gray-400 text-[11px] mb-0.5">입사일</div><div className="font-semibold text-gray-700">{selected.hireDate || "미등록"}</div></div>
@@ -48180,7 +48180,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <h3 className="text-[17px] font-bold text-gray-900">차량관리</h3>
           <span style={{ background:accent+"15",color:accent,fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20 }}>{drivers.length}대</span>
         </div>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="기사명 · 차량번호 검색"
+        <input autoComplete="off" value={search} onChange={e=>setSearch(e.target.value)} placeholder="기사명 · 차량번호 검색"
           className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]" style={{ maxWidth:360 }} />
         <div className="grid grid-cols-2 gap-3">
           {filtered.map((d,i)=>(
@@ -48211,7 +48211,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <h3 className="text-[17px] font-bold text-gray-900">거래처관리</h3>
           <span style={{ background:accent+"15",color:accent,fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20 }}>{allClients.length}곳</span>
         </div>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="거래처명 검색"
+        <input autoComplete="off" value={search} onChange={e=>setSearch(e.target.value)} placeholder="거래처명 검색"
           className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]" style={{ maxWidth:360 }} />
         <div className="grid grid-cols-2 gap-3">
           {filtered.map((c,i)=>(
@@ -48652,7 +48652,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 </div>
                 <div>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">예금주</label>
-                  <input
+                  <input autoComplete="off"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                     placeholder="예금주 이름"
                     value={bankForm.accountHolder}
@@ -48662,7 +48662,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">계좌번호</label>
-                <input
+                <input autoComplete="off"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="숫자만 입력 (하이픈 제외)"
                   value={bankForm.accountNumber}
@@ -48697,7 +48697,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               >
                 {uploading ? uploadProgress : "파일 선택"}
               </button>
-              <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+              <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
                 onChange={e => handleFileUpload(e.target.files?.[0])} />
             </div>
             <div
@@ -48801,7 +48801,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               ].map(({ label, key }) => (
                 <div key={key}>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
-                  <input
+                  <input autoComplete="off"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                     value={editForm[key] || ""}
                     onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}

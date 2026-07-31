@@ -354,7 +354,7 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
 
   return (
     <div className="relative">
-      <input
+      <input autoComplete="off"
         className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition"
         placeholder={placeholder}
         value={query}
@@ -407,7 +407,7 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
 
   return (
     <div className="relative">
-      <input
+      <input autoComplete="off"
         className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
         placeholder={placeholder}
         value={query}
@@ -456,7 +456,7 @@ function ClientSearch({ value, onChange, clients }) {
 
   return (
     <div className="relative">
-      <input
+      <input autoComplete="off"
         className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
         placeholder="거래처 검색..."
         value={query}
@@ -985,17 +985,17 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 </div>
                 <div>
                   <label className={labelCls}>상차지 주소 <span className="text-red-400">*</span></label>
-                  <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <input autoComplete="off" className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                 </div>
                 <div>
                   <label className={labelCls}>하차지 주소 <span className="text-red-400">*</span></label>
-                  <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <input autoComplete="off" className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                 </div>
               </div>
             )}
 
             <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit">
-              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
+              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
               <span className="text-[12px] font-semibold text-gray-600">경유지명도 검색에 포함</span>
             </label>
 
@@ -1008,11 +1008,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
               <div>
                 <label className={labelCls}>차량톤수</label>
-                <input className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                <input autoComplete="off" className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
               </div>
               <div>
                 <label className={labelCls}>화물내용</label>
-                <input className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                <input autoComplete="off" className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
               </div>
               <div>
                 <label className={labelCls}>정렬방식</label>
