@@ -47168,72 +47168,65 @@ function RevenuePasswordSection({ companyName }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4 mx-0">
-      <div className="bg-[#1B2B4B] px-6 py-4">
-        <h2 className="text-white font-bold text-[16px]">매출관리 비밀번호</h2>
-        <p className="text-white/55 text-[12px] mt-0.5">매출관리 접근 비밀번호를 설정합니다</p>
-      </div>
-      <div className="px-6 py-5 space-y-4">
-        {!loaded ? (
-          <div className="text-[13px] text-gray-400">로딩 중...</div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between">
-              <div className="text-[13px] text-gray-500">
-                현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-400"}>{currentPw ? "비밀번호 설정됨" : "비밀번호 미설정"}</b>
+    <div>
+      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">매출관리 비밀번호</p>
+      {!loaded ? (
+        <div className="text-[13px] text-gray-400">로딩 중...</div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[13px] text-gray-500">
+              현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-400"}>{currentPw ? "설정됨" : "미설정"}</b>
+            </div>
+            {currentPw && !changeMode && (
+              <button onClick={() => { setChangeMode(true); setMsg(""); }}
+                className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition shrink-0">
+                변경
+              </button>
+            )}
+          </div>
+          {msg && <div className={`text-[12px] font-medium ${msgType === "err" ? "text-red-500" : "text-emerald-600"}`}>{msg}</div>}
+          {(!currentPw || changeMode) && (
+            <>
+              {changeMode && (
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">현재 비밀번호</label>
+                  <input type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                    placeholder="현재 비밀번호" value={oldPw} onChange={e => { setOldPw(e.target.value); setMsg(""); }} />
+                </div>
+              )}
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">새 비밀번호</label>
+                <input type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  placeholder="새 비밀번호" value={newPw} onChange={e => { setNewPw(e.target.value); setMsg(""); }} />
               </div>
-              {currentPw && !changeMode && (
-                <button onClick={() => { setChangeMode(true); setMsg(""); }}
-                  className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
-                  비밀번호 변경
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">비밀번호 확인</label>
+                <input type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  placeholder="비밀번호 확인" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setMsg(""); }} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleSave} disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
+                  {saving ? "저장 중..." : (changeMode ? "변경 저장" : "저장")}
+                </button>
+                {changeMode && (
+                  <button onClick={() => { clearForm(); setMsg(""); }}
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold hover:bg-gray-50 transition">
+                    취소
+                  </button>
+                )}
+              </div>
+              {currentPw && (
+                <button onClick={handleReset}
+                  className="w-full py-2 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
+                  비밀번호 초기화
                 </button>
               )}
-            </div>
-            {msg && <div className={`text-[12px] font-medium ${msgType === "err" ? "text-red-500" : "text-emerald-600"}`}>{msg}</div>}
-            {(!currentPw || changeMode) && (
-              <>
-                {changeMode && (
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">현재 비밀번호</label>
-                    <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                      placeholder="현재 비밀번호" value={oldPw} onChange={e => { setOldPw(e.target.value); setMsg(""); }} />
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">새 비밀번호</label>
-                    <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                      placeholder="새 비밀번호" value={newPw} onChange={e => { setNewPw(e.target.value); setMsg(""); }} />
-                  </div>
-                  <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">비밀번호 확인</label>
-                    <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                      placeholder="비밀번호 확인" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setMsg(""); }} />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={handleSave} disabled={saving}
-                    className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
-                    {saving ? "저장 중..." : (changeMode ? "변경 저장" : "저장")}
-                  </button>
-                  {changeMode && (
-                    <button onClick={() => { clearForm(); setMsg(""); }}
-                      className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold hover:bg-gray-50 transition">
-                      취소
-                    </button>
-                  )}
-                  {currentPw && (
-                    <button onClick={handleReset}
-                      className="px-5 py-2.5 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
-                      초기화
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
