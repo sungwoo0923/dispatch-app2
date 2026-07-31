@@ -20,6 +20,8 @@ import {
 
 import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
 import { CustomSelect } from "./CustomSelect";
+import RolePermissionsPanel from "./RolePermissionsPanel";
+import { useCustomRoles } from "./customRoles";
 
 const todayStr = () => {
   const d = new Date();
@@ -110,9 +112,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
   const me = auth.currentUser;
   const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
+  const customRoles = useCustomRoles();
+  const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(customRoles.map(r => [r.key, r.label])) };
   const ROLES = isTotalMaster
-    ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test"]
-    : ["admin", "user", "viewer", "driver", "shipper", "test"];
+    ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)]
+    : ["admin", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || "돌캐";
 
   useEffect(() => {
@@ -700,6 +704,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             화주사 강제 업데이트
           </button>
         )}
+        {isTotalMaster && (
+          <button
+            onClick={() => setAdminTab("permissions")}
+            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "permissions" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+          >
+            권한 관리
+          </button>
+        )}
       </div>
 
       <div className="flex gap-6">
@@ -725,7 +737,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   >
                     <option value="all">전체 권한</option>
                     {ROLES.map(r => (
-                      <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>
+                      <option key={r} value={r}>{roleLabels[r] || r}</option>
                     ))}
                   </select>
                   <div className="text-[11px] text-gray-400">{filtered.length}명 표시 중</div>
@@ -746,7 +758,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <div className="text-[11px] text-gray-400 mt-0.5 truncate">{u.email}</div>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 font-semibold">{u.team || "미배정"}</span>
-                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold">{ROLE_LABELS[u.role || "user"] || u.role}</span>
+                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold">{roleLabels[u.role || "user"] || u.role}</span>
                           {isMe && <span className="text-[10px] text-blue-500 font-semibold">나</span>}
                         </div>
                       </div>
@@ -795,7 +807,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               ["직책", u.position || "-"],
                               ["부서", u.team || "미배정"],
                               ["연락처", u.phone || "-"],
-                              ["권한", ROLE_LABELS[u.role] || u.role || "-"],
+                              ["권한", roleLabels[u.role] || u.role || "-"],
                               ["회사명", u.companyName || "-"],
                             ].map(([label, value], i) => (
                               <div key={label} className={`flex items-center px-4 py-3 ${i % 2 === 0 ? "border-r border-gray-100" : ""} ${i < 4 ? "border-b border-gray-50" : ""}`}>
@@ -875,7 +887,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               <label className="block text-[11px] font-semibold text-gray-500 mb-1">권한</label>
                               <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)}
                                 className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
-                                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                                {ROLES.map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>
                             </div>
                           </div>
@@ -1192,7 +1204,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <td className="px-2 py-2.5 text-center text-gray-700 truncate max-w-[120px]">{l.companyName || "-"}</td>
                         <td className="px-2 py-2.5 text-center text-gray-700 truncate max-w-[100px]">{l.name || "-"}</td>
                         <td className="px-2 py-2.5 text-center text-gray-500 truncate max-w-[160px]">{l.email || "-"}</td>
-                        <td className="px-2 py-2.5 text-center text-gray-500">{ROLE_LABELS[l.role] || l.role || "-"}</td>
+                        <td className="px-2 py-2.5 text-center text-gray-500">{roleLabels[l.role] || l.role || "-"}</td>
                         <td className="px-2 py-2.5 text-center text-gray-400 whitespace-nowrap">
                           {l.at?.seconds ? new Date(l.at.seconds * 1000).toLocaleString("ko-KR") : "-"}
                         </td>
@@ -1222,6 +1234,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {/* ====== 화주사 강제 업데이트 탭 (최고관리자 전용) ====== */}
           {adminTab === "forceUpdate" && isTotalMaster && (
             <ShipperForceUpdatePanel currentVersion={__APP_VERSION__} />
+          )}
+
+          {/* ====== 권한 관리 탭 (최고관리자 전용) ====== */}
+          {adminTab === "permissions" && isTotalMaster && (
+            <RolePermissionsPanel />
           )}
         </div>
 

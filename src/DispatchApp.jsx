@@ -28,6 +28,8 @@ import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, is
 import FreightRateInquiry from "./FreightRateInquiry";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
+import { estimateDistanceFare } from "./tmapFareCalc";
+import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -3909,8 +3911,12 @@ React.useEffect(() => {
 }, []);
 
   // ---------------- 역할별 차단 메뉴 ----------------
+  // 최고관리자가 새로 만든 커스텀 권한(역할) — 메뉴별 접근범위(숨김/조회/조회+수정)를
+  // 직접 설정할 수 있다. 내장 역할(admin/user/test/viewer 등)에는 관여하지 않는다.
+  const customRoles = useCustomRoles();
+  const customRole = findCustomRole(customRoles, role);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
-  const isViewer = role === "viewer";
+  const isViewer = role === "viewer" || (!!customRole && getMenuAccess(customRoles, role, menu) === "read");
   const _viewerBlock = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
   const addDispatchSafe = isViewer ? _viewerBlock : addDispatch;
   const patchDispatchSafe = isViewer ? _viewerBlock : patchDispatch;
@@ -4110,7 +4116,8 @@ return (
               "관리자메뉴",
               "관리센터",
             ].map((m) => {
-              const isBlocked = (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
+              if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return null;
+              const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return null;
               if (m === "관리센터" && role !== "totalMaster") return null;
               if (isBlocked && (role === "test" || isViewer)) return null;
@@ -4457,7 +4464,7 @@ return (
           <RateCard dispatchData={dispatchDataFiltered} />
         )}
 
-        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
+        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
           <DriverManagement
             drivers={drivers}
             upsertDriver={upsertDriverSafe}
@@ -4465,7 +4472,7 @@ return (
           />
         )}
 
-        {menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
+        {menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
           <>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["하차지거래처", "기본거래처", "고정거래처관리", "고정노선관리"].map(tab => (
@@ -4505,7 +4512,7 @@ return (
           </>
         )}
 
-        {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer) && (
+        {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
           <div>
             <div className="flex gap-2 px-4 pt-4 pb-4">
               <button
@@ -4520,7 +4527,7 @@ return (
           </div>
         )}
 
-        {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer) && (
+        {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           revenueUnlocked ? (
             <Settlement
               dispatchData={dispatchDataFiltered}
@@ -4588,7 +4595,7 @@ return (
           )
         )}
 
-        {menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer) && (
+        {menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["거래처정산", "지급관리"].map(tab => (
@@ -5311,6 +5318,7 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [aiRecommend, setAiRecommend] = React.useState(null);
       const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
       const [areaFareHint, setAreaFareHint] = React.useState(null);
+      const [distanceFareEstimate, setDistanceFareEstimate] = React.useState(null);
       const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
@@ -6902,6 +6910,28 @@ React.useEffect(() => {
   form.차량종류,
   dispatchData,
 ]);
+
+// ===============================
+// 💡 티맵 거리 기반 운임 추정 — 실제 도로거리 × 차량/화물 조건으로 산정
+// ===============================
+React.useEffect(() => {
+  if (!form.상차지주소 || !form.하차지주소) {
+    setDistanceFareEstimate(null);
+    return;
+  }
+  let cancelled = false;
+  const t = setTimeout(async () => {
+    const est = await estimateDistanceFare({
+      pickupAddr: form.상차지주소,
+      dropAddr: form.하차지주소,
+      vehicleText: form.차량종류,
+      tonText: form.차량톤수,
+      cargoText: form.화물내용,
+    }).catch(() => null);
+    if (!cancelled) setDistanceFareEstimate(est);
+  }, 500);
+  return () => { cancelled = true; clearTimeout(t); };
+}, [form.상차지주소, form.하차지주소, form.차량종류, form.차량톤수, form.화물내용]);
 
     React.useEffect(() => _safeSave("dispatchForm", form), [form]);
     const pickupStops = form.경유상차목록 || [];
@@ -9553,9 +9583,9 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
   className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   긴급
 </button>
-  {areaFareHint && (
+  {(areaFareHint || distanceFareEstimate) && (
     <div
-      className="mt-2 flex items-center gap-3 border border-[#1B2B4B]/15 bg-[#1B2B4B]/5 rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-[#1B2B4B]/10 transition"
+      className="mt-2 flex items-center gap-3 bg-[#1B2B4B] rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-[#243a60] transition"
       onClick={() => {
         const inputTon = getTotalTonFromOrder(form);
         const inputPallet = getTotalPalletFromOrder(form);
@@ -9593,16 +9623,24 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
         setFareHistoryOpen(true);
       }}
     >
-      <span className="font-semibold text-[#1B2B4B]">
-        {areaFareHint.pickupLabel} → {areaFareHint.dropLabel}
+      <span className="font-semibold text-white">
+        {areaFareHint ? `${areaFareHint.pickupLabel} → ${areaFareHint.dropLabel}` : `${form.상차지주소?.slice(0, 12) || ""} → ${form.하차지주소?.slice(0, 12) || ""}`}
       </span>
-      <span className="text-gray-400 text-xs">
-        기준: {areaFareHint.motorFallback ? "일반차량(오토바이 참고)" : areaFareHint.level}
-        <span className="ml-1">({areaFareHint.count}건)</span>
+      <span className="text-white/60 text-xs">
+        {areaFareHint
+          ? <>기준: {areaFareHint.motorFallback ? "일반차량(오토바이 참고)" : areaFareHint.level}<span className="ml-1">({areaFareHint.count}건)</span></>
+          : `티맵 ${distanceFareEstimate.distance}km 기준 추정`}
       </span>
-      <span className="ml-auto font-bold text-[#1B2B4B]">
-        {areaFareHint.min.toLocaleString()} ~ {areaFareHint.max.toLocaleString()}원
+      <span className="ml-auto font-bold text-white">
+        {areaFareHint
+          ? `${areaFareHint.min.toLocaleString()} ~ ${areaFareHint.max.toLocaleString()}원`
+          : `${distanceFareEstimate.min.toLocaleString()} ~ ${distanceFareEstimate.max.toLocaleString()}원`}
       </span>
+      {distanceFareEstimate && areaFareHint && (
+        <span className="text-white/50 text-[11px] border-l border-white/20 pl-3 whitespace-nowrap">
+          티맵 {distanceFareEstimate.distance}km 기준 {distanceFareEstimate.min.toLocaleString()}~{distanceFareEstimate.max.toLocaleString()}원
+        </span>
+      )}
     </div>
   )}
 </div>
