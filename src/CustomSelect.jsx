@@ -58,14 +58,23 @@ const CustomSelect = React.forwardRef(function CustomSelect(
       width: r.width,
       top: openUp ? undefined : r.bottom + 4,
       bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
-      maxHeight: Math.max(120, (openUp ? r.top : spaceBelow) - 12),
+      // 옵션이 많은 목록(시간 선택 등)이 화면 여유 공간을 다 채워 펼쳐지지 않도록
+      // 항상 최대 높이를 캡(약 8개 항목)해서 나머지는 스크롤로 보게 한다.
+      maxHeight: Math.min(288, Math.max(120, (openUp ? r.top : spaceBelow) - 12)),
     });
   }, []);
 
   React.useEffect(() => {
     if (!open) return;
     updateMenuRect();
-    const close = () => setOpen(false);
+    // 목록 자체의 overflow-auto 스크롤도 캡처 단계에서 "scroll" 이벤트를 발생시키므로,
+    // 타겟을 가리지 않고 닫으면 목록 안에서 스크롤만 해도 드롭다운이 즉시 닫혀버린다
+    // (시간 선택 드롭다운에서 스크롤하면 사라지던 버그의 원인). 메뉴 내부에서 발생한
+    // 스크롤은 무시하고, 배경(트리거를 담은 패널 등)이 스크롤될 때만 닫는다.
+    const close = (e) => {
+      if (menuRef.current && e?.target && menuRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
     const onDocDown = (e) => {
       if (wrapRef.current && wrapRef.current.contains(e.target)) return;
       if (menuRef.current && menuRef.current.contains(e.target)) return;
