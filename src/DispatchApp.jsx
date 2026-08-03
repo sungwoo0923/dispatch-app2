@@ -10070,8 +10070,9 @@ const similar = placeList.filter(p => {
         if (e.key === "Enter") {
           const p = list[pickupActive];
           if (!p) return;
-          applyPlaceToForm(p, "pickup", "pickup-place-input");
+          applyPlaceToForm(p, "pickup", "pickup-manager");
           setShowPickupDropdown(false);
+          setPickupOptions([]);
         } else if (e.key === "ArrowDown") {
           setPickupActive((i) => Math.min(i + 1, list.length - 1));
         } else if (e.key === "ArrowUp") {
@@ -10079,8 +10080,14 @@ const similar = placeList.filter(p => {
         } else if (e.key === "Tab") {
           const p = list[pickupActive];
           if (p) {
-            applyPlaceToForm(p, "pickup", "pickup-place-input");
+            // finalFocusId를 같은 입력창(pickup-place-input)으로 주면, 담당자가
+            // 여러 명이라 팝업이 뜨는 경우 선택을 마친 뒤 포커스가 이 필드로
+            // 되돌아오는데, 아직 지우지 않은 pickupOptions가 남아있는 상태에서
+            // 다시 Tab을 누르면 이 분기가 또 실행되어 팝업이 무한히 재등장했다.
+            // 다음 필드(담당자)로 넘기고 옵션 목록도 비워 재트리거를 막는다.
+            applyPlaceToForm(p, "pickup", "pickup-manager");
             setShowPickupDropdown(false);
+            setPickupOptions([]);
           }
         }
       }}
@@ -10096,8 +10103,9 @@ const similar = placeList.filter(p => {
           i === pickupActive ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"
         }`}
         onMouseDown={() => {
-          applyPlaceToForm(p, "pickup", "pickup-place-input");
+          applyPlaceToForm(p, "pickup", "pickup-manager");
           setShowPickupDropdown(false);
+          setPickupOptions([]);
         }}
       >
 
@@ -10220,8 +10228,9 @@ className={`
       if (e.key === "Enter") {
         const p = list[placeActive]
         if (!p) return
-        applyPlaceToForm(p, "drop", "drop-place-input");
+        applyPlaceToForm(p, "drop", "drop-manager");
         setShowPlaceDropdown(false);
+        setPlaceOptions([]);
       } else if (e.key === "ArrowDown") {
         setPlaceActive((i) => Math.min(i + 1, list.length - 1))
       } else if (e.key === "ArrowUp") {
@@ -10229,8 +10238,13 @@ className={`
       } else if (e.key === "Tab") {
         const p = list[placeActive]
         if (p) {
-          applyPlaceToForm(p, "drop", "drop-place-input");
+          // finalFocusId가 같은 입력창(drop-place-input)이면, 담당자가 여러 명이라
+          // 팝업이 뜬 뒤 선택을 마치고 포커스가 이 필드로 되돌아왔을 때 placeOptions가
+          // 아직 남아있어 Tab을 다시 누르면 이 분기가 재실행되어 팝업이 계속
+          // 재등장했다. 다음 필드(담당자)로 넘기고 옵션 목록도 비워 재트리거를 막는다.
+          applyPlaceToForm(p, "drop", "drop-manager");
           setShowPlaceDropdown(false);
+          setPlaceOptions([]);
         }
       }
     }}
@@ -10247,8 +10261,9 @@ className={`
           }`}
           onMouseEnter={() => setPlaceActive(i)}
           onMouseDown={() => {
-            applyPlaceToForm(p, "drop", "drop-place-input");
+            applyPlaceToForm(p, "drop", "drop-manager");
             setShowPlaceDropdown(false);
+            setPlaceOptions([]);
           }}
         >
           <b>{p.업체명}</b>
