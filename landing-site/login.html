@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>로그인 · 회원가입 - KP-Flow Logistics</title>
+<meta name="description" content="KP-Flow 회원 로그인 및 회원가입 안내 페이지입니다." />
+<link rel="icon" type="image/png" href="/icons/sflow-icon.png" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+  <div class="wrap header-inner">
+    <a class="brand" href="index.html">
+      <img src="/icons/sflow-icon.png" alt="KP-Flow" />
+      <span>KP-Flow</span>
+    </a>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <a class="btn btn-outline" href="index.html">홈으로</a>
+      <a class="btn btn-navy" href="index.html#inquiry-form">도입 문의</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero" style="padding: 56px 20px 48px;">
+  <div class="hero-inner">
+    <div class="badge">회원 서비스</div>
+    <h1 style="font-size: 32px;">로그인 &amp; 회원가입</h1>
+    <p>등록된 계정으로 로그인하거나, 새 회사 계정을 만들어보세요.</p>
+  </div>
+</section>
+
+<section style="padding-top: 0;">
+  <div class="auth-grid">
+    <div class="auth-card">
+      <div class="auth-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      </div>
+      <h3>이미 계정이 있으신가요?</h3>
+      <p>회사에서 발급받은 이메일과 비밀번호로 로그인하세요.</p>
+      <a class="btn btn-navy btn-lg" style="display:block;" href="https://dispatch-app2.vercel.app/">로그인하기</a>
+    </div>
+    <div class="auth-card">
+      <div class="auth-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+      </div>
+      <h3>처음이신가요?</h3>
+      <p>회사 정보를 입력하고 새 계정을 만들어보세요.</p>
+      <a class="btn btn-navy btn-lg" style="display:block;" href="https://dispatch-app2.vercel.app/signup">회원가입하기</a>
+    </div>
+  </div>
+  <p class="auth-note">계정 발급이나 도입 관련 문의는 <a href="index.html#inquiry-form">도입 문의</a>를 이용해 주세요.</p>
+</section>
+
+<footer>
+  <div class="wrap footer-inner">
+    <div class="contact"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>도입 문의 및 상담은 홈페이지의 문의 폼을 이용해 주세요.</div>
+    <div class="copy">© <span id="year"></span> KP-Flow. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  document.getElementById("year").textContent = new Date().getFullYear();
+</script>
+
+</body>
+</html>

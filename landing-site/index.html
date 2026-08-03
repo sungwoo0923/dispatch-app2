@@ -10,68 +10,7 @@
 <meta property="og:type" content="website" />
 <link rel="icon" type="image/png" href="/icons/sflow-icon.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
-<style>
-  :root { --navy: #1B2B4B; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Pretendard", sans-serif; color: #111827; background: #fff; }
-  a { text-decoration: none; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
-
-  header { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid #eef0f3; }
-  .header-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; }
-  .brand { display: flex; align-items: center; gap: 8px; }
-  .brand img { width: 30px; height: 30px; border-radius: 8px; }
-  .brand span { font-weight: 800; font-size: 18px; color: var(--navy); letter-spacing: -0.02em; }
-  .btn { padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; border: none; }
-  .btn-navy { background: var(--navy); color: #fff; }
-  .btn-outline { background: #fff; color: var(--navy); border: 1px solid var(--navy); }
-
-  .hero { background: linear-gradient(180deg, #f6f8fc 0%, #ffffff 100%); padding: 80px 20px 64px; text-align: center; }
-  .hero-inner { max-width: 860px; margin: 0 auto; }
-  .badge { display: inline-block; padding: 6px 14px; border-radius: 999px; background: #eef1f7; color: var(--navy); font-size: 13px; font-weight: 700; margin-bottom: 20px; }
-  .hero h1 { font-size: 40px; font-weight: 800; color: #111827; line-height: 1.3; letter-spacing: -0.02em; margin: 0; }
-  .hero h1 span { color: var(--navy); }
-  .hero p { font-size: 16px; color: #6b7280; margin-top: 20px; line-height: 1.7; }
-  .hero-actions { margin-top: 32px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .btn-lg { padding: 14px 28px; border-radius: 10px; font-weight: 700; font-size: 15px; }
-
-  section { padding: 72px 20px; }
-  .section-label { text-align: center; font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
-  .section-title { text-align: center; font-size: 28px; font-weight: 800; color: #111827; margin: 0 0 44px; }
-
-  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; max-width: 1120px; margin: 0 auto; }
-  .feature-card { border: 1px solid #eef0f3; border-radius: 14px; padding: 24px; background: #fafbfc; }
-  .feature-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--navy); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 20px; }
-  .feature-card h3 { font-size: 16px; font-weight: 700; color: #111827; margin: 0 0 6px; }
-  .feature-card p { font-size: 13.5px; color: #6b7280; line-height: 1.6; margin: 0; }
-
-  .steps-section { background: #f6f8fc; }
-  .steps-title { text-align: center; font-size: 24px; font-weight: 800; color: #111827; margin-bottom: 40px; }
-  .steps { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 860px; margin: 0 auto; }
-  .step-card { flex: 1 1 220px; max-width: 260px; background: #fff; border: 1px solid #eef0f3; border-radius: 14px; padding: 24px; text-align: center; }
-  .step-num { width: 32px; height: 32px; border-radius: 50%; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; margin: 0 auto 14px; }
-  .step-card h4 { font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 6px; }
-  .step-card p { font-size: 13px; color: #6b7280; line-height: 1.6; margin: 0; }
-
-  .form-section { max-width: 560px; margin: 0 auto; text-align: center; }
-  .form-section p.sub { font-size: 14px; color: #6b7280; margin-top: 10px; }
-  form { text-align: left; display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
-  label { display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px; }
-  input, textarea { width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 10px; border: 1px solid #d1d5db; font-size: 14px; outline: none; font-family: inherit; }
-  textarea { resize: vertical; }
-  .submit-btn { margin-top: 6px; padding: 14px; border-radius: 10px; background: var(--navy); color: #fff; font-weight: 700; font-size: 15px; border: none; cursor: pointer; }
-  .submit-btn:disabled { background: #9ca3af; cursor: not-allowed; }
-  .error-text { color: #dc2626; font-size: 13px; font-weight: 600; }
-  .success-box { border: 1.5px solid var(--navy); border-radius: 14px; padding: 40px 24px; text-align: center; }
-  .success-box .check { font-size: 40px; margin-bottom: 14px; }
-  .success-box h3 { font-size: 17px; font-weight: 800; color: #111827; margin: 0 0 8px; }
-  .success-box p { font-size: 14px; color: #6b7280; margin: 0; }
-
-  footer { border-top: 1px solid #eef0f3; padding: 28px 20px; }
-  .footer-inner { max-width: 1120px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-  .footer-inner .contact { color: #9ca3af; font-size: 13px; }
-  .footer-inner .copy { font-size: 12px; color: #9ca3af; }
-</style>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
@@ -83,7 +22,7 @@
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
       <button class="btn btn-navy" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">도입 문의</button>
-      <a class="btn btn-outline" href="https://dispatch-app2.vercel.app/login" target="_blank" rel="noopener">로그인</a>
+      <a class="btn btn-outline" href="login.html">로그인</a>
     </div>
   </div>
 </header>
@@ -95,7 +34,7 @@
     <p>배차관리, 실시간 추적, 지입차관리, 정산관리까지 —<br />운송사 운영에 필요한 모든 기능을 하나의 프로그램에서 관리하세요.</p>
     <div class="hero-actions">
       <button class="btn btn-navy btn-lg" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">도입 문의하기</button>
-      <a class="btn btn-outline btn-lg" href="https://dispatch-app2.vercel.app/login" target="_blank" rel="noopener">로그인</a>
+      <a class="btn btn-outline btn-lg" href="login.html">로그인</a>
     </div>
   </div>
 </section>
@@ -104,14 +43,14 @@
   <div class="section-label">주요 기능</div>
   <h2 class="section-title">운송 업무에 꼭 필요한 기능만</h2>
   <div class="features">
-    <div class="feature-card"><div class="feature-icon">📋</div><h3>배차관리</h3><p>상/하차지, 차량, 운임까지 한 화면에서 빠르게 등록하고 배차하세요.</p></div>
-    <div class="feature-card"><div class="feature-icon">📍</div><h3>실시간 배차현황</h3><p>진행 중인 오더와 기사 위치를 실시간으로 확인할 수 있습니다.</p></div>
-    <div class="feature-card"><div class="feature-icon">🚚</div><h3>지입차관리</h3><p>지입/직영 차량의 노선, 배차 이력, 정산 내역을 한 번에 관리합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon">🏢</div><h3>거래처관리</h3><p>상/하차지 거래처 정보와 담당자 연락처를 체계적으로 관리합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon">💰</div><h3>정산관리</h3><p>기사운임, 거래처 정산을 자동으로 집계해 실수를 줄여줍니다.</p></div>
-    <div class="feature-card"><div class="feature-icon">👥</div><h3>기사관리</h3><p>기사 등록부터 등급 관리, 서류 업로드까지 한곳에서 처리합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon">🌡️</div><h3>온도/차량 관제</h3><p>냉동/냉장 차량의 온도와 적재함 상태를 원격으로 확인합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon">🛡️</div><h3>권한별 접근 관리</h3><p>역할에 따라 메뉴 접근 범위를 세밀하게 설정할 수 있습니다.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg></div><h3>배차관리</h3><p>상/하차지, 차량, 운임까지 한 화면에서 빠르게 등록하고 배차하세요.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></div><h3>실시간 배차현황</h3><p>진행 중인 오더와 기사 위치를 실시간으로 확인할 수 있습니다.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14v10"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div><h3>지입차관리</h3><p>지입/직영 차량의 노선, 배차 이력, 정산 내역을 한 번에 관리합니다.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><h3>거래처관리</h3><p>상/하차지 거래처 정보와 담당자 연락처를 체계적으로 관리합니다.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg></div><h3>정산관리</h3><p>기사운임, 거래처 정산을 자동으로 집계해 실수를 줄여줍니다.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>기사관리</h3><p>기사 등록부터 등급 관리, 서류 업로드까지 한곳에서 처리합니다.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg></div><h3>온도/차량 관제</h3><p>냉동/냉장 차량의 온도와 적재함 상태를 원격으로 확인합니다.</p></div>
+    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>권한별 접근 관리</h3><p>역할에 따라 메뉴 접근 범위를 세밀하게 설정할 수 있습니다.</p></div>
   </div>
 </section>
 
@@ -156,7 +95,7 @@
     </form>
 
     <div id="successBox" class="success-box" style="display:none;">
-      <div class="check">✅</div>
+      <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div>
       <h3>문의가 접수되었습니다</h3>
       <p>담당자 확인 후 입력하신 연락처로 안내드리겠습니다.</p>
     </div>
@@ -165,7 +104,7 @@
 
 <footer>
   <div class="wrap footer-inner">
-    <div class="contact">📞 도입 문의 및 상담은 위 폼을 이용해 주세요.</div>
+    <div class="contact"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>도입 문의 및 상담은 위 폼을 이용해 주세요.</div>
     <div class="copy">© <span id="year"></span> KP-Flow. All rights reserved.</div>
   </div>
 </footer>
