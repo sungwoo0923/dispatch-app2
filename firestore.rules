@@ -57,6 +57,13 @@ service cloud.firestore {
       allow get, list, update, delete: if isSignedIn();
     }
 
+    // 홈페이지(랜딩페이지) 도입 문의 — 로그인 없는 방문자가 폼으로 제출만 할 수 있고,
+    // 목록 조회/상태 변경은 관리자메뉴(로그인 사용자)만 가능하다.
+    match /landingInquiries/{id} {
+      allow create: if true;
+      allow get, list, update, delete: if isSignedIn();
+    }
+
     // 실시간 위치공유 — 업로드 페이지에서 오더 id로만 쓰고 읽는다. 전체 목록 열람은 로그인 사용자만.
     match /liveLocations/{id} {
       allow get, create, update: if true;

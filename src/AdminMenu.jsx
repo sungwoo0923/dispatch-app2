@@ -105,6 +105,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [inquiryReplyText, setInquiryReplyText] = useState("");
   const [inquiryReplying, setInquiryReplying] = useState(false);
 
+  // 도입 문의(홈페이지 랜딩페이지) 탭 state
+  const [landingInquiries, setLandingInquiries] = useState([]);
+  const [selectedLandingInquiry, setSelectedLandingInquiry] = useState(null);
+  const [landingStatusSaving, setLandingStatusSaving] = useState(false);
+
   const [myRole, setMyRole] = useState("");
   const [myCompany, setMyCompany] = useState("");
   const [myCompanyCode, setMyCompanyCode] = useState("");
@@ -176,6 +181,29 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     });
     return () => unsub();
   }, []);
+
+  // 도입 문의(홈페이지 랜딩페이지 도입문의 폼) 구독 — 최고관리자만
+  useEffect(() => {
+    if (!isTotalMaster) return;
+    const unsub = onSnapshot(collection(db, "landingInquiries"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setLandingInquiries(list);
+    });
+    return () => unsub();
+  }, [isTotalMaster]);
+
+  const newLandingInquiryCount = landingInquiries.filter(q => (q.status || "신규") === "신규").length;
+
+  const updateLandingInquiryStatus = async (id, status) => {
+    setLandingStatusSaving(true);
+    try {
+      await updateDoc(doc(db, "landingInquiries", id), { status });
+      setSelectedLandingInquiry(prev => (prev && prev.id === id ? { ...prev, status } : prev));
+    } finally {
+      setLandingStatusSaving(false);
+    }
+  };
 
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) return users;
@@ -712,6 +740,19 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             권한 관리
           </button>
         )}
+        {isTotalMaster && (
+          <button
+            onClick={() => setAdminTab("landingInquiries")}
+            className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "landingInquiries" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+          >
+            도입 문의
+            {newLandingInquiryCount > 0 && (
+              <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${adminTab === "landingInquiries" ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
+                {newLandingInquiryCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       <div className="flex gap-6">
@@ -1236,6 +1277,46 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <ShipperForceUpdatePanel currentVersion={__APP_VERSION__} />
           )}
 
+          {/* ====== 도입 문의 탭 (홈페이지 랜딩페이지, 최고관리자 전용) ====== */}
+          {adminTab === "landingInquiries" && isTotalMaster && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {landingInquiries.length === 0 ? (
+                <div className="text-[13px] text-gray-400 text-center py-16">홈페이지로 들어온 도입 문의가 없습니다.</div>
+              ) : (
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#1B2B4B] text-white">
+                      <th className="px-4 py-2.5 text-left font-semibold">회사명</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">담당자</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">연락처</th>
+                      <th className="px-4 py-2.5 text-center font-semibold">접수일</th>
+                      <th className="px-4 py-2.5 text-center font-semibold">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {landingInquiries.map(q => (
+                      <tr key={q.id} onClick={() => setSelectedLandingInquiry(q)} className="cursor-pointer hover:bg-gray-50 transition">
+                        <td className="px-4 py-3 font-semibold text-gray-800">{q.companyName}</td>
+                        <td className="px-4 py-3 text-gray-600">{q.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{q.phone}</td>
+                        <td className="px-4 py-3 text-center text-gray-400">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                            q.status === "완료" ? "bg-emerald-100 text-emerald-700"
+                            : q.status === "상담중" ? "bg-blue-50 text-blue-600"
+                            : "bg-amber-50 text-amber-600"
+                          }`}>
+                            {q.status || "신규"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
           {/* ====== 권한 관리 탭 (최고관리자 전용) ====== */}
           {adminTab === "permissions" && isTotalMaster && (
             <RolePermissionsPanel />
@@ -1492,6 +1573,57 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               >
                 {inquiryReplying ? "등록 중..." : (selectedInquiry.status === "답변완료" ? "답변 수정" : "답변 등록")}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====== 도입 문의 상세 팝업 ====== */}
+      {selectedLandingInquiry && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSelectedLandingInquiry(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <div className="font-bold text-[15px] text-[#1B2B4B]">{selectedLandingInquiry.companyName}</div>
+                <div className="text-[12px] text-gray-400 mt-0.5">
+                  {selectedLandingInquiry.name} · {selectedLandingInquiry.phone}
+                  {selectedLandingInquiry.createdAt?.seconds && ` · ${new Date(selectedLandingInquiry.createdAt.seconds * 1000).toLocaleString("ko-KR")}`}
+                </div>
+              </div>
+              <button onClick={() => setSelectedLandingInquiry(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {selectedLandingInquiry.email && (
+                <div>
+                  <div className="text-[11px] font-semibold text-gray-500 mb-1">이메일</div>
+                  <div className="text-[13px] text-gray-700">{selectedLandingInquiry.email}</div>
+                </div>
+              )}
+              <div>
+                <div className="text-[11px] font-semibold text-gray-500 mb-1">문의 내용</div>
+                <div className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3 min-h-[48px]">
+                  {selectedLandingInquiry.message || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-gray-500 mb-1">진행 상태</div>
+                <div className="flex gap-2">
+                  {["신규", "상담중", "완료"].map(s => (
+                    <button
+                      key={s}
+                      disabled={landingStatusSaving}
+                      onClick={() => updateLandingInquiryStatus(selectedLandingInquiry.id, s)}
+                      className={`flex-1 py-2 rounded-lg text-[13px] font-bold border transition disabled:opacity-50 ${
+                        (selectedLandingInquiry.status || "신규") === s
+                          ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

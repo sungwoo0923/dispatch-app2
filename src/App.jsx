@@ -36,6 +36,7 @@ import UploadPage from "./UploadPage";
 import DriverSearchPage from "./DriverSearchPage";
 import StandardFare from "./StandardFare";
 import ChangePassword from "./ChangePassword";
+import LandingPage from "./LandingPage";
 
 /* =======================================================================
    디바이스 감지
@@ -432,7 +433,9 @@ export default function App() {
   }, []);
 
   // 공개 라우트는 인증/스플래시 없이 바로 렌더링 (Android PWA start_url 우회)
-  const PUBLIC_ROUTES = { "/driver-upload": DriverSearchPage, "/upload": UploadPage };
+  // "/"는 검색엔진에서 유입되는 방문자를 위한 소개(마케팅) 홈페이지 — 로그인 화면으로
+  // 바로 리다이렉트하지 않고, 여기서 프로그램을 소개하고 도입 문의를 받는다.
+  const PUBLIC_ROUTES = { "/driver-upload": DriverSearchPage, "/upload": UploadPage, "/": LandingPage };
   const publicMatch = PUBLIC_ROUTES[window.location.pathname];
   if (publicMatch) {
     const PublicComp = publicMatch;
@@ -504,7 +507,7 @@ export default function App() {
       <Router>
         <React.Suspense fallback={routeFallback}>
         <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          {/* "/"는 PUBLIC_ROUTES에서 LandingPage로 먼저 처리되어 이 아래로 내려오지 않는다 */}
 
           <Route
             path="/login"
