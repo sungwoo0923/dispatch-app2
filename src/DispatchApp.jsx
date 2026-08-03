@@ -2404,6 +2404,16 @@ function mergeViaCargoText(mainCargo, waypointLists) {
   const parts = [...Object.entries(byUnit).map(([u, n]) => `${n}${u}`), ...untyped];
   return parts.join("+");
 }
+function mergeViaNames(waypointLists) {
+  const names = [];
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      const name = String(s?.업체명 || "").trim();
+      if (name && !names.includes(name)) names.push(name);
+    }
+  }
+  return names.join(", ");
+}
 function mergeViaTonnage(mainTon, waypointLists) {
   const parseKg = (s) => {
     const str = String(s || "").trim().replace(/,/g, "");
@@ -40263,19 +40273,23 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   const selectedRowsInvoice = rowsInvoice.filter(r => selectedInvoiceIds.has(r._id));
 
-  const mapped = selectedRowsInvoice.map((r, i) => ({
-    idx: i + 1,
-    상차일: r.상차일 || "",
-    상차지: r.상차지명 || r.상차지 || "",
-    하차지: r.하차지명 || r.하차지 || "",
-    화물명: r.화물내용 || "",
-    기사명: r.이름 || r.기사명 || "",
-    차량번호: r.차량번호 || "",
-    공급가액: toInt(r.청구운임),
-    세액: Math.round(toInt(r.청구운임) * 0.1),
-    톤수: r.차량톤수 || "",
-    차량종류: r.차량종류 || "",
-  }));
+  const mapped = selectedRowsInvoice.map((r, i) => {
+    const viaLists = [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차];
+    return {
+      idx: i + 1,
+      상차일: r.상차일 || "",
+      상차지: r.상차지명 || r.상차지 || "",
+      하차지: r.하차지명 || r.하차지 || "",
+      경유지: mergeViaNames(viaLists),
+      화물명: mergeViaCargoText(r.화물내용, viaLists),
+      기사명: r.이름 || r.기사명 || "",
+      차량번호: r.차량번호 || "",
+      공급가액: toInt(r.청구운임),
+      세액: Math.round(toInt(r.청구운임) * 0.1),
+      톤수: r.차량톤수 || "",
+      차량종류: r.차량종류 || "",
+    };
+  });
 
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
@@ -40339,6 +40353,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차일||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차지||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.하차지||""}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.경유지||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.화물명||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.기사명||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.차량번호||""}</td>
@@ -40394,13 +40409,13 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       <table style="width:100%;border-collapse:collapse">
         <thead>
           <tr style="background:#1B2B4B">
-            ${["No","날짜","상차지","하차지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="padding:9px 10px;font-size:12px;color:#fff;font-weight:700;text-align:center;white-space:nowrap">${h}</th>`).join("")}
+            ${["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="padding:9px 10px;font-size:12px;color:#fff;font-weight:700;text-align:center;white-space:nowrap">${h}</th>`).join("")}
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           <tr style="background:#1B2B4B">
-            <td colspan="7" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff;text-align:center">소 계</td>
+            <td colspan="8" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff;text-align:center">소 계</td>
             <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fff">${sup.toLocaleString()}</td>
             <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#93c5fd">${tax.toLocaleString()}</td>
             <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fde68a">${total.toLocaleString()}</td>
@@ -41768,6 +41783,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <th className="px-2 py-2 text-center">날짜</th>
                       <th className="px-2 py-2 text-center">상차지</th>
                       <th className="px-2 py-2 text-center">하차지</th>
+                      <th className="px-2 py-2 text-center">경유지</th>
                       <th className="px-2 py-2 text-center">화물명</th>
                       <th className="px-2 py-2 text-center">차량번호</th>
                       <th className="px-2 py-2 text-right">청구운임</th>
@@ -41804,7 +41820,8 @@ const handleBatchSettle = async (targetStatus) => {
                           <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.상차일 || ""}</td>
                           <td className="px-2 py-1.5 text-center">{r.상차지명 || ""}</td>
                           <td className="px-2 py-1.5 text-center">{r.하차지명 || ""}</td>
-                          <td className="px-2 py-1.5 text-center">{r.화물내용 || ""}</td>
+                          <td className="px-2 py-1.5 text-center">{mergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차])}</td>
+                          <td className="px-2 py-1.5 text-center">{mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차])}</td>
                           <td className="px-2 py-1.5 text-center text-[11px]">{r.차량번호 || ""}</td>
                           <td className="px-2 py-1.5 text-right font-semibold">{won(toInt(r.청구운임))}</td>
                         </tr>
@@ -41955,14 +41972,14 @@ const handleBatchSettle = async (targetStatus) => {
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B]">
-                      {["No","날짜","상차지","하차지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
+                      {["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {mapped.length === 0 ? (
-                      <tr><td colSpan={10} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
+                      <tr><td colSpan={11} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                     ) : (
                                                                  mapped.map((m, i) => (
                         <tr
@@ -41990,6 +42007,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">{m.상차일}</td>
                           <td className="px-3 py-2.5 text-center">{m.상차지}</td>
                           <td className="px-3 py-2.5 text-center">{m.하차지}</td>
+                          <td className="px-3 py-2.5 text-center">{m.경유지}</td>
                           <td className="px-3 py-2.5 text-center">{m.화물명}</td>
                           <td className="px-3 py-2.5 text-center">{m.기사명}</td>
                           <td className="px-3 py-2.5 text-center text-[12px]">{m.차량번호}</td>
@@ -42002,7 +42020,7 @@ const handleBatchSettle = async (targetStatus) => {
                     )}
                     {mapped.length > 0 && (
                       <tr className="bg-[#1B2B4B]">
-                        <td colSpan={7} className="px-3 py-3 text-white font-bold text-center">소 계</td>
+                        <td colSpan={8} className="px-3 py-3 text-white font-bold text-center">소 계</td>
                         <td className="px-3 py-3 text-right text-white font-bold">{won(합계공급가)}</td>
                         <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(합계세액)}</td>
                         <td className="px-3 py-3 text-right text-yellow-300 font-extrabold">{won(합계공급가+합계세액)}</td>
@@ -42361,7 +42379,7 @@ const handleBatchSettle = async (targetStatus) => {
               try {
                 // 엑셀 생성
                 const wsData = (item.mapped||[]).map(m => ({
-                  No: m.idx, 날짜: m.상차일, 상차지: m.상차지, 하차지: m.하차지,
+                  No: m.idx, 날짜: m.상차일, 상차지: m.상차지, 하차지: m.하차지, 경유지: m.경유지,
                   화물명: m.화물명, 기사명: m.기사명, 차량번호: m.차량번호,
                   공급가액: m.공급가액, "세액(10%)": m.세액, 합계: m.공급가액+m.세액,
                 }));
@@ -42574,6 +42592,7 @@ const handleBatchSettle = async (targetStatus) => {
                           날짜: m.상차일,
                           상차지: m.상차지,
                           하차지: m.하차지,
+                          경유지: m.경유지,
                           화물명: m.화물명,
                           기사명: m.기사명,
                           차량번호: m.차량번호,
@@ -42614,6 +42633,7 @@ const handleBatchSettle = async (targetStatus) => {
                                 상차일: m.상차일 || "",
                                 상차지: m.상차지 || "",
                                 하차지: m.하차지 || "",
+                                경유지: m.경유지 || "",
                                 화물명: m.화물명 || "",
                                 기사명: m.기사명 || "",
                                 차량번호: m.차량번호 || "",
