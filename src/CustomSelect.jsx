@@ -68,12 +68,14 @@ const CustomSelect = React.forwardRef(function CustomSelect(
     if (!open) return;
     updateMenuRect();
     // 목록 자체의 overflow-auto 스크롤도 캡처 단계에서 "scroll" 이벤트를 발생시키므로,
-    // 타겟을 가리지 않고 닫으면 목록 안에서 스크롤만 해도 드롭다운이 즉시 닫혀버린다
-    // (시간 선택 드롭다운에서 스크롤하면 사라지던 버그의 원인). 메뉴 내부에서 발생한
-    // 스크롤은 무시하고, 배경(트리거를 담은 패널 등)이 스크롤될 때만 닫는다.
-    const close = (e) => {
+    // 타겟을 가리지 않고 반응하면 목록 안에서 스크롤만 해도 오작동한다(무시).
+    // 그 외 배경(트리거를 담은 모달/패널 등)이 스크롤될 때는 예전엔 그냥 닫아버렸는데,
+    // 그러면 "밖에서 스크롤하면 드롭다운이 사라진다"는 문제가 생긴다. 트리거 버튼도
+    // 배경과 함께 움직이므로, 닫는 대신 트리거의 새 위치를 다시 재서 드롭다운이
+    // 트리거를 계속 따라다니게 한다(항상 열려있는 상태로 위/아래 스크롤 가능).
+    const reposition = (e) => {
       if (menuRef.current && e?.target && menuRef.current.contains(e.target)) return;
-      setOpen(false);
+      updateMenuRect();
     };
     const onDocDown = (e) => {
       if (wrapRef.current && wrapRef.current.contains(e.target)) return;
@@ -81,12 +83,12 @@ const CustomSelect = React.forwardRef(function CustomSelect(
       setOpen(false);
     };
     document.addEventListener("mousedown", onDocDown);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
     return () => {
       document.removeEventListener("mousedown", onDocDown);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
     };
   }, [open, updateMenuRect]);
 

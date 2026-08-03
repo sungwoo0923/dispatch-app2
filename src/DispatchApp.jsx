@@ -2404,6 +2404,16 @@ function mergeViaCargoText(mainCargo, waypointLists) {
   const parts = [...Object.entries(byUnit).map(([u, n]) => `${n}${u}`), ...untyped];
   return parts.join("+");
 }
+function mergeViaNames(waypointLists) {
+  const names = [];
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      const name = String(s?.업체명 || "").trim();
+      if (name && !names.includes(name)) names.push(name);
+    }
+  }
+  return names.join(", ");
+}
 function mergeViaTonnage(mainTon, waypointLists) {
   const parseKg = (s) => {
     const str = String(s || "").trim().replace(/,/g, "");
@@ -3848,6 +3858,10 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
+  // 정산관리(거래명세서 검색/선택 상태)는 다른 메뉴로 이동했다 돌아와도 유지되도록,
+  // 한 번 방문하면 언마운트하지 않고 CSS로만 숨긴다.
+  const [정산관리Visited, set정산관리Visited] = useState(false);
+  useEffect(() => { if (menu === "정산관리") set정산관리Visited(true); }, [menu]);
   const [activeTool, setActiveTool] = useState("none"); // "none" | "calculator" | "ai" | "messenger"
   const notificationsEnabled = useNotificationsEnabled();
   const calcOpen = activeTool === "calculator";
@@ -4595,8 +4609,8 @@ return (
           )
         )}
 
-        {menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
-          <>
+        {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
+          <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["거래처정산", "지급관리"].map(tab => (
               <button key={tab} onClick={() => set정산관리Tab(tab)}
@@ -4609,7 +4623,8 @@ return (
               </button>
             ))}
           </div>
-          {정산관리Tab === "거래처정산" && (
+          {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
+          <div style={{ display: 정산관리Tab === "거래처정산" ? undefined : "none" }}>
             <ClientSettlement
               dispatchData={dispatchDataFiltered}
               setDispatchData={setDispatchData}
@@ -4624,7 +4639,7 @@ return (
               setCardImageUploading={setCardImageUploading}
               isViewer={isViewer}
             />
-          )}
+          </div>
           {정산관리Tab === "지급관리" && (
             <div className="p-4">
               <PaymentManagement
@@ -4633,7 +4648,7 @@ return (
               />
             </div>
           )}
-          </>
+          </div>
         )}
 
         {menu === "운임조회" && <FreightRateInquiry />}
@@ -40114,6 +40129,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [editInfo, setEditInfo] = useState({});
   const [showEdit, setShowEdit] = useState(false);
   const [searched, setSearched] = useState(false);
+  // ★ 명세서 포함 오더 선택 목록 내 세부검색 (쉼표로 여러 검색어 입력 시 OR 매칭)
+  const [invoiceRowFilter, setInvoiceRowFilter] = useState("");
 
   // ★ 드롭다운 상태
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -40263,19 +40280,40 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   const selectedRowsInvoice = rowsInvoice.filter(r => selectedInvoiceIds.has(r._id));
 
-  const mapped = selectedRowsInvoice.map((r, i) => ({
-    idx: i + 1,
-    상차일: r.상차일 || "",
-    상차지: r.상차지명 || r.상차지 || "",
-    하차지: r.하차지명 || r.하차지 || "",
-    화물명: r.화물내용 || "",
-    기사명: r.이름 || r.기사명 || "",
-    차량번호: r.차량번호 || "",
-    공급가액: toInt(r.청구운임),
-    세액: Math.round(toInt(r.청구운임) * 0.1),
-    톤수: r.차량톤수 || "",
-    차량종류: r.차량종류 || "",
-  }));
+  // ★ 명세서 포함 오더 선택 목록의 세부검색 — 쉼표로 구분한 여러 검색어 중 하나라도
+  // 상차지/하차지/경유지/화물명/차량번호에 포함되면 매칭 (OR 조건)
+  const invoiceFilterTerms = useMemo(
+    () => invoiceRowFilter.split(/[,，]/).map(s => s.trim().toLowerCase()).filter(Boolean),
+    [invoiceRowFilter]
+  );
+  const filteredRowsInvoice = useMemo(() => {
+    if (invoiceFilterTerms.length === 0) return rowsInvoice;
+    return rowsInvoice.filter(r => {
+      const hay = [
+        r.상차지명, r.하차지명, r.화물내용, r.차량번호, r.거래처명,
+        mergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]),
+      ].join(" ").toLowerCase();
+      return invoiceFilterTerms.some(t => hay.includes(t));
+    });
+  }, [rowsInvoice, invoiceFilterTerms]);
+
+  const mapped = selectedRowsInvoice.map((r, i) => {
+    const viaLists = [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차];
+    return {
+      idx: i + 1,
+      상차일: r.상차일 || "",
+      상차지: r.상차지명 || r.상차지 || "",
+      하차지: r.하차지명 || r.하차지 || "",
+      경유지: mergeViaNames(viaLists),
+      화물명: mergeViaCargoText(r.화물내용, viaLists),
+      기사명: r.이름 || r.기사명 || "",
+      차량번호: r.차량번호 || "",
+      공급가액: toInt(r.청구운임),
+      세액: Math.round(toInt(r.청구운임) * 0.1),
+      톤수: r.차량톤수 || "",
+      차량종류: r.차량종류 || "",
+    };
+  });
 
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
@@ -40339,6 +40377,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차일||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차지||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.하차지||""}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.경유지||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.화물명||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.기사명||""}</td>
         <td style="padding:7px 10px;font-size:12px;color:#374151">${m.차량번호||""}</td>
@@ -40394,13 +40433,13 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       <table style="width:100%;border-collapse:collapse">
         <thead>
           <tr style="background:#1B2B4B">
-            ${["No","날짜","상차지","하차지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="padding:9px 10px;font-size:12px;color:#fff;font-weight:700;text-align:center;white-space:nowrap">${h}</th>`).join("")}
+            ${["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="padding:9px 10px;font-size:12px;color:#fff;font-weight:700;text-align:center;white-space:nowrap">${h}</th>`).join("")}
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           <tr style="background:#1B2B4B">
-            <td colspan="7" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff;text-align:center">소 계</td>
+            <td colspan="8" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff;text-align:center">소 계</td>
             <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fff">${sup.toLocaleString()}</td>
             <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#93c5fd">${tax.toLocaleString()}</td>
             <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fde68a">${total.toLocaleString()}</td>
@@ -41740,26 +41779,48 @@ const handleBatchSettle = async (targetStatus) => {
           {/* ★ 조회결과 중 명세서에 포함할 오더 선택 (특정 오더만 골라서 명세서 발급) */}
           {searched && rowsInvoice.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
                 <div className="text-[13px] font-bold text-gray-600">
                   명세서에 포함할 오더 선택
                   <span className="text-[12px] text-gray-400 font-normal ml-1">(체크 해제하면 아래 명세서에서 빠집니다)</span>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    autoComplete="off"
+                    value={invoiceRowFilter}
+                    onChange={(e) => setInvoiceRowFilter(e.target.value)}
+                    placeholder="세부검색 (예: gs부산센터, gs양산센터)"
+                    className="px-2.5 py-1 text-[12px] border border-gray-200 rounded-lg w-[220px] outline-none focus:border-[#1B2B4B]"
+                  />
+                  {invoiceRowFilter && (
+                    <button
+                      onClick={() => setInvoiceRowFilter("")}
+                      className="px-2 py-1 rounded-lg bg-gray-100 text-gray-500 text-[12px] font-semibold hover:bg-gray-200 transition"
+                    >
+                      검색초기화
+                    </button>
+                  )}
                   <button
-                    onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
+                    onClick={() => setSelectedInvoiceIds(prev => new Set([...prev, ...filteredRowsInvoice.map(r => r._id)]))}
                     className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
                   >
-                    전체선택
+                    {invoiceRowFilter ? "검색결과 선택" : "전체선택"}
                   </button>
                   <button
-                    onClick={() => setSelectedInvoiceIds(new Set())}
+                    onClick={() => setSelectedInvoiceIds(prev => {
+                      const next = new Set(prev);
+                      filteredRowsInvoice.forEach(r => next.delete(r._id));
+                      return next;
+                    })}
                     className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
                   >
-                    전체해제
+                    {invoiceRowFilter ? "검색결과 해제" : "전체해제"}
                   </button>
                 </div>
               </div>
+              {invoiceRowFilter && (
+                <div className="text-[12px] text-gray-400 mb-2">검색결과 {filteredRowsInvoice.length}건 / 전체 {rowsInvoice.length}건</div>
+              )}
               <div className="overflow-x-auto max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
                 <table className="w-full text-[12px]">
                   <thead>
@@ -41768,13 +41829,16 @@ const handleBatchSettle = async (targetStatus) => {
                       <th className="px-2 py-2 text-center">날짜</th>
                       <th className="px-2 py-2 text-center">상차지</th>
                       <th className="px-2 py-2 text-center">하차지</th>
+                      <th className="px-2 py-2 text-center">경유지</th>
                       <th className="px-2 py-2 text-center">화물명</th>
                       <th className="px-2 py-2 text-center">차량번호</th>
                       <th className="px-2 py-2 text-right">청구운임</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rowsInvoice.map((r) => {
+                    {filteredRowsInvoice.length === 0 ? (
+                      <tr><td colSpan={8} className="text-center text-gray-400 py-6 text-[12px]">검색 결과가 없습니다.</td></tr>
+                    ) : filteredRowsInvoice.map((r) => {
                       const checked = selectedInvoiceIds.has(r._id);
                       return (
                         <tr
@@ -41804,7 +41868,8 @@ const handleBatchSettle = async (targetStatus) => {
                           <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.상차일 || ""}</td>
                           <td className="px-2 py-1.5 text-center">{r.상차지명 || ""}</td>
                           <td className="px-2 py-1.5 text-center">{r.하차지명 || ""}</td>
-                          <td className="px-2 py-1.5 text-center">{r.화물내용 || ""}</td>
+                          <td className="px-2 py-1.5 text-center">{mergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차])}</td>
+                          <td className="px-2 py-1.5 text-center">{mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차])}</td>
                           <td className="px-2 py-1.5 text-center text-[11px]">{r.차량번호 || ""}</td>
                           <td className="px-2 py-1.5 text-right font-semibold">{won(toInt(r.청구운임))}</td>
                         </tr>
@@ -41955,14 +42020,14 @@ const handleBatchSettle = async (targetStatus) => {
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B]">
-                      {["No","날짜","상차지","하차지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
+                      {["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {mapped.length === 0 ? (
-                      <tr><td colSpan={10} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
+                      <tr><td colSpan={11} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                     ) : (
                                                                  mapped.map((m, i) => (
                         <tr
@@ -41990,6 +42055,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">{m.상차일}</td>
                           <td className="px-3 py-2.5 text-center">{m.상차지}</td>
                           <td className="px-3 py-2.5 text-center">{m.하차지}</td>
+                          <td className="px-3 py-2.5 text-center">{m.경유지}</td>
                           <td className="px-3 py-2.5 text-center">{m.화물명}</td>
                           <td className="px-3 py-2.5 text-center">{m.기사명}</td>
                           <td className="px-3 py-2.5 text-center text-[12px]">{m.차량번호}</td>
@@ -42002,7 +42068,7 @@ const handleBatchSettle = async (targetStatus) => {
                     )}
                     {mapped.length > 0 && (
                       <tr className="bg-[#1B2B4B]">
-                        <td colSpan={7} className="px-3 py-3 text-white font-bold text-center">소 계</td>
+                        <td colSpan={8} className="px-3 py-3 text-white font-bold text-center">소 계</td>
                         <td className="px-3 py-3 text-right text-white font-bold">{won(합계공급가)}</td>
                         <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(합계세액)}</td>
                         <td className="px-3 py-3 text-right text-yellow-300 font-extrabold">{won(합계공급가+합계세액)}</td>
@@ -42361,7 +42427,7 @@ const handleBatchSettle = async (targetStatus) => {
               try {
                 // 엑셀 생성
                 const wsData = (item.mapped||[]).map(m => ({
-                  No: m.idx, 날짜: m.상차일, 상차지: m.상차지, 하차지: m.하차지,
+                  No: m.idx, 날짜: m.상차일, 상차지: m.상차지, 하차지: m.하차지, 경유지: m.경유지,
                   화물명: m.화물명, 기사명: m.기사명, 차량번호: m.차량번호,
                   공급가액: m.공급가액, "세액(10%)": m.세액, 합계: m.공급가액+m.세액,
                 }));
@@ -42574,6 +42640,7 @@ const handleBatchSettle = async (targetStatus) => {
                           날짜: m.상차일,
                           상차지: m.상차지,
                           하차지: m.하차지,
+                          경유지: m.경유지,
                           화물명: m.화물명,
                           기사명: m.기사명,
                           차량번호: m.차량번호,
@@ -42614,6 +42681,7 @@ const handleBatchSettle = async (targetStatus) => {
                                 상차일: m.상차일 || "",
                                 상차지: m.상차지 || "",
                                 하차지: m.하차지 || "",
+                                경유지: m.경유지 || "",
                                 화물명: m.화물명 || "",
                                 기사명: m.기사명 || "",
                                 차량번호: m.차량번호 || "",
