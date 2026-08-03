@@ -3858,6 +3858,10 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
+  // 정산관리(거래명세서 검색/선택 상태)는 다른 메뉴로 이동했다 돌아와도 유지되도록,
+  // 한 번 방문하면 언마운트하지 않고 CSS로만 숨긴다.
+  const [정산관리Visited, set정산관리Visited] = useState(false);
+  useEffect(() => { if (menu === "정산관리") set정산관리Visited(true); }, [menu]);
   const [activeTool, setActiveTool] = useState("none"); // "none" | "calculator" | "ai" | "messenger"
   const notificationsEnabled = useNotificationsEnabled();
   const calcOpen = activeTool === "calculator";
@@ -4605,8 +4609,8 @@ return (
           )
         )}
 
-        {menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
-          <>
+        {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
+          <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <div className="flex gap-2 px-4 pt-4 pb-0">
             {["거래처정산", "지급관리"].map(tab => (
               <button key={tab} onClick={() => set정산관리Tab(tab)}
@@ -4619,7 +4623,8 @@ return (
               </button>
             ))}
           </div>
-          {정산관리Tab === "거래처정산" && (
+          {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
+          <div style={{ display: 정산관리Tab === "거래처정산" ? undefined : "none" }}>
             <ClientSettlement
               dispatchData={dispatchDataFiltered}
               setDispatchData={setDispatchData}
@@ -4634,7 +4639,7 @@ return (
               setCardImageUploading={setCardImageUploading}
               isViewer={isViewer}
             />
-          )}
+          </div>
           {정산관리Tab === "지급관리" && (
             <div className="p-4">
               <PaymentManagement
@@ -4643,7 +4648,7 @@ return (
               />
             </div>
           )}
-          </>
+          </div>
         )}
 
         {menu === "운임조회" && <FreightRateInquiry />}
@@ -40124,6 +40129,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [editInfo, setEditInfo] = useState({});
   const [showEdit, setShowEdit] = useState(false);
   const [searched, setSearched] = useState(false);
+  // ★ 명세서 포함 오더 선택 목록 내 세부검색 (쉼표로 여러 검색어 입력 시 OR 매칭)
+  const [invoiceRowFilter, setInvoiceRowFilter] = useState("");
 
   // ★ 드롭다운 상태
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -40272,6 +40279,23 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   }, [rowsInvoice]);
 
   const selectedRowsInvoice = rowsInvoice.filter(r => selectedInvoiceIds.has(r._id));
+
+  // ★ 명세서 포함 오더 선택 목록의 세부검색 — 쉼표로 구분한 여러 검색어 중 하나라도
+  // 상차지/하차지/경유지/화물명/차량번호에 포함되면 매칭 (OR 조건)
+  const invoiceFilterTerms = useMemo(
+    () => invoiceRowFilter.split(/[,，]/).map(s => s.trim().toLowerCase()).filter(Boolean),
+    [invoiceRowFilter]
+  );
+  const filteredRowsInvoice = useMemo(() => {
+    if (invoiceFilterTerms.length === 0) return rowsInvoice;
+    return rowsInvoice.filter(r => {
+      const hay = [
+        r.상차지명, r.하차지명, r.화물내용, r.차량번호, r.거래처명,
+        mergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]),
+      ].join(" ").toLowerCase();
+      return invoiceFilterTerms.some(t => hay.includes(t));
+    });
+  }, [rowsInvoice, invoiceFilterTerms]);
 
   const mapped = selectedRowsInvoice.map((r, i) => {
     const viaLists = [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차];
@@ -41755,26 +41779,48 @@ const handleBatchSettle = async (targetStatus) => {
           {/* ★ 조회결과 중 명세서에 포함할 오더 선택 (특정 오더만 골라서 명세서 발급) */}
           {searched && rowsInvoice.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
                 <div className="text-[13px] font-bold text-gray-600">
                   명세서에 포함할 오더 선택
                   <span className="text-[12px] text-gray-400 font-normal ml-1">(체크 해제하면 아래 명세서에서 빠집니다)</span>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    autoComplete="off"
+                    value={invoiceRowFilter}
+                    onChange={(e) => setInvoiceRowFilter(e.target.value)}
+                    placeholder="세부검색 (예: gs부산센터, gs양산센터)"
+                    className="px-2.5 py-1 text-[12px] border border-gray-200 rounded-lg w-[220px] outline-none focus:border-[#1B2B4B]"
+                  />
+                  {invoiceRowFilter && (
+                    <button
+                      onClick={() => setInvoiceRowFilter("")}
+                      className="px-2 py-1 rounded-lg bg-gray-100 text-gray-500 text-[12px] font-semibold hover:bg-gray-200 transition"
+                    >
+                      검색초기화
+                    </button>
+                  )}
                   <button
-                    onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
+                    onClick={() => setSelectedInvoiceIds(prev => new Set([...prev, ...filteredRowsInvoice.map(r => r._id)]))}
                     className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
                   >
-                    전체선택
+                    {invoiceRowFilter ? "검색결과 선택" : "전체선택"}
                   </button>
                   <button
-                    onClick={() => setSelectedInvoiceIds(new Set())}
+                    onClick={() => setSelectedInvoiceIds(prev => {
+                      const next = new Set(prev);
+                      filteredRowsInvoice.forEach(r => next.delete(r._id));
+                      return next;
+                    })}
                     className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
                   >
-                    전체해제
+                    {invoiceRowFilter ? "검색결과 해제" : "전체해제"}
                   </button>
                 </div>
               </div>
+              {invoiceRowFilter && (
+                <div className="text-[12px] text-gray-400 mb-2">검색결과 {filteredRowsInvoice.length}건 / 전체 {rowsInvoice.length}건</div>
+              )}
               <div className="overflow-x-auto max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
                 <table className="w-full text-[12px]">
                   <thead>
@@ -41790,7 +41836,9 @@ const handleBatchSettle = async (targetStatus) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {rowsInvoice.map((r) => {
+                    {filteredRowsInvoice.length === 0 ? (
+                      <tr><td colSpan={8} className="text-center text-gray-400 py-6 text-[12px]">검색 결과가 없습니다.</td></tr>
+                    ) : filteredRowsInvoice.map((r) => {
                       const checked = selectedInvoiceIds.has(r._id);
                       return (
                         <tr
