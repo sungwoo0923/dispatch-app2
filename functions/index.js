@@ -1,6 +1,6 @@
 import * as functions from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import fetch from "node-fetch";
 
@@ -127,3 +127,45 @@ export const fuel = functions.https.onRequest(async (req, res) => {
     _fallback: true,
   });
 });
+
+/* ==============================
+   🗑️ 첨부파일 6개월 경과 자동삭제
+   — 매일 실행되며, 등록(createdAt) 후 6개월이 지난 첨부파일 중
+   사용자가 "잠금"을 걸어두지 않은(잠금 !== true) 파일만 삭제한다.
+   잠긴 파일은 아무리 오래돼도 이 정리에서 제외된다.
+============================== */
+export const cleanupOldAttachments = functions.pubsub
+  .schedule("every 24 hours")
+  .onRun(async () => {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 6);
+
+    const snap = await db
+      .collectionGroup("attachments")
+      .where("createdAt", "<", cutoff)
+      .get();
+
+    const countByParent = new Map();
+    let deleted = 0;
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      if (data?.잠금 === true) continue;
+      await docSnap.ref.delete();
+      deleted++;
+      const parentRef = docSnap.ref.parent.parent;
+      if (parentRef) {
+        countByParent.set(parentRef.path, (countByParent.get(parentRef.path) || 0) + 1);
+      }
+    }
+
+    for (const [path, count] of countByParent) {
+      try {
+        await db.doc(path).update({ attachCount: FieldValue.increment(-count) });
+      } catch (e) {
+        console.warn("attachCount 갱신 실패(무시):", path, e?.message || e);
+      }
+    }
+
+    console.log(`🗑️ 6개월 경과 첨부파일 자동삭제 완료: ${deleted}건`);
+  });

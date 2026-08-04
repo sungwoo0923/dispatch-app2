@@ -14851,6 +14851,46 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     } catch(e) { alert("삭제 실패: " + e.message); }
   };
 
+  // 첨부파일은 등록 후 6개월이 지나면 서버(cleanupOldAttachments 스케줄 함수)가
+  // 자동으로 삭제한다. 이 잠금 토글은 개별 파일 단위로 그 자동삭제 대상에서
+  // 제외/포함시키는 스위치다 — 전체 오더/전체 첨부에 일괄 적용되지 않는다.
+  const isOlderThanSixMonths = (createdAt) => {
+    if (!createdAt) return false;
+    const ts = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 6);
+    return ts < cutoff;
+  };
+  const daysUntilAutoDelete = (createdAt) => {
+    if (!createdAt) return null;
+    const ts = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
+    const cutoff = new Date(ts);
+    cutoff.setMonth(cutoff.getMonth() + 6);
+    return Math.ceil((cutoff.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  };
+  const handleToggleLock = async (item) => {
+    if (isViewer) return;
+    const nextLocked = !item.잠금;
+    try {
+      const col = row.__col || "orders";
+      const mirror = getMirrorTarget();
+      await updateDoc(doc(db, col, row._id, "attachments", item.id), { 잠금: nextLocked });
+      if (mirror) {
+        updateDoc(doc(db, mirror.col, mirror.id, "attachments", item.id), { 잠금: nextLocked }).catch(() => {});
+      }
+      // 이미 6개월이 지난 파일을 잠갔다가 풀면, 다음 자동삭제 주기를 기다리지 않고
+      // 그 즉시 삭제 대상으로 처리한다.
+      if (!nextLocked && isOlderThanSixMonths(item.createdAt)) {
+        await deleteDoc(doc(db, col, row._id, "attachments", item.id));
+        await updateDoc(doc(db, col, row._id), { attachCount: increment(-1) });
+        if (mirror) {
+          deleteDoc(doc(db, mirror.col, mirror.id, "attachments", item.id)).catch(() => {});
+          updateDoc(doc(db, mirror.col, mirror.id), { attachCount: increment(-1) }).catch(() => {});
+        }
+      }
+    } catch (e) { alert("잠금 설정 실패: " + e.message); }
+  };
+
   const handleUpload = async (files) => {
     if (isViewer) { alert("조회전용 권한으로는 업로드할 수 없습니다."); return; }
     if (!files?.length) return;
@@ -15018,7 +15058,14 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
                     </div>
                   </div>
                   <div className="px-3 py-2.5 bg-white">
-                    <div className="text-[11px] text-gray-400 truncate mb-2">{item.name || "파일"} {item.sizeKB ? `· ${item.sizeKB}KB` : ""}</div>
+                    <div className="text-[11px] text-gray-400 truncate mb-2">
+                      {item.name || "파일"} {item.sizeKB ? `· ${item.sizeKB}KB` : ""}
+                      {!item.잠금 && item.createdAt && (() => {
+                        const d = daysUntilAutoDelete(item.createdAt);
+                        if (d === null) return null;
+                        return <span className={d <= 0 ? "text-red-500 font-semibold" : "text-gray-400"}> · {d <= 0 ? "삭제 대상" : `${d}일 후 자동삭제`}</span>;
+                      })()}
+                    </div>
                     <div className="flex gap-1.5">
                       <button onClick={() => downloadRotated(item)}
                         className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-90 transition">
@@ -15037,6 +15084,23 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
                           className="px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[11px] font-bold hover:bg-gray-50 transition"
                           title="90도 회전">
                           ↻
+                        </button>
+                      )}
+                      {!isViewer && (
+                        <button onClick={e => { e.stopPropagation(); handleToggleLock(item); }}
+                          className={`px-2 py-1.5 rounded-lg border text-[11px] font-bold transition ${
+                            item.잠금 ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                          }`}
+                          title={item.잠금 ? "잠금 해제 (6개월 경과 시 자동삭제 대상이 됩니다)" : "잠금 (6개월이 지나도 자동삭제되지 않습니다)"}>
+                          {item.잠금 ? (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                          ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                            </svg>
+                          )}
                         </button>
                       )}
                       {!isViewer && (
