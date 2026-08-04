@@ -17591,7 +17591,7 @@ const baseNotice = isColdVehicle(r.차량종류)
   ? COLD_NOTICE
   : NORMAL_NOTICE;
 
-const isBanchan = (r.거래처명 || "").includes("반찬단지");
+const isBanchan = (r.상차지명 || "").includes("반찬단지") || (r.하차지명 || "").includes("반찬단지");
 
 const DRIVER_NOTICE = isBanchan
   ? `${baseNotice}\n\n${BANCHAN_NOTICE}`
@@ -17721,7 +17721,7 @@ return `[파렛전표/거래명세서 업로드]
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
-${/(냉장|냉동)/i.test(r.차량종류||r.차종||"") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}*결제일 링크 참고하세요*
+${/(냉장|냉동)/i.test(r.차량종류||r.차종||"") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
 ${dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
 
 ${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
@@ -28219,7 +28219,7 @@ const baseNotice =
       ? COLD_NOTICE
       : NORMAL_NOTICE;
 
-const isBanchan = (r.거래처명 || "").includes("반찬단지");
+const isBanchan = (r.상차지명 || "").includes("반찬단지") || (r.하차지명 || "").includes("반찬단지");
 
 const DRIVER_NOTICE = isBanchan
   ? `${baseNotice}\n\n${BANCHAN_NOTICE}`
@@ -28320,7 +28320,7 @@ return `[파렛전표/거래명세서 업로드]
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
-${/(냉장|냉동)/i.test(r.차량종류||"-") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}*결제일 링크 참고하세요*
+${/(냉장|냉동)/i.test(r.차량종류||"-") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
 ${dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}
 
 ${_pNum5d}상차 :${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}

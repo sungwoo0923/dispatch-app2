@@ -13976,7 +13976,7 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
     else if (type === "driver") {
       const carTypeText = String(order.차량종류 || order.차종 || "");
       const isColdVeh = carTypeText.includes("냉장") || carTypeText.includes("냉동");
-      const isBanchan = (order.거래처명 || "").includes("반찬단지");
+      const isBanchan = (order.상차지명 || "").includes("반찬단지") || (order.하차지명 || "").includes("반찬단지");
 
       const noticeBlock = isBanchan
         ? `[반찬단지 주의사항]\n- 안전화 착용 필수 (슬리퍼/크록스 금지)\n- 입차 시 지게차 기사님께 하차지명 말씀\n- 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`
@@ -14045,7 +14045,7 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
-${isColdVeh ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}*결제일 링크 참고하세요*
+${isColdVeh ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${order.지급방식 === "착불" ? "*착불건입니다*" : order.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
 ${dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}
 
 ${_pStopsTextMd ? _pStopsTextMd+"\n\n" : ""}${_pNumMd}상차 : ${order.상차지명||"-"} / ${timeOrNow(order.상차시간)}${order.상차시간기준 ? ` ${order.상차시간기준}` : ""}
