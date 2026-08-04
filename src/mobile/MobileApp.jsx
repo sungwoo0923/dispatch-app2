@@ -53,6 +53,14 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const role = localStorage.getItem("role") || "user";
 const collName = "dispatch";
 
+// 기사전달용 업로드 링크 단축 — PC(DispatchApp)의 buildShortUploadUrl과 동일한 규칙으로
+// /u/{code}를 발급한다(code는 토큰에서 파생되어 재복사해도 항상 같은 링크).
+function buildShortUploadUrlMobile(orderId, token) {
+  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || Math.random().toString(36).slice(2, 10);
+  setDoc(doc(db, "shortLinks", code), { id: orderId, t: token, createdAt: serverTimestamp() }, { merge: true }).catch(() => {});
+  return `${window.location.origin}/u/${code}`;
+}
+
 // 운임조회 결과 정렬(추천/최신/금액) — PC의 sortFareHistory와 동일한 규칙.
 const FARE_SORT_OPTIONS_MOBILE = [
   { value: "relevance", label: "추천순" },
@@ -13991,7 +13999,7 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
             updateDoc(doc(db, order.originCol, order.originId), patch).catch(() => {});
           }
         }
-        return `${window.location.origin}/upload?id=${oid}&t=${token}`;
+        return buildShortUploadUrlMobile(oid, token);
       })();
 
       const pm = (n, p) => (!n && !p) ? "" : p ? `담당자 : ${n || ""} (${p})` : `담당자 : ${n}`;

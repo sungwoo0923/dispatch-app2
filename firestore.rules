@@ -44,6 +44,17 @@ service cloud.firestore {
       allow create, delete: if isSignedIn();
     }
 
+    // 기사전달용 업로드 링크 단축 — /u/{code}가 로그인 없이 code로 원본
+    // (오더id+토큰)을 조회해 /upload로 넘겨줘야 한다. list는 막아서 전체
+    // 코드 목록이 노출되지 않게 하고, 발급(create/update)은 로그인한
+    // 운송사 앱에서만 가능하게 한다.
+    match /shortLinks/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
     // 인수증/서류 첨부 — 오더 문서 id만 알면 사진을 올리고 확인·삭제(되돌리기)할 수 있어야 한다.
     // 첨부 문서 id는 추측 불가능한 Firestore 자동 id라 list를 막아도 기능에 지장이 없다.
     match /{col}/{orderId}/attachments/{attId} {

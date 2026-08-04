@@ -34,6 +34,7 @@ import ShipperPending from "./shipper/ShipperPending";
 import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
 import DriverSearchPage from "./DriverSearchPage";
+import ShortLinkRedirect from "./ShortLinkRedirect";
 import StandardFare from "./StandardFare";
 import ChangePassword from "./ChangePassword";
 
@@ -437,6 +438,12 @@ export default function App() {
   if (publicMatch) {
     const PublicComp = publicMatch;
     return <Router><Routes><Route path="*" element={<PublicComp />} /></Routes></Router>;
+  }
+
+  // 기사전달용 짧은 업로드 링크 (/u/{code}) — /upload?id=...&t=...로 리다이렉트
+  const shortLinkMatch = window.location.pathname.match(/^\/u\/([A-Za-z0-9]+)$/);
+  if (shortLinkMatch) {
+    return <Router><Routes><Route path="*" element={<ShortLinkRedirect code={shortLinkMatch[1]} />} /></Routes></Router>;
   }
 
   // 로딩/스플래시

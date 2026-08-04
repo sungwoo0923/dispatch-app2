@@ -564,6 +564,14 @@ import {
 import { auth, db, storage } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
+// 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
+// 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
+// 오더/토큰으로 여러 번 복사해도 항상 같은 링크가 나오게 한다(중복 문서는 덮어쓰기).
+function buildShortUploadUrl(orderId, token) {
+  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || Math.random().toString(36).slice(2, 10);
+  setDoc(doc(db, "shortLinks", code), { id: orderId, t: token, createdAt: serverTimestamp() }, { merge: true }).catch(() => {});
+  return `${window.location.origin}/u/${code}`;
+}
 
 /* -------------------------------------------------
    가로 스크롤 테이블 안에서도 잘리지 않는 호버 툴팁
@@ -17618,7 +17626,7 @@ const uploadUrl = (() => {
       updateDoc(doc(db, r.originCol, r.originId), patch).catch(() => {});
     }
   }
-  return `${window.location.origin}/upload?id=${r._id}&t=${token}`;
+  return buildShortUploadUrl(r._id, token);
 })();
 
 const noticeBlock = isBanchan
@@ -28183,7 +28191,7 @@ const DRIVER_NOTICE = isBanchan
                 updateDoc(doc(db, r.originCol, r.originId), patch).catch(() => {});
               }
             }
-            return `${window.location.origin}/upload?id=${r._id}&t=${token}`;
+            return buildShortUploadUrl(r._id, token);
           })();
 
 const noticeBlock = isBanchan
