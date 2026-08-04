@@ -228,6 +228,22 @@ const EDIT_REQUEST_FIELD_LABELS = {
   상차지담당자번호: "상차지 담당자 연락처", 하차지담당자번호: "하차지 담당자 연락처",
   전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
 };
+// 거래처/상하차지별로 "기사전달용" 복사 시 자동으로 함께 붙는 주의사항 문구.
+// 실제 값은 clients/places 문서의 기사전달주의사항 필드에 저장되며(오더메모와
+// 동일한 저장 구조 재사용), 여기서는 그 값이 아직 없을 때 편집 팝업에 채워줄
+// 기본 템플릿만 정의한다. 반찬단지는 예전부터 하드코딩되어 있던 문구를 그대로
+// 기본값으로 사용해 기존 동작을 그대로 유지한다.
+const DEFAULT_BANCHAN_DRIVER_NOTICE = `[반찬단지 주의사항]
+- 안전화 착용 필수 (슬리퍼/크록스 금지)
+- 입차 시 지게차 기사님께 하차지명 말씀
+- 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`;
+const defaultDriverNoticeTemplate = (name) => {
+  const n = (name || "").trim();
+  if (!n) return "";
+  if (n.includes("반찬단지")) return DEFAULT_BANCHAN_DRIVER_NOTICE;
+  return `[${n} 주의사항]\n- `;
+};
+
 // 경유지 필드는 "경유상차목록"/"경유지_상차"/"경유지상차"처럼 여러 동의어 필드명으로 저장되고
 // 문자열(JSON)/배열 형태가 뒤섞여 있어, 단순 String() 비교로는 실제로 안 바뀐 경우도
 // "[object Object]" 같은 값으로 오탐되어 표시된다. 두 방향(상차/하차)을 하나로 묶어
@@ -730,12 +746,15 @@ function ContactPickerIconButton({ onClick, title = "담당자 선택" }) {
 // UI를 오더복사/수정 패널, 선택수정 패널에서도 재사용한다. 저장은 즉시 반영하지
 // 않고(onSave로 넘긴 값을 패널 자체의 상태에만 임시로 담아두고) 실제 오더가
 // 등록/수정되는 시점에만 함께 반영되도록, 호출하는 쪽에서 저장 시점을 결정한다.
-function OrderMemoModal({ type, name, memo, popupShow, onCancel, onSave }) {
+function OrderMemoModal({ type, name, memo, popupShow, notice, onCancel, onSave }) {
   const [localMemo, setLocalMemo] = React.useState(memo || "");
   const [localShow, setLocalShow] = React.useState(popupShow !== false);
+  // 기사전달주의사항이 아직 한 번도 저장된 적 없으면(undefined) 빈 칸 대신
+  // 기본 템플릿을 채워둔다 — 반찬단지는 기존 하드코딩 문구가 그대로 기본값이 된다.
+  const [localNotice, setLocalNotice] = React.useState(notice !== undefined ? notice : defaultDriverNoticeTemplate(name));
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onCancel}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
           <div>
             <h3 className="text-white text-[15px] font-bold">{type === "pickup" ? "상차지" : "하차지"} 오더메모</h3>
@@ -752,6 +771,17 @@ function OrderMemoModal({ type, name, memo, popupShow, onCancel, onSave }) {
             value={localMemo}
             onChange={(e) => setLocalMemo(e.target.value)}
           />
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700 mb-1.5">기사전달주의사항</div>
+            <div className="text-[11px] text-gray-400 mb-1.5">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다</div>
+            <textarea
+              rows={4}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+              placeholder="예: 안전화 착용 필수"
+              value={localNotice}
+              onChange={(e) => setLocalNotice(e.target.value)}
+            />
+          </div>
           <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
             <div>
               <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
@@ -767,7 +797,7 @@ function OrderMemoModal({ type, name, memo, popupShow, onCancel, onSave }) {
         <div className="px-6 pb-5 flex gap-3">
           <button onClick={onCancel}
             className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-          <button onClick={() => onSave(localMemo, localShow)}
+          <button onClick={() => onSave(localMemo, localShow, localNotice)}
             className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
         </div>
       </div>
@@ -6108,6 +6138,7 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         contacts: cContacts,
         오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
         팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
+        기사전달주의사항: extraFields?.기사전달주의사항 !== undefined ? extraFields.기사전달주의사항 : clientMatch.기사전달주의사항,
       }).catch(() => {});
       return;
     }
@@ -6194,6 +6225,7 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     이메일: extraFields?.이메일 || existing?.이메일 || "",
     오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
     팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
+    기사전달주의사항: extraFields?.기사전달주의사항 !== undefined ? extraFields.기사전달주의사항 : existing?.기사전달주의사항,
   });
 };
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
@@ -7458,12 +7490,14 @@ const openOrderMemoEditor = (type) => {
   if (!name) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
   const pendingMemoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
   const pendingShowKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-  if (form[pendingMemoKey] !== undefined || form[pendingShowKey] !== undefined) {
+  const pendingNoticeKey = type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+  if (form[pendingMemoKey] !== undefined || form[pendingShowKey] !== undefined || form[pendingNoticeKey] !== undefined) {
     // 이미 이번 오더에서 한 번 수정해둔 값이 있으면(아직 등록 전) 그 값을 그대로 이어서 보여준다.
     setOrderMemoPopup({
       type, name,
       memo: form[pendingMemoKey] || "",
       팝업표시: form[pendingShowKey] !== undefined ? form[pendingShowKey] : true,
+      notice: form[pendingNoticeKey] !== undefined ? form[pendingNoticeKey] : defaultDriverNoticeTemplate(name),
     });
     return;
   }
@@ -7472,14 +7506,16 @@ const openOrderMemoEditor = (type) => {
     type, name,
     memo: found?.오더메모 || "",
     팝업표시: found?.팝업표시 !== undefined ? found.팝업표시 : true,
+    notice: found?.기사전달주의사항 !== undefined ? found.기사전달주의사항 : defaultDriverNoticeTemplate(name),
   });
 };
-const saveOrderMemo = (memo, popupShow) => {
+const saveOrderMemo = (memo, popupShow, notice) => {
   if (!orderMemoPopup) return;
   const { type } = orderMemoPopup;
   const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
   const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-  setForm(p => ({ ...p, [memoKey]: memo, [showKey]: popupShow }));
+  const noticeKey = type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+  setForm(p => ({ ...p, [memoKey]: memo, [showKey]: popupShow, [noticeKey]: notice }));
   setOrderMemoPopup(null);
   showAlert("오더를 등록하면 오더메모가 함께 저장됩니다.");
 };
@@ -8262,8 +8298,8 @@ const _dName = form.하차지명, _dAddr = form.하차지주소, _dMgr = form.�
 const _carNo = form.차량번호, _name = form.이름, _tel = form.전화번호;
 // 상/하차지 오더메모 버튼으로 미리 수정해둔 값(아직 거래처관리엔 반영 안 됨) — 오더가
 // 실제로 등록되는 지금 시점에만 함께 반영한다.
-const _pOrderMemo = form.상차지오더메모, _pOrderMemoShow = form.상차지오더메모팝업표시;
-const _dOrderMemo = form.하차지오더메모, _dOrderMemoShow = form.하차지오더메모팝업표시;
+const _pOrderMemo = form.상차지오더메모, _pOrderMemoShow = form.상차지오더메모팝업표시, _pNotice = form.상차지기사전달주의사항;
+const _dOrderMemo = form.하차지오더메모, _dOrderMemoShow = form.하차지오더메모팝업표시, _dNotice = form.하차지기사전달주의사항;
 
 // ★ 오더 병렬 저장 (순차→병렬로 속도 개선)
 const saveCount = multiCount > 1 ? multiCount : 1;
@@ -8298,10 +8334,10 @@ setBottomStatusKey(k => k+1);
 // ★ 백그라운드 저장 (UI 블로킹 없음)
 if (typeof upsertPlace === "function") {
   savePlaceSmart(_pName, _pAddr, _pMgr, _pPhone, _pId, undefined,
-    (_pOrderMemo !== undefined || _pOrderMemoShow !== undefined) ? { 오더메모: _pOrderMemo, 팝업표시: _pOrderMemoShow } : undefined
+    (_pOrderMemo !== undefined || _pOrderMemoShow !== undefined || _pNotice !== undefined) ? { 오더메모: _pOrderMemo, 팝업표시: _pOrderMemoShow, 기사전달주의사항: _pNotice } : undefined
   ).catch(() => {});
   savePlaceSmart(_dName, _dAddr, _dMgr, _dPhone, _dId, undefined,
-    (_dOrderMemo !== undefined || _dOrderMemoShow !== undefined) ? { 오더메모: _dOrderMemo, 팝업표시: _dOrderMemoShow } : undefined
+    (_dOrderMemo !== undefined || _dOrderMemoShow !== undefined || _dNotice !== undefined) ? { 오더메모: _dOrderMemo, 팝업표시: _dOrderMemoShow, 기사전달주의사항: _dNotice } : undefined
   ).catch(() => {});
   // 경유 하차지 자동 등록
   [...(rec.경유하차목록 || []), ...(rec.경유상차목록 || [])].forEach(s => {
@@ -12736,7 +12772,7 @@ className={`
 {/* 상/하차지 오더메모 보기·수정 팝업 */}
 {orderMemoPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setOrderMemoPopup(null)}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
           <h3 className="text-white text-[15px] font-bold">{orderMemoPopup.type === "pickup" ? "상차지" : "하차지"} 오더메모</h3>
@@ -12753,6 +12789,17 @@ className={`
           value={orderMemoPopup.memo}
           onChange={(e) => setOrderMemoPopup(p => ({ ...p, memo: e.target.value }))}
         />
+        <div>
+          <div className="text-[13px] font-semibold text-gray-700 mb-1.5">기사전달주의사항</div>
+          <div className="text-[11px] text-gray-400 mb-1.5">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다</div>
+          <textarea
+            rows={4}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+            placeholder="예: 안전화 착용 필수"
+            value={orderMemoPopup.notice ?? defaultDriverNoticeTemplate(orderMemoPopup.name)}
+            onChange={(e) => setOrderMemoPopup(p => ({ ...p, notice: e.target.value }))}
+          />
+        </div>
         <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
           <div>
             <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
@@ -12768,7 +12815,7 @@ className={`
       <div className="px-6 pb-5 flex gap-3">
         <button onClick={() => setOrderMemoPopup(null)}
           className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-        <button onClick={() => saveOrderMemo(orderMemoPopup.memo, orderMemoPopup.팝업표시)}
+        <button onClick={() => saveOrderMemo(orderMemoPopup.memo, orderMemoPopup.팝업표시, orderMemoPopup.notice ?? defaultDriverNoticeTemplate(orderMemoPopup.name))}
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
       </div>
     </div>
@@ -17028,6 +17075,7 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         contacts: cContacts,
         오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
         팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
+        기사전달주의사항: extraFields?.기사전달주의사항 !== undefined ? extraFields.기사전달주의사항 : clientMatch.기사전달주의사항,
       }).catch(() => {});
       return;
     }
@@ -17083,6 +17131,7 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     메모: extraFields?.메모 || existing?.메모 || "",
     오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
     팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
+    기사전달주의사항: extraFields?.기사전달주의사항 !== undefined ? extraFields.기사전달주의사항 : existing?.기사전달주의사항,
   }).catch(() => {});
 };
 
@@ -17398,18 +17447,20 @@ const checkWarningStatus = (name, type) => {
     if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
     const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
     const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-    if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined) {
-      setPanelMemoPopupC4({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true });
+    const noticeKey = type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+    if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined || copyTarget[noticeKey] !== undefined) {
+      setPanelMemoPopupC4({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true, notice: copyTarget[noticeKey] !== undefined ? copyTarget[noticeKey] : defaultDriverNoticeTemplate(name) });
       return;
     }
     const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
-    setPanelMemoPopupC4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+    setPanelMemoPopupC4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true, notice: found?.기사전달주의사항 !== undefined ? found.기사전달주의사항 : defaultDriverNoticeTemplate(name) });
   };
-  const savePanelMemoC4 = (memo, show) => {
+  const savePanelMemoC4 = (memo, show, notice) => {
     if (!panelMemoPopupC4) return;
     const memoKey = panelMemoPopupC4.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
     const showKey = panelMemoPopupC4.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-    setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+    const noticeKey = panelMemoPopupC4.type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+    setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
     setPanelMemoPopupC4(null);
   };
 
@@ -17420,18 +17471,20 @@ const checkWarningStatus = (name, type) => {
     if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
     const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
     const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-    if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined) {
-      setPanelMemoPopupE4({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true });
+    const noticeKey = type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+    if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined || editTarget[noticeKey] !== undefined) {
+      setPanelMemoPopupE4({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true, notice: editTarget[noticeKey] !== undefined ? editTarget[noticeKey] : defaultDriverNoticeTemplate(name) });
       return;
     }
     const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
-    setPanelMemoPopupE4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+    setPanelMemoPopupE4({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true, notice: found?.기사전달주의사항 !== undefined ? found.기사전달주의사항 : defaultDriverNoticeTemplate(name) });
   };
-  const savePanelMemoE4 = (memo, show) => {
+  const savePanelMemoE4 = (memo, show, notice) => {
     if (!panelMemoPopupE4) return;
     const memoKey = panelMemoPopupE4.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
     const showKey = panelMemoPopupE4.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-    setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+    const noticeKey = panelMemoPopupE4.type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+    setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
     setPanelMemoPopupE4(null);
   };
   // ==========================
@@ -17587,16 +17640,6 @@ if (mode === "driver") {
     }
   }
 
-const baseNotice = isColdVehicle(r.차량종류)
-  ? COLD_NOTICE
-  : NORMAL_NOTICE;
-
-const isBanchan = (r.상차지명 || "").includes("반찬단지") || (r.하차지명 || "").includes("반찬단지");
-
-const DRIVER_NOTICE = isBanchan
-  ? `${baseNotice}\n\n${BANCHAN_NOTICE}`
-  : baseNotice;
-
   const driverNote =
     edited[r._id]?.전달사항 ??
     r.전달사항 ??
@@ -17698,12 +17741,18 @@ const uploadUrl = (() => {
   return buildShortUploadUrl(r._id, token);
 })();
 
-const noticeBlock = isBanchan
-  ? `[반찬단지 주의사항]
-- 안전화 착용 필수 (슬리퍼/크록스 금지)
-- 입차 시 지게차 기사님께 하차지명 말씀
-- 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`
-  : ``;
+// 상/하차지명으로 거래처(clients)/하차지거래처(places) 레코드를 찾아 저장된
+// 기사전달주의사항을 붙인다. 아직 아무도 저장한 적 없는 반찬단지는 예전
+// 하드코딩 문구를 기본값으로 계속 보여준다(하위호환).
+const _findDriverNotice4d = (placeName) => {
+  const n = (placeName || "").trim();
+  if (!n) return "";
+  const found = (mergedClients || []).find(c => normalizeKey(c.업체명 || c.거래처명 || "") === normalizeKey(n));
+  const saved = (found?.기사전달주의사항 || "").trim();
+  if (saved) return saved;
+  return n.includes("반찬단지") ? DEFAULT_BANCHAN_DRIVER_NOTICE : "";
+};
+const noticeBlock = [...new Set([_findDriverNotice4d(r.상차지명), _findDriverNotice4d(r.하차지명)].filter(Boolean))].join("\n\n");
 
 const _pkg4d=(str)=>{const s=String(str||"").trim().replace(/,/g,"");if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)\s*톤/);return ton?parseFloat(ton[1])*1000:0;};
 const _fkg4d=(kg)=>{if(!kg)return"";const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";};
@@ -21566,10 +21615,10 @@ flashRow(savedId);
 
     patchDispatch(savedId, payload).catch(console.error);
     if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
-      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시 } : undefined
+      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined || payload.상차지기사전달주의사항 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시, 기사전달주의사항: payload.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
-      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시 } : undefined
+      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined || payload.하차지기사전달주의사항 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시, 기사전달주의사항: payload.하차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (payload.차량번호 && payload.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
@@ -21595,10 +21644,10 @@ flashRow(savedId);
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
-      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시 } : undefined
+      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined || copyTarget.상차지기사전달주의사항 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시, 기사전달주의사항: copyTarget.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
-      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
+      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined || copyTarget.하차지기사전달주의사항 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시, 기사전달주의사항: copyTarget.하차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (copyTarget.차량번호 && copyTarget.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(copyTarget.차량번호));
@@ -24395,10 +24444,10 @@ if (editTarget.거래처명) {
   upsertClient?.({ 거래처명: editTarget.거래처명, 주소: editTarget.상차지주소||"", 담당자: editTarget.거래처담당자||"", 연락처: editTarget.거래처연락처||"", updatedAt: Date.now() }).catch(console.error);
 }
 if (editTarget.상차지명) savePlaceSmart(editTarget.상차지명, editTarget.상차지주소||"", editTarget.상차지담당자||"", editTarget.상차지담당자번호||"", null, undefined,
-  (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시 } : undefined
+  (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined || editTarget.상차지기사전달주의사항 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시, 기사전달주의사항: editTarget.상차지기사전달주의사항 } : undefined
 ).catch(console.error);
 if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.하차지주소||"", editTarget.하차지담당자||"", editTarget.하차지담당자번호||"", null, undefined,
-  (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시 } : undefined
+  (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined || editTarget.하차지기사전달주의사항 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시, 기사전달주의사항: editTarget.하차지기사전달주의사항 } : undefined
 ).catch(console.error);
                 }}
               >
@@ -26652,6 +26701,7 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
         contacts: cContacts,
         오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : clientMatch.오더메모,
         팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : clientMatch.팝업표시,
+        기사전달주의사항: extraFields?.기사전달주의사항 !== undefined ? extraFields.기사전달주의사항 : clientMatch.기사전달주의사항,
       }).catch(() => {});
       return;
     }
@@ -26707,6 +26757,7 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     메모: extraFields?.메모 || existing?.메모 || "",
     오더메모: extraFields?.오더메모 !== undefined ? extraFields.오더메모 : existing?.오더메모,
     팝업표시: extraFields?.팝업표시 !== undefined ? extraFields.팝업표시 : existing?.팝업표시,
+    기사전달주의사항: extraFields?.기사전달주의사항 !== undefined ? extraFields.기사전달주의사항 : existing?.기사전달주의사항,
   }).catch(() => {});
 };
 
@@ -27583,18 +27634,20 @@ const openPanelMemoC5 = (type) => {
   if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
   const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
   const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-  if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined) {
-    setPanelMemoPopupC5({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true });
+  const noticeKey = type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+  if (copyTarget[memoKey] !== undefined || copyTarget[showKey] !== undefined || copyTarget[noticeKey] !== undefined) {
+    setPanelMemoPopupC5({ type, name, memo: copyTarget[memoKey] || "", popupShow: copyTarget[showKey] !== undefined ? copyTarget[showKey] : true, notice: copyTarget[noticeKey] !== undefined ? copyTarget[noticeKey] : defaultDriverNoticeTemplate(name) });
     return;
   }
   const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
-  setPanelMemoPopupC5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+  setPanelMemoPopupC5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true, notice: found?.기사전달주의사항 !== undefined ? found.기사전달주의사항 : defaultDriverNoticeTemplate(name) });
 };
-const savePanelMemoC5 = (memo, show) => {
+const savePanelMemoC5 = (memo, show, notice) => {
   if (!panelMemoPopupC5) return;
   const memoKey = panelMemoPopupC5.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
   const showKey = panelMemoPopupC5.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-  setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+  const noticeKey = panelMemoPopupC5.type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+  setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
   setPanelMemoPopupC5(null);
 };
 
@@ -27605,18 +27658,20 @@ const openPanelMemoE5 = (type) => {
   if (!name.trim()) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
   const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
   const showKey = type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-  if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined) {
-    setPanelMemoPopupE5({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true });
+  const noticeKey = type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+  if (editTarget[memoKey] !== undefined || editTarget[showKey] !== undefined || editTarget[noticeKey] !== undefined) {
+    setPanelMemoPopupE5({ type, name, memo: editTarget[memoKey] || "", popupShow: editTarget[showKey] !== undefined ? editTarget[showKey] : true, notice: editTarget[noticeKey] !== undefined ? editTarget[noticeKey] : defaultDriverNoticeTemplate(name) });
     return;
   }
   const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
-  setPanelMemoPopupE5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true });
+  setPanelMemoPopupE5({ type, name, memo: found?.오더메모 || "", popupShow: found?.팝업표시 !== undefined ? found.팝업표시 : true, notice: found?.기사전달주의사항 !== undefined ? found.기사전달주의사항 : defaultDriverNoticeTemplate(name) });
 };
-const savePanelMemoE5 = (memo, show) => {
+const savePanelMemoE5 = (memo, show, notice) => {
   if (!panelMemoPopupE5) return;
   const memoKey = panelMemoPopupE5.type === "pickup" ? "상차지오더메모" : "하차지오더메모";
   const showKey = panelMemoPopupE5.type === "pickup" ? "상차지오더메모팝업표시" : "하차지오더메모팝업표시";
-  setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show }));
+  const noticeKey = panelMemoPopupE5.type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
+  setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
   setPanelMemoPopupE5(null);
 };
   // 🔔 즉시 변경 확인 팝업 + 히스토리
@@ -28212,19 +28267,6 @@ const BANCHAN_NOTICE = `
           const isColdVehicle =
             vehicleType.includes("냉장") || vehicleType.includes("냉동");
 
-const baseNotice =
-  vehicleType === ""
-    ? ""
-    : isColdVehicle
-      ? COLD_NOTICE
-      : NORMAL_NOTICE;
-
-const isBanchan = (r.상차지명 || "").includes("반찬단지") || (r.하차지명 || "").includes("반찬단지");
-
-const DRIVER_NOTICE = isBanchan
-  ? `${baseNotice}\n\n${BANCHAN_NOTICE}`
-  : baseNotice;
-
           const yoil = getYoil(r.상차일 || "");
           const dateText = `${r.상차일 || ""} ${yoil}`;
           // ==========================
@@ -28284,12 +28326,18 @@ const DRIVER_NOTICE = isBanchan
             return buildShortUploadUrl(r._id, token);
           })();
 
-const noticeBlock = isBanchan
-  ? `[반찬단지 주의사항]
-- 안전화 착용 필수 (슬리퍼/크록스 금지)
-- 입차 시 지게차 기사님께 하차지명 말씀
-- 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`
-  : ``;
+// 상/하차지명으로 거래처(clients)/하차지거래처(places) 레코드를 찾아 저장된
+// 기사전달주의사항을 붙인다. 아직 아무도 저장한 적 없는 반찬단지는 예전
+// 하드코딩 문구를 기본값으로 계속 보여준다(하위호환).
+const _findDriverNotice5d = (placeName) => {
+  const n = (placeName || "").trim();
+  if (!n) return "";
+  const found = (mergedClients || []).find(c => normalizeKey(c.업체명 || c.거래처명 || "") === normalizeKey(n));
+  const saved = (found?.기사전달주의사항 || "").trim();
+  if (saved) return saved;
+  return n.includes("반찬단지") ? DEFAULT_BANCHAN_DRIVER_NOTICE : "";
+};
+const noticeBlock = [...new Set([_findDriverNotice5d(r.상차지명), _findDriverNotice5d(r.하차지명)].filter(Boolean))].join("\n\n");
 
 // 경유지 파싱
 const _ss5d=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -31798,10 +31846,10 @@ return (
     }, 400);
     patchDispatch(savedId, payload).catch(console.error);
     if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
-      (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시 } : undefined
+      (editTarget.상차지오더메모 !== undefined || editTarget.상차지오더메모팝업표시 !== undefined || editTarget.상차지기사전달주의사항 !== undefined) ? { 오더메모: editTarget.상차지오더메모, 팝업표시: editTarget.상차지오더메모팝업표시, 기사전달주의사항: editTarget.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
-      (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시 } : undefined
+      (editTarget.하차지오더메모 !== undefined || editTarget.하차지오더메모팝업표시 !== undefined || editTarget.하차지기사전달주의사항 !== undefined) ? { 오더메모: editTarget.하차지오더메모, 팝업표시: editTarget.하차지오더메모팝업표시, 기사전달주의사항: editTarget.하차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (payload.차량번호 && payload.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
@@ -31931,10 +31979,10 @@ return (
     // ✅ 백그라운드 저장
     patchDispatch(id, payload).catch(console.error);
     if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
-      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시 } : undefined
+      (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined || payload.상차지기사전달주의사항 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시, 기사전달주의사항: payload.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
-      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시 } : undefined
+      (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined || payload.하차지기사전달주의사항 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시, 기사전달주의사항: payload.하차지기사전달주의사항 } : undefined
     ).catch(console.error);
     const plate = normalizePlate(payload.차량번호 || "");
     if (plate) {
@@ -31968,10 +32016,10 @@ return (
 
     setCopyPanelOpen(false);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
-      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시 } : undefined
+      (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined || copyTarget.상차지기사전달주의사항 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시, 기사전달주의사항: copyTarget.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
-      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
+      (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined || copyTarget.하차지기사전달주의사항 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시, 기사전달주의사항: copyTarget.하차지기사전달주의사항 } : undefined
     ).catch(console.error);
     if (copyTarget.차량번호 && copyTarget.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(copyTarget.차량번호));
