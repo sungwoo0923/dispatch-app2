@@ -1847,6 +1847,7 @@ const markEditRequestSeen = async (order) => {
           if (client.메모 !== undefined) syncFields.메모 = client.메모;
           if (client.오더메모 !== undefined) syncFields.오더메모 = client.오더메모;
           if (client.팝업표시 !== undefined) syncFields.팝업표시 = client.팝업표시;
+          if (client.기사전달주의사항 !== undefined) syncFields.기사전달주의사항 = client.기사전달주의사항;
           if (Object.keys(syncFields).length) {
             await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
           }
@@ -2011,6 +2012,9 @@ const upsertPlace = async (place) => {
       // 오더메모: 이 거래처명을 상/하차지명 등 어디서 입력하든 팝업표시가 켜져 있으면
       // 안내 팝업으로 뜨는 메모 — 기본거래처와 동일한 의미/필드명으로 맞춘다.
       오더메모: place.오더메모 !== undefined ? place.오더메모 : (existingData?.오더메모 || ""),
+      // 기사전달주의사항: 이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때
+      // 자동으로 함께 붙는 문구 — 오더메모와 동일한 저장/동기화 방식을 따른다.
+      기사전달주의사항: place.기사전달주의사항 !== undefined ? place.기사전달주의사항 : (existingData?.기사전달주의사항 || ""),
       // 메모/등급 안내 팝업 노출 여부 — 기본값은 켜짐(true). 거래처관리에서 끈 경우에만 false로 저장된다.
       팝업표시: place.팝업표시 !== undefined ? place.팝업표시 : (existingData?.팝업표시 !== undefined ? existingData.팝업표시 : true),
       isActive: place.isActive !== false,
@@ -2035,6 +2039,7 @@ const upsertPlace = async (place) => {
           연락처: data.담당자번호,
           메모: data.메모,
           오더메모: data.오더메모,
+          기사전달주의사항: data.기사전달주의사항,
           팝업표시: data.팝업표시,
         }, { merge: true }).catch(() => {});
       }
@@ -45773,6 +45778,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       등급변경일: d.등급변경일 || null,
       메모: d.메모 || "",
       오더메모: d.오더메모 || "",
+      기사전달주의사항: d.기사전달주의사항 || "",
       팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
       updatedAt: d.updatedAt || null,
       // 담당자가 2명 이상인 문서를 수정 팝업에서 저장할 때, 대표(주 담당자)를
@@ -46609,7 +46615,7 @@ React.useEffect(() => {
                         <input autoComplete="off" type="checkbox" onChange={togglePlaceAll}
                           checked={filteredPlaces.length > 0 && placeSelected.size === filteredPlaces.length} />
                       </th>
-                      {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","삭제"].map((h) => (
+                      {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","안내사항","삭제"].map((h) => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -46625,6 +46631,7 @@ React.useEffect(() => {
                             contacts: Array.isArray(r._rawContacts) && r._rawContacts.length
                               ? r._rawContacts
                               : (r.담당자 ? [{ name: r.담당자, phone: r.담당자번호 || "", isPrimary: true }] : []),
+                            기사전달주의사항: r.기사전달주의사항 !== undefined ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.업체명),
                           })}
                           className={`hover:bg-blue-50/60 transition border-b border-gray-100 cursor-pointer ${
                             grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
@@ -46658,6 +46665,7 @@ React.useEffect(() => {
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.메모||""}</td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.오더메모||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.기사전달주의사항||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
                               if (!confirm("삭제하시겠습니까?")) return;
@@ -46936,7 +46944,7 @@ React.useEffect(() => {
                   if (selected.size > 1) return showAlert("한 번에 1건만 수정할 수 있습니다.");
                   const id = [...selected][0];
                   const row = rows.find(r => (r.id || r.거래처명) === id);
-                  if (row) setEditClientModal({ ...row });
+                  if (row) setEditClientModal({ ...row, 기사전달주의사항: row.기사전달주의사항 !== undefined ? row.기사전달주의사항 : defaultDriverNoticeTemplate(row.거래처명) });
                 }}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
                 선택수정 {selected.size === 1 && "(1)"}
@@ -47060,6 +47068,14 @@ React.useEffect(() => {
                       value={editClientModal.오더메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 오더메모: e.target.value }))} />
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">안내사항 (기사전달주의사항)</label>
+                    <div className="text-[11px] text-gray-400 mb-1">이 거래처가 상/하차지로 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 하차지거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
+                    <textarea rows={3} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none resize-y"
+                      placeholder="예: 안전화 착용 필수"
+                      value={editClientModal.기사전달주의사항 || ""}
+                      onChange={(e) => setEditClientModal(p => ({ ...p, 기사전달주의사항: e.target.value }))} />
+                  </div>
                   {(editClientModal.오더메모?.trim() || (editClientModal.등급 && editClientModal.등급 !== "일반")) && (
                     <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                       <div>
@@ -47174,7 +47190,7 @@ React.useEffect(() => {
                         <input autoComplete="off" type="checkbox" onChange={toggleAll}
                           checked={filtered.length > 0 && selected.size === filtered.length} />
                       </th>
-                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","일반메모","오더메모"].map(h => (
+                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","일반메모","오더메모","안내사항"].map(h => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -47191,6 +47207,7 @@ React.useEffect(() => {
                             contacts: Array.isArray(r.contacts) && r.contacts.length
                               ? r.contacts
                               : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []),
+                            기사전달주의사항: r.기사전달주의사항 !== undefined ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.거래처명),
                           })}>
                           <td className="px-3 py-2.5 text-center">
                             <input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
@@ -47245,6 +47262,16 @@ React.useEffect(() => {
                               </span>
                             ) : (
                               <span className="text-[13px] text-gray-500">{r.오더메모 || ""}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2.5 text-center max-w-[160px]">
+                            {(r.기사전달주의사항 || "").length > 18 ? (
+                              <span className="text-[13px] text-gray-500">
+                                {(r.기사전달주의사항 || "").slice(0, 18)}…
+                                <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r.기사전달주의사항); }}>더보기</button>
+                              </span>
+                            ) : (
+                              <span className="text-[13px] text-gray-500">{r.기사전달주의사항 || ""}</span>
                             )}
                           </td>
                         </tr>
@@ -47315,6 +47342,14 @@ React.useEffect(() => {
                   placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
                   value={editPlaceModal.오더메모||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 오더메모: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">안내사항 (기사전달주의사항)</label>
+                <div className="text-[11px] text-gray-400 mb-1">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 기본거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
+                <textarea rows={3} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none resize-y"
+                  placeholder="예: 안전화 착용 필수"
+                  value={editPlaceModal.기사전달주의사항||""}
+                  onChange={(e) => setEditPlaceModal(p => ({ ...p, 기사전달주의사항: e.target.value }))} />
               </div>
               {(editPlaceModal.오더메모?.trim() || (editPlaceModal.등급 && editPlaceModal.등급 !== "일반")) && (
                 <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
