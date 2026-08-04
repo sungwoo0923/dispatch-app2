@@ -844,10 +844,26 @@ function OrderMemoIconButton({ onClick, title = "오더메모" }) {
   return (
     <button type="button" tabIndex={-1} onClick={onClick}
       className="text-[#1B2B4B] hover:opacity-70 transition" title={title}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 3v4a1 1 0 0 0 1 1h4" />
         <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
         <path d="M9 13h6" /><path d="M9 17h6" />
+      </svg>
+    </button>
+  );
+}
+
+// 상/하차지 담당자 라벨 옆 담당자선택 아이콘 버튼 — 등록된 거래처의 담당자 목록
+// 팝업(contactPopup)을 수동으로 열기 위한 진입점.
+function ContactPickerIconButton({ onClick, title = "담당자 선택" }) {
+  return (
+    <button type="button" tabIndex={-1} onClick={onClick}
+      className="text-[#1B2B4B] hover:opacity-70 transition" title={title}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     </button>
   );
@@ -7721,6 +7737,19 @@ const openContactPopup = (items) => {
   setContactSearchQ("");
 };
 
+// 상/하차지 담당자 라벨 옆 아이콘을 눌러 수동으로 담당자선택 팝업을 여는 진입점.
+// 자동완성 흐름과 달리 사용자가 원할 때 언제든 다시 열어볼 수 있게 한다.
+const openContactPickerFor = (type) => {
+  const name = (type === "pickup" ? form.상차지명 : form.하차지명 || "").trim();
+  if (!name) return showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`);
+  const place = findPlaceByName(name);
+  if (!place) return showAlert("등록된 거래처를 찾을 수 없습니다.");
+  const contacts = (place.contacts || []).filter(c => c.name?.trim());
+  const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
+  if (uniqueContacts.length === 0) return showAlert("등록된 담당자가 없습니다.");
+  openContactPopup([{ type, place, contacts: uniqueContacts }]);
+};
+
 const closeContactPopup = (selectedContact) => {
   if (selectedContact && contactPopup) {
     const field = contactPopup.type === "pickup"
@@ -9550,7 +9579,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
      {/* 오더복사 */}
     <button
       onClick={() => { setCopyOpen(true); setCopySelected([]); }}
-      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
+      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
     >
       오더복사
     </button>
@@ -9558,7 +9587,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
     {/* 초기화 */}
     <button
       onClick={resetForm}
-      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 transition"
+      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 transition"
     >
       초기화
     </button>
@@ -9567,7 +9596,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
     <button
       type="button"
       onClick={() => setShowOrderParser(v => !v)}
-      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 transition"
+      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
     >
       오더 붙여넣기
     </button>
@@ -9575,7 +9604,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
     {/* 운임조회 */}
     <button
       onClick={handleFareSearch}
-      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-blue-600 border border-blue-300 hover:bg-blue-50 transition"
+      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-blue-600 border border-blue-300 hover:bg-blue-50 transition"
     >
       운임조회
     </button>
@@ -9585,7 +9614,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
       type="button"
       disabled={!aiRecommend}
       onClick={() => setAiPopupOpen(true)}
-      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-indigo-600 border border-indigo-300 hover:bg-indigo-50 disabled:opacity-40 transition"
+      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-indigo-600 border border-indigo-300 hover:bg-indigo-50 disabled:opacity-40 transition"
     >
       AI 추천
     </button>
@@ -9597,25 +9626,25 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 
   {/* 독차 */}
 <button type="button" onClick={() => onChange("독차", !form.독차)}
-  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   독차
 </button>
 
 {/* 혼적 */}
 <button type="button" onClick={() => onChange("혼적", !form.혼적)}
-  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   혼적
 </button>
 
 {/* 왕복 */}
 <button type="button" onClick={() => onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")}
-  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   왕복
 </button>
 
 {/* 긴급 */}
 <button type="button" onClick={() => onChange("긴급", !form.긴급)}
-  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   긴급
 </button>
   {(areaFareHint || distanceFareEstimate) && (
@@ -10134,8 +10163,8 @@ const similar = placeList.filter(p => {
 
 {/* 상차지주소 */}
 <div>
-  <div className="flex items-center justify-between">
-    <label className={labelCls}>
+  <div className="flex items-center justify-between mb-1.5">
+    <label className={`${labelCls} mb-0`}>
       상차지주소 <AutoBadge show={autoPickMatched} />
     </label>
 
@@ -10176,9 +10205,12 @@ className={`
 
 {/* 상차지 담당자 */}
 <div>
-  <label className={labelCls}>
-    상차지 담당자
-  </label>
+  <div className="flex items-center justify-between mb-1">
+    <label className={`${labelCls} mb-0`}>
+      상차지 담당자
+    </label>
+    <ContactPickerIconButton onClick={() => openContactPickerFor("pickup")} title="상차지 담당자 선택" />
+  </div>
 
   {/* 담당자 입력 */}
   <div className="relative">
@@ -10293,10 +10325,10 @@ className={`
 
 {/* 하차지주소 */}
 <div>
-  
-  <div className="flex items-center justify-between">
-    
-    <label className={labelCls}>
+
+  <div className="flex items-center justify-between mb-1.5">
+
+    <label className={`${labelCls} mb-0`}>
       하차지주소 <AutoBadge show={autoDropMatched} />
     </label>
 
@@ -10339,9 +10371,12 @@ className={`
 
 {/* 하차지 담당자 */}
 <div>
-  <label className={labelCls}>
-    하차지 담당자
-  </label>
+  <div className="flex items-center justify-between mb-1">
+    <label className={`${labelCls} mb-0`}>
+      하차지 담당자
+    </label>
+    <ContactPickerIconButton onClick={() => openContactPickerFor("drop")} title="하차지 담당자 선택" />
+  </div>
 
     <input autoComplete="off"
     id="drop-manager"
@@ -10456,10 +10491,10 @@ className={`
 
 <div className="relative">
   <div
-  className="flex items-center gap-2"
+  className="flex items-center justify-between mb-1.5"
   onClick={(e) => e.stopPropagation()}
 >
-  <label className={labelCls}>
+  <label className={`${labelCls} mb-0`}>
     차량종류
   </label>
 
@@ -12634,7 +12669,7 @@ className={`
       }
     }}
   >
-    <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl w-[920px] max-w-[96vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
     <h3 className="text-white font-bold text-[15px]">
           {contactPopup.type === "pickup" ? "🔵 상차지" : "🔴 하차지"} 담당자 선택
@@ -12652,14 +12687,14 @@ className={`
           onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
         />
       </div>
-      <div ref={contactListRef} className="relative p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[70vh]">
+      <div ref={contactListRef} className="relative p-5 grid grid-flow-col grid-rows-[repeat(4,min-content)] content-start auto-cols-[260px] gap-3 overflow-x-auto max-h-[70vh]">
         {visible.length === 0 && (
-          <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
+          <div className="text-sm text-gray-400 text-center py-10 w-[260px]">검색 결과가 없습니다</div>
         )}
         {visible.map(({ c, i }) => (
           <div
             key={i}
-            className={`rounded-lg border-2 px-2.5 py-2 transition ${
+            className={`relative rounded-xl border-2 px-4 py-3.5 transition ${
               i === contactActive
                 ? "border-blue-500 bg-blue-50"
                 : "border-gray-200"
@@ -12668,17 +12703,17 @@ className={`
           >
             {editingContactIdx === i ? (
               /* ── 인라인 수정 폼 ── */
-              <div className="space-y-1.5" onClick={e => e.stopPropagation()}>
+              <div className="space-y-2" onClick={e => e.stopPropagation()}>
                 <input autoComplete="off"
                   autoFocus
-                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="이름"
                   value={editContactData.name}
                   onChange={e => setEditContactData(p => ({ ...p, name: e.target.value }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
                 <input autoComplete="off"
-                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#1B2B4B]"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="전화번호"
                   value={editContactData.phone}
                   onChange={e => setEditContactData(p => ({ ...p, phone: e.target.value }))}
@@ -12686,7 +12721,7 @@ className={`
                 />
                 <div className="flex gap-1.5 pt-0.5">
                   <button
-                    className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold"
+                    className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
                     onClick={async () => {
                       if (!editContactData.name.trim()) return showAlert("이름을 입력하세요.");
                       const updated = contactPopup.contacts.map((x, idx) =>
@@ -12697,33 +12732,28 @@ className={`
                     }}
                   >저장</button>
                   <button
-                    className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-[11px]"
+                    className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-[12px]"
                     onClick={() => setEditingContactIdx(null)}
                   >취소</button>
                 </div>
               </div>
             ) : (
-              /* ── 일반 표시: 이름/전화번호/수정/삭제만 간단히 ── */
+              /* ── 일반 표시: 수정/삭제는 카드 우측 상단 아이콘으로 ── */
               <div>
-                <div
-                  className="flex items-baseline gap-1.5 mb-1.5 cursor-pointer min-w-0"
-                  onClick={() => closeContactPopup(c)}
-                >
-                  <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
-                  <span className="text-[11px] font-bold text-gray-900 truncate">{c.phone || "-"}</span>
-                </div>
-                <div className="flex gap-1">
+                <div className="absolute top-2 right-2 flex gap-1">
                   <button
-                    className="flex-1 py-1 rounded bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-[10px] font-semibold transition"
+                    title="수정"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-[13px] hover:bg-blue-50 hover:border-blue-300 transition"
                     onClick={e => {
                       e.stopPropagation();
                       setEditContactData({ name: c.name || "", phone: c.phone || "" });
                       setEditingContactIdx(i);
                       setContactActive(i);
                     }}
-                  >수정</button>
+                  >✏️</button>
                   <button
-                    className="flex-1 py-1 rounded bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-[10px] font-semibold transition"
+                    title="삭제"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-[13px] hover:bg-red-50 hover:border-red-300 transition"
                     onClick={async e => {
                       e.stopPropagation();
                       if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
@@ -12734,7 +12764,14 @@ className={`
                       const final = hasPrimary ? updated : updated.map((x, idx) => ({ ...x, isPrimary: idx === 0 }));
                       await updateContactInPlace(contactPopup.place, final);
                     }}
-                  >삭제</button>
+                  >🗑️</button>
+                </div>
+                <div
+                  className="cursor-pointer min-w-0 pr-16"
+                  onClick={() => closeContactPopup(c)}
+                >
+                  <div className="font-bold text-gray-900 text-[14px] truncate">{c.name || "-"}</div>
+                  <div className="text-[13px] font-bold text-gray-700 truncate mt-1">{c.phone || "-"}</div>
                 </div>
               </div>
             )}
