@@ -14376,7 +14376,7 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder, onKeyDow
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
         placeholder={placeholder}
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
@@ -15633,6 +15633,7 @@ function MobileStandardFare({ onBack, cardVersionB = false }) {
 
   const [dispatchData, setDispatchData] = useState([]);
 
+  const [searchMode, setSearchMode] = useState("client"); // "client" | "address" — PC(StandardFare)와 동일한 검색 모드 토글
   const [pickup, setPickup] = useState("");
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
@@ -16017,53 +16018,66 @@ const calcFareMobile = () => {
       {/* 검색 카드 */}
       <div className="mx-4 mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-4 space-y-3">
-          {/* 상/하차지명 */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5">상차지명</div>
-              <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 인천 후레쉬2공장" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
-            </div>
-            <div>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5">하차지명</div>
-              <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 반찬단지" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
-            </div>
+          {/* 검색 모드 토글 (PC StandardFare와 동일) */}
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => setSearchMode("client")}
+              className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
+                searchMode === "client" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"
+              }`}>
+              거래처로 검색
+            </button>
+            <button type="button" onClick={() => setSearchMode("address")}
+              className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
+                searchMode === "address" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"
+              }`}>
+              주소로 검색
+            </button>
           </div>
-          {/* 주소 검색 — 드롭다운 없이 입력한 텍스트 그대로 검색에 사용 */}
-          <div className="bg-blue-50 rounded-xl p-3 space-y-2">
-            <div className="text-[11px] font-bold text-blue-500">주소로 검색 (선택)</div>
-            <div className="grid grid-cols-2 gap-2">
+          {searchMode === "client" ? (
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="text-[10px] text-blue-400 mb-1">상차지주소</div>
+                <div className="text-[12px] font-bold text-gray-900 mb-1">상차지명</div>
+                <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 인천 후레쉬2공장" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
+              </div>
+              <div>
+                <div className="text-[12px] font-bold text-gray-900 mb-1">하차지명</div>
+                <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 반찬단지" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-[12px] font-bold text-gray-900 mb-1">상차지 주소</div>
                 <input autoComplete="off"
-                  className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
+                  className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
                   value={pickupAddr}
                   onChange={e => setPickupAddr(e.target.value)}
-                  placeholder="예: 김포"
+                  placeholder="예: 인천 서구"
                   onKeyDown={e=>e.key==="Enter"&&calcFareMobile()}
                 />
               </div>
               <div>
-                <div className="text-[10px] text-blue-400 mb-1">하차지주소</div>
+                <div className="text-[12px] font-bold text-gray-900 mb-1">하차지 주소</div>
                 <input autoComplete="off"
-                  className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
+                  className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
                   value={dropAddr}
                   onChange={e => setDropAddr(e.target.value)}
-                  placeholder="예: 경남"
+                  placeholder="예: 서울 송파구"
                   onKeyDown={e=>e.key==="Enter"&&calcFareMobile()}
                 />
               </div>
             </div>
-          </div>
+          )}
           {/* 경유지 포함 여부 (PC와 동일한 단일 토글) */}
           <button type="button" onClick={() => setIncludeVia(v => !v)}
             className={`w-full py-2 rounded-xl text-[12px] font-bold border transition ${includeVia ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"}`}>
             경유포함
           </button>
           {/* 차종/톤수/화물 */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5">차종</div>
-              <select className="w-full border border-gray-200 rounded-xl px-2 py-2 text-[12px] bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
+              <div className="text-[12px] font-bold text-gray-900 mb-1">차종</div>
+              <select className="w-full px-1 py-2 text-[12px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
                 value={vehicle} onChange={e=>setVehicle(e.target.value)}>
                 <option value="전체">전체</option>
                 <option value="다마스">다마스</option>
@@ -16078,22 +16092,22 @@ const calcFareMobile = () => {
               </select>
             </div>
             <div>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5">톤수</div>
-              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+              <div className="text-[12px] font-bold text-gray-900 mb-1">톤수</div>
+              <input autoComplete="off" className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
                 placeholder="예: 1톤" value={ton} onChange={e=>setTon(e.target.value)}
                 onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
             </div>
             <div>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5">화물</div>
-              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+              <div className="text-[12px] font-bold text-gray-900 mb-1">화물</div>
+              <input autoComplete="off" className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
                 placeholder="예: 3파렛트" value={cargo} onChange={e=>setCargo(e.target.value)}
                 onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
             </div>
           </div>
           {/* 거래처/정렬방식 (PC와 동일) */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5">거래처</div>
+              <div className="text-[12px] font-bold text-gray-900 mb-1">거래처</div>
               <MobilePlaceSuggest
                 value={client === "전체" ? "" : client}
                 onChange={v => setClient(v || "전체")}
@@ -16103,8 +16117,8 @@ const calcFareMobile = () => {
               />
             </div>
             <div>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5">정렬방식</div>
-              <select className="w-full border border-gray-200 rounded-xl px-2 py-2 text-[12px] bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
+              <div className="text-[12px] font-bold text-gray-900 mb-1">정렬방식</div>
+              <select className="w-full px-1 py-2 text-[12px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
                 value={sortKey} onChange={e=>setSortKey(e.target.value)}>
                 <option value="date_desc">최신순</option>
                 <option value="date_asc">오래된순</option>
