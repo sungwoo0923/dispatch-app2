@@ -24785,7 +24785,19 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       {contextMenu && (
         <div
           className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
-          style={{ top: Math.min(contextMenu.y, window.innerHeight / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 240), left: Math.min(contextMenu.x, window.innerWidth / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 180) }}
+          style={(() => {
+            const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
+            const vh = window.innerHeight / _z;
+            const vw = window.innerWidth / _z;
+            const left = Math.min(contextMenu.x, vw - 180);
+            // 메뉴의 실제 높이는 항목 구성에 따라 달라져 미리 알 수 없으므로,
+            // 클릭 지점이 화면 하단에 가까우면 top이 아닌 bottom으로 앵커해
+            // 위쪽으로 펼쳐지게 한다 (bottom 앵커는 엘리먼트 높이와 무관하게
+            // 항상 화면 안에 들어온다). 남은 공간이 부족하면 스크롤로 보강한다.
+            return contextMenu.y > vh * 0.55
+              ? { bottom: Math.max(8, vh - contextMenu.y), left, maxHeight: vh - 16, overflowY: "auto" }
+              : { top: contextMenu.y, left, maxHeight: vh - contextMenu.y - 16, overflowY: "auto" };
+          })()}
           onClick={e => e.stopPropagation()}
         >
           {/* 기사복사 */}
@@ -34276,7 +34288,19 @@ setCopyPlaceOptions(list);
       {contextMenuDS && (
         <div
           className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
-          style={{ top: Math.min(contextMenuDS.y, window.innerHeight / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 260), left: Math.min(contextMenuDS.x, window.innerWidth / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 180) }}
+          style={(() => {
+            const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
+            const vh = window.innerHeight / _z;
+            const vw = window.innerWidth / _z;
+            const left = Math.min(contextMenuDS.x, vw - 180);
+            // 메뉴의 실제 높이는 항목 구성에 따라 달라져 미리 알 수 없으므로,
+            // 클릭 지점이 화면 하단에 가까우면 top이 아닌 bottom으로 앵커해
+            // 위쪽으로 펼쳐지게 한다 (bottom 앵커는 엘리먼트 높이와 무관하게
+            // 항상 화면 안에 들어온다). 남은 공간이 부족하면 스크롤로 보강한다.
+            return contextMenuDS.y > vh * 0.55
+              ? { bottom: Math.max(8, vh - contextMenuDS.y), left, maxHeight: vh - 16, overflowY: "auto" }
+              : { top: contextMenuDS.y, left, maxHeight: vh - contextMenuDS.y - 16, overflowY: "auto" };
+          })()}
           onClick={e => e.stopPropagation()}
         >
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
