@@ -233,16 +233,11 @@ const EDIT_REQUEST_FIELD_LABELS = {
 // 거래처/상하차지별로 "기사전달용" 복사 시 자동으로 함께 붙는 주의사항 문구.
 // 실제 값은 clients/places 문서의 기사전달주의사항 필드에 저장되며(오더메모와
 // 동일한 저장 구조 재사용), 여기서는 그 값이 아직 없을 때 편집 팝업에 채워줄
-// 기본 템플릿만 정의한다. 반찬단지는 예전부터 하드코딩되어 있던 문구를 그대로
-// 기본값으로 사용해 기존 동작을 그대로 유지한다.
-const DEFAULT_BANCHAN_DRIVER_NOTICE = `[반찬단지 주의사항]
-- 안전화 착용 필수 (슬리퍼/크록스 금지)
-- 입차 시 지게차 기사님께 하차지명 말씀
-- 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`;
+// 기본 템플릿만 정의한다. 업체별 전용 하드코딩 문구는 없다 — 모든 업체가
+// 동일하게 이 템플릿으로 시작해 사용자가 직접 채워 저장해야 한다.
 const defaultDriverNoticeTemplate = (name) => {
   const n = (name || "").trim();
   if (!n) return "";
-  if (n.includes("반찬단지")) return DEFAULT_BANCHAN_DRIVER_NOTICE;
   return `[${n} 주의사항]\n- `;
 };
 
@@ -6260,6 +6255,7 @@ const mergedClients = React.useMemo(() => {
       담당자번호: c.연락처 || c.담당자번호 || "",
       메모: c.메모 || "",
       오더메모: c.오더메모 || "",
+      기사전달주의사항: c.기사전달주의사항 || "",
       등급: c.등급 || "일반",
       등급변경일: c.등급변경일 || null,
       팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
@@ -16993,7 +16989,7 @@ const mergedClients = React.useMemo(() => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 기사전달주의사항: c.기사전달주의사항 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
   // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
@@ -17749,15 +17745,12 @@ const uploadUrl = (() => {
 })();
 
 // 상/하차지명으로 거래처(clients)/하차지거래처(places) 레코드를 찾아 저장된
-// 기사전달주의사항을 붙인다. 아직 아무도 저장한 적 없는 반찬단지는 예전
-// 하드코딩 문구를 기본값으로 계속 보여준다(하위호환).
+// 기사전달주의사항을 붙인다.
 const _findDriverNotice4d = (placeName) => {
   const n = (placeName || "").trim();
   if (!n) return "";
   const found = (mergedClients || []).find(c => rtNormalizeKey(c.업체명 || c.거래처명 || "") === rtNormalizeKey(n));
-  const saved = (found?.기사전달주의사항 || "").trim();
-  if (saved) return saved;
-  return n.includes("반찬단지") ? DEFAULT_BANCHAN_DRIVER_NOTICE : "";
+  return (found?.기사전달주의사항 || "").trim();
 };
 const noticeBlock = [...new Set([_findDriverNotice4d(r.상차지명), _findDriverNotice4d(r.하차지명)].filter(Boolean))].join("\n\n");
 
@@ -26627,7 +26620,7 @@ const mergedClients = React.useMemo(() => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 기사전달주의사항: c.기사전달주의사항 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
   // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
@@ -28334,15 +28327,12 @@ const BANCHAN_NOTICE = `
           })();
 
 // 상/하차지명으로 거래처(clients)/하차지거래처(places) 레코드를 찾아 저장된
-// 기사전달주의사항을 붙인다. 아직 아무도 저장한 적 없는 반찬단지는 예전
-// 하드코딩 문구를 기본값으로 계속 보여준다(하위호환).
+// 기사전달주의사항을 붙인다.
 const _findDriverNotice5d = (placeName) => {
   const n = (placeName || "").trim();
   if (!n) return "";
   const found = (mergedClients || []).find(c => dsNormalizeKey(c.업체명 || c.거래처명 || "") === dsNormalizeKey(n));
-  const saved = (found?.기사전달주의사항 || "").trim();
-  if (saved) return saved;
-  return n.includes("반찬단지") ? DEFAULT_BANCHAN_DRIVER_NOTICE : "";
+  return (found?.기사전달주의사항 || "").trim();
 };
 const noticeBlock = [...new Set([_findDriverNotice5d(r.상차지명), _findDriverNotice5d(r.하차지명)].filter(Boolean))].join("\n\n");
 

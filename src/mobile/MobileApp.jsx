@@ -62,9 +62,7 @@ function buildShortUploadUrlMobile(orderId, token) {
 }
 
 // 거래처/상하차지별 "기사전달용" 복사 시 자동으로 붙는 주의사항 — PC(DispatchApp)와
-// 동일하게 clients/places 문서의 기사전달주의사항 필드를 조회한다. 아직 아무도
-// 저장한 적 없는 반찬단지는 예전 하드코딩 문구를 기본값으로 계속 보여준다(하위호환).
-const DEFAULT_BANCHAN_DRIVER_NOTICE_MOBILE = `[반찬단지 주의사항]\n- 안전화 착용 필수 (슬리퍼/크록스 금지)\n- 입차 시 지게차 기사님께 하차지명 말씀\n- 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`;
+// 동일하게 clients/places 문서의 기사전달주의사항 필드를 조회한다.
 async function findDriverNoticeMobile(name) {
   const n = (name || "").trim();
   if (!n) return "";
@@ -75,9 +73,8 @@ async function findDriverNoticeMobile(name) {
       const placeSnap = await getDocs(query(collection(db, "places"), where("업체명", "==", n)));
       saved = (placeSnap.docs[0]?.data()?.기사전달주의사항 || "").trim();
     }
-    if (saved) return saved;
-  } catch { /* 조회 실패 시 아래 기본값으로 폴백 */ }
-  return n.includes("반찬단지") ? DEFAULT_BANCHAN_DRIVER_NOTICE_MOBILE : "";
+    return saved;
+  } catch { return ""; }
 }
 
 // 운임조회 결과 정렬(추천/최신/금액) — PC의 sortFareHistory와 동일한 규칙.
