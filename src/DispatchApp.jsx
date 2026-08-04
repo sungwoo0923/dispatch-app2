@@ -12629,17 +12629,21 @@ className={`
                 <div className="absolute top-2 right-2 flex gap-1">
                   <button
                     title="수정"
-                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-[13px] hover:bg-blue-50 hover:border-blue-300 transition"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-400 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition"
                     onClick={e => {
                       e.stopPropagation();
                       setEditContactData({ name: c.name || "", phone: c.phone || "" });
                       setEditingContactIdx(i);
                       setContactActive(i);
                     }}
-                  >✏️</button>
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    </svg>
+                  </button>
                   <button
                     title="삭제"
-                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-[13px] hover:bg-red-50 hover:border-red-300 transition"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-400 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition"
                     onClick={async e => {
                       e.stopPropagation();
                       if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
@@ -12650,7 +12654,11 @@ className={`
                       const final = hasPrimary ? updated : updated.map((x, idx) => ({ ...x, isPrimary: idx === 0 }));
                       await updateContactInPlace(contactPopup.place, final);
                     }}
-                  >🗑️</button>
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    </svg>
+                  </button>
                 </div>
                 <div
                   className="cursor-pointer min-w-0 pr-16"
@@ -22461,8 +22469,7 @@ value={copyTarget?.화물수량 || ""}
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
-  const _fareResultOuter = fareResult;
-  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
+  const sortedFareRecords = sortFareHistory(fareResult.records || [], fareSortMode);
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -22540,14 +22547,14 @@ value={copyTarget?.화물수량 || ""}
             {(() => {
               const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
               const filterCounts = {};
-              (fareResult.records || []).forEach(r => {
+              (sortedFareRecords || []).forEach(r => {
                 const l = r._match?.label || "경로일치";
                 filterCounts[l] = (filterCounts[l] || 0) + 1;
               });
               return (
                 <div className="flex gap-1.5 pb-3 flex-wrap">
                   {filterLabels.map(l => {
-                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    const cnt = l === "all" ? sortedFareRecords.length : (filterCounts[l] || 0);
                     if (l !== "all" && cnt === 0) return null;
                     return (
                       <button key={l}
@@ -22565,7 +22572,7 @@ value={copyTarget?.화물수량 || ""}
               );
             })()}
             {(() => {
-              const fares = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              const fares = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
               if (fares.length === 0) return null;
               const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
               const mn = Math.min(...fares);
@@ -22582,12 +22589,12 @@ value={copyTarget?.화물수량 || ""}
               );
             })()}
             <div className="space-y-2">
-              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
+              {(sortedFareRecords || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
-                const _allFares4c = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _allFares4c = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
                 const _avg4c = _allFares4c.length ? Math.round(_allFares4c.reduce((a,b)=>a+b,0)/_allFares4c.length) : 0;
                 const _diff4c = fare - _avg4c;
 
@@ -22828,8 +22835,7 @@ value={copyTarget?.화물수량 || ""}
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
-  const _fareResultOuter = fareResult;
-  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
+  const sortedFareRecords = sortFareHistory(fareResult.records || [], fareSortMode);
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -22916,14 +22922,14 @@ value={copyTarget?.화물수량 || ""}
             {(() => {
               const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
               const filterCounts = {};
-              (fareResult.records || []).forEach(r => {
+              (sortedFareRecords || []).forEach(r => {
                 const l = r._match?.label || "경로일치";
                 filterCounts[l] = (filterCounts[l] || 0) + 1;
               });
               return (
                 <div className="flex gap-1.5 pb-3 flex-wrap">
                   {filterLabels.map(l => {
-                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    const cnt = l === "all" ? sortedFareRecords.length : (filterCounts[l] || 0);
                     if (l !== "all" && cnt === 0) return null;
                     return (
                       <button key={l}
@@ -22941,7 +22947,7 @@ value={copyTarget?.화물수량 || ""}
               );
             })()}
             {(() => {
-              const fares = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              const fares = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
               if (fares.length === 0) return null;
               const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
               const mn = Math.min(...fares);
@@ -22958,12 +22964,12 @@ value={copyTarget?.화물수량 || ""}
               );
             })()}
             <div className="space-y-2">
-              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
+              {(sortedFareRecords || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
-                const _allFares4e = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _allFares4e = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
                 const _avg4e = _allFares4e.length ? Math.round(_allFares4e.reduce((a,b)=>a+b,0)/_allFares4e.length) : 0;
                 const _diff4e = fare - _avg4e;
 
@@ -25060,8 +25066,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
   const fareMax = ctxFare4Result.max;
   const fareAvg = ctxFare4Result.avg;
   const fareRange = fareMax - fareMin || 1;
-  const _ctxFare4ResultOuter = ctxFare4Result;
-  const ctxFare4Result = { ..._ctxFare4ResultOuter, records: sortFareHistory(_ctxFare4ResultOuter.records || [], ctxFare4SortMode) };
+  const sortedFareRecords = sortFareHistory(ctxFare4Result.records || [], ctxFare4SortMode);
   const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
   const getFareTag = (fare) => {
     const pct = getBarPct(fare);
@@ -25134,7 +25139,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               <FareSortDropdown value={ctxFare4SortMode} onChange={setCtxFare4SortMode} />
             </div>
             {(() => {
-              const fares = (ctxFare4Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              const fares = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
               if (fares.length === 0) return null;
               const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
               const mn = Math.min(...fares);
@@ -25151,12 +25156,12 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               );
             })()}
             <div className="space-y-2">
-              {ctxFare4Result.records.map((rec, idx) => {
+              {sortedFareRecords.map((rec, idx) => {
                 const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
-                const _allFares4ctx = (ctxFare4Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _allFares4ctx = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
                 const _avg4ctx = _allFares4ctx.length ? Math.round(_allFares4ctx.reduce((a,b)=>a+b,0)/_allFares4ctx.length) : 0;
                 const _diff4ctx = fare - _avg4ctx;
                 return (
@@ -32760,8 +32765,7 @@ setCopyPlaceOptions(list);
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
-  const _fareResultOuter = fareResult;
-  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
+  const sortedFareRecords = sortFareHistory(fareResult.records || [], fareSortMode);
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -32839,14 +32843,14 @@ setCopyPlaceOptions(list);
             {(() => {
               const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
               const filterCounts = {};
-              (fareResult.records || []).forEach(r => {
+              (sortedFareRecords || []).forEach(r => {
                 const l = r._match?.label || "경로일치";
                 filterCounts[l] = (filterCounts[l] || 0) + 1;
               });
               return (
                 <div className="flex gap-1.5 pb-3 flex-wrap">
                   {filterLabels.map(l => {
-                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    const cnt = l === "all" ? sortedFareRecords.length : (filterCounts[l] || 0);
                     if (l !== "all" && cnt === 0) return null;
                     return (
                       <button key={l}
@@ -32864,7 +32868,7 @@ setCopyPlaceOptions(list);
               );
             })()}
             {(() => {
-              const fares = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              const fares = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
               if (fares.length === 0) return null;
               const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
               const mn = Math.min(...fares);
@@ -32881,12 +32885,12 @@ setCopyPlaceOptions(list);
               );
             })()}
             <div className="space-y-2">
-              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
+              {(sortedFareRecords || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
-                const _allFares5c = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _allFares5c = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
                 const _avg5c = _allFares5c.length ? Math.round(_allFares5c.reduce((a,b)=>a+b,0)/_allFares5c.length) : 0;
                 const _diff5c = fare - _avg5c;
 
@@ -33059,8 +33063,7 @@ setCopyPlaceOptions(list);
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
-  const _fareResultOuter = fareResult;
-  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
+  const sortedFareRecords = sortFareHistory(fareResult.records || [], fareSortMode);
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -33141,14 +33144,14 @@ setCopyPlaceOptions(list);
             {(() => {
               const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
               const filterCounts = {};
-              (fareResult.records || []).forEach(r => {
+              (sortedFareRecords || []).forEach(r => {
                 const l = r._match?.label || "경로일치";
                 filterCounts[l] = (filterCounts[l] || 0) + 1;
               });
               return (
                 <div className="flex gap-1.5 pb-3 flex-wrap">
                   {filterLabels.map(l => {
-                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    const cnt = l === "all" ? sortedFareRecords.length : (filterCounts[l] || 0);
                     if (l !== "all" && cnt === 0) return null;
                     return (
                       <button key={l}
@@ -33166,7 +33169,7 @@ setCopyPlaceOptions(list);
               );
             })()}
             <div className="space-y-2">
-              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
+              {(sortedFareRecords || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -34524,8 +34527,7 @@ setCopyPlaceOptions(list);
   const fareMax = ctxFare5Result.max;
   const fareAvg = ctxFare5Result.avg;
   const fareRange = fareMax - fareMin || 1;
-  const _ctxFare5ResultOuter = ctxFare5Result;
-  const ctxFare5Result = { ..._ctxFare5ResultOuter, records: sortFareHistory(_ctxFare5ResultOuter.records || [], ctxFare5SortMode) };
+  const sortedFareRecords = sortFareHistory(ctxFare5Result.records || [], ctxFare5SortMode);
   const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
   const getFareTag = (fare) => {
     const pct = getBarPct(fare);
@@ -34601,14 +34603,14 @@ setCopyPlaceOptions(list);
             {(() => {
               const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
               const filterCounts = {};
-              (ctxFare5Result.records || []).forEach(r => {
+              (sortedFareRecords || []).forEach(r => {
                 const l = r._match?.label || "경로일치";
                 filterCounts[l] = (filterCounts[l] || 0) + 1;
               });
               return (
                 <div className="flex gap-1.5 pb-3 flex-wrap">
                   {filterLabels.map(l => {
-                    const cnt = l === "all" ? ctxFare5Result.records.length : (filterCounts[l] || 0);
+                    const cnt = l === "all" ? sortedFareRecords.length : (filterCounts[l] || 0);
                     if (l !== "all" && cnt === 0) return null;
                     return (
                       <button key={l}
@@ -34626,7 +34628,7 @@ setCopyPlaceOptions(list);
               );
             })()}
             {(() => {
-              const fares = (ctxFare5Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              const fares = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
               if (fares.length === 0) return null;
               const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
               const mn = Math.min(...fares);
@@ -34643,12 +34645,12 @@ setCopyPlaceOptions(list);
               );
             })()}
             <div className="space-y-2">
-              {(ctxFare5Result.records || []).filter(r => fare5Filter === "all" || (r._match?.label || "경로일치") === fare5Filter).map((rec, idx) => {
+              {(sortedFareRecords || []).filter(r => fare5Filter === "all" || (r._match?.label || "경로일치") === fare5Filter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
-                const _allFares5ctx = (ctxFare5Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _allFares5ctx = (sortedFareRecords || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
                 const _avg5ctx = _allFares5ctx.length ? Math.round(_allFares5ctx.reduce((a,b)=>a+b,0)/_allFares5ctx.length) : 0;
                 const _diff5ctx = fare - _avg5ctx;
                 return (
