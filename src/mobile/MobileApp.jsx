@@ -7627,7 +7627,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
                 onClick={() => setDeliverState(v)}
                 className={`flex-1 py-2 rounded-lg text-[13px] font-semibold border transition ${
                   deliverState === v
-                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                    ? (bStyle ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-blue-600 border-blue-600") + " text-white"
                     : "bg-white text-gray-600 border-gray-300"
                 }`}
               >{v}</button>
@@ -7672,7 +7672,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         </div>
 
         <button onClick={handleSave} disabled={saving}
-          className="w-full py-3 rounded-xl text-[14px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] transition disabled:opacity-50">
+          className={`w-full py-3 rounded-xl text-[14px] font-bold text-white transition disabled:opacity-50 ${bStyle ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-blue-600 hover:bg-blue-700"}`}>
           {saving ? "저장 중..." : "저장"}
         </button>
       </div>
@@ -9823,7 +9823,7 @@ const handleAssignClick = () => {
             <div className="flex justify-center pt-3 pb-0 shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-300" />
             </div>
-            <div className="bg-[#1B2B4B] px-5 py-4 shrink-0 rounded-t-none">
+            <div className={cardVersionB ? "bg-[#1B2B4B] px-5 py-4 shrink-0 rounded-t-none" : "bg-blue-600 px-5 py-4 shrink-0 rounded-t-none"}>
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-white font-bold text-[16px]">운임 조회 결과</div>
@@ -9906,7 +9906,7 @@ const handleAssignClick = () => {
                           if (t !== "all" && cnt === 0) return null;
                           return (
                             <button key={t} onClick={() => setDetailFareFilter(t)}
-                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition ${detailFareFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200"}`}>
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition ${detailFareFilter === t ? (cardVersionB ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-blue-600 border-blue-600") + " text-white" : "bg-white text-gray-600 border-gray-200"}`}>
                               {t === "all" ? `전체 ${cnt}` : `${t} ${cnt}`}
                             </button>
                           );
@@ -9919,19 +9919,19 @@ const handleAssignClick = () => {
                           조회 운임 범위 ({visibleMatches.length}건)
                         </div>
                         <div className="flex items-baseline gap-2 mb-3">
-                          <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+                          <span className={cardVersionB ? "text-[26px] font-black text-[#1B2B4B] leading-none" : "text-[26px] font-black text-blue-600 leading-none"}>{fareMin.toLocaleString()}</span>
                           <span className="text-[16px] font-bold text-gray-300">~</span>
-                          <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+                          <span className={cardVersionB ? "text-[26px] font-black text-[#1B2B4B] leading-none" : "text-[26px] font-black text-blue-600 leading-none"}>{fareMax.toLocaleString()}</span>
                           <span className="text-[13px] font-semibold text-gray-400 mb-0.5">원</span>
                         </div>
                         <div className="relative h-2 bg-gray-100 rounded-full mb-1.5">
                           <div className="absolute inset-0 bg-gray-200 rounded-full" />
-                          <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                          <div className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-md z-10 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                             style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
                         </div>
                         <div className="flex justify-between text-[10px] font-semibold text-gray-400">
                           <span>최저 {fareMin.toLocaleString()}원</span>
-                          <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+                          <span className={cardVersionB ? "text-[#1B2B4B] font-bold" : "text-blue-600 font-bold"}>평균 {fareAvg.toLocaleString()}원</span>
                           <span>최고 {fareMax.toLocaleString()}원</span>
                         </div>
                         <div className="grid grid-cols-3 gap-2 mt-3">
@@ -9944,7 +9944,7 @@ const handleAssignClick = () => {
                               onClick={() => applyFareDirectly(value, null)}
                               className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
                               <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
-                              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
+                              <div className={cardVersionB ? "text-[15px] font-extrabold text-[#1B2B4B]" : "text-[15px] font-extrabold text-blue-600"}>{value.toLocaleString()}</div>
                             </button>
                           ))}
                         </div>
@@ -9952,7 +9952,7 @@ const handleAssignClick = () => {
                     )}
                     <div className="px-4 py-3 space-y-2.5">
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+                        <span className={cardVersionB ? "text-[13px] font-extrabold text-[#1B2B4B]" : "text-[13px] font-extrabold text-blue-600"}>과거 운송 기록</span>
                         <FareSortDropdownMobile value={detailFareSortMode} onChange={setDetailFareSortMode} />
                       </div>
                       {visibleMatches.map((r, i) => {
@@ -9962,7 +9962,7 @@ const handleAssignClick = () => {
                         const te = r.tags.includes("톤수일치");
                         const re = r.tags.includes("지명일치") || r.tags.includes("거래처일치");
                         const tagLabel = (ce && te && re) ? "완전일치" : (ce || cp) ? "부분일치" : te ? "톤수일치" : "노선일치";
-                        const tagColor = tagLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
+                        const tagColor = tagLabel === "완전일치" ? (cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600") + " text-white"
                           : tagLabel === "부분일치" ? "bg-emerald-600 text-white"
                           : tagLabel === "톤수일치" ? "bg-gray-600 text-white"
                           : "bg-blue-100 text-blue-700";
@@ -9972,9 +9972,9 @@ const handleAssignClick = () => {
                         const fareLevelCls = barPct <= 33 ? "bg-emerald-600 text-white" : barPct <= 66 ? "bg-gray-600 text-white" : "bg-orange-600 text-white";
                         const isTop = i === 0;
                         return (
-                          <div key={i} onClick={() => setDetailFareDetailItem(o)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
+                          <div key={i} onClick={() => setDetailFareDetailItem(o)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? (cardVersionB ? "border-[#1B2B4B]/30" : "border-blue-300") : "border-gray-200"}`}>
                             {isTop && (
-                              <div className="bg-[#1B2B4B] px-4 py-1 flex items-center gap-1">
+                              <div className={cardVersionB ? "bg-[#1B2B4B] px-4 py-1 flex items-center gap-1" : "bg-blue-600 px-4 py-1 flex items-center gap-1"}>
                                 <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
                               </div>
                             )}
@@ -10018,13 +10018,13 @@ const handleAssignClick = () => {
                                 </div>
                                 <div className="text-right shrink-0">
                                   <div className="text-[11px] text-gray-400">청구</div>
-                                  <div className="text-[17px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</div>
+                                  <div className={cardVersionB ? "text-[17px] font-extrabold text-[#1B2B4B]" : "text-[17px] font-extrabold text-blue-600"}>{fare.toLocaleString()}원</div>
                                   <div className="text-[11px] text-gray-400 mt-0.5">기사 {r.drv.toLocaleString()}원</div>
                                 </div>
                               </div>
                               {claims.length > 1 && (
                                 <div className="relative h-1.5 bg-gray-100 rounded-full mb-2.5">
-                                  <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                                  <div className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border-2 border-white shadow ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                                     style={{ left: `calc(${barPct}% - 5px)` }} />
                                 </div>
                               )}
@@ -10038,7 +10038,7 @@ const handleAssignClick = () => {
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); applyFareDirectly(r.claim, null); }}
-                                className="flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80"
+                                className={cardVersionB ? "flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80" : "flex-1 py-2.5 bg-blue-600 text-white text-[12px] font-bold text-center active:opacity-80"}
                               >
                                 청구운임 적용 ({r.claim.toLocaleString()})
                               </button>
@@ -10072,7 +10072,7 @@ const handleAssignClick = () => {
             <div className="flex justify-center pt-3 pb-0">
               <div className="w-10 h-1 rounded-full bg-gray-300" />
             </div>
-            <div className="bg-[#1B2B4B] px-5 py-4">
+            <div className={cardVersionB ? "bg-[#1B2B4B] px-5 py-4" : "bg-blue-600 px-5 py-4"}>
               <div className="flex items-center justify-between">
                 <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
                 <button onClick={() => setDetailFareDetailItem(null)}
@@ -10084,7 +10084,7 @@ const handleAssignClick = () => {
               {detailFareDetailItem.거래처명 && (
                 <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
                   <span className="text-[11px] text-gray-400 w-16 shrink-0">거래처</span>
-                  <span className="text-[14px] font-bold text-[#1B2B4B]">{detailFareDetailItem.거래처명}</span>
+                  <span className={cardVersionB ? "text-[14px] font-bold text-[#1B2B4B]" : "text-[14px] font-bold text-blue-600"}>{detailFareDetailItem.거래처명}</span>
                 </div>
               )}
               <div className="space-y-2">
@@ -10121,7 +10121,7 @@ const handleAssignClick = () => {
                   </div>
                 )}
               </div>
-              <div className="bg-[#1B2B4B] rounded-xl p-4">
+              <div className={cardVersionB ? "bg-[#1B2B4B] rounded-xl p-4" : "bg-blue-600 rounded-xl p-4"}>
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <div className="text-white/50 text-[10px] mb-1">청구운임</div>
@@ -10143,7 +10143,7 @@ const handleAssignClick = () => {
               <div className="flex gap-2 mt-1">
                 <button
                   onClick={() => applyFareDirectly(Number(detailFareDetailItem.청구운임||0), null)}
-                  className="flex-1 py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80"
+                  className={cardVersionB ? "flex-1 py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80" : "flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-[13px] active:opacity-80"}
                 >
                   청구운임 적용<br/><span className="text-[11px] font-normal">{Number(detailFareDetailItem.청구운임||0).toLocaleString()}원</span>
                 </button>
@@ -10169,7 +10169,7 @@ const handleAssignClick = () => {
           onClick={() => setFareAppliedPopup(null)}
         >
           {cardVersionB ? (
-            <div className="bg-[#1B2B4B] rounded-2xl shadow-2xl overflow-hidden">
+            <div className={cardVersionB ? "bg-[#1B2B4B] rounded-2xl shadow-2xl overflow-hidden" : "bg-blue-600 rounded-2xl shadow-2xl overflow-hidden"}>
               <div className="px-5 py-3.5 flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -10194,7 +10194,7 @@ const handleAssignClick = () => {
             </div>
           ) : (
             <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-              <div className="bg-[#1B2B4B] px-5 py-3 flex items-center gap-2">
+              <div className={cardVersionB ? "bg-[#1B2B4B] px-5 py-3 flex items-center gap-2" : "bg-blue-600 px-5 py-3 flex items-center gap-2"}>
                 <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center shrink-0">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
@@ -10204,12 +10204,12 @@ const handleAssignClick = () => {
               <div className="px-5 py-3.5 flex gap-6">
                 <div>
                   <div className="text-gray-400 text-[10px] font-bold tracking-wider mb-1">청구운임</div>
-                  <div className="text-[#1B2B4B] font-extrabold text-[18px]">{fareAppliedPopup.claim.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
+                  <div className={cardVersionB ? "text-[#1B2B4B] font-extrabold text-[18px]" : "text-blue-600 font-extrabold text-[18px]"}>{fareAppliedPopup.claim.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
                 </div>
                 {fareAppliedPopup.drv != null && (
                   <div>
                     <div className="text-gray-400 text-[10px] font-bold tracking-wider mb-1">기사운임</div>
-                    <div className="text-[#1B2B4B] font-extrabold text-[18px]">{fareAppliedPopup.drv.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
+                    <div className={cardVersionB ? "text-[#1B2B4B] font-extrabold text-[18px]" : "text-blue-600 font-extrabold text-[18px]"}>{fareAppliedPopup.drv.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
                   </div>
                 )}
               </div>
@@ -12480,7 +12480,7 @@ const pickDrop = (c) => {
               <div className="w-10 h-1 rounded-full bg-gray-300" />
             </div>
             {/* 헤더 */}
-            <div className="bg-[#1B2B4B] px-5 py-4 shrink-0 rounded-t-none">
+            <div className={cardVersionB ? "bg-[#1B2B4B] px-5 py-4 shrink-0 rounded-t-none" : "bg-blue-600 px-5 py-4 shrink-0 rounded-t-none"}>
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-white font-bold text-[16px]">운임 조회 결과</div>
@@ -12557,7 +12557,7 @@ const pickDrop = (c) => {
                           if (t !== "all" && cnt === 0) return null;
                           return (
                             <button key={t} onClick={() => setMobileFareFilter(t)}
-                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition ${mobileFareFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200"}`}>
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition ${mobileFareFilter === t ? (cardVersionB ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-blue-600 border-blue-600") + " text-white" : "bg-white text-gray-600 border-gray-200"}`}>
                               {t === "all" ? `전체 ${cnt}` : `${t} ${cnt}`}
                             </button>
                           );
@@ -12572,19 +12572,19 @@ const pickDrop = (c) => {
                           조회 운임 범위 ({visibleMatches.length}건)
                         </div>
                         <div className="flex items-baseline gap-2 mb-3">
-                          <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+                          <span className={cardVersionB ? "text-[26px] font-black text-[#1B2B4B] leading-none" : "text-[26px] font-black text-blue-600 leading-none"}>{fareMin.toLocaleString()}</span>
                           <span className="text-[16px] font-bold text-gray-300">~</span>
-                          <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+                          <span className={cardVersionB ? "text-[26px] font-black text-[#1B2B4B] leading-none" : "text-[26px] font-black text-blue-600 leading-none"}>{fareMax.toLocaleString()}</span>
                           <span className="text-[13px] font-semibold text-gray-400 mb-0.5">원</span>
                         </div>
                         <div className="relative h-2 bg-gray-100 rounded-full mb-1.5">
                           <div className="absolute inset-0 bg-gray-200 rounded-full" />
-                          <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                          <div className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-md z-10 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                             style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
                         </div>
                         <div className="flex justify-between text-[10px] font-semibold text-gray-400">
                           <span>최저 {fareMin.toLocaleString()}원</span>
-                          <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+                          <span className={cardVersionB ? "text-[#1B2B4B] font-bold" : "text-blue-600 font-bold"}>평균 {fareAvg.toLocaleString()}원</span>
                           <span>최고 {fareMax.toLocaleString()}원</span>
                         </div>
                         {/* 빠른 적용 버튼 */}
@@ -12602,7 +12602,7 @@ const pickDrop = (c) => {
                               }}
                               className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
                               <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
-                              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
+                              <div className={cardVersionB ? "text-[15px] font-extrabold text-[#1B2B4B]" : "text-[15px] font-extrabold text-blue-600"}>{value.toLocaleString()}</div>
                             </button>
                           ))}
                         </div>
@@ -12612,7 +12612,7 @@ const pickDrop = (c) => {
                     {/* 과거 기록 목록 */}
                     <div className="px-4 py-3 space-y-2.5">
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+                        <span className={cardVersionB ? "text-[13px] font-extrabold text-[#1B2B4B]" : "text-[13px] font-extrabold text-blue-600"}>과거 운송 기록</span>
                         <FareSortDropdownMobile value={mobileFareSortMode} onChange={setMobileFareSortMode} />
                       </div>
                       {visibleMatches.map((r, i) => {
@@ -12625,7 +12625,7 @@ const pickDrop = (c) => {
                           : (ce || cp) ? "부분일치"
                           : te ? "톤수일치"
                           : "노선일치";
-                        const tagColor = tagLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
+                        const tagColor = tagLabel === "완전일치" ? (cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600") + " text-white"
                           : tagLabel === "부분일치" ? "bg-emerald-600 text-white"
                           : tagLabel === "톤수일치" ? "bg-gray-600 text-white"
                           : "bg-blue-100 text-blue-700";
@@ -12637,9 +12637,9 @@ const pickDrop = (c) => {
                         const isTop = i === 0;
 
                         return (
-                          <div key={i} onClick={() => setFareDetailItem(r.order)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
+                          <div key={i} onClick={() => setFareDetailItem(r.order)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? (cardVersionB ? "border-[#1B2B4B]/30" : "border-blue-300") : "border-gray-200"}`}>
                             {isTop && (
-                              <div className="bg-[#1B2B4B] px-4 py-1 flex items-center gap-1">
+                              <div className={cardVersionB ? "bg-[#1B2B4B] px-4 py-1 flex items-center gap-1" : "bg-blue-600 px-4 py-1 flex items-center gap-1"}>
                                 <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
                               </div>
                             )}
@@ -12683,14 +12683,14 @@ const pickDrop = (c) => {
                                 </div>
                                 <div className="text-right shrink-0">
                                   <div className="text-[11px] text-gray-400">청구</div>
-                                  <div className="text-[17px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</div>
+                                  <div className={cardVersionB ? "text-[17px] font-extrabold text-[#1B2B4B]" : "text-[17px] font-extrabold text-blue-600"}>{fare.toLocaleString()}원</div>
                                   <div className="text-[11px] text-gray-400 mt-0.5">기사 {r.drv.toLocaleString()}원</div>
                                 </div>
                               </div>
                               {/* 운임 위치 바 */}
                               {claims.length > 1 && (
                                 <div className="relative h-1.5 bg-gray-100 rounded-full mb-2.5">
-                                  <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                                  <div className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border-2 border-white shadow ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                                     style={{ left: `calc(${barPct}% - 5px)` }} />
                                 </div>
                               )}
@@ -12709,7 +12709,7 @@ const pickDrop = (c) => {
                                   setShowFareHistory(false);
                                   showToast(`청구운임 적용: ${r.claim.toLocaleString()}원`);
                                 }}
-                                className="flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80"
+                                className={cardVersionB ? "flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80" : "flex-1 py-2.5 bg-blue-600 text-white text-[12px] font-bold text-center active:opacity-80"}
                               >
                                 청구운임 적용 ({r.claim.toLocaleString()})
                               </button>
@@ -12748,7 +12748,7 @@ const pickDrop = (c) => {
             <div className="flex justify-center pt-3 pb-0">
               <div className="w-10 h-1 rounded-full bg-gray-300" />
             </div>
-            <div className="bg-[#1B2B4B] px-5 py-4">
+            <div className={cardVersionB ? "bg-[#1B2B4B] px-5 py-4" : "bg-blue-600 px-5 py-4"}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
@@ -12765,7 +12765,7 @@ const pickDrop = (c) => {
               {fareDetailItem.거래처명 && (
                 <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
                   <span className="text-[11px] text-gray-400 w-16 shrink-0">거래처</span>
-                  <span className="text-[14px] font-bold text-[#1B2B4B]">{fareDetailItem.거래처명}</span>
+                  <span className={cardVersionB ? "text-[14px] font-bold text-[#1B2B4B]" : "text-[14px] font-bold text-blue-600"}>{fareDetailItem.거래처명}</span>
                 </div>
               )}
               <div className="space-y-2">
@@ -12802,7 +12802,7 @@ const pickDrop = (c) => {
                   </div>
                 )}
               </div>
-              <div className="bg-[#1B2B4B] rounded-xl p-4">
+              <div className={cardVersionB ? "bg-[#1B2B4B] rounded-xl p-4" : "bg-blue-600 rounded-xl p-4"}>
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <div className="text-white/50 text-[10px] mb-1">청구운임</div>
@@ -12829,7 +12829,7 @@ const pickDrop = (c) => {
                     setShowFareHistory(false);
                     showToast(`청구운임 적용: ${Number(fareDetailItem.청구운임||0).toLocaleString()}원`);
                   }}
-                  className="flex-1 py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80"
+                  className={cardVersionB ? "flex-1 py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80" : "flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-[13px] active:opacity-80"}
                 >
                   청구운임 적용<br/><span className="text-[11px] font-normal">{Number(fareDetailItem.청구운임||0).toLocaleString()}원</span>
                 </button>
@@ -12884,7 +12884,7 @@ const pickDrop = (c) => {
             <button
               type="button"
               className={`w-full py-2.5 rounded-lg text-[13px] font-semibold border ${
-                cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-[#1B2B4B] text-[#1B2B4B]"
+                cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-600"
               }`}
               onClick={() => {
                 setShowClientSearchModal(false);
@@ -14250,18 +14250,18 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
         <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden mx-4">
-          <div className="bg-[#1B2B4B] px-5 py-4">
+          <div className={cardVersionB ? "bg-[#1B2B4B] px-5 py-4" : "bg-blue-600 px-5 py-4"}>
             <h3 className="text-white font-bold text-[15px]">문자 메시지 전송</h3>
           </div>
           <div className="p-5">
             <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
               오더 내용이 복사되었습니다.<br />
-              <span className="font-semibold text-[#1B2B4B]">{smsConfirm.phone}</span> 으로 문자 앱을 여시겠습니까?<br />
+              <span className={`font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>{smsConfirm.phone}</span> 으로 문자 앱을 여시겠습니까?<br />
               <span className="text-gray-500">(문자 내용란에 붙여넣기 해주세요 — 길어서 자동입력 시 일부가 잘릴 수 있습니다)</span>
             </div>
             <div className="flex gap-2">
               <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600" onClick={() => { setSmsConfirm(null); }}>취소</button>
-              <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold"
+              <button className={`flex-1 py-2.5 rounded-xl text-white text-[13px] font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                 onClick={() => {
                   window.location.href = `sms:${smsConfirm.phone}`;
                   setSmsConfirm(null);
@@ -14307,7 +14307,7 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
             <button
               key={type}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-colors active:scale-[0.98] ${
-                primary ? "bg-[#1B2B4B] text-white" : "bg-gray-50 border border-gray-200 text-gray-800"
+                primary ? (cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600") + " text-white" : "bg-gray-50 border border-gray-200 text-gray-800"
               }`}
               onClick={() => copy(type)}
             >
