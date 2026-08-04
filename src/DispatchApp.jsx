@@ -179,6 +179,7 @@ function normalizeClient(row) {
     // 오더메모: 이 거래처명을 어디서(배차관리 상/하차지명·거래처명 등) 입력하든
     // 팝업표시가 켜져 있으면 메모 팝업으로 안내되는 메모.
     오더메모: row.오더메모 || "",
+    기사전달주의사항: row.기사전달주의사항 || "",
     대표자: row.대표자 || row.사업자명 || "",
     업태: row.업태 || "",
     종목: row.종목 || "",
@@ -213,6 +214,7 @@ function normalizeClients(arr) {
       이메일: c.이메일 || "",
       메모: c.메모 || "",
       오더메모: c.오더메모 || "",
+      기사전달주의사항: c.기사전달주의사항 || "",
       등급: c.등급 || "일반",
       팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
       contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
@@ -46665,7 +46667,16 @@ React.useEffect(() => {
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.메모||""}</td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.오더메모||""}</td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.기사전달주의사항||""}</td>
+                          <td className="px-2 py-2.5 text-center max-w-[160px]">
+                            {(r.기사전달주의사항 || "").length > 18 ? (
+                              <span className="text-[13px] text-gray-600">
+                                {(r.기사전달주의사항 || "").slice(0, 18)}…
+                                <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r.기사전달주의사항); }}>더보기</button>
+                              </span>
+                            ) : (
+                              <span className="text-[13px] text-gray-600">{r.기사전달주의사항 || ""}</span>
+                            )}
+                          </td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
                               if (!confirm("삭제하시겠습니까?")) return;
