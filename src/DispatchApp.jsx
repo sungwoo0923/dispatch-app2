@@ -45803,7 +45803,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     if (g === "블랙") return "bg-gray-900 text-white";
     if (g === "주의") return "bg-orange-100 text-orange-700 border border-orange-300";
     if (g === "이탈") return "bg-red-100 text-red-700 border border-red-300";
-    return "bg-blue-50 text-blue-600 border border-blue-200";
+    return "bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/30";
   };
 
   const [subTab, setSubTab] = React.useState(initialTab);
@@ -46633,7 +46633,7 @@ React.useEffect(() => {
                             contacts: Array.isArray(r._rawContacts) && r._rawContacts.length
                               ? r._rawContacts
                               : (r.담당자 ? [{ name: r.담당자, phone: r.담당자번호 || "", isPrimary: true }] : []),
-                            기사전달주의사항: r.기사전달주의사항 !== undefined ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.업체명),
+                            기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.업체명),
                           })}
                           className={`hover:bg-blue-50/60 transition border-b border-gray-100 cursor-pointer ${
                             grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
@@ -46668,14 +46668,7 @@ React.useEffect(() => {
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.메모||""}</td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.오더메모||""}</td>
                           <td className="px-2 py-2.5 text-center max-w-[160px]">
-                            {(r.기사전달주의사항 || "").length > 18 ? (
-                              <span className="text-[13px] text-gray-600">
-                                {(r.기사전달주의사항 || "").slice(0, 18)}…
-                                <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r.기사전달주의사항); }}>더보기</button>
-                              </span>
-                            ) : (
-                              <span className="text-[13px] text-gray-600">{r.기사전달주의사항 || ""}</span>
-                            )}
+                            <span className="text-[13px] font-bold text-black">{(r.기사전달주의사항 || "").trim() ? "등록" : "미등록"}</span>
                           </td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
@@ -46955,7 +46948,7 @@ React.useEffect(() => {
                   if (selected.size > 1) return showAlert("한 번에 1건만 수정할 수 있습니다.");
                   const id = [...selected][0];
                   const row = rows.find(r => (r.id || r.거래처명) === id);
-                  if (row) setEditClientModal({ ...row, 기사전달주의사항: row.기사전달주의사항 !== undefined ? row.기사전달주의사항 : defaultDriverNoticeTemplate(row.거래처명) });
+                  if (row) setEditClientModal({ ...row, 기사전달주의사항: (row.기사전달주의사항 || "").trim() ? row.기사전달주의사항 : defaultDriverNoticeTemplate(row.거래처명) });
                 }}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
                 선택수정 {selected.size === 1 && "(1)"}
@@ -47218,7 +47211,7 @@ React.useEffect(() => {
                             contacts: Array.isArray(r.contacts) && r.contacts.length
                               ? r.contacts
                               : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []),
-                            기사전달주의사항: r.기사전달주의사항 !== undefined ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.거래처명),
+                            기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.거래처명),
                           })}>
                           <td className="px-3 py-2.5 text-center">
                             <input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
@@ -47276,14 +47269,7 @@ React.useEffect(() => {
                             )}
                           </td>
                           <td className="px-2 py-2.5 text-center max-w-[160px]">
-                            {(r.기사전달주의사항 || "").length > 18 ? (
-                              <span className="text-[13px] text-gray-500">
-                                {(r.기사전달주의사항 || "").slice(0, 18)}…
-                                <button className="ml-1 text-[12px] text-[#1B2B4B] font-semibold underline" onClick={(e) => { e.stopPropagation(); setMemoPopup(r.기사전달주의사항); }}>더보기</button>
-                              </span>
-                            ) : (
-                              <span className="text-[13px] text-gray-500">{r.기사전달주의사항 || ""}</span>
-                            )}
+                            <span className="text-[13px] font-bold text-black">{(r.기사전달주의사항 || "").trim() ? "등록" : "미등록"}</span>
                           </td>
                         </tr>
                       );
