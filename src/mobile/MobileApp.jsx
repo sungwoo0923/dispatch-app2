@@ -53,6 +53,34 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const role = localStorage.getItem("role") || "user";
 const collName = "dispatch";
 
+// 운임조회 결과 정렬(추천/최신/금액) — PC의 sortFareHistory와 동일한 규칙.
+const FARE_SORT_OPTIONS_MOBILE = [
+  { value: "relevance", label: "추천순" },
+  { value: "latest", label: "최신순" },
+  { value: "price_high", label: "금액 높은순" },
+  { value: "price_low", label: "금액 낮은순" },
+];
+function sortFareHistoryMobile(list, mode, dateKey = "상차일", fareKey = "청구운임") {
+  const arr = Array.isArray(list) ? [...list] : [];
+  const getDate = (r) => r[dateKey] || r.order?.[dateKey] || "";
+  const getFare = (r) => Number(String(r[fareKey] ?? r.claim ?? 0).replace(/[^\d]/g, ""));
+  if (mode === "latest") return arr.sort((a, b) => getDate(b).localeCompare(getDate(a)));
+  if (mode === "price_high") return arr.sort((a, b) => getFare(b) - getFare(a));
+  if (mode === "price_low") return arr.sort((a, b) => getFare(a) - getFare(b));
+  return arr;
+}
+function FareSortDropdownMobile({ value, onChange }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="text-[11px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white"
+    >
+      {FARE_SORT_OPTIONS_MOBILE.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
 // 거래처명 매칭용 공백/대소문자 무시 정규화 (오더복사 등으로 기존 오더에서 그대로
 // 복사된 거래처명이 실제 저장값과 공백만 다른 경우에도 연동 화주사를 정확히 찾기 위함)
 const normalizeCompanyKey = (s = "") =>
@@ -8456,6 +8484,7 @@ function MobileOrderDetail({
   const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
   const [fareAppliedPopup, setFareAppliedPopup] = React.useState(null);
   const [detailFareFilter, setDetailFareFilter] = useState("all");
+  const [detailFareSortMode, setDetailFareSortMode] = useState("relevance");
   const [detailFareDetailItem, setDetailFareDetailItem] = useState(null);
 
   useEffect(() => {
@@ -9812,9 +9841,12 @@ const handleAssignClick = () => {
                 const validDetailMatches = detailFareMatches.filter(r => r.claim > 0);
                 const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
                 validDetailMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
-                const visibleMatches = detailFareFilter === "all"
-                  ? validDetailMatches
-                  : validDetailMatches.filter(r => getLabel(r) === detailFareFilter);
+                const visibleMatches = sortFareHistoryMobile(
+                  detailFareFilter === "all"
+                    ? validDetailMatches
+                    : validDetailMatches.filter(r => getLabel(r) === detailFareFilter),
+                  detailFareSortMode, "dateStr", "claim"
+                );
                 const claims = visibleMatches.map(r => r.claim).filter(v => v > 0);
                 const fareMin = claims.length ? Math.min(...claims) : 0;
                 const fareMax = claims.length ? Math.max(...claims) : 0;
@@ -9892,9 +9924,9 @@ const handleAssignClick = () => {
                       </div>
                     )}
                     <div className="px-4 py-3 space-y-2.5">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-                        <span className="text-[11px] text-gray-400">노선일치 · 최신순</span>
+                        <FareSortDropdownMobile value={detailFareSortMode} onChange={setDetailFareSortMode} />
                       </div>
                       {visibleMatches.map((r, i) => {
                         const o = r.order;
@@ -10718,6 +10750,7 @@ const saveStopSheet = () => {
 };
 const [showFareHistory, setShowFareHistory] = useState(false);
 const [mobileFareFilter, setMobileFareFilter] = useState("all");
+const [mobileFareSortMode, setMobileFareSortMode] = useState("relevance");
 const [fareDetailItem, setFareDetailItem] = useState(null);
 const [showSmartParser, setShowSmartParser] = useState(false);
 
@@ -12457,9 +12490,12 @@ const pickDrop = (c) => {
                 const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
                 validFareMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
 
-                const visibleMatches = mobileFareFilter === "all"
-                  ? validFareMatches
-                  : validFareMatches.filter(r => getLabel(r) === mobileFareFilter);
+                const visibleMatches = sortFareHistoryMobile(
+                  mobileFareFilter === "all"
+                    ? validFareMatches
+                    : validFareMatches.filter(r => getLabel(r) === mobileFareFilter),
+                  mobileFareSortMode, "dateStr", "claim"
+                );
                 const claims = visibleMatches.map(r => r.claim).filter(v => v > 0);
                 const fareMin = claims.length ? Math.min(...claims) : 0;
                 const fareMax = claims.length ? Math.max(...claims) : 0;
@@ -12548,9 +12584,9 @@ const pickDrop = (c) => {
 
                     {/* 과거 기록 목록 */}
                     <div className="px-4 py-3 space-y-2.5">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-                        <span className="text-[11px] text-gray-400">유사도순 · 최신순</span>
+                        <FareSortDropdownMobile value={mobileFareSortMode} onChange={setMobileFareSortMode} />
                       </div>
                       {visibleMatches.map((r, i) => {
                         const o = r.order;

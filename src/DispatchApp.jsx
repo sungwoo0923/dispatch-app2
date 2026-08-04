@@ -2306,6 +2306,38 @@ function mergeViaTonnage(mainTon, waypointLists) {
   return fmtKg(totalKg);
 }
 
+// ================================
+// 운임조회 결과 정렬 — 3/4/5파트 운임조회 모달에서 공용으로 쓰는 정렬 헬퍼.
+// "추천순"은 각 모달이 이미 계산해둔 기본 순서(화물/톤수 근접도 등)를 그대로
+// 두고, 나머지 모드만 이 함수에서 재정렬한다.
+// ================================
+const FARE_SORT_OPTIONS = [
+  { value: "relevance", label: "추천순" },
+  { value: "latest", label: "최신순" },
+  { value: "price_high", label: "금액 높은순" },
+  { value: "price_low", label: "금액 낮은순" },
+];
+function sortFareHistory(list, mode) {
+  const arr = Array.isArray(list) ? [...list] : [];
+  const getDate = (r) => r._date || r.상차일 || r.등록일 || "";
+  const getFare = (r) => Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
+  if (mode === "latest") return arr.sort((a, b) => getDate(b).localeCompare(getDate(a)));
+  if (mode === "price_high") return arr.sort((a, b) => getFare(b) - getFare(a));
+  if (mode === "price_low") return arr.sort((a, b) => getFare(a) - getFare(b));
+  return arr; // relevance: 원래 순서 유지
+}
+function FareSortDropdown({ value, onChange }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="text-[11px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2 py-1 outline-none cursor-pointer bg-white"
+    >
+      {FARE_SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
 // ===================== 오더정보 모달 =====================
 function OrderInfoModal({ row, onClose }) {
   const [routeInfo, setRouteInfo] = React.useState(null); // { distanceKm, durationText } | "loading" | "error"
@@ -8283,6 +8315,7 @@ const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [fare3Filter, setFare3Filter] = React.useState("all");
 const [fareResult, setFareResult] = React.useState(null);
+const [fareSortMode, setFareSortMode] = React.useState("relevance");
 const [fareQuickOpen, setFareQuickOpen] = React.useState(false);
 const [fareQuickMatches, setFareQuickMatches] = React.useState([]);
     const [expandedMemo, setExpandedMemo] = React.useState(null);
@@ -14151,6 +14184,7 @@ setConfirmChange(null);
     const diff = recent3[0] - recent3[recent3.length - 1];
     trend = diff > 5000 ? "up" : diff < -5000 ? "down" : "flat";
   }
+  sortedHistory = sortFareHistory(sortedHistory, fareSortMode);
 
   const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
 
@@ -14259,9 +14293,9 @@ setConfirmChange(null);
           {/* 과거 운송 기록 */}
           {sortedHistory.length > 0 && (
             <div className="px-6 pt-4 pb-6">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center justify-between gap-2 mb-3">
                 <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-                <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+                <FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />
               </div>
 
               {/* 필터 탭 */}
@@ -18032,6 +18066,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [ctxFare4Target, setCtxFare4Target] = React.useState(null);
   const [ctxFare4PanelOpen, setCtxFare4PanelOpen] = React.useState(false);
   const [ctxFare4Result, setCtxFare4Result] = React.useState(null);
+  const [ctxFare4SortMode, setCtxFare4SortMode] = React.useState("relevance");
   const [ctxNoHistory4Open, setCtxNoHistory4Open] = React.useState(false);
   const [ctxAddrSearch4Open, setCtxAddrSearch4Open] = React.useState(false);
   const [ctxAddrPickup4, setCtxAddrPickup4] = React.useState("");
@@ -18489,6 +18524,7 @@ React.useEffect(() => {
   // 신규 오더 등록 팝업
   const [showCreate, setShowCreate] = React.useState(false);
   const [fareResult, setFareResult] = React.useState(null);
+  const [fareSortMode, setFareSortMode] = React.useState("relevance");
   const [autoList, setAutoList] = React.useState([]);
 
 
@@ -22417,6 +22453,8 @@ value={copyTarget?.화물수량 || ""}
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
+  const _fareResultOuter = fareResult;
+  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -22486,9 +22524,9 @@ value={copyTarget?.화물수량 || ""}
           </div>
 
           <div className="px-6 pt-4 pb-6">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+              <FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />
             </div>
             {/* 필터 탭 */}
             {(() => {
@@ -22782,6 +22820,8 @@ value={copyTarget?.화물수량 || ""}
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
+  const _fareResultOuter = fareResult;
+  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -22860,9 +22900,9 @@ value={copyTarget?.화물수량 || ""}
 
           {/* 과거 운송 기록 */}
           <div className="px-6 pt-4 pb-6">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+              <FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />
             </div>
             {/* 필터 탭 */}
             {(() => {
@@ -25012,6 +25052,8 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
   const fareMax = ctxFare4Result.max;
   const fareAvg = ctxFare4Result.avg;
   const fareRange = fareMax - fareMin || 1;
+  const _ctxFare4ResultOuter = ctxFare4Result;
+  const ctxFare4Result = { ..._ctxFare4ResultOuter, records: sortFareHistory(_ctxFare4ResultOuter.records || [], ctxFare4SortMode) };
   const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
   const getFareTag = (fare) => {
     const pct = getBarPct(fare);
@@ -25079,9 +25121,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             </div>
           </div>
           <div className="px-6 pt-4 pb-6">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+              <FareSortDropdown value={ctxFare4SortMode} onChange={setCtxFare4SortMode} />
             </div>
             {(() => {
               const fares = (ctxFare4Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
@@ -27749,6 +27791,7 @@ const [clientOptions, setClientOptions] = React.useState([]);
 const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
 const [fareResult, setFareResult] = React.useState(null);
+const [fareSortMode, setFareSortMode] = React.useState("relevance");
 const [copyFareFilter, setCopyFareFilter] = React.useState("all");
   const [fareSourceData, setFareSourceData] = React.useState([]);
   // 🔥 운임조회용 원본 데이터 (날짜 필터 무시)
@@ -29358,6 +29401,7 @@ const save = {
   const [ctxFare5Target, setCtxFare5Target] = React.useState(null);
   const [ctxFare5PanelOpen, setCtxFare5PanelOpen] = React.useState(false);
   const [ctxFare5Result, setCtxFare5Result] = React.useState(null);
+  const [ctxFare5SortMode, setCtxFare5SortMode] = React.useState("relevance");
   const [fare5Filter, setFare5Filter] = React.useState("all");
   const [ctxNoHistory5Open, setCtxNoHistory5Open] = React.useState(false);
   const [ctxAddrSearch5Open, setCtxAddrSearch5Open] = React.useState(false);
@@ -32708,6 +32752,8 @@ setCopyPlaceOptions(list);
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
+  const _fareResultOuter = fareResult;
+  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -32777,9 +32823,9 @@ setCopyPlaceOptions(list);
           </div>
 
           <div className="px-6 pt-4 pb-6">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+              <FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />
             </div>
             {/* 필터 탭 */}
             {(() => {
@@ -33005,6 +33051,8 @@ setCopyPlaceOptions(list);
   const fareMax = fareResult.max;
   const fareAvg = fareResult.avg;
   const fareRange = fareMax - fareMin || 1;
+  const _fareResultOuter = fareResult;
+  const fareResult = { ..._fareResultOuter, records: sortFareHistory(_fareResultOuter.records || [], fareSortMode) };
 
   const getBarPct = (fare) =>
     fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -33077,9 +33125,9 @@ setCopyPlaceOptions(list);
           </div>
 
           <div className="px-6 pt-4 pb-6">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+              <FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />
             </div>
             {/* 필터 탭 */}
             {(() => {
@@ -34468,6 +34516,8 @@ setCopyPlaceOptions(list);
   const fareMax = ctxFare5Result.max;
   const fareAvg = ctxFare5Result.avg;
   const fareRange = fareMax - fareMin || 1;
+  const _ctxFare5ResultOuter = ctxFare5Result;
+  const ctxFare5Result = { ..._ctxFare5ResultOuter, records: sortFareHistory(_ctxFare5ResultOuter.records || [], ctxFare5SortMode) };
   const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
   const getFareTag = (fare) => {
     const pct = getBarPct(fare);
@@ -34535,9 +34585,9 @@ setCopyPlaceOptions(list);
             </div>
           </div>
           <div className="px-6 pt-4 pb-6">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+              <FareSortDropdown value={ctxFare5SortMode} onChange={setCtxFare5SortMode} />
             </div>
             {/* 필터 탭 */}
             {(() => {
