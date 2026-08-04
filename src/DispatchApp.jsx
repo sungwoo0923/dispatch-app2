@@ -9055,7 +9055,7 @@ const inputCls = orderCardStyle === "B"
 // 텍스트 라벨의 높이를 통일해, 같은 grid row의 옆 칸 입력창끼리 높이가
 // 들쑥날쑥해지는 것을 방지한다.
 const labelCls =
-  "flex items-center min-h-[26px] text-[15px] font-semibold text-black mb-1";
+  "flex items-center h-[22px] overflow-visible text-[15px] font-semibold text-black mb-1";
 
 // 메모/전달사항 textarea (A: 카드형 / B: 밑줄형)
 const textareaCls = orderCardStyle === "B"
@@ -10031,7 +10031,7 @@ const similar = placeList.filter(p => {
 
   {/* 상차지명 + 자동완성 */}
   <div className="relative">
-    <label className="flex items-center min-h-[26px] gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
+    <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
   상차지 {reqStar}
   <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("pickup")}
     className="text-[#1B2B4B] hover:opacity-70 transition" title="상차지 오더메모">
@@ -10113,7 +10113,7 @@ const similar = placeList.filter(p => {
 
 {/* 상차지주소 */}
 <div>
-  <div className="flex items-center min-h-[26px] justify-between mb-1.5">
+  <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
       상차지주소 <AutoBadge show={autoPickMatched} />
     </label>
@@ -10134,7 +10134,7 @@ const arr = form.경유상차목록 || [];
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2.5 py-1 rounded-lg border transition
+  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition
   ${hasPickupStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -10155,7 +10155,7 @@ className={`
 
 {/* 상차지 담당자 */}
 <div>
-  <div className="flex items-center min-h-[26px] justify-between mb-1">
+  <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
       상차지 담당자
     </label>
@@ -10190,7 +10190,7 @@ className={`
 
 {/* 하차지명 + 자동완성 */}
 <div className="relative">
-  <label className="flex items-center min-h-[26px] gap-1.5 text-[16px] font-bold text-red-500 mb-1">
+  <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-red-500 mb-1">
     하차지 {reqStar}
     <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("drop")}
       className="text-[#1B2B4B] hover:opacity-70 transition" title="하차지 오더메모">
@@ -10276,7 +10276,7 @@ className={`
 {/* 하차지주소 */}
 <div>
 
-  <div className="flex items-center min-h-[26px] justify-between mb-1.5">
+  <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
 
     <label className={`${labelCls} mb-0`}>
       하차지주소 <AutoBadge show={autoDropMatched} />
@@ -10300,7 +10300,7 @@ className={`
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2.5 py-1 rounded-lg border transition
+  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition
   ${hasDropStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -10321,7 +10321,7 @@ className={`
 
 {/* 하차지 담당자 */}
 <div>
-  <div className="flex items-center min-h-[26px] justify-between mb-1">
+  <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
       하차지 담당자
     </label>
@@ -10441,7 +10441,7 @@ className={`
 
 <div className="relative">
   <div
-  className="flex items-center min-h-[26px] justify-between mb-1.5"
+  className="flex items-center h-[22px] overflow-visible justify-between mb-1"
   onClick={(e) => e.stopPropagation()}
 >
   <label className={`${labelCls} mb-0`}>
@@ -10456,7 +10456,7 @@ className={`
       e.stopPropagation();
       setVehicleSpecOpen(true);
     }}
-   className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
+   className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
   >
     차량제원
   </button>
