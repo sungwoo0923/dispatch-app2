@@ -17747,7 +17747,7 @@ const uploadUrl = (() => {
 const _findDriverNotice4d = (placeName) => {
   const n = (placeName || "").trim();
   if (!n) return "";
-  const found = (mergedClients || []).find(c => normalizeKey(c.업체명 || c.거래처명 || "") === normalizeKey(n));
+  const found = (mergedClients || []).find(c => rtNormalizeKey(c.업체명 || c.거래처명 || "") === rtNormalizeKey(n));
   const saved = (found?.기사전달주의사항 || "").trim();
   if (saved) return saved;
   return n.includes("반찬단지") ? DEFAULT_BANCHAN_DRIVER_NOTICE : "";
@@ -28332,7 +28332,7 @@ const BANCHAN_NOTICE = `
 const _findDriverNotice5d = (placeName) => {
   const n = (placeName || "").trim();
   if (!n) return "";
-  const found = (mergedClients || []).find(c => normalizeKey(c.업체명 || c.거래처명 || "") === normalizeKey(n));
+  const found = (mergedClients || []).find(c => dsNormalizeKey(c.업체명 || c.거래처명 || "") === dsNormalizeKey(n));
   const saved = (found?.기사전달주의사항 || "").trim();
   if (saved) return saved;
   return n.includes("반찬단지") ? DEFAULT_BANCHAN_DRIVER_NOTICE : "";
