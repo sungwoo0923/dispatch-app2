@@ -13927,7 +13927,8 @@ ${order.하차지주소||""}${_dConMf?`\n${_dConMf}`:""}${_mainDCargoMf}${_mainD
 하차시간 : ${dropTime}
 하차방법 : ${order.하차방법||"-"}
 
-중량 : ${_totTonMf}${_totCargoMf?` / ${_totCargoMf}`:""} ${order.차량종류||order.차종||""}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전달사항.trim()}` : ""}
+중량 : ${_totTonMf}${_totCargoMf?` / ${_totCargoMf}`:""} ${order.차량종류||order.차종||""}
+결제방법 : ${order.지급방식 || "-"}
 
 ${order.차량번호} ${driverName} ${driverPhone}
 ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지급방식||"";return pt==="계산서"?"부가세별도":pt==="착불"?"착불":pt==="선불"?"선불":"부가세별도";})()  } 배차되었습니다.
