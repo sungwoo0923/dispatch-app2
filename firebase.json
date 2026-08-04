@@ -36,6 +36,10 @@
         "function": "fuel"
       },
       {
+        "source": "/api/fuel",
+        "function": "fuel"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
