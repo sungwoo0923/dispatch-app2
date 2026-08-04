@@ -6,6 +6,7 @@ import MobileIntelView from "./MobileIntelView";
 import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
+import CustomDatePicker from "../CustomDatePicker";
 import southKorea from "@svg-maps/south-korea";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
@@ -4316,20 +4317,20 @@ onGoAttendance={() => {
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="text-[11px] text-gray-400 mb-1">시작일</div>
-            <input autoComplete="off"
-              type="date"
+            <CustomDatePicker
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
               value={scheduleForm.start}
               onChange={e => setScheduleForm(f => ({ ...f, start: e.target.value }))}
+              showIcon
             />
           </div>
           <div>
             <div className="text-[11px] text-gray-400 mb-1">종료일</div>
-            <input autoComplete="off"
-              type="date"
+            <CustomDatePicker
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
               value={scheduleForm.end}
               onChange={e => setScheduleForm(f => ({ ...f, end: e.target.value }))}
+              showIcon
             />
           </div>
         </div>
@@ -4608,11 +4609,11 @@ onGoAttendance={() => {
         <option value="">받는 사람 선택</option>
         {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
       </select>
-      <input autoComplete="off"
-        type="date"
+      <CustomDatePicker
         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
         value={handoverForm.date}
         onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })}
+        showIcon
       />
       <textarea
         rows={4}
@@ -4665,11 +4666,11 @@ onGoAttendance={() => {
             <option value="">받는 사람 선택</option>
             {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
           </select>
-          <input autoComplete="off"
-            type="date"
+          <CustomDatePicker
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
             value={handoverForm.date}
             onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })}
+            showIcon
           />
           <textarea
             rows={4}
@@ -6491,8 +6492,7 @@ const summary = useMemo(() => {
               <div className="flex items-center gap-2 text-sm">
                 <div className="relative flex-1">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
-                  <input autoComplete="off"
-                    type="date"
+                  <CustomDatePicker
                     className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
@@ -6501,8 +6501,7 @@ const summary = useMemo(() => {
                 <span className={`text-xs ${icon}`}>~</span>
                 <div className="relative flex-1">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
-                  <input autoComplete="off"
-                    type="date"
+                  <CustomDatePicker
                     className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
@@ -11331,8 +11330,7 @@ const pickDrop = (c) => {
   input={
     <div className="space-y-1.5">
       <div className="flex flex-wrap gap-1.5 min-w-0">
-        <input autoComplete="off"
-          type="date"
+        <CustomDatePicker
           className="flex-1 min-w-[100px] border rounded px-2 py-1 text-sm"
           value={form.상차일}
           onChange={(e) => update("상차일", e.target.value)}
@@ -11373,8 +11371,7 @@ const pickDrop = (c) => {
   input={
     <div className="space-y-1.5">
       <div className="flex flex-wrap gap-1.5 min-w-0">
-        <input autoComplete="off"
-          type="date"
+        <CustomDatePicker
           className="flex-1 min-w-[100px] border rounded px-2 py-1 text-sm"
           value={form.하차일}
           onChange={(e) => update("하차일", e.target.value)}
@@ -12327,8 +12324,7 @@ const pickDrop = (c) => {
                   {Array.from({ length: multiCount }, (_, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
-                      <input autoComplete="off"
-                        type="date"
+                      <CustomDatePicker
                         value={orderDates[i] || form.상차일 || ""}
                         onChange={e => {
                           const next = [...orderDates];
@@ -12342,8 +12338,7 @@ const pickDrop = (c) => {
                         }}
                         className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
                       />
-                      <input autoComplete="off"
-                        type="date"
+                      <CustomDatePicker
                         value={orderDropDates[i] || orderDates[i] || form.상차일 || ""}
                         onChange={e => {
                           const nd = [...orderDropDates];
