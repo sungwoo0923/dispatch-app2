@@ -8997,16 +8997,34 @@ setCopyOpen(false);
 // KakaoT Minimal Clean Theme
 // =======================
 
-// 입력창 (카카오T 스타일)
-const inputCls =
-"w-full px-3 py-2 text-sm rounded-lg border " +
-"border-gray-200 shadow-sm bg-white " +
-"focus:border-blue-500 focus:ring-2 focus:ring-blue-100 " +
-"placeholder:text-gray-400 transition";
+// 오더 정보 카드 스타일 — A: 카드형(기본), B: 밑줄형. 사용자가 마지막으로
+// 선택한 스타일을 localStorage에 저장해 재접속/다른 탭 이동 후에도 유지한다.
+const [orderCardStyle, setOrderCardStyle] = React.useState(() => {
+  try { return localStorage.getItem("orderCardStyle") === "B" ? "B" : "A"; } catch { return "A"; }
+});
+const toggleOrderCardStyle = () => {
+  setOrderCardStyle(prev => {
+    const next = prev === "B" ? "A" : "B";
+    try { localStorage.setItem("orderCardStyle", next); } catch {}
+    return next;
+  });
+};
 
-// 라벨 (카카오T 스타일)
+// 입력창 (A: 카드형 / B: 밑줄형 — 오더복사수정패널과 동일한 밑줄 스타일)
+const inputCls = orderCardStyle === "B"
+  ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition"
+  : "w-full px-3 py-2 text-sm rounded-lg border border-gray-200 shadow-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-400 transition";
+
+// 라벨 (카카오T 스타일) — min-h + flex로 아이콘 버튼이 붙은 라벨과 일반
+// 텍스트 라벨의 높이를 통일해, 같은 grid row의 옆 칸 입력창끼리 높이가
+// 들쑥날쑥해지는 것을 방지한다.
 const labelCls =
-  "block text-[15px] font-semibold text-black mb-1";
+  "flex items-center min-h-[26px] text-[15px] font-semibold text-black mb-1";
+
+// 메모/전달사항 textarea (A: 카드형 / B: 밑줄형)
+const textareaCls = orderCardStyle === "B"
+  ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition"
+  : "w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.12),0_4px_12px_rgba(27,43,75,0.08)] placeholder:text-gray-400 transition-all";
     const reqStar = <span className="text-red-500">*</span>;
     const AutoBadge = ({ show }) => null;
 function FuelPriceWidget({ apiKey }) {
@@ -9825,10 +9843,15 @@ shadow-sm
   
   {/* ================== 오더 정보 (카드 최상단 네이비 헤더) ================== */}
 <div className="col-span-8 -mx-6 -mt-0 mb-3">
-  <div className="bg-[#1B2B4B] px-6 py-3 flex items-center">
+  <div className="bg-[#1B2B4B] px-6 py-3 flex items-center justify-between">
     <span className="text-[14px] font-bold text-white tracking-wide">
       오더 정보
     </span>
+    <button type="button" onClick={toggleOrderCardStyle}
+      className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
+      title="입력창 스타일 전환 (A: 카드형 / B: 밑줄형)">
+      {orderCardStyle}
+    </button>
   </div>
 </div>
 
@@ -9972,7 +9995,7 @@ const similar = placeList.filter(p => {
 
   {/* 상차지명 + 자동완성 */}
   <div className="relative">
-    <label className="flex items-center gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
+    <label className="flex items-center min-h-[26px] gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
   상차지 {reqStar}
   <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("pickup")}
     className="text-[#1B2B4B] hover:opacity-70 transition" title="상차지 오더메모">
@@ -10054,7 +10077,7 @@ const similar = placeList.filter(p => {
 
 {/* 상차지주소 */}
 <div>
-  <div className="flex items-center justify-between mb-1.5">
+  <div className="flex items-center min-h-[26px] justify-between mb-1.5">
     <label className={`${labelCls} mb-0`}>
       상차지주소 <AutoBadge show={autoPickMatched} />
     </label>
@@ -10096,7 +10119,7 @@ className={`
 
 {/* 상차지 담당자 */}
 <div>
-  <div className="flex items-center justify-between mb-1">
+  <div className="flex items-center min-h-[26px] justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
       상차지 담당자
     </label>
@@ -10131,7 +10154,7 @@ className={`
 
 {/* 하차지명 + 자동완성 */}
 <div className="relative">
-  <label className="flex items-center gap-1.5 text-[16px] font-bold text-red-500 mb-1">
+  <label className="flex items-center min-h-[26px] gap-1.5 text-[16px] font-bold text-red-500 mb-1">
     하차지 {reqStar}
     <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("drop")}
       className="text-[#1B2B4B] hover:opacity-70 transition" title="하차지 오더메모">
@@ -10217,7 +10240,7 @@ className={`
 {/* 하차지주소 */}
 <div>
 
-  <div className="flex items-center justify-between mb-1.5">
+  <div className="flex items-center min-h-[26px] justify-between mb-1.5">
 
     <label className={`${labelCls} mb-0`}>
       하차지주소 <AutoBadge show={autoDropMatched} />
@@ -10262,7 +10285,7 @@ className={`
 
 {/* 하차지 담당자 */}
 <div>
-  <div className="flex items-center justify-between mb-1">
+  <div className="flex items-center min-h-[26px] justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
       하차지 담당자
     </label>
@@ -10382,7 +10405,7 @@ className={`
 
 <div className="relative">
   <div
-  className="flex items-center justify-between mb-1.5"
+  className="flex items-center min-h-[26px] justify-between mb-1.5"
   onClick={(e) => e.stopPropagation()}
 >
   <label className={`${labelCls} mb-0`}>
@@ -11512,20 +11535,7 @@ className={`
     </div>
 
         <textarea
-      className="
-        w-full
-        border-2 border-gray-300
-        rounded-xl
-        px-4 py-3
-        text-[13px]
-        resize-none
-        bg-white
-        shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)]
-        focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B]
-        focus:shadow-[0_0_0_1px_rgba(27,43,75,0.12),0_4px_12px_rgba(27,43,75,0.08)]
-        placeholder:text-gray-400
-        transition-all
-      "
+      className={textareaCls}
       rows={4}
       placeholder="내부 메모 입력"
       value={form.메모}
@@ -11549,20 +11559,7 @@ className={`
     </div>
 
        <textarea
-      className="
-        w-full
-        border-2 border-gray-300
-        rounded-xl
-        px-4 py-3
-        text-[13px]
-        resize-none
-        bg-white
-        shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)]
-        focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B]
-        focus:shadow-[0_0_0_1px_rgba(27,43,75,0.12),0_4px_12px_rgba(27,43,75,0.08)]
-        placeholder:text-gray-400
-        transition-all
-      "
+      className={textareaCls}
       rows={4}
       placeholder="운송 기사님께 전달 내용을 입력하세요"
       value={form.전달사항}
