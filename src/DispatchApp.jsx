@@ -112,7 +112,7 @@ const inputStyle =
   "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
   const Field = ({ label, children }) => (
     <div className="space-y-1">
-      <div className="text-[13px] font-bold text-gray-900">
+      <div className="text-[13px] font-bold text-gray-900 min-h-[20px] flex items-center flex-wrap gap-1">
         {label}
       </div>
       {children}
