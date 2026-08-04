@@ -7157,6 +7157,8 @@ setAiRecommend({
   sampleCount: similar.length,
 
   hasInputFare: inputFare > 0,   // ⭐ 핵심
+  inputFare,
+  fareDiffPercent: inputFare > 0 ? Math.round(((inputFare - fareAvg) / fareAvg) * 100) : 0,
 
   isOutlier:
     inputFare > 0 &&
@@ -7259,26 +7261,25 @@ function makeAiExplain(ai) {
   // ① 운임 미입력
   if (!ai.hasInputFare) {
     return (
-      `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
-      `추천 운임 범위는 ${ai.fareMin.toLocaleString()} ~ ` +
-      `${ai.fareMax.toLocaleString()}원 입니다.`
+      `동일한 상/하차지·톤수로 최근 ${ai.sampleCount}건이 배차됐어요. ` +
+      `평균 ${ai.fareAvg.toLocaleString()}원, 적정 범위는 ` +
+      `${ai.fareMin.toLocaleString()}~${ai.fareMax.toLocaleString()}원이에요.`
     );
   }
 
   // ② 이상치
   if (ai.isOutlier) {
+    const dir = ai.fareDiffPercent > 0 ? "높아요" : "낮아요";
     return (
-      `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
-      `평균 운임은 ${ai.fareAvg.toLocaleString()}원이며, ` +
-      `입력한 운임은 평균 대비 차이가 큽니다.`
+      `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)보다 ` +
+      `${Math.abs(ai.fareDiffPercent)}% ${dir}. 거래처 협의 내용을 한 번 더 확인해보세요.`
     );
   }
 
   // ③ 정상
   return (
-    `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
-    `평균 운임은 ${ai.fareAvg.toLocaleString()}원이며, ` +
-    `입력한 운임은 통계 범위 내의 적정 금액입니다.`
+    `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)과 ` +
+    `비슷한 적정 범위예요. 이대로 진행하셔도 좋습니다.`
   );
 }
     // =====================
@@ -10730,73 +10731,68 @@ className={`
    =============================== */}
 {/* ================= 🤖 AI 추천 팝업 ================= */}
 {aiPopupOpen && aiRecommend && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-xl p-6 w-[520px] shadow-2xl border">
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAiPopupOpen(false)}>
+    <div className="bg-white rounded-2xl w-[520px] max-w-[94vw] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
 
       {/* 헤더 */}
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold">🤖 AI 배차 추천</h3>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2v4" /><path d="m6.4 5.4 2.8 2.8" /><path d="M2 13h4" /><path d="m5.4 20.6 2.8-2.8" />
+            <path d="M12 22v-4" /><path d="m18.6 20.6-2.8-2.8" /><path d="M22 13h-4" /><path d="m18.6 5.4-2.8 2.8" />
+            <circle cx="12" cy="13" r="3.5" />
+          </svg>
+          <h3 className="text-white font-bold text-[15px]">AI 운임 추천</h3>
+        </div>
+        <button onClick={() => setAiPopupOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+      </div>
+
+      <div className="px-6 py-5">
+        {/* 요약 */}
+        <div className={`mb-4 p-3.5 rounded-xl text-[13px] leading-relaxed font-semibold ${
+          aiRecommend.isOutlier ? "bg-red-50 text-red-700" : "bg-[#eef1f7] text-[#1B2B4B]"
+        }`}>
+          {makeAiExplain(aiRecommend)}
+        </div>
+
+        {/* 추천 수치 */}
+        <div className="grid grid-cols-2 gap-2.5 mb-1">
+          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
+            <div className="text-[11px] font-bold text-gray-400 mb-1">차량 / 톤수</div>
+            <div className="text-[14px] font-bold text-gray-900">{aiRecommend.vehicle} / {form.차량톤수 || "미입력"}</div>
+          </div>
+          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
+            <div className="text-[11px] font-bold text-gray-400 mb-1">표본 건수</div>
+            <div className="text-[14px] font-bold text-gray-900">{aiRecommend.sampleCount}건</div>
+          </div>
+          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
+            <div className="text-[11px] font-bold text-gray-400 mb-1">추천 청구운임</div>
+            <div className="text-[14px] font-bold text-[#1B2B4B]">{aiRecommend.fareMin.toLocaleString()} ~ {aiRecommend.fareMax.toLocaleString()}원</div>
+          </div>
+          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
+            <div className="text-[11px] font-bold text-gray-400 mb-1">평균 기사운임</div>
+            <div className="text-[14px] font-bold text-gray-900">{aiRecommend.driverAvg.toLocaleString()}원</div>
+          </div>
+          <div className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3 flex items-center justify-between">
+            <div className="text-[11px] font-bold text-gray-400">예상 마진율</div>
+            <div className={`text-[15px] font-extrabold ${
+              aiRecommend.marginPercent >= 15 ? "text-emerald-600" : aiRecommend.marginPercent >= 5 ? "text-orange-500" : "text-red-500"
+            }`}>{aiRecommend.marginPercent}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 버튼 */}
+      <div className="px-6 pb-5 flex justify-end gap-2">
         <button
-          onClick={() => setAiPopupOpen(false)}
-          className="text-gray-400 hover:text-black text-xl"
-        >
-          ×
-        </button>
-      </div>
-
-      {/* 요약 */}
-      <div className="mb-4 text-sm leading-relaxed text-gray-700">
-        {makeAiExplain(aiRecommend)}
-      </div>
-
-      {/* 추천 수치 */}
-      <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-        <div>
-  차량:
-  <b className="ml-1">
-    {aiRecommend.vehicle} / {form.차량톤수 || "톤수 미입력"}
-  </b>
-</div>
-        <div>표본: <b>{aiRecommend.sampleCount}건</b></div>
-        <div>
-          청구:
-          <b className="ml-1">
-            {aiRecommend.fareMin.toLocaleString()} ~{" "}
-            {aiRecommend.fareMax.toLocaleString()}
-          </b>
-        </div>
-        <div>
-          기사:
-          <b className="ml-1">
-            {aiRecommend.driverAvg.toLocaleString()}
-          </b>
-        </div>
-        <div className="col-span-2">
-          마진:
-          <b className="ml-1 text-emerald-600">
-            {aiRecommend.marginPercent}%
-          </b>
-        </div>
-      </div>
-
-      {/* 경고 */}
-      {aiRecommend.isOutlier && (
-        <div className="mb-4 p-3 rounded bg-red-50 text-red-700 text-xs">
-          ⚠ 평균 대비 운임 차이가 큽니다
-        </div>
-      )}
-
-      {/* 적용 버튼 */}
-      <div className="flex justify-end gap-2">
-        <button
-          className="px-4 py-2 rounded bg-gray-200"
+          className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-bold hover:bg-gray-200 transition"
           onClick={() => setAiPopupOpen(false)}
         >
           닫기
         </button>
 
         <button
-          className="px-4 py-2 rounded bg-blue-600 text-white"
+          className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
           onClick={() => {
             onChange("청구운임", String(aiRecommend.fareAvg));
             onChange("기사운임", String(aiRecommend.driverAvg));
