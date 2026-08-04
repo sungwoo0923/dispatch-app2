@@ -16030,13 +16030,17 @@ const calcFareMobile = () => {
           <div className="flex gap-1.5">
             <button type="button" onClick={() => setSearchMode("client")}
               className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
-                searchMode === "client" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"
+                searchMode === "client"
+                  ? (cardVersionB ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-blue-600 border-blue-600") + " text-white"
+                  : "bg-white text-gray-500 border-gray-200"
               }`}>
               거래처로 검색
             </button>
             <button type="button" onClick={() => setSearchMode("address")}
               className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
-                searchMode === "address" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"
+                searchMode === "address"
+                  ? (cardVersionB ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-blue-600 border-blue-600") + " text-white"
+                  : "bg-white text-gray-500 border-gray-200"
               }`}>
               주소로 검색
             </button>
@@ -16078,7 +16082,7 @@ const calcFareMobile = () => {
           )}
           {/* 경유지 포함 여부 (PC와 동일한 단일 토글) */}
           <button type="button" onClick={() => setIncludeVia(v => !v)}
-            className={`w-full py-2 rounded-xl text-[12px] font-bold border transition ${includeVia ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"}`}>
+            className={`w-full py-2 rounded-xl text-[12px] font-bold border transition ${includeVia ? (cardVersionB ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-blue-600 border-blue-600") + " text-white" : "bg-white text-gray-500 border-gray-200"}`}>
             경유포함
           </button>
           {/* 차종/톤수/화물 */}

@@ -19230,9 +19230,9 @@ const applySmart4 = async (target, setTarget, text) => {
       setSmartQ4(""); setSmartList4([]);
       return;
     }
-    if (plate && name) {
-      await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
-    }
+    // ⚠️ 여기서는 기사관리(Firestore)에 즉시 저장하지 않는다.
+    // 패널을 저장하지 않고 닫으면 신규 기사 정보가 남으면 안 되므로,
+    // 실제 저장은 패널의 저장 버튼(오더 저장 시점)에서만 이루어져야 한다.
     setTarget(p=>({...p, 차량번호:plate, 이름:name, 전화번호:formatPhone(phone), 배차상태:"배차완료"}));
   }
   setSmartQ4(""); setSmartList4([]);
@@ -21510,6 +21510,12 @@ flashRow(savedId);
     if (payload.하차지명) savePlaceSmart(payload.하차지명, payload.하차지주소||"", payload.하차지담당자||"", payload.하차지담당자번호||"", null, undefined,
       (payload.하차지오더메모 !== undefined || payload.하차지오더메모팝업표시 !== undefined) ? { 오더메모: payload.하차지오더메모, 팝업표시: payload.하차지오더메모팝업표시 } : undefined
     ).catch(console.error);
+    if (payload.차량번호 && payload.이름) {
+      const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
+      if (!existingD) {
+        upsertDriver({ 차량번호: payload.차량번호, 이름: payload.이름, 전화번호: payload.전화번호||"" }).catch(console.error);
+      }
+    }
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
@@ -21533,6 +21539,12 @@ flashRow(savedId);
     if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
       (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
     ).catch(console.error);
+    if (copyTarget.차량번호 && copyTarget.이름) {
+      const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(copyTarget.차량번호));
+      if (!existingD) {
+        upsertDriver({ 차량번호: copyTarget.차량번호, 이름: copyTarget.이름, 전화번호: copyTarget.전화번호||"" }).catch(console.error);
+      }
+    }
   }}
   className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
@@ -27928,9 +27940,9 @@ const applySmart5 = async (target, setTarget, text) => {
       setSmartQ5(""); setSmartList5([]);
       return;
     }
-    if (plate && name) {
-      await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
-    }
+    // ⚠️ 여기서는 기사관리(Firestore)에 즉시 저장하지 않는다.
+    // 패널을 저장하지 않고 닫으면 신규 기사 정보가 남으면 안 되므로,
+    // 실제 저장은 패널의 저장 버튼(오더 저장 시점)에서만 이루어져야 한다.
     setTarget(p=>({...p, 차량번호:plate, 이름:name, 전화번호:formatPhone(phone), 배차상태:"배차완료"}));
   }
   setSmartQ5(""); setSmartList5([]);
@@ -31855,6 +31867,9 @@ return (
     if (plate) {
       const d = (drivers || []).find(x => normalizePlate(x.차량번호) === plate);
       emitBlackIfNeeded(d);
+      if (payload.이름 && !d) {
+        upsertDriver({ 차량번호: payload.차량번호, 이름: payload.이름, 전화번호: payload.전화번호||"" }).catch(console.error);
+      }
     }
 
 
@@ -31885,6 +31900,12 @@ return (
     if (copyTarget.하차지명) savePlaceSmart(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "", null, undefined,
       (copyTarget.하차지오더메모 !== undefined || copyTarget.하차지오더메모팝업표시 !== undefined) ? { 오더메모: copyTarget.하차지오더메모, 팝업표시: copyTarget.하차지오더메모팝업표시 } : undefined
     ).catch(console.error);
+    if (copyTarget.차량번호 && copyTarget.이름) {
+      const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(copyTarget.차량번호));
+      if (!existingD) {
+        upsertDriver({ 차량번호: copyTarget.차량번호, 이름: copyTarget.이름, 전화번호: copyTarget.전화번호||"" }).catch(console.error);
+      }
+    }
 
   }}
     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
