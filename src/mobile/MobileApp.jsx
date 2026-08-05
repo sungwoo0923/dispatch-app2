@@ -11692,12 +11692,14 @@ const pickDrop = (c) => {
     }
   />
 
-  {/* 상/하차지 맞바꾸기 */}
-  <div className="flex justify-center -my-1">
+  {/* 상/하차지 맞바꾸기 — 카드 사이에 별도 공간을 차지하지 않도록 높이 0인
+      래퍼 안에서 절대위치로 배치해, 상/하차지 라벨 컬럼(왼쪽 88px) 정중앙 ·
+      두 카드의 경계선 위에 딱 겹치게 띄운다. 카드가 벌어지지 않는다. */}
+  <div className="relative h-0 z-10">
     <button
       type="button"
       onClick={handleSwapPickupDrop}
-      className={`w-7 h-7 rounded-full flex items-center justify-center active:scale-90 transition ${
+      className={`absolute left-[52px] top-0 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center shadow active:scale-90 transition ${
         cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
       }`}
     >
@@ -11955,22 +11957,23 @@ const pickDrop = (c) => {
             </div>
           }
         />
-        {/* 화물내용 추가 팝업 */}
+        {/* 화물내용 추가 팝업 — 화면이 좁은 기종에서 단위 드롭다운이 잘려 보이지
+            않도록 팝업 폭을 뷰포트 비율(vw) 기반으로 반응형으로 잡는다. */}
         {mCargoAddPopup && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] px-5"
             onClick={() => setMCargoAddPopup(false)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-72 overflow-hidden border" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[320px] overflow-hidden border" onClick={e => e.stopPropagation()}>
               <div className="bg-[#1B2B4B] px-5 py-3">
                 <div className="text-[14px] font-bold text-white">화물내용 추가</div>
               </div>
               <div className="p-5">
                 <div className="flex items-center gap-2 mb-4">
-                  <input autoComplete="off" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                  <input autoComplete="off" className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                     placeholder="수량 (예: 2)" inputMode={mCargoAddType ? "decimal" : "text"}
                     value={mCargoAddQty}
                     onChange={e => setMCargoAddQty(mCargoAddType ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)}
                     autoFocus />
-                  <div className="relative w-[82px] shrink-0">
+                  <div className="relative w-[76px] shrink-0">
                     <select className={`appearance-none w-full border-0 rounded-lg px-2 pr-5 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                       value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
                       <option value="">없음</option>
