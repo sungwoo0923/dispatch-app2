@@ -8544,15 +8544,18 @@ if (!sameStops(inputDropStops, rowDropStops)) return false;
         const rDrop = String(r.하차지명).trim();
 
 // ✅ 상차 / 하차 "완전 동일"만 허용
+// ⚠️ 예전에는 양쪽 다 상차지Id/하차지Id가 있으면 이름은 무시하고 Id만 비교했다.
+// 같은 이름의 거래처가 중복 등록(거래처 중복 문서)되어 있으면 과거 오더의 Id와
+// 지금 선택한 거래처의 Id가 서로 달라 이름이 완전히 같은데도 매칭에서 빠지는
+// 사고가 있었다(예: 기장물산랩 2건 중 1건이 조용히 누락). 이름이 완전히 같으면
+// 항상 동일 장소로 인정하고, Id 일치는 "추가로" 매칭시키는 보조 조건으로만 쓴다.
 const matchPickup =
-  (r.상차지Id && form.상차지Id)
-    ? r.상차지Id === form.상차지Id
-    : rPickup === pickup;
+  rPickup === pickup ||
+  (!!r.상차지Id && !!form.상차지Id && r.상차지Id === form.상차지Id);
 
 const matchDrop =
-  (r.하차지Id && form.하차지Id)
-    ? r.하차지Id === form.하차지Id
-    : rDrop === drop;
+  rDrop === drop ||
+  (!!r.하차지Id && !!form.하차지Id && r.하차지Id === form.하차지Id);
 
 if (!matchPickup || !matchDrop) return false;
 const matchVehicle =
@@ -14268,9 +14271,10 @@ setConfirmChange(null);
 
   // tier 기준으로 그룹화 후 각 그룹 내 최신 1건씩 대표 선출 후 정렬
   // (같은 화물+톤수 조합은 최신 1건만)
+  // ⚠️ 화물내용+톤수만으로 묶으면 금액이 다른 이력이 사라지므로 청구운임도 그룹 키에 포함
   const _groupMap = new Map();
   _scoredAll.forEach(r => {
-    const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`;
+    const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}|${Number(String(r.청구운임||"0").replace(/[^\d]/g,""))}`;
     if (!_groupMap.has(key)) _groupMap.set(key, []);
     _groupMap.get(key).push(r);
   });
@@ -18310,8 +18314,11 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
       return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
     });
 
+    // ⚠️ 화물내용+톤수만으로 묶으면 같은 조합이라도 청구운임이 다른 이력(예: 2건 중
+    // 1건만 금액이 달랐던 경우)까지 최신 1건으로 뭉개져 사라진다 — 운임 금액도 그룹
+    // 키에 포함해 실제로 완전히 동일한 이력만 합쳐지도록 한다.
     const _4fGroupMap = new Map();
-    _4fScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_4fGroupMap.has(key)) _4fGroupMap.set(key, []); _4fGroupMap.get(key).push(r); });
+    _4fScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}|${Number(String(r.청구운임||"0").replace(/[^\d]/g,""))}`; if (!_4fGroupMap.has(key)) _4fGroupMap.set(key, []); _4fGroupMap.get(key).push(r); });
     const scored = Array.from(_4fGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
       .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
@@ -18384,8 +18391,9 @@ setFarePanelOpen(true);
       return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
     });
 
+    // ⚠️ 화물내용+톤수만으로 묶으면 금액이 다른 이력이 사라지므로 청구운임도 그룹 키에 포함
     const _4cGroupMap = new Map();
-    _4cScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_4cGroupMap.has(key)) _4cGroupMap.set(key, []); _4cGroupMap.get(key).push(r); });
+    _4cScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}|${Number(String(r.청구운임||"0").replace(/[^\d]/g,""))}`; if (!_4cGroupMap.has(key)) _4cGroupMap.set(key, []); _4cGroupMap.get(key).push(r); });
     const scored = Array.from(_4cGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
       .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
@@ -28753,8 +28761,9 @@ if (mode === "driver") {
       return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
     });
 
+    // ⚠️ 화물내용+톤수만으로 묶으면 금액이 다른 이력이 사라지므로 청구운임도 그룹 키에 포함
     const _5fGroupMap = new Map();
-    _5fScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_5fGroupMap.has(key)) _5fGroupMap.set(key, []); _5fGroupMap.get(key).push(r); });
+    _5fScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}|${Number(String(r.청구운임||"0").replace(/[^\d]/g,""))}`; if (!_5fGroupMap.has(key)) _5fGroupMap.set(key, []); _5fGroupMap.get(key).push(r); });
     const records = Array.from(_5fGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
       .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
@@ -28814,8 +28823,9 @@ if (mode === "driver") {
       return { ...r, _cargoDiff: cargoDiff, _tonDiff: tonDiff, _tier: tier, _date: rDate, _match: { label: matchLabel } };
     });
 
+    // ⚠️ 화물내용+톤수만으로 묶으면 금액이 다른 이력이 사라지므로 청구운임도 그룹 키에 포함
     const _5cGroupMap = new Map();
-    _5cScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}`; if (!_5cGroupMap.has(key)) _5cGroupMap.set(key, []); _5cGroupMap.get(key).push(r); });
+    _5cScored.forEach(r => { const key = `${(r.화물내용||"").trim()}|${(r.차량톤수||"").trim()}|${Number(String(r.청구운임||"0").replace(/[^\d]/g,""))}`; if (!_5cGroupMap.has(key)) _5cGroupMap.set(key, []); _5cGroupMap.get(key).push(r); });
     const scored = Array.from(_5cGroupMap.values()).map(recs => { const best = [...recs].sort((a,b) => b._date.localeCompare(a._date))[0]; return { ...best, _groupSize: recs.length }; })
       .sort((a, b) => { if (a._tier !== b._tier) return a._tier - b._tier; if (a._tonDiff !== b._tonDiff) return a._tonDiff - b._tonDiff; if (a._cargoDiff !== b._cargoDiff) return a._cargoDiff - b._cargoDiff; return b._date.localeCompare(a._date); });
 
@@ -45571,15 +45581,13 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           </button>
 
           <div className="mb-1.5">
-            <label className="block text-[12px] font-bold text-gray-900 mb-2">등급</label>
-            <div className="flex flex-col gap-1.5">
+            <label className="block text-[12px] font-bold text-gray-900 mb-1">등급</label>
+            <select className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition cursor-pointer"
+              value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}>
               {["전체","일반","직영","지입","블랙"].map(g => (
-                <button key={g} onClick={() => setGradeFilter(g)}
-                  className={`px-3 py-2 rounded-lg text-[12px] font-semibold border text-left transition ${gradeFilter===g ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"}`}>
-                  {g}
-                </button>
+                <option key={g} value={g}>{g}</option>
               ))}
-            </div>
+            </select>
           </div>
 
           <div className="mt-5 pt-4 border-t border-gray-100 text-[12px] text-gray-400 font-medium">
