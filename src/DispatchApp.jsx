@@ -15687,14 +15687,20 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
       const initList = (currentList || []).filter(s => s?.업체명?.trim()).map(s => {
         const cargo = s.화물내용 || "";
         let cargoVal = cargo, cargoType = "파레트";
-        if (/파레트|파렛트/.test(cargo)) { cargoVal = cargo.replace(/파레트|파렛트/g,""); cargoType="파레트"; }
+        // ⚠️ 예전 버그로 화물내용을 비운 채 "없음"으로 저장했던 이력 데이터가
+        // 문자 그대로 "없음"으로 남아있을 수 있다 — 이 경우 빈 값으로 취급한다.
+        if (cargo === "없음") { cargoVal = ""; cargoType = "없음"; }
+        else if (/파레트|파렛트/.test(cargo)) { cargoVal = cargo.replace(/파레트|파렛트/g,""); cargoType="파레트"; }
         else if (/박스/.test(cargo)) { cargoVal = cargo.replace(/박스/g,""); cargoType="박스"; }
         else if (/통/.test(cargo)) { cargoVal = cargo.replace(/통/g,""); cargoType="통"; }
+        else if (!cargo.trim()) { cargoType = "파레트"; }
         else { cargoType="없음"; }
         const ton = s.차량톤수 || s.톤수값 || "";
         let tonVal = ton, tonType = "톤";
-        if (/톤/.test(ton)) { tonVal = ton.replace(/톤/g,""); tonType="톤"; }
+        if (ton === "없음") { tonVal = ""; tonType = "없음"; }
+        else if (/톤/.test(ton)) { tonVal = ton.replace(/톤/g,""); tonType="톤"; }
         else if (/kg/i.test(ton)) { tonVal = ton.replace(/kg/gi,""); tonType="kg"; }
+        else if (!ton.trim()) { tonType = "톤"; }
         else { tonType="없음"; }
         return { ...emptyStop(), ...s, 화물내용: cargoVal, 화물타입: cargoType, 톤수값: tonVal, 톤수타입: tonType };
       });
@@ -15733,11 +15739,14 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
       for (const sfx of CARGO_SFXS) { if (cargoBase.endsWith(sfx)) { cargoBase = cargoBase.slice(0, -sfx.length).trim(); break; } }
       let tonBase = tonVal;
       for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
-      const tonRaw = (tonType && tonType !== "없음" && tonBase) ? `${tonBase}${tonType}` : (tonVal || "없음");
+      // ⚠️ "없음" 선택 + 입력 없음일 때 예전엔 문자 그대로 "없음"을 저장해, 다시 열면
+      // 입력칸에 "없음"이라는 글자가 그대로 보이는 버그가 있었다 — 빈 값(빈 문자열)으로 저장한다.
+      const finalCargo = (cargoType && cargoType !== "없음" && cargoBase) ? `${cargoBase}${cargoType}` : cargoBase;
+      const finalTon = (tonType && tonType !== "없음" && tonBase) ? `${tonBase}${tonType}` : tonBase;
       return {
         ...s,
-        화물내용: (cargoType && cargoType !== "없음" && cargoBase) ? `${cargoBase}${cargoType}` : (cargo || "없음"),
-        차량톤수: tonRaw === "없음" ? "없음" : toTonUnit(tonRaw),
+        화물내용: finalCargo,
+        차량톤수: finalTon ? toTonUnit(finalTon) : "",
       };
     }).filter(s => s.업체명?.trim());
     onSave(finalList);
@@ -15883,22 +15892,30 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             )}
 
             {/* 화물내용 + 타입 / 톤수 + 타입 */}
+            {/* ⚠️ 드롭다운을 "없음"으로 선택하고 값도 비어있으면 입력칸을 비활성화하고
+                비워둔다("없음"이라는 글자가 입력칸에 그대로 보이던 버그 수정). 단, 이미
+                내용을 입력해둔 상태에서 드롭다운만 "없음"으로 바꾼 경우엔 그 내용을
+                지우거나 잠그지 않고 그대로 수정 가능하게 유지한다. */}
             <div className="grid grid-cols-2 gap-2">
+              {(() => {
+                const cargoIsUnit = !!(stop.화물타입 && stop.화물타입 !== "없음");
+                const cargoDisabled = !cargoIsUnit && !String(stop.화물내용||"").trim();
+                return (
               <div className="relative">
-                <input autoComplete="off" className={`${inputCls} pr-[62px]`}
-                  placeholder={(stop.화물타입&&stop.화물타입!=="없음")?"숫자만 입력":"화물내용 (예: 2)"}
-                  value={(stop.화물타입&&stop.화물타입!=="없음")
+                <input autoComplete="off" className={`${inputCls} pr-[62px] ${cargoDisabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""}`}
+                  disabled={cargoDisabled}
+                  placeholder={cargoDisabled ? "" : (cargoIsUnit?"숫자만 입력":"화물내용 (예: 2)")}
+                  value={cargoDisabled ? "" : (cargoIsUnit
                     ?String(stop.화물내용||"").replace(/(파레트|파렛트|박스|통)$/,"").trim()
-                    :(stop.화물내용||"")}
+                    :(stop.화물내용||""))}
                   onKeyDown={e=>{
                     if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}
-                    if(stop.화물타입&&stop.화물타입!=="없음"){
+                    if(cargoIsUnit){
                       if(!/[\d]/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();}
                     }
                   }}
                   onChange={e=>{
-                    const isUnit=stop.화물타입&&stop.화물타입!=="없음";
-                    const v=isUnit?e.target.value.replace(/[^\d]/g,""):e.target.value;
+                    const v=cargoIsUnit?e.target.value.replace(/[^\d]/g,""):e.target.value;
                     setEditList(prev=>{const c=[...prev];c[idx].화물내용=v;return c;});
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
@@ -15911,18 +15928,25 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                   <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">▾</span>
                 </div>
               </div>
+                );
+              })()}
+              {(() => {
+                const tonIsUnit = !!(stop.톤수타입 && stop.톤수타입 !== "없음");
+                const tonCurVal = tonIsUnit ? (stop.톤수값||"") : (stop.차량톤수||"");
+                const tonDisabled = !tonIsUnit && !String(tonCurVal||"").trim();
+                return (
               <div className="relative">
-                <input autoComplete="off" className={`${inputCls} pr-[52px]`}
-                  placeholder={stop.톤수타입?"톤수 (예: 1)":"예: 5톤 또는 소형"}
-                  value={stop.톤수타입?(stop.톤수값||""):(stop.차량톤수||"")}
+                <input autoComplete="off" className={`${inputCls} pr-[52px] ${tonDisabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""}`}
+                  disabled={tonDisabled}
+                  placeholder={tonDisabled ? "" : (tonIsUnit?"톤수 (예: 1)":"예: 5톤 또는 소형")}
+                  value={tonDisabled ? "" : tonCurVal}
                   onKeyDown={e=>{
                     if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}
-                    if(stop.톤수타입){if(!/[\d.,]/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();}}
+                    if(tonIsUnit){if(!/[\d.,]/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();}}
                   }}
                   onChange={e=>{
-                    const hasType=!!stop.톤수타입;
-                    const v=hasType?e.target.value.replace(/[^\d.]/g,""):e.target.value;
-                    setEditList(prev=>{const c=[...prev];if(hasType){c[idx].톤수값=v;c[idx].차량톤수=`${v}${c[idx].톤수타입}`;}else{c[idx].차량톤수=v;c[idx].톤수값=v;}return c;});
+                    const v=tonIsUnit?e.target.value.replace(/[^\d.]/g,""):e.target.value;
+                    setEditList(prev=>{const c=[...prev];if(tonIsUnit){c[idx].톤수값=v;c[idx].차량톤수=`${v}${c[idx].톤수타입}`;}else{c[idx].차량톤수=v;c[idx].톤수값=v;}return c;});
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
                   <select className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
@@ -15933,6 +15957,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                   <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">▾</span>
                 </div>
               </div>
+                );
+              })()}
             </div>
 
             {/* 상차시간 / 하차시간 */}
