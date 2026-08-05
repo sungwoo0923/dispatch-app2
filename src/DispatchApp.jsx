@@ -47776,6 +47776,92 @@ React.useEffect(() => {
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
 
 // ===================== 회사 정보 관리 =====================
+// ─────────── 결제일(계산서 발행 → 입금 규칙) 설정 섹션 ───────────
+// 회사마다 계산서 발행일 기준 입금 규칙이 다를 수 있어(예전엔 전 회사가 동일하게
+// "평일+3일/금요일→익주화요일/주말→화요일"로 고정돼 있었다), 관리자/최고관리자가
+// 회사별로 직접 설정할 수 있게 한다. 기사업로드링크(UploadPage.jsx)의 "결제일 정보"
+// 팝업이 이 값을 그대로 읽어서 계산한다.
+const DAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function PaymentDateRuleSection({ companyName }) {
+  const [rule, setRule] = React.useState(null);
+  const [loaded, setLoaded] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  const DEFAULT_RULE = { weekdayDays: 3, fridayTargetDow: 2, weekendTargetDow: 2 };
+
+  React.useEffect(() => {
+    if (!companyName) return;
+    const unsub = onSnapshot(doc(db, "companySettings", companyName.trim()), (snap) => {
+      setRule({ ...DEFAULT_RULE, ...(snap.data()?.결제일규칙 || {}) });
+      setLoaded(true);
+    });
+    return () => unsub();
+  }, [companyName]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "companySettings", companyName.trim()), { 결제일규칙: rule }, { merge: true });
+      setMsg("저장되었습니다.");
+      setTimeout(() => setMsg(""), 2500);
+    } catch (e) {
+      setMsg("저장 실패: " + e.message);
+    }
+    setSaving(false);
+  };
+
+  if (!loaded || !rule) {
+    return (
+      <div>
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">결제일(계산서→입금) 규칙</p>
+        <div className="text-[13px] text-gray-400">로딩 중...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">결제일(계산서→입금) 규칙</p>
+      <p className="text-[12px] text-gray-400 mb-4 leading-relaxed">
+        기사가 업로드 링크의 "결제일 정보"에서 계산서 발행일을 입력하면, 아래 규칙으로 입금 예정일을 안내합니다.
+      </p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-gray-700 font-medium">평일(월~목) 계산서 → </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <input type="number" min={1} max={14} value={rule.weekdayDays}
+              onChange={e => setRule(r => ({ ...r, weekdayDays: Math.max(1, Math.min(14, Number(e.target.value) || 1)) }))}
+              className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-center focus:outline-none focus:border-[#1B2B4B]" />
+            <span className="text-[13px] text-gray-700 font-medium">일 후 입금</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-gray-700 font-medium">금요일 계산서 → 익주</span>
+          <select value={rule.fridayTargetDow}
+            onChange={e => setRule(r => ({ ...r, fridayTargetDow: Number(e.target.value) }))}
+            className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] shrink-0">
+            {DAYS_KO.map((d, i) => <option key={i} value={i}>{d}요일 입금</option>)}
+          </select>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-gray-700 font-medium">주말(토/일) 계산서 →</span>
+          <select value={rule.weekendTargetDow}
+            onChange={e => setRule(r => ({ ...r, weekendTargetDow: Number(e.target.value) }))}
+            className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] shrink-0">
+            {DAYS_KO.map((d, i) => <option key={i} value={i}>{d}요일 입금</option>)}
+          </select>
+        </div>
+        {msg && <div className="text-[12px] font-medium text-emerald-600">{msg}</div>}
+        <button onClick={handleSave} disabled={saving}
+          className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
+          {saving ? "저장 중..." : "저장"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─────────── 매출관리 비밀번호 설정 섹션 ───────────
 function RevenuePasswordSection({ companyName }) {
   const [currentPw, setCurrentPw] = React.useState(null);
@@ -49390,6 +49476,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           {/* 매출관리 비밀번호 */}
           <div className="p-8">
             {isAdmin && <RevenuePasswordSection companyName={companyName} />}
+          </div>
+
+          {/* 결제일(계산서→입금) 규칙 */}
+          <div className="p-8 border-t border-gray-100">
+            {isAdmin && <PaymentDateRuleSection companyName={companyName} />}
           </div>
         </div>
       </div>
