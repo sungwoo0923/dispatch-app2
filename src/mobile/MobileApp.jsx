@@ -927,7 +927,7 @@ function buildOrderCopyText(order) {
     ``,
     `${order.화물내용 || "-"} ${order.차량톤수 || order.톤수 || ""} ${order.차량종류 || order.차종 || ""}`.trim(),
     ``,
-    `${order.차량번호 || "-"} ${order.기사명 || ""} ${order.전화번호 || ""}`.trim(),
+    `${order.차량번호 || "-"} ${order.기사명 || ""} ${formatPhone(order.전화번호)}`.trim(),
     `${money}원 ${payText} 배차되었습니다.`,
   ].join("\n");
 }
@@ -1286,6 +1286,17 @@ const isUrgentOrder = (o = {}) => {
 };
 const normalizePhone = (p = "") =>
   String(p).replace(/[^\d+]/g, "");
+// 전화번호 숫자→하이픈 자동 포맷 (PC formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  if (digits.length === 11) return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  if (digits.length === 10) {
+    if (digits.startsWith("02")) return digits.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+    return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+  if (digits.length === 8) return digits.replace(/(\d{4})(\d{4})/, "$1-$2");
+  return digits;
+};
 // ======================================================================
 //  메인 컴포넌트
 // ======================================================================
@@ -4880,7 +4891,7 @@ setOpenMemo={setOpenMemo}
         {registeredSummary && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] px-6" onClick={() => setRegisteredSummary(null)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="bg-[#1B2B4B] px-5 py-4 flex items-center gap-2">
+              <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-4 flex items-center gap-2`}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
                 <h3 className="text-white font-bold text-[15px]">
                   {registeredSummary.length > 1 ? `${registeredSummary.length}건 등록 완료` : "등록 완료"}
@@ -4897,7 +4908,7 @@ setOpenMemo={setOpenMemo}
                       {o.거래처명 || "-"}{o.차량톤수 ? ` · ${o.차량톤수}` : ""}{o.차량종류 ? ` · ${o.차량종류}` : ""}
                     </div>
                     {o.청구운임 > 0 && (
-                      <div className="text-[12px] font-semibold text-[#1B2B4B]">{fmtMoney(o.청구운임)}</div>
+                      <div className={`text-[12px] font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>{fmtMoney(o.청구운임)}</div>
                     )}
                   </div>
                 ))}
@@ -4905,7 +4916,7 @@ setOpenMemo={setOpenMemo}
               <div className="px-5 py-4">
                 <button
                   onClick={() => setRegisteredSummary(null)}
-                  className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-[14px]"
+                  className={`w-full py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[14px]`}
                 >
                   확인
                 </button>
@@ -5085,7 +5096,8 @@ setOpenMemo={setOpenMemo}
 }
 const SALES_PIN_KEY = "exec_intel_pin_v1";
 
-function SalesPinGate({ onVerified }) {
+function SalesPinGate({ onVerified, cardVersionB = false }) {
+  const accent = cardVersionB ? "#1B2B4B" : "#2563eb";
   const hasPin = !!localStorage.getItem(SALES_PIN_KEY);
   const [mode, setMode] = useState(hasPin ? "verify" : "setup1");
   const [entered, setEntered] = useState("");
@@ -5119,7 +5131,7 @@ function SalesPinGate({ onVerified }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f4f6f9", display: "flex", flexDirection: "column" }}>
-      <div style={{ background: "#1B2B4B", padding: "16px 20px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ background: accent, padding: "16px 20px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ width: 34, height: 34, background: "rgba(255,255,255,0.12)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -5133,19 +5145,19 @@ function SalesPinGate({ onVerified }) {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 24px" }}>
         <div style={{ width: "100%", maxWidth: 340 }}>
           <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: "#1B2B4B", marginBottom: 6 }}>{heading}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: accent, marginBottom: 6 }}>{heading}</h2>
             <p style={{ fontSize: 13, color: "#9ca3af" }}>{sub}</p>
           </div>
           <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 20 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid", transition: "all 0.15s", background: i < entered.length ? "#1B2B4B" : "white", borderColor: i < entered.length ? "#1B2B4B" : "#d1d5db" }} />
+              <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid", transition: "all 0.15s", background: i < entered.length ? accent : "white", borderColor: i < entered.length ? accent : "#d1d5db" }} />
             ))}
           </div>
           {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", fontWeight: 600, marginBottom: 16, background: "#fef2f2", borderRadius: 10, padding: "9px 12px" }}>{error}</div>}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
             {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
               <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
-                style={{ height: 58, borderRadius: 14, fontSize: 20, fontWeight: 700, border: "none", cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, background: d === "←" ? "#f1f5f9" : "white", color: "#1B2B4B", boxShadow: d === null ? "none" : "0 2px 8px rgba(0,0,0,0.07)", transition: "all 0.1s", WebkitTapHighlightColor: "transparent" }}>
+                style={{ height: 58, borderRadius: 14, fontSize: 20, fontWeight: 700, border: "none", cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, background: d === "←" ? "#f1f5f9" : "white", color: accent, boxShadow: d === null ? "none" : "0 2px 8px rgba(0,0,0,0.07)", transition: "all 0.1s", WebkitTapHighlightColor: "transparent" }}>
                 {d}
               </button>
             ))}
@@ -5162,7 +5174,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
   const fmtWon = (v) => Number(v).toLocaleString("ko-KR");
 
-  if (!verified) return <SalesPinGate onVerified={() => { sessionStorage.setItem("sales_ok", "1"); setVerified(true); }} />;
+  if (!verified) return <SalesPinGate cardVersionB={cardVersionB} onVerified={() => { sessionStorage.setItem("sales_ok", "1"); setVerified(true); }} />;
 
   // 고정거래처 오더를 dispatch orders 형식으로 변환하여 합산
   const normalizeFixed = (r) => ({
@@ -7664,7 +7676,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
           </div>
           <div>
             <label className={labelCls}>연락처</label>
-            <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" />
+            <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(formatPhone(e.target.value))} placeholder="010-0000-0000" inputMode="tel" />
           </div>
         </div>
 
@@ -9432,7 +9444,7 @@ const handleAssignClick = () => {
                       <div className="px-4 py-3 bg-blue-50">
                         <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
                         <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
-                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
                         <div className="flex gap-2">
                           <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                             onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
@@ -11647,7 +11659,7 @@ const pickDrop = (c) => {
           placeholder="상차지 담당자번호"
           value={form.상차지담당자번호 || ""}
           onChange={(e) =>
-            update("상차지담당자번호", e.target.value)
+            update("상차지담당자번호", formatPhone(e.target.value))
           }
         />
 
@@ -11803,7 +11815,7 @@ const pickDrop = (c) => {
           placeholder="하차지 담당자번호"
           value={form.하차지담당자번호 || ""}
           onChange={(e) =>
-            update("하차지담당자번호", e.target.value)
+            update("하차지담당자번호", formatPhone(e.target.value))
           }
         />
 
@@ -13079,7 +13091,7 @@ const pickDrop = (c) => {
           <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={newClientForm.담당자번호}
-            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: e.target.value }))}
+            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: formatPhone(e.target.value) }))}
             placeholder="연락처 (선택)"
           />
         </div>
@@ -13358,7 +13370,7 @@ const pickDrop = (c) => {
                 className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="연락처"
                 value={stop.담당자번호 || ""}
-                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자번호: e.target.value } : s))}
+                onChange={e => { const v = formatPhone(e.target.value); setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자번호: v } : s)); }}
               />
             </div>
             {/* 화물내용 + 타입 */}
@@ -13849,7 +13861,7 @@ const buildManagerLine = (name, phone) => {
   if (!name && !phone) return ""; // 둘 다 없으면 아예 출력 안 함
 
   const safeName = name || "";
-  const safePhone = phone ? ` (${phone})` : "";
+  const safePhone = phone ? ` (${formatPhone(phone)})` : "";
 
   return `담당자 : ${safeName}${safePhone}`;
 };
@@ -13888,7 +13900,7 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
   const driverName =
     order.기사명 || order.이름 || order.기사 || "-";
   const driverPhone =
-    order.전화번호 || order.전화 || "-";
+    formatPhone(order.전화번호 || order.전화) || "-";
  // 🔧 파렛트 추출 (1파 / 2파 / 3파렛트 / 3PLT 대응)
   const extractPallet = (text) => {
   if (!text || typeof text !== "string") return "";
@@ -13964,8 +13976,8 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
       const _dNumMf=_dHasMf?`${_dStopsMf.length+1}.`:"";
       const _pConMf=buildManagerLine(order.상차지담당자,order.상차지담당자번호);
       const _dConMf=buildManagerLine(order.하차지담당자,order.하차지담당자번호);
-      const _pStopsTextMf=_pHasMf?_pStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _dStopsTextMf=_dHasMf?_dStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _pStopsTextMf=_pHasMf?_pStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _dStopsTextMf=_dHasMf?_dStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
       const _mainDCargoMf=(_dHasMf||_pHasMf)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
       const _mainDTonMf=(_dHasMf||_pHasMf)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
 
@@ -14018,7 +14030,7 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
         return buildShortUploadUrlMobile(oid, token);
       })();
 
-      const pm = (n, p) => (!n && !p) ? "" : p ? `담당자 : ${n || ""} (${p})` : `담당자 : ${n}`;
+      const pm = (n, p) => (!n && !p) ? "" : p ? `담당자 : ${n || ""} (${formatPhone(p)})` : `담당자 : ${n}`;
 
       let dateNotice2 = "";
       let dropTimeText2 = timeOrNow(order.하차시간) + (order.하차시간기준 ? ` ${order.하차시간기준}` : "");
@@ -14051,8 +14063,8 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
       const _dNumMd=_dHasMd?`${_dStopsMd.length+1}.`:"";
       const pickupMgr = pm(order.상차지담당자, order.상차지담당자번호);
       const dropMgr = pm(order.하차지담당자, order.하차지담당자번호);
-      const _pStopsTextMd=_pHasMd?_pStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _dStopsTextMd=_dHasMd?_dStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _pStopsTextMd=_pHasMd?_pStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _dStopsTextMd=_dHasMd?_dStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
       const _mainDCargoMd=(_dHasMd||_pHasMd)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
       const _mainDTonMd=(_dHasMd||_pHasMd)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
 
@@ -14511,43 +14523,43 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
   }, [hireDate]);
 
   return (
-    <div className="px-4 py-5 space-y-4 pb-24">
+    <div className="px-4 py-5 space-y-4 pb-24" style={{ "--myinfo-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
       {/* 입사일 / 연차·월차 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">입사일 / 연차·월차</div>
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-[12px] text-gray-500 font-semibold flex-shrink-0">입사일</span>
           <select value={hireY || ""} onChange={e => handleHireDateChange(Number(e.target.value), hireM, hireD)}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
             <option value="">년</option>
             {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
           </select>
           <select value={hireM || ""} onChange={e => handleHireDateChange(hireY, Number(e.target.value), hireD)}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
             <option value="">월</option>
             {monthOptions.map(m => <option key={m} value={m}>{m}월</option>)}
           </select>
           <select value={hireD || ""} onChange={e => handleHireDateChange(hireY, hireM, Number(e.target.value))}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
             <option value="">일</option>
             {dayOptions.map(d => <option key={d} value={d}>{d}일</option>)}
           </select>
           {hireDateSaving && <span className="text-[10px] text-gray-400">저장중</span>}
           {yearsOfService && (
-            <span className="ml-auto text-[13px] font-bold text-[#1B2B4B]">{yearsOfService}</span>
+            <span className="ml-auto text-[13px] font-bold text-[var(--myinfo-accent)]">{yearsOfService}</span>
           )}
         </div>
         {leave ? (
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.leaveLabel}</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.leaveLabel}</div>
               <div className="text-[10px] text-gray-400 mt-0.5">구분</div>
             </div>
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.used}일</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.used}일</div>
               <div className="text-[10px] text-gray-400 mt-0.5">사용</div>
             </div>
-            <div className="bg-[#1B2B4B] rounded-xl p-2.5 text-center">
+            <div className="bg-[var(--myinfo-accent)] rounded-xl p-2.5 text-center">
               <div className="text-[15px] font-extrabold text-white">{leave.remaining}일</div>
               <div className="text-[10px] text-white/50 mt-0.5">잔여</div>
             </div>
@@ -14555,11 +14567,11 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
               총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계
             </div>
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.sickDays}일</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.sickDays}일</div>
               <div className="text-[10px] text-gray-400 mt-0.5">병가</div>
             </div>
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.fieldDays}일</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.fieldDays}일</div>
               <div className="text-[10px] text-gray-400 mt-0.5">외근</div>
             </div>
           </div>
@@ -14570,7 +14582,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
       {/* 프로필 카드 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
+        <div className={`${cardVersionB ? "bg-[var(--myinfo-accent)]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
           <div>
             <div className="text-white text-[17px] font-extrabold tracking-tight">{myName}</div>
             {myRole && <div className="text-white/60 text-[12px] mt-0.5">{myRole}</div>}
@@ -14798,6 +14810,26 @@ const M_CITIES = {
   ],
   제주:[{n:"서귀포시",la:33.253,lo:126.560},{n:"제주시",la:33.499,lo:126.531}],
 };
+// 주소 텍스트(지도 클릭으로 만든 라벨이든, 자동완성/지오코딩으로 얻은 실제 주소든)에서
+// 시/도 이름을 뽑아낸다 — 지도에 화살표를 그릴 때 입력 방식(지도 클릭/수기 검색)에
+// 상관없이 항상 같은 방식으로 출발·도착 지역을 찾기 위함.
+const M_PROV_NORM = [
+  ["서울특별시","서울"],["서울시","서울"],["부산광역시","부산"],["대구광역시","대구"],
+  ["인천광역시","인천"],["광주광역시","광주"],["대전광역시","대전"],["울산광역시","울산"],
+  ["세종특별자치시","세종"],["세종시","세종"],["경기도","경기"],
+  ["강원특별자치도","강원"],["강원도","강원"],
+  ["충청북도","충북"],["충청남도","충남"],
+  ["전라북도","전북"],["전북특별자치도","전북"],["전라남도","전남"],
+  ["경상북도","경북"],["경상남도","경남"],
+  ["제주특별자치도","제주"],["제주도","제주"],
+];
+const deriveMapProvince = (addr) => {
+  const s = String(addr || "");
+  if (!s.trim()) return null;
+  for (const [full, abbr] of M_PROV_NORM) if (s.includes(full)) return abbr;
+  for (const p of M_PROVINCES) if (s.includes(p)) return p;
+  return null;
+};
 
 // 통합 운임조회용 차량 타입 (PC와 동일한 요율)
 const MOBILE_VT = [
@@ -14876,6 +14908,32 @@ function MobileFareInquiry({ cardVersionB = false }) {
   const [mapSubCity,setMapSubCity]=useState(null);
   const [mapSubDistricts,setMapSubDistricts]=useState([]);
   const [mapSubLoading,setMapSubLoading]=useState(false);
+  // 지도에서 지역을 클릭하지 않고 상/하차지 입력칸에 텍스트만 입력해도 조회할 수 있게
+  // 하기 위한 상태 — 입력칸 자동완성에서 항목을 선택하지 않고 그냥 타이핑만 한 경우
+  // fromCoord/toCoord가 null이라 결과가 계산되지 않는데, 이때 "조회" 버튼을 누르면
+  // 입력된 텍스트를 좌표로 지오코딩해 채워 넣는다.
+  const [nfSearching,setNfSearching]=useState(false);
+  const [nfSearchError,setNfSearchError]=useState("");
+  const geocodeAddrSimple=async(addr)=>{
+    const url=`https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
+    const res=await fetch(url,{headers:{appKey:MOBILE_TMAP_KEY,Accept:"application/json"}});
+    const data=await res.json();
+    const coord=data?.coordinateInfo?.coordinate?.[0];
+    if(!coord||!parseFloat(coord.lat))throw new Error(`"${addr}" 위치를 찾을 수 없습니다`);
+    return {lat:parseFloat(coord.lat),lon:parseFloat(coord.lon),address:addr};
+  };
+  const runFareSearch=async()=>{
+    if(!fromSearch.trim()||!toSearch.trim()){setNfSearchError("상차지와 하차지를 모두 입력하세요");return;}
+    setNfSearching(true);setNfSearchError("");
+    try{
+      if(!fromCoord)setFromCoord(await geocodeAddrSimple(fromSearch.trim()));
+      if(!toCoord)setToCoord(await geocodeAddrSimple(toSearch.trim()));
+    }catch(err){
+      setNfSearchError(err.message||"조회 중 오류가 발생했습니다");
+    }finally{
+      setNfSearching(false);
+    }
+  };
 
   const result=useMemo(()=>{
     if(!fromCoord||!toCoord)return null;
@@ -14943,9 +15001,14 @@ function MobileFareInquiry({ cardVersionB = false }) {
   };
 
   const onMapProvClick=(prov)=>{
-    if(!mapCityStep)return;
-    if(mapCityStep==="from")setMapFromProv(prov);
+    // 상/하차지 지역 버튼을 먼저 누르지 않아도, 지도를 바로 클릭하면 첫 클릭은
+    // 출발지(상차지), 이미 출발지가 정해진 상태에서의 다음 클릭은 도착지(하차지)로
+    // 자동 판별한다. 버튼으로 명시적으로 눌러둔 상태(mapCityStep)가 있으면 그걸 우선한다.
+    const target = mapCityStep || (!fromCoord ? "from" : (!toCoord ? "to" : "from"));
+    if(target==="from")setMapFromProv(prov);
     else setMapToProv(prov);
+    setMapCityStep(target);
+    setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);
   };
 
   const onMapCitySelect=(city)=>{
@@ -14972,6 +15035,20 @@ function MobileFareInquiry({ cardVersionB = false }) {
   };
 
   const curFromProv=mapFromProv,curToProv=mapToProv;
+
+  // 출발→도착 화살표를 그리기 위한 시/도 — 지도로 직접 찍었으면 그 지역을 쓰고,
+  // 수기 검색/자동완성/조회버튼의 지오코딩으로 좌표만 채워진 경우엔 확정된 주소
+  // 텍스트에서 시/도를 추출해 화살표가 항상 나오게 한다.
+  const arrowFromProv = curFromProv || deriveMapProvince(fromCoord?.address || fromSearch);
+  const arrowToProv = curToProv || deriveMapProvince(toCoord?.address || toSearch);
+  let mArrowPath = null;
+  if (fromCoord && toCoord && arrowFromProv && arrowToProv) {
+    const pf = M_PROVINCE_LABEL_POS[arrowFromProv];
+    const pt = M_PROVINCE_LABEL_POS[arrowToProv];
+    if (pf && pt) {
+      mArrowPath = `M ${pf[0]},${pf[1]} Q ${(pf[0]+pt[0])/2},${(pf[1]+pt[1])/2-40} ${pt[0]},${pt[1]}`;
+    }
+  }
 
   const [mapTf,setMapTf]=useState({scale:1,tx:0,ty:0});
   const mapTouchRef=useRef({mode:null,dist:0,scale:1,tx:0,ty:0,startX:0,startY:0});
@@ -15008,7 +15085,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
       <div className="flex rounded-xl border border-gray-200 overflow-hidden shadow-sm">
         {["독차","혼적"].map(m=>(
           <button key={m} onClick={()=>{setFreightMode(m);setMixWeightKg("");setMixCbm("");}}
-            className={`flex-1 py-2.5 text-[13px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500"}`}>{m}</button>
+            className={`flex-1 py-2.5 text-[13px] font-bold transition ${freightMode===m?(cardVersionB?"bg-[#1B2B4B] text-white":"bg-blue-600 text-white"):"bg-white text-gray-500"}`}>{m}</button>
         ))}
       </div>
 
@@ -15054,6 +15131,21 @@ function MobileFareInquiry({ cardVersionB = false }) {
               {vias.length<3&&<button onClick={addVia} className="text-[10px] font-semibold text-[#1B2B4B]/70 border border-dashed border-[#1B2B4B]/30 rounded-md px-2 py-0.5">+ 경유</button>}
               {(fromCoord||toCoord||vias.length>0)&&<button onClick={reset} className="text-[10px] text-gray-400 hover:text-red-500">초기화</button>}
             </div>
+            {/* 지도에서 지역을 클릭하지 않아도, 입력칸에 텍스트만 넣고 이 버튼으로 조회할 수 있다 */}
+            <button onClick={runFareSearch} disabled={nfSearching}
+              className={`w-full py-2 rounded-lg text-[12px] font-bold text-white disabled:opacity-50 flex items-center justify-center gap-1.5 ${cardVersionB?"bg-[#1B2B4B]":"bg-blue-600"}`}>
+              {nfSearching ? (
+                <>
+                  <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/>
+                  </svg>
+                  조회 중...
+                </>
+              ) : "조회"}
+            </button>
+            {nfSearchError && (
+              <div className="text-[11px] text-red-500 font-semibold">{nfSearchError}</div>
+            )}
           </div>
 
           {/* 오른쪽: 지도 패널 */}
@@ -15061,7 +15153,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
             {/* 상/하차 선택 토글 */}
             <div className="flex border-b border-gray-100" style={{flexShrink:0}}>
               <button onClick={()=>{setMapCityStep("from");setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);resetMapTf();}}
-                className={`flex-1 py-1.5 text-[10px] font-bold transition ${mapCityStep==="from"?"bg-[#1B2B4B] text-white":"text-gray-400 hover:bg-gray-50"}`}>
+                className={`flex-1 py-1.5 text-[10px] font-bold transition ${mapCityStep==="from"?(cardVersionB?"bg-[#1B2B4B] text-white":"bg-blue-600 text-white"):"text-gray-400 hover:bg-gray-50"}`}>
                 상차지 지역
               </button>
               <div className="w-px bg-gray-100"/>
@@ -15071,104 +15163,117 @@ function MobileFareInquiry({ cardVersionB = false }) {
               </button>
             </div>
 
-            {/* 도/시 지도 */}
-            {!mapSubCityStep&&!(mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv))&&(
-              <div style={{flex:1,overflow:"hidden",touchAction:"none",position:"relative",minHeight:180}}
-                onTouchStart={onMapPinchStart} onTouchMove={onMapPinchMove} onTouchEnd={onMapPinchEnd}>
-                <svg viewBox="0 0 524 631"
-                  style={{width:"100%",height:"100%",display:"block",transform:`translate(${mapTf.tx}px,${mapTf.ty}px) scale(${mapTf.scale})`,transformOrigin:"50% 50%",userSelect:"none"}}
-                  preserveAspectRatio="xMidYMid meet">
-                  <rect width="524" height="631" fill="white"/>
-                  {M_PROVINCES.map(prov=>{
-                    const isFr=prov===curFromProv,isTo=prov===curToProv,isHov=prov===mapHover;
-                    let fill=M_PROVINCE_COLORS[prov]||"#c8d8e8";
-                    if(isFr)fill="#3b82f6";else if(isTo)fill="#f97316";else if(isHov)fill="#9ac0e8";
+            {/* 도/시 지도 — 항상 표시. 지역을 클릭하면 팝업으로 시/군/구를 고른다.
+                버튼을 먼저 누르지 않아도 첫 클릭은 출발지, 그 다음 클릭은 도착지로 자동 판별. */}
+            <div style={{flex:1,overflow:"hidden",touchAction:"none",position:"relative",minHeight:180}}
+              onTouchStart={onMapPinchStart} onTouchMove={onMapPinchMove} onTouchEnd={onMapPinchEnd}>
+              <svg viewBox="0 0 524 631"
+                style={{width:"100%",height:"100%",display:"block",transform:`translate(${mapTf.tx}px,${mapTf.ty}px) scale(${mapTf.scale})`,transformOrigin:"50% 50%",userSelect:"none"}}
+                preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <marker id="mNfArr" markerWidth="10" markerHeight="10" refX="6" refY="5" orient="auto">
+                    <path d="M 0,0 L 9,5 L 0,10 Z" fill="#3b82f6"/>
+                  </marker>
+                </defs>
+                <rect width="524" height="631" fill="white"/>
+                {M_PROVINCES.map(prov=>{
+                  const isFr=prov===curFromProv,isTo=prov===curToProv,isHov=prov===mapHover;
+                  let fill=M_PROVINCE_COLORS[prov]||"#c8d8e8";
+                  if(isFr)fill="#3b82f6";else if(isTo)fill="#f97316";else if(isHov)fill="#9ac0e8";
+                  return(
+                    <g key={prov}>
+                      <path d={M_PROVINCE_PATHS[prov]} fill={fill}
+                        stroke={isFr||isTo?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.7)"}
+                        strokeWidth={isFr||isTo?2:1}
+                        style={{cursor:"pointer"}}
+                        onMouseEnter={()=>setMapHover(prov)} onMouseLeave={()=>setMapHover(null)}
+                        onClick={()=>onMapProvClick(prov)}/>
+                    </g>
+                  );
+                })}
+                {M_PROVINCES.map(prov=>{
+                  if(prov===curFromProv||prov===curToProv)return null;
+                  const isSmall=M_SMALL.includes(prov);
+                  const[lx,ly]=M_PROVINCE_LABEL_POS[prov]||[0,0];
+                  return(
+                    <text key={`ml-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                      fontSize={isSmall?9:11} fontWeight="700" fill="#1B2B4B" style={{pointerEvents:"none"}}>{prov}</text>
+                  );
+                })}
+                {[curFromProv&&{prov:curFromProv,label:"출",color:"#3b82f6"},curToProv&&{prov:curToProv,label:"하",color:"#f97316"}]
+                  .filter(Boolean).map(({prov,label,color})=>{
+                    const pos=M_PROVINCE_LABEL_POS[prov];if(!pos)return null;
+                    const[bx,by]=pos;
                     return(
-                      <g key={prov}>
-                        <path d={M_PROVINCE_PATHS[prov]} fill={fill}
-                          stroke={isFr||isTo?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.7)"}
-                          strokeWidth={isFr||isTo?2:1}
-                          style={{cursor:"pointer"}}
-                          onMouseEnter={()=>setMapHover(prov)} onMouseLeave={()=>setMapHover(null)}
-                          onClick={()=>onMapProvClick(prov)}/>
+                      <g key={label} style={{pointerEvents:"none"}}>
+                        <circle cx={bx} cy={by} r={14} fill={color} stroke="white" strokeWidth="2"/>
+                        <text x={bx} y={by} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="white">{label}</text>
                       </g>
                     );
                   })}
-                  {M_PROVINCES.map(prov=>{
-                    if(prov===curFromProv||prov===curToProv)return null;
-                    const isSmall=M_SMALL.includes(prov);
-                    const[lx,ly]=M_PROVINCE_LABEL_POS[prov]||[0,0];
-                    return(
-                      <text key={`ml-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                        fontSize={isSmall?9:11} fontWeight="700" fill="#1B2B4B" style={{pointerEvents:"none"}}>{prov}</text>
-                    );
-                  })}
-                  {[curFromProv&&{prov:curFromProv,label:"출",color:"#3b82f6"},curToProv&&{prov:curToProv,label:"하",color:"#f97316"}]
-                    .filter(Boolean).map(({prov,label,color})=>{
-                      const pos=M_PROVINCE_LABEL_POS[prov];if(!pos)return null;
-                      const[bx,by]=pos;
-                      return(
-                        <g key={label} style={{pointerEvents:"none"}}>
-                          <circle cx={bx} cy={by} r={14} fill={color} stroke="white" strokeWidth="2"/>
-                          <text x={bx} y={by} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="white">{label}</text>
-                        </g>
-                      );
-                    })}
-                </svg>
-              </div>
-            )}
-
-            {/* 시/군/구 선택 */}
-            {!mapSubCityStep&&mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv)&&(
-              <div className="p-2 flex flex-col" style={{flex:1,overflow:"hidden"}}>
-                <div className="flex items-center justify-between mb-1.5" style={{flexShrink:0}}>
-                  <span className="text-[10px] font-bold text-gray-500">{mapCityStep==="from"?curFromProv:curToProv} 시.군.구</span>
-                  <button onClick={()=>{mapCityStep==="from"?setMapFromProv(null):setMapToProv(null);resetMapTf();}}
-                    className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">← 지도</button>
-                </div>
-                <div className="grid grid-cols-3 gap-1 overflow-y-auto">
-                  {(M_CITIES[mapCityStep==="from"?curFromProv:curToProv]||[]).map(city=>(
-                    <button key={city.n} onClick={()=>onMapCitySelect(city)}
-                      className="px-1 py-1.5 text-[9px] font-semibold text-gray-600 border border-gray-100 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
-                      {city.n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 읍/면/동 선택 */}
-            {mapSubCityStep&&(
-              <div className="p-2 flex flex-col" style={{flex:1,overflow:"hidden"}}>
-                <div className="flex items-center justify-between mb-1.5" style={{flexShrink:0}}>
-                  <span className="text-[10px] font-bold text-[#1B2B4B]">{mapSubCity?.n}</span>
-                  <button onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep==="from"?"from":"to");}}
-                    className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">← 구/시</button>
-                </div>
-                {mapSubLoading?(
-                  <div className="text-center py-3 text-[10px] text-gray-400">로딩 중...</div>
-                ):(
-                  <div className="grid grid-cols-3 gap-1 overflow-y-auto">
-                    <button onClick={onMapSelectWholeCity}
-                      className="px-1 py-1.5 text-[9px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-blue-50/50 text-center leading-tight">
-                      전체
-                    </button>
-                    {mapSubDistricts.map(sd=>(
-                      <button key={sd.n} onClick={()=>onMapSubDistrictSelect(sd)}
-                        className="px-1 py-1.5 text-[9px] font-semibold text-gray-600 border border-gray-100 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
-                        {sd.n}
-                      </button>
-                    ))}
-                    {!mapSubLoading&&mapSubDistricts.length===0&&(
-                      <div className="col-span-3 text-center text-[9px] text-gray-400 py-2">세부 지역 없음</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                {/* 출발→도착 화살표 — 지도 클릭이든 수기 검색이든, 확정된 상/하차지 주소에서
+                    시/도를 추출해 항상 같은 방식으로 그린다. */}
+                {mArrowPath && <path d={mArrowPath} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" markerEnd="url(#mNfArr)"/>}
+              </svg>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* 시/군/구 선택 팝업 (지도에서 지역 클릭 시) */}
+      {!mapSubCityStep&&mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv)&&(
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center px-6" onClick={()=>{setMapCityStep(null);resetMapTf();}}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] max-h-[70vh] flex flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className={`px-5 py-3.5 flex items-center gap-2 ${mapCityStep==="from"?(cardVersionB?"bg-[#1B2B4B]":"bg-blue-600"):"bg-orange-400"}`}>
+              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-[11px] font-black shrink-0">{mapCityStep==="from"?"출":"하"}</span>
+              <span className="text-white font-bold text-[14px]">{mapCityStep==="from"?curFromProv:curToProv} 시·군·구 선택</span>
+              <button onClick={()=>{setMapCityStep(null);resetMapTf();}} className="ml-auto text-white/70 hover:text-white text-lg leading-none">×</button>
+            </div>
+            <div className="p-3 overflow-y-auto grid grid-cols-3 gap-1.5">
+              {(M_CITIES[mapCityStep==="from"?curFromProv:curToProv]||[]).map(city=>(
+                <button key={city.n} onClick={()=>onMapCitySelect(city)}
+                  className="px-1.5 py-2.5 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
+                  {city.n}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 읍/면/동 선택 팝업 */}
+      {mapSubCityStep&&(
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center px-6" onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep);}}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] max-h-[70vh] flex flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className={`px-5 py-3.5 flex items-center gap-2 ${mapSubCityStep==="from"?(cardVersionB?"bg-[#1B2B4B]":"bg-blue-600"):"bg-orange-400"}`}>
+              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-[11px] font-black shrink-0">{mapSubCityStep==="from"?"출":"하"}</span>
+              <span className="text-white font-bold text-[14px]">{mapSubCity?.n} 세부 지역</span>
+              <button onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep);}} className="ml-auto text-white/70 hover:text-white text-lg leading-none">×</button>
+            </div>
+            <div className="p-3 overflow-y-auto">
+              {mapSubLoading?(
+                <div className="text-center py-6 text-[12px] text-gray-400">로딩 중...</div>
+              ):(
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button onClick={onMapSelectWholeCity}
+                    className="px-1.5 py-2.5 text-[11px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-blue-50/50 text-center leading-tight">
+                    {mapSubCity?.n} 전체
+                  </button>
+                  {mapSubDistricts.map(sd=>(
+                    <button key={sd.n} onClick={()=>onMapSubDistrictSelect(sd)}
+                      className="px-1.5 py-2.5 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
+                      {sd.n}
+                    </button>
+                  ))}
+                  {!mapSubLoading&&mapSubDistricts.length===0&&(
+                    <div className="col-span-3 text-center text-[11px] text-gray-400 py-3">세부 지역 정보 없음</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 혼적 화물 */}
       {freightMode==="혼적"&&(
@@ -15193,12 +15298,13 @@ function MobileFareInquiry({ cardVersionB = false }) {
       {freightMode==="독차"&&(
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
           <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">차량 선택</p>
-          <div className="grid grid-cols-5 gap-1.5">
+          <select value={vehicle} onChange={e=>setVehicle(e.target.value)}
+            className={`w-full py-2.5 px-3 rounded-lg text-[13px] font-bold border-2 outline-none appearance-none bg-no-repeat ${cardVersionB?"border-[#1B2B4B] text-[#1B2B4B]":"border-blue-600 text-blue-600"}`}
+            style={{backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231B2B4B' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",backgroundPosition:"right 10px center",backgroundSize:"16px",paddingRight:"36px"}}>
             {MOBILE_VT.map(v=>(
-              <button key={v.id} onClick={()=>setVehicle(v.id)}
-                className={`py-2 rounded-lg text-[11px] font-bold transition ${vehicle===v.id?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{v.name}</button>
+              <option key={v.id} value={v.id}>{v.name}</option>
             ))}
-          </div>
+          </select>
         </div>
       )}
 
@@ -15208,7 +15314,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
         <div className="flex gap-2">
           {MOBILE_CARGO_TYPES.map(ct=>(
             <button key={ct.id} onClick={()=>setCargoType(ct.id)}
-              className={`flex-1 py-2 rounded-xl text-[12px] font-bold transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600"}`}>{ct.name}</button>
+              className={`flex-1 py-2 rounded-xl text-[12px] font-bold transition ${cargoType===ct.id?(cardVersionB?"bg-[#1B2B4B] text-white":"bg-blue-600 text-white"):"bg-gray-100 text-gray-600"}`}>{ct.name}</button>
           ))}
         </div>
       </div>
@@ -15225,7 +15331,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
               {id:"lg",label:"리프트",sub:MOBILE_SL[vehicle]>0?`+${Number((MOBILE_SL[vehicle]/10000).toFixed(1))}만`:null,active:liftgate,set:()=>setLiftgate(p=>!p)},
             ].map(opt=>(
               <button key={opt.id} onClick={opt.set}
-                className={`flex items-center gap-1 px-3 py-2 rounded-xl text-[12px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200"}`}>
+                className={`flex items-center gap-1 px-3 py-2 rounded-xl text-[12px] font-bold border-2 transition ${opt.active?(cardVersionB?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-blue-600 text-white border-blue-600"):"bg-white text-gray-500 border-gray-200"}`}>
                 {opt.label}
                 {opt.sub&&<span className={`text-[10px] ${opt.active?"text-white/70":"text-gray-400"}`}>{opt.sub}</span>}
               </button>
@@ -15236,8 +15342,8 @@ function MobileFareInquiry({ cardVersionB = false }) {
 
       {/* 결과 카드 */}
       {result&&fromCoord&&toCoord&&(
-        <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
-          style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
+        <div className={`rounded-2xl overflow-hidden shadow-xl ${cardVersionB?"border border-[#1B2B4B]/10":"border border-blue-600/10"}`}
+          style={{background:cardVersionB?"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)":"linear-gradient(150deg,#0d3a7a 0%,#1d4ed8 50%,#2563eb 100%)"}}>
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90":"bg-blue-400/90"} text-white`}>{result.mode==="혼적"?"혼적":"독차"}</span>
@@ -15662,6 +15768,10 @@ function MobileStandardFare({ onBack, cardVersionB = false }) {
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
   const [showNoResultPopup, setShowNoResultPopup] = useState(false);
+  // 자사운임표 결과 없음 팝업 안에서 바로 전국표준운임표로 조회하기 위한 상태
+  const [nrLoading, setNrLoading] = useState(false);
+  const [nrError, setNrError] = useState("");
+  const [nrResult, setNrResult] = useState(null);
 const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   const [pickupAddr, setPickupAddr] = useState("");
   const [drop, setDrop] = useState("");
@@ -16020,7 +16130,44 @@ const calcFareMobile = () => {
 
   setMatchedRows(finalList);
   setResult(true);
-  if (finalList.length === 0) setShowNoResultPopup(true);
+  if (finalList.length === 0) { setShowNoResultPopup(true); setNrResult(null); setNrError(""); }
+};
+
+// 자사운임표에서 조회한 상/하차지 기록이 없을 때, 팝업 안에서 바로 전국표준운임표
+// 로직(거리 기반 추정)으로 조회해 결과를 보여준다 — 화면 이동 없이 팝업 내에서 완결.
+const runNationalFareInPopup = async () => {
+  const fromAddr = (searchMode === "address" ? (pickupAddr || pickup) : pickup).trim();
+  const toAddr = (searchMode === "address" ? (dropAddr || drop) : drop).trim();
+  if (!fromAddr || !toAddr) { setNrError("상차지와 하차지를 모두 입력하세요"); return; }
+  setNrLoading(true); setNrError(""); setNrResult(null);
+  try {
+    const geocode = async (addr) => {
+      const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
+      const res = await fetch(url, { headers: { appKey: MOBILE_TMAP_KEY, Accept: "application/json" } });
+      const data = await res.json();
+      const coord = data?.coordinateInfo?.coordinate?.[0];
+      if (!coord || !parseFloat(coord.lat)) throw new Error(`"${addr}" 위치를 찾을 수 없습니다`);
+      return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+    };
+    const [fromC, toC] = await Promise.all([geocode(fromAddr), geocode(toAddr)]);
+    const straight = mHaversine(fromC.lat, fromC.lon, toC.lat, toC.lon);
+    const dist = Math.round(straight * 1.25);
+    const vtId = MOBILE_VT.find(v => v.id === vehicle || v.name === vehicle)?.id || "1ton";
+    const vt = MOBILE_VT.find(v => v.id === vtId) || MOBILE_VT[2];
+    const rawBase = vt.base + vt.perKm * dist;
+    const fare = Math.max(vt.min, rawBase);
+    const avg = Math.round(fare / 5000) * 5000;
+    setNrResult({
+      from: fromAddr, to: toAddr, distance: dist, vehicleName: vt.name,
+      min: Math.round(avg * 0.83 / 5000) * 5000,
+      max: Math.round(avg * 1.17 / 5000) * 5000,
+      avg,
+    });
+  } catch (err) {
+    setNrError(err.message || "조회 중 오류가 발생했습니다");
+  } finally {
+    setNrLoading(false);
+  }
 };
 
 
@@ -16271,9 +16418,14 @@ const calcFareMobile = () => {
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-[11px] text-gray-400">청구</div>
-                      <div className="text-[17px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">기사 {drv.toLocaleString()}원</div>
+                      <div className="flex items-baseline justify-end gap-1">
+                        <span className="text-[11px] text-gray-400 font-semibold">청구 :</span>
+                        <span className="text-[16px] font-extrabold text-gray-900 tabular-nums">{fare.toLocaleString()}원</span>
+                      </div>
+                      <div className="flex items-baseline justify-end gap-1 mt-0.5">
+                        <span className="text-[11px] text-gray-400 font-semibold">기사 :</span>
+                        <span className="text-[13px] font-extrabold text-amber-600 tabular-nums">{drv.toLocaleString()}원</span>
+                      </div>
                     </div>
                   </div>
                   {fares.length > 1 && (
@@ -16393,12 +16545,46 @@ const calcFareMobile = () => {
       )}
 
       {showNoResultPopup && (
-        <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
-          <div className="bg-white p-5 rounded-2xl w-[300px] text-center">
+        <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center px-6" onClick={() => setShowNoResultPopup(false)}>
+          <div className="bg-white p-5 rounded-2xl w-full max-w-[320px] text-center" onClick={e => e.stopPropagation()}>
             <div className="text-[16px] font-bold mb-2">조회 결과 없음</div>
-            <div className="text-[13px] text-gray-500 mb-4">해당 상/하차지 기록이 없습니다.</div>
-            <button onClick={() => setShowNoResultPopup(false)}
-              className={`w-full py-2.5 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[13px]`}>확인</button>
+            <div className="text-[13px] text-gray-500 mb-1">해당 상/하차지 기록이 없습니다.</div>
+            <div className="text-[13px] text-gray-700 font-semibold mb-4">전국표준운임표로 검색하시겠습니까?</div>
+
+            {nrResult && (
+              <div className={`rounded-xl overflow-hidden mb-3 text-left ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
+                <div className="p-3.5">
+                  <div className="text-white/60 text-[11px] font-semibold mb-1 truncate">{nrResult.from} → {nrResult.to}</div>
+                  <div className="text-white/40 text-[10px] mb-2">약 {nrResult.distance}km · {nrResult.vehicleName} 기준</div>
+                  <div className="text-[10px] text-white/40 font-semibold mb-0.5">예상 운임 (VAT 별도)</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-[18px] font-black text-white">{nrResult.min.toLocaleString()}</span>
+                    <span className="text-white/30 text-[13px]">~</span>
+                    <span className="text-[18px] font-black text-white">{nrResult.max.toLocaleString()}원</span>
+                  </div>
+                  <div className="text-[11px] text-yellow-300 font-bold mt-1">평균 {nrResult.avg.toLocaleString()}원</div>
+                </div>
+              </div>
+            )}
+            {nrError && (
+              <div className="px-3 py-2 mb-3 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-600 text-left">{nrError}</div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={() => setShowNoResultPopup(false)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl font-bold text-[13px]">닫기</button>
+              <button onClick={runNationalFareInPopup} disabled={nrLoading}
+                className={`flex-1 py-2.5 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[13px] disabled:opacity-50 flex items-center justify-center gap-1.5`}>
+                {nrLoading ? (
+                  <>
+                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/>
+                    </svg>
+                    조회 중...
+                  </>
+                ) : nrResult ? "다시 조회" : "조회"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -16571,7 +16757,7 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
             <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
               {[["청구운임","청구가"],["기사운임","기사운임"]].map(([val,label])=>(
                 <button key={val} type="button" onClick={()=>setFareField(val)}
-                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all ${fareField===val ? "bg-[#1B2B4B] text-white shadow-sm" : "text-gray-500"}`}>
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all ${fareField===val ? (cardVersionB ? "bg-[#1B2B4B] text-white shadow-sm" : "bg-blue-600 text-white shadow-sm") : "text-gray-500"}`}>
                   {label}
                 </button>
               ))}

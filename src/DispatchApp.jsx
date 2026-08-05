@@ -9139,6 +9139,7 @@ function calcHistoryScore(row, form) {
 // ===============================
 const [smartDriverQuery, setSmartDriverQuery] = React.useState("");
 const [smartDriverMatched, setSmartDriverMatched] = React.useState([]);
+const [smartDriverActiveIdx, setSmartDriverActiveIdx] = React.useState(-1);
 const [driverConflictPopup, setDriverConflictPopup] = React.useState(null);
 // cargoAddPopup is passed in via props from DispatchApp
 // { mode: "overwrite"|"new", existing: driver, input: {plate,name,phone} }
@@ -9187,6 +9188,7 @@ const normD = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
 
 const handleSmartDriverInput = (text) => {
   setSmartDriverQuery(text);
+  setSmartDriverActiveIdx(-1);
   if (!text.trim()) {
     setSmartDriverMatched([]);
     return;
@@ -9225,6 +9227,33 @@ const selectSmartDriver = (d) => {
   }));
   setSmartDriverQuery("");
   setSmartDriverMatched([]);
+  setSmartDriverActiveIdx(-1);
+};
+// 스마트검색 입력창 공용 방향키 핸들러 — ↑/↓ 이동, Enter 선택, Esc 닫기
+const handleSmartDriverKeyDown = (e) => {
+  if (smartDriverMatched.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    setSmartDriverActiveIdx(prev => {
+      const next = e.key === "ArrowDown" ? prev + 1 : prev - 1;
+      if (next < 0) return smartDriverMatched.length - 1;
+      if (next >= smartDriverMatched.length) return 0;
+      return next;
+    });
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (smartDriverMatched.length > 0 && smartDriverActiveIdx >= 0 && smartDriverActiveIdx < smartDriverMatched.length) {
+      selectSmartDriver(smartDriverMatched[smartDriverActiveIdx]);
+    } else {
+      applySmartDriverInput(smartDriverQuery);
+    }
+    return;
+  }
+  if (e.key === "Escape" && smartDriverMatched.length > 0) {
+    e.preventDefault();
+    setSmartDriverMatched([]); setSmartDriverActiveIdx(-1);
+  }
 };
 
 
@@ -10074,6 +10103,9 @@ const similar = placeList.filter(p => {
           setPickupActive((i) => Math.min(i + 1, list.length - 1));
         } else if (e.key === "ArrowUp") {
           setPickupActive((i) => Math.max(i - 1, 0));
+        } else if (e.key === "Escape") {
+          setShowPickupDropdown(false);
+          setPickupOptions([]);
         } else if (e.key === "Tab") {
           const p = list[pickupActive];
           if (p) {
@@ -10235,6 +10267,9 @@ className={`
         setPlaceActive((i) => Math.min(i + 1, list.length - 1))
       } else if (e.key === "ArrowUp") {
         setPlaceActive((i) => Math.max(i - 1, 0))
+      } else if (e.key === "Escape") {
+        setShowPlaceDropdown(false);
+        setPlaceOptions([]);
       } else if (e.key === "Tab") {
         const p = list[placeActive]
         if (p) {
@@ -10405,6 +10440,7 @@ className={`
   <CustomSelect
    className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.화물타입 || ""}
+        openOnFocus
 
         onChange={(e) => {
           const type = e.target.value;
@@ -10500,6 +10536,8 @@ className={`
         setVehicleActive((i) => Math.min(i + 1, list.length - 1));
       } else if (e.key === "ArrowUp") {
         setVehicleActive((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Escape") {
+        setShowVehicleDropdown(false);
       } else if (e.key === "Tab") {
         const pick = list[vehicleActive];
         if (pick) {
@@ -10577,6 +10615,7 @@ className={`
       <CustomSelect
         className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.톤수타입}
+        openOnFocus
 
         onChange={(e) => {
           const type = e.target.value;
@@ -10873,6 +10912,9 @@ className={`
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setStopPlaceActive(i => Math.max(i - 1, 0));
+              } else if (e.key === "Escape") {
+                setShowStopDropdown(false);
+                setActiveStopIdx(null);
               } else if (e.key === "Tab") {
                 const list = stopPlaceOptions;
                 if (showStopDropdown && list.length > 0) {
@@ -11046,6 +11088,7 @@ className={`
               <CustomSelect
                 className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.화물타입 ?? "파레트"}
+                openOnFocus
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
@@ -11097,6 +11140,7 @@ className={`
               <CustomSelect
                 className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.톤수타입 ?? "톤"}
+                openOnFocus
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
@@ -11323,18 +11367,14 @@ className={`
 
 
       onChange={e => handleSmartDriverInput(e.target.value)}
-      onKeyDown={e => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          applySmartDriverInput(smartDriverQuery);
-        }
-      }}
+      onKeyDown={handleSmartDriverKeyDown}
       onBlur={e => {
         setTimeout(() => {
           if (e.target.value.trim().length > 4) {
             applySmartDriverInput(e.target.value);
           }
           setSmartDriverMatched([]);
+          setSmartDriverActiveIdx(-1);
         }, 200);
       }}
     />
@@ -11346,7 +11386,8 @@ className={`
         </div>
         {smartDriverMatched.map((d, i) => (
           <div key={i}
-            className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
+            className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between ${i===smartDriverActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+            onMouseEnter={() => setSmartDriverActiveIdx(i)}
             onMouseDown={() => selectSmartDriver(d)}
           >
             <div>
@@ -11409,6 +11450,10 @@ className={`
           배차상태: "배차완료",
         }));
 
+        setDriverDropdownOpen(false);
+      }
+
+      if (e.key === "Escape") {
         setDriverDropdownOpen(false);
       }
 
@@ -12638,7 +12683,7 @@ className={`
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="전화번호"
                   value={editContactData.phone}
-                  onChange={e => setEditContactData(p => ({ ...p, phone: e.target.value }))}
+                  onChange={e => setEditContactData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
                 <div className="flex gap-1.5 pt-0.5">
@@ -15811,7 +15856,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 onChange={e=>{setEditList(prev=>{const c=[...prev];c[idx].담당자=e.target.value;return c;});}} />
               <input autoComplete="off" className={inputCls} placeholder="연락처" value={stop.담당자번호}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
+                onChange={e=>{const v=formatPhone(e.target.value);setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
             </div>
 
             {/* 담당자 선택 팝업 (복수 담당자) */}
@@ -16123,7 +16168,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
                 placeholder="전화번호 입력"
                 inputMode="numeric"
                 value={form.전화번호}
-                onChange={e => setForm(p => ({ ...p, 전화번호: e.target.value.replace(/[^\d-]/g, "") }))}
+                onChange={e => setForm(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
               />
             </div>
             <div>
@@ -19230,6 +19275,7 @@ const driverMap = React.useMemo(() => {
 // ===== 스마트 기사 검색 (PART 4) =====
 const [smartQ4, setSmartQ4] = React.useState("");
 const [smartList4, setSmartList4] = React.useState([]);
+const [smart4ActiveIdx, setSmart4ActiveIdx] = React.useState(-1);
 const [smart4ConflictPopup, setSmart4ConflictPopup] = React.useState(null);
 
 const parseDriverText4 = (text) => {
@@ -19269,6 +19315,7 @@ const nd4 = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
 
 const handleSmart4Input = (text) => {
   setSmartQ4(text);
+  setSmart4ActiveIdx(-1);
   if (!text.trim()) { setSmartList4([]); return; }
   const { phone, plate, name } = parseDriverText4(text);
   const q = nd4(text);
@@ -19287,6 +19334,40 @@ const results = plate
   ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
   : [];
 setSmartList4(results.slice(0,8));
+};
+// 스마트검색 드롭다운 항목 선택 공통 처리 (마우스 클릭 / 방향키+엔터 공용)
+const selectSmart4Driver = (d, setTarget) => {
+  const gr = d?.등급 || d?.grade || "";
+  if (gr === "블랙") setBlackAlert(d);
+  else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
+  setTarget(p => ({ ...p, 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호), 배차상태: "배차완료" }));
+  setSmartQ4(""); setSmartList4([]); setSmart4ActiveIdx(-1);
+};
+// 스마트검색 입력창 공용 방향키 핸들러 — ↑/↓ 이동, Enter 선택, Esc 닫기
+const handleSmart4KeyDown = (e, target, setTarget) => {
+  if (smartList4.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    setSmart4ActiveIdx(prev => {
+      const next = e.key === "ArrowDown" ? prev + 1 : prev - 1;
+      if (next < 0) return smartList4.length - 1;
+      if (next >= smartList4.length) return 0;
+      return next;
+    });
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (smartList4.length > 0 && smart4ActiveIdx >= 0 && smart4ActiveIdx < smartList4.length) {
+      selectSmart4Driver(smartList4[smart4ActiveIdx], setTarget);
+    } else {
+      applySmart4(target, setTarget, smartQ4);
+    }
+    return;
+  }
+  if (e.key === "Escape" && smartList4.length > 0) {
+    e.preventDefault();
+    setSmartList4([]); setSmart4ActiveIdx(-1);
+  }
 };
 
 const [newDriverModalOpen, setNewDriverModalOpen] = React.useState(false);
@@ -21761,6 +21842,9 @@ checkWarningStatus(c.거래처명, "거래처");
               setShowCopyClientDropdown(false);
             }
           }
+          if(e.key==="Escape"){
+            setShowCopyClientDropdown(false);
+          }
         }}
 
         onBlur={()=>setTimeout(()=>setShowCopyClientDropdown(false),150)}
@@ -21866,6 +21950,9 @@ checkWarningStatus(c.거래처명, "거래처");
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.max(i-1,0));
               }
+              if(e.key==="Escape"){
+                setShowCopyPlaceDropdown(false);
+              }
               if(e.key==="Enter"){
                 e.preventDefault();
                 const p = copyPlaceOptions[copyActiveIndex];
@@ -21964,7 +22051,7 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -22049,6 +22136,10 @@ checkWarningStatus(c.거래처명, "거래처");
             onKeyDown={(e)=>{
               if(!showCopyPlaceDropdown || copyPlaceType!=="drop") return;
 
+              if (e.key === "Escape") {
+                setShowCopyPlaceDropdown(false);
+                return;
+              }
               if(e.key==="ArrowDown"){
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
@@ -22155,7 +22246,7 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -22199,15 +22290,16 @@ checkWarningStatus(c.거래처명, "거래처");
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ4}
         onChange={e=>handleSmart4Input(e.target.value)}
-        onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault(); applySmart4(copyTarget,setCopyTarget,smartQ4);}}}
-        onBlur={e=>{ setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart4(copyTarget,setCopyTarget,e.target.value); setSmartList4([]); },200);}}
+        onKeyDown={e=>handleSmart4KeyDown(e, copyTarget, setCopyTarget)}
+        onBlur={e=>{ setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart4(copyTarget,setCopyTarget,e.target.value); setSmartList4([]); setSmart4ActiveIdx(-1); },200);}}
       />
 {smartList4.length>0 && (
         <div className="absolute z-[9999] w-full bg-white border-2 border-[#1B2B4B] rounded-xl shadow-xl mt-0.5 overflow-hidden">
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
           {smartList4.map((d,i)=>(
-            <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+            <div key={i} className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between ${i===smart4ActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+              onMouseEnter={()=>setSmart4ActiveIdx(i)}
+              onMouseDown={()=>selectSmart4Driver(d, setCopyTarget)}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -23274,6 +23366,10 @@ value={copyTarget?.화물수량 || ""}
                 onKeyDown={(e) => {
                   if (!showEditClientDropdown) return;
 
+                  if (e.key === "Escape") {
+                    setShowEditClientDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setEditClientActiveIndex((i) =>
@@ -23476,6 +23572,10 @@ value={copyTarget?.화물수량 || ""}
                 onKeyDown={(e) => {
                   if (!showEditPlaceDropdown || editPlaceType !== "pickup") return;
 
+                  if (e.key === "Escape") {
+                    setShowEditPlaceDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setEditActiveIndex((i) =>
@@ -23579,7 +23679,7 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">상차지 연락처</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
@@ -23641,6 +23741,10 @@ value={copyTarget?.화물수량 || ""}
                 onKeyDown={(e) => {
                   if (!showEditPlaceDropdown || editPlaceType !== "drop") return;
 
+                  if (e.key === "Escape") {
+                    setShowEditPlaceDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setEditActiveIndex((i) =>
@@ -23744,7 +23848,7 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">하차지 연락처</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
@@ -23937,15 +24041,16 @@ value={copyTarget?.화물수량 || ""}
                   placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
                   value={smartQ4}
                   onChange={e => handleSmart4Input(e.target.value)}
-                  onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); applySmart4(editTarget, setEditTarget, smartQ4); }}}
-                  onBlur={e => { setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart4(editTarget,setEditTarget,e.target.value); setSmartList4([]); },200); }}
+                  onKeyDown={e => handleSmart4KeyDown(e, editTarget, setEditTarget)}
+                  onBlur={e => { setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart4(editTarget,setEditTarget,e.target.value); setSmartList4([]); setSmart4ActiveIdx(-1); },200); }}
                 />
                 {smartList4.length > 0 && (
                   <div className="absolute z-[9999] w-full bg-white border-2 border-[#1B2B4B] rounded-xl shadow-xl mt-0.5 overflow-hidden">
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
                     {smartList4.map((d,i)=>(
-                      <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+                      <div key={i} className={`px-4 py-2.5 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between ${i===smart4ActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                        onMouseEnter={()=>setSmart4ActiveIdx(i)}
+                        onMouseDown={()=>selectSmart4Driver(d, setEditTarget)}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -27973,6 +28078,7 @@ const openNewDriverModal = (차량번호, onConfirm) => {
   // ===== 스마트 기사 검색 (PART 5) =====
 const [smartQ5, setSmartQ5] = React.useState("");
 const [smartList5, setSmartList5] = React.useState([]);
+const [smart5ActiveIdx, setSmart5ActiveIdx] = React.useState(-1);
 const [smart5ConflictPopup, setSmart5ConflictPopup] = React.useState(null);
 
 const parseDriverText5 = (text) => {
@@ -28012,6 +28118,7 @@ const nd5 = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
 
 const handleSmart5Input = (text) => {
   setSmartQ5(text);
+  setSmart5ActiveIdx(-1);
   if (!text.trim()) { setSmartList5([]); return; }
   const { phone, plate, name } = parseDriverText5(text);
   const q = nd5(text);
@@ -28029,6 +28136,40 @@ const results = plate
   ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
   : [];
 setSmartList5(results.slice(0,8));
+};
+// 스마트검색 드롭다운 항목 선택 공통 처리 (마우스 클릭 / 방향키+엔터 공용)
+const selectSmart5Driver = (d, setTarget) => {
+  const gr = d?.등급 || d?.grade || "";
+  if (gr === "블랙") setBlackAlert(d);
+  else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
+  setTarget(p => ({ ...p, 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호), 배차상태: "배차완료" }));
+  setSmartQ5(""); setSmartList5([]); setSmart5ActiveIdx(-1);
+};
+// 스마트검색 입력창 공용 방향키 핸들러 — ↑/↓ 이동, Enter 선택, Esc 닫기
+const handleSmart5KeyDown = (e, target, setTarget) => {
+  if (smartList5.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    setSmart5ActiveIdx(prev => {
+      const next = e.key === "ArrowDown" ? prev + 1 : prev - 1;
+      if (next < 0) return smartList5.length - 1;
+      if (next >= smartList5.length) return 0;
+      return next;
+    });
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (smartList5.length > 0 && smart5ActiveIdx >= 0 && smart5ActiveIdx < smartList5.length) {
+      selectSmart5Driver(smartList5[smart5ActiveIdx], setTarget);
+    } else {
+      applySmart5(target, setTarget, smartQ5);
+    }
+    return;
+  }
+  if (e.key === "Escape" && smartList5.length > 0) {
+    e.preventDefault();
+    setSmartList5([]); setSmart5ActiveIdx(-1);
+  }
 };
 
 const applySmart5 = async (target, setTarget, text) => {
@@ -30722,6 +30863,10 @@ return (
                 onKeyDown={(e) => {
                   if (!showClientDropdown) return;
 
+                  if (e.key === "Escape") {
+                    setShowClientDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setClientActiveIndex(i => Math.min(i + 1, clientOptions.length - 1));
@@ -30913,6 +31058,10 @@ return (
                 onKeyDown={(e) => {
                   if (!placeOptions.length) return;
 
+                  if (e.key === "Escape") {
+                    setActivePlaceField(null);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setPlaceActiveIndex((i) =>
@@ -31027,7 +31176,7 @@ return (
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.상차지담당자번호 || ""}
-                  onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: formatPhone(e.target.value) }))}
                 />
               </div>
               <div>
@@ -31081,6 +31230,10 @@ return (
                 onKeyDown={(e) => {
                   if (!placeOptions.length) return;
 
+                  if (e.key === "Escape") {
+                    setActivePlaceField(null);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setPlaceActiveIndex((i) =>
@@ -31196,7 +31349,7 @@ return (
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.하차지담당자번호 || ""}
-                  onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: formatPhone(e.target.value) }))}
                 />
               </div>
               <div>
@@ -31351,15 +31504,16 @@ return (
                   placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
                   value={smartQ5}
                   onChange={e => handleSmart5Input(e.target.value)}
-                  onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); applySmart5(editTarget, setEditTarget, smartQ5); }}}
-                  onBlur={e => { setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart5(editTarget,setEditTarget,e.target.value); setSmartList5([]); },200); }}
+                  onKeyDown={e => handleSmart5KeyDown(e, editTarget, setEditTarget)}
+                  onBlur={e => { setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart5(editTarget,setEditTarget,e.target.value); setSmartList5([]); setSmart5ActiveIdx(-1); },200); }}
                 />
                 {smartList5.length > 0 && (
                   <div className="absolute z-[9999] w-full bg-white border-2 border-[#1B2B4B] rounded-xl shadow-xl mt-0.5 overflow-hidden">
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
                     {smartList5.map((d,i)=>(
-                      <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+                      <div key={i} className={`px-4 py-2.5 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between ${i===smart5ActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                        onMouseEnter={()=>setSmart5ActiveIdx(i)}
+                        onMouseDown={()=>selectSmart5Driver(d, setEditTarget)}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -32092,6 +32246,10 @@ return (
         onKeyDown={(e)=>{
           if(!showCopyClientDropdown) return;
 
+          if (e.key === "Escape") {
+            setShowCopyClientDropdown(false);
+            return;
+          }
           if(e.key==="ArrowDown"){
             e.preventDefault();
             setCopyClientIndex(i=>Math.min(i+1, copyClientOptions.length-1));
@@ -32227,6 +32385,10 @@ setCopyPlaceOptions(list);
             onKeyDown={(e)=>{
               if(!showCopyPlaceDropdown || copyPlaceType!=="pickup") return;
 
+              if (e.key === "Escape") {
+                setShowCopyPlaceDropdown(false);
+                return;
+              }
               if(e.key==="ArrowDown"){
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
@@ -32333,7 +32495,7 @@ setCopyPlaceOptions(list);
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -32400,6 +32562,10 @@ setCopyPlaceOptions(list);
             onKeyDown={(e)=>{
               if(!showCopyPlaceDropdown || copyPlaceType!=="drop") return;
 
+              if (e.key === "Escape") {
+                setShowCopyPlaceDropdown(false);
+                return;
+              }
               if(e.key==="ArrowDown"){
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
@@ -32506,7 +32672,7 @@ setCopyPlaceOptions(list);
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -32532,15 +32698,16 @@ setCopyPlaceOptions(list);
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ5}
         onChange={e=>handleSmart5Input(e.target.value)}
-        onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault(); applySmart5(copyTarget,setCopyTarget,smartQ5);}}}
-        onBlur={e=>{ setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart5(copyTarget,setCopyTarget,e.target.value); setSmartList5([]); },200);}}
+        onKeyDown={e=>handleSmart5KeyDown(e, copyTarget, setCopyTarget)}
+        onBlur={e=>{ setTimeout(()=>{ if(e.target.value.trim().length>4) applySmart5(copyTarget,setCopyTarget,e.target.value); setSmartList5([]); setSmart5ActiveIdx(-1); },200);}}
       />
       {smartList5.length>0 && (
       <div className="absolute z-[9999] w-full bg-white border-2 border-[#1B2B4B] rounded-xl shadow-xl mt-0.5 overflow-hidden">
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
           {smartList5.map((d,i)=>(
-            <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+            <div key={i} className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between ${i===smart5ActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+              onMouseEnter={()=>setSmart5ActiveIdx(i)}
+              onMouseDown={()=>selectSmart5Driver(d, setCopyTarget)}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -38846,6 +39013,7 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   // 스마트 기사 검색 (Part 7)
   const [smartQ7, setSmartQ7] = React.useState("");
   const [smartList7, setSmartList7] = React.useState([]);
+  const [smart7ActiveIdx, setSmart7ActiveIdx] = React.useState(-1);
   const [editingDriver7Id, setEditingDriver7Id] = React.useState(null);
   const [editingDriver7Data, setEditingDriver7Data] = React.useState({ 이름: "", 전화번호: "" });
   const lastWarnedRef7 = React.useRef({ key: "", time: 0 });
@@ -39016,6 +39184,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
   const handleSmart7Input = (val) => {
     setSmartQ7(val);
+    setSmart7ActiveIdx(-1);
     if (!val.trim()) { setSmartList7([]); return; }
     const { plate } = parseDriverText7(val);
     if (!plate) { setSmartList7([]); return; }
@@ -39030,6 +39199,36 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
         return 0;
       });
     setSmartList7(results.slice(0, 8));
+  };
+  // 스마트검색 드롭다운 항목 선택 공통 처리 (마우스 클릭 / 방향키+엔터 공용)
+  const selectSmart7Driver = (d) => {
+    setCopyTarget(prev => ({ ...prev, 차량번호: d.차량번호, 이름: d.이름 || "", 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료" }));
+    setSmartQ7(""); setSmartList7([]); setSmart7ActiveIdx(-1);
+  };
+  const handleSmart7KeyDown = (e) => {
+    if (smartList7.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      setSmart7ActiveIdx(prev => {
+        const next = e.key === "ArrowDown" ? prev + 1 : prev - 1;
+        if (next < 0) return smartList7.length - 1;
+        if (next >= smartList7.length) return 0;
+        return next;
+      });
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (smartList7.length > 0 && smart7ActiveIdx >= 0 && smart7ActiveIdx < smartList7.length) {
+        selectSmart7Driver(smartList7[smart7ActiveIdx]);
+      } else {
+        applySmart7();
+      }
+      return;
+    }
+    if (e.key === "Escape" && smartList7.length > 0) {
+      e.preventDefault();
+      setSmartList7([]); setSmart7ActiveIdx(-1);
+    }
   };
 
   const applySmart7 = async () => {
@@ -39419,7 +39618,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             </div>
             <input autoComplete="off" placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
             <input autoComplete="off" placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
-            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(formatPhone(e.target.value))} className="border p-2 rounded w-full mb-2" />
             {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✔ 기존 등록 차량 / 기사 자동 매칭됨</div>}
             {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">➕ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
             <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
@@ -39449,7 +39648,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: e.target.value}))} placeholder="010-0000-0000" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
               </div>
             </div>
             <div className="flex gap-2 px-6 pb-6">
@@ -39840,7 +40039,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="상차지 연락처">
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       {/* 경유 상차지 */}
                       {(() => {
@@ -39935,7 +40134,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="하차지 연락처">
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       {/* 경유 하차지 */}
                       {(() => {
@@ -39966,12 +40165,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         placeholder="차량번호 · 기사명 · 연락처 · 문자 복붙"
                         value={smartQ7}
                         onChange={(e) => handleSmart7Input(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applySmart7(); } }}
+                        onKeyDown={handleSmart7KeyDown}
                       />
                       {smartList7.length > 0 && (
                         <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
                           {smartList7.map((d, i) => (
-                            <div key={d.id || i} className="border-b border-gray-100 last:border-0">
+                            <div key={d.id || i} className={`border-b border-gray-100 last:border-0 ${i===smart7ActiveIdx?"bg-blue-100":""}`}
+                              onMouseEnter={() => setSmart7ActiveIdx(i)}>
                               {editingDriver7Id === (d.id || i) ? (
                                 <div className="px-4 py-3 bg-blue-50">
                                   <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
@@ -39985,7 +40185,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                     className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-blue-400"
                                     placeholder="전화번호"
                                     value={editingDriver7Data.전화번호}
-                                    onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: e.target.value }))}
+                                    onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
                                   />
                                   <div className="flex gap-2">
                                     <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
@@ -40002,10 +40202,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                               ) : (
                                 <div className="flex items-center hover:bg-gray-50">
                                   <button type="button" className="flex-1 text-left px-4 py-3"
-                                    onClick={() => {
-                                      setCopyTarget(prev => ({ ...prev, 차량번호: d.차량번호, 이름: d.이름 || "", 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료" }));
-                                      setSmartQ7(""); setSmartList7([]);
-                                    }}>
+                                    onClick={() => selectSmart7Driver(d)}>
                                     <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
                                     <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
                                   </button>
@@ -40886,6 +41083,7 @@ const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
 const [emailBody, setEmailBody] = useState("");
 const [editInfoClientDropOpen, setEditInfoClientDropOpen] = useState(false);
+const [editInfoClientActiveIdx, setEditInfoClientActiveIdx] = useState(0);
 const [generalEmailOpen, setGeneralEmailOpen] = useState(false);
 const [generalEmailTo, setGeneralEmailTo] = useState("");
 const [generalEmailSubject, setGeneralEmailSubject] = useState("");
@@ -40894,6 +41092,7 @@ const [generalEmailSending, setGeneralEmailSending] = useState(false);
 const [generalEmailFiles, setGeneralEmailFiles] = useState([]);
 const [generalEmailAddrOpen, setGeneralEmailAddrOpen] = useState(false);
 const [generalEmailAddrQuery, setGeneralEmailAddrQuery] = useState("");
+const [generalEmailAddrActiveIdx, setGeneralEmailAddrActiveIdx] = useState(0);
 const [batchSendList, setBatchSendList] = useState([]); // [{name, email, start, end, mapped, totals, clientInfo}]
 const [batchSendOpen, setBatchSendOpen] = useState(false);
 const [batchSending, setBatchSending] = useState(false);
@@ -42288,14 +42487,32 @@ const handleBatchSettle = async (targetStatus) => {
                           <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
                             <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] outline-none"
                               placeholder="거래처명으로 검색" value={generalEmailAddrQuery}
-                              onChange={e => setGeneralEmailAddrQuery(e.target.value)} autoFocus />
+                              onChange={e => { setGeneralEmailAddrQuery(e.target.value); setGeneralEmailAddrActiveIdx(0); }}
+                              onKeyDown={e => {
+                                const opts = (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery)));
+                                if (e.key === "ArrowDown") { e.preventDefault(); setGeneralEmailAddrActiveIdx(i => Math.min(i + 1, opts.length - 1)); }
+                                else if (e.key === "ArrowUp") { e.preventDefault(); setGeneralEmailAddrActiveIdx(i => Math.max(i - 1, 0)); }
+                                else if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  const c = opts[generalEmailAddrActiveIdx];
+                                  if (!c) return;
+                                  const cur = generalEmailTo.trim();
+                                  const existing = cur ? cur.split(",").map(s => s.trim()).filter(Boolean) : [];
+                                  if (!existing.includes(c.이메일)) existing.push(c.이메일);
+                                  setGeneralEmailTo(existing.join(", "));
+                                  setGeneralEmailAddrQuery("");
+                                  setGeneralEmailAddrOpen(false);
+                                } else if (e.key === "Escape") { e.preventDefault(); setGeneralEmailAddrOpen(false); }
+                              }}
+                              autoFocus />
                           </div>
                           {(clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).length === 0 ? (
                             <div className="px-4 py-6 text-center text-[13px] text-gray-400">
                               {generalEmailAddrQuery ? "검색 결과 없음" : "등록된 이메일 없음 (거래처관리에서 이메일 등록)"}
                             </div>
                           ) : (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).map((c, i) => (
-                            <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-[13px] border-b border-gray-50"
+                            <div key={i} className={`px-4 py-2.5 cursor-pointer flex items-center justify-between text-[13px] border-b border-gray-50 ${i===generalEmailAddrActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                              onMouseEnter={() => setGeneralEmailAddrActiveIdx(i)}
                               onMouseDown={e => {
                                 e.preventDefault();
                                 const cur = generalEmailTo.trim();
@@ -42838,22 +43055,23 @@ const handleBatchSettle = async (targetStatus) => {
                     <label className="text-[12px] font-semibold text-gray-500 mb-1 block">거래처명 (검색하면 정보 자동 입력)</label>
                     <input autoComplete="off" className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                       value={editInfo["거래처명"]||""}
-                      onChange={e => { setEditInfo(p=>({...p, 거래처명: e.target.value})); setEditInfoClientDropOpen(true); }}
+                      onChange={e => { setEditInfo(p=>({...p, 거래처명: e.target.value})); setEditInfoClientDropOpen(true); setEditInfoClientActiveIdx(0); }}
                       onFocus={() => setEditInfoClientDropOpen(true)}
                       onBlur={() => setTimeout(() => setEditInfoClientDropOpen(false), 180)}
                       onKeyDown={e => {
-                        if (e.key === "Escape") setEditInfoClientDropOpen(false);
+                        const opts = (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).slice(0, 12);
+                        if (e.key === "Escape") { setEditInfoClientDropOpen(false); return; }
+                        if (e.key === "ArrowDown" && editInfoClientDropOpen) { e.preventDefault(); setEditInfoClientActiveIdx(i => Math.min(i + 1, opts.length - 1)); return; }
+                        if (e.key === "ArrowUp" && editInfoClientDropOpen) { e.preventDefault(); setEditInfoClientActiveIdx(i => Math.max(i - 1, 0)); return; }
                         if (e.key === "Enter") {
-                          const q = (editInfo["거래처명"]||"").toLowerCase();
-                          const match = (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes(q))[0];
+                          const match = editInfoClientDropOpen ? opts[editInfoClientActiveIdx] : opts[0];
                           if (match) {
                             setEditInfo({ 거래처명: match.거래처명, 사업자번호: match.사업자번호||"", 대표자: match.대표자||match.사업자명||"", 업태: match.업태||"", 종목: match.종목||"", 주소: match.주소||"", 담당자: match.담당자||"", 연락처: match.연락처||"", 이메일: match.이메일||"" });
                             setEditInfoClientDropOpen(false);
                           }
                         }
                         if (e.key === "Tab" && editInfoClientDropOpen) {
-                          const q = (editInfo["거래처명"]||"").toLowerCase();
-                          const match = (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes(q))[0];
+                          const match = opts[editInfoClientActiveIdx] || opts[0];
                           if (match) {
                             setEditInfo({ 거래처명: match.거래처명, 사업자번호: match.사업자번호||"", 대표자: match.대표자||match.사업자명||"", 업태: match.업태||"", 종목: match.종목||"", 주소: match.주소||"", 담당자: match.담당자||"", 연락처: match.연락처||"", 이메일: match.이메일||"" });
                             setEditInfoClientDropOpen(false);
@@ -42866,7 +43084,8 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="absolute z-[300] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                         {(clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).slice(0, 12).map((c, i) => (
                           <div key={i}
-                            className="px-4 py-2.5 text-[13px] cursor-pointer hover:bg-blue-50 flex items-center justify-between border-b border-gray-50"
+                            className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between border-b border-gray-50 ${i===editInfoClientActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                            onMouseEnter={() => setEditInfoClientActiveIdx(i)}
                             onMouseDown={e => {
                               e.preventDefault();
                               setEditInfo({ 거래처명: c.거래처명||"", 사업자번호: c.사업자번호||"", 대표자: c.대표자||c.사업자명||"", 업태: c.업태||"", 종목: c.종목||"", 주소: c.주소||"", 담당자: c.담당자||"", 연락처: c.연락처||"", 이메일: c.이메일||"" });
@@ -46570,7 +46789,7 @@ React.useEffect(() => {
                   <div>
                     <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                      value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
+                      value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: formatPhone(e.target.value) }))} />
                   </div>
                   <div className="col-span-2">
                     <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>

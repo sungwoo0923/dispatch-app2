@@ -16,7 +16,7 @@ function fmtTime(iso) {
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
 
-export default function MobileAttendanceBoard({ userCompany, role, currentUser }) {
+export default function MobileAttendanceBoard({ userCompany, role, currentUser, cardVersionB = false }) {
   const isAdmin = ADMIN_ROLES.includes(role);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -317,13 +317,13 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
   const canEditAttendance = role === "totalMaster";
 
   return (
-    <div className="px-3 py-3 space-y-3 pb-24">
+    <div className="px-3 py-3 space-y-3 pb-24" style={{ "--attn-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
       {/* 관리자: 출근지 설정 */}
       {isAdmin && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <div className="text-[13px] font-bold text-[#1B2B4B]">출근지 설정</div>
+              <div className="text-[13px] font-bold text-[var(--attn-accent)]">출근지 설정</div>
               {officeLocation ? (
                 <div className="text-[11px] text-blue-600 mt-0.5">{officeLocation.address || `${officeLocation.lat?.toFixed(5)}, ${officeLocation.lng?.toFixed(5)}`}</div>
               ) : (
@@ -331,31 +331,31 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
               )}
             </div>
             <button onClick={() => setShowOfficePanel(v => !v)}
-              className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border transition ${showOfficePanel ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B]"}`}>
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border transition ${showOfficePanel ? "bg-[var(--attn-accent)] text-white border-[var(--attn-accent)]" : "border-gray-200 text-[var(--attn-accent)]"}`}>
               {showOfficePanel ? "닫기" : "설정"}
             </button>
           </div>
           {showOfficePanel && (
             <div className="border-t border-gray-100 pt-3 space-y-2">
               <button onClick={getCurrentLocation} disabled={gettingLoc}
-                className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                className="w-full py-2.5 rounded-xl bg-[var(--attn-accent)] text-white text-[13px] font-bold disabled:opacity-50">
                 {gettingLoc ? "위치 가져오는 중..." : "현재 위치를 출근지로 설정"}
               </button>
               <div className="text-[11px] text-gray-400 text-center">또는 직접 입력</div>
               <div className="flex gap-2 min-w-0">
                 <input type="number" step="0.000001" placeholder="위도"
                   value={officeInput.lat} onChange={e => setOfficeInput(p => ({ ...p, lat: e.target.value }))}
-                  className="min-w-0 flex-1 w-0 px-2 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                  className="min-w-0 flex-1 w-0 px-2 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
                 <input type="number" step="0.000001" placeholder="경도"
                   value={officeInput.lng} onChange={e => setOfficeInput(p => ({ ...p, lng: e.target.value }))}
-                  className="min-w-0 flex-1 w-0 px-2 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                  className="min-w-0 flex-1 w-0 px-2 py-2 rounded-xl border-2 border-gray-200 text-[12px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
               </div>
               <input type="text" placeholder="장소명 (예: 본사 사무실)"
                 value={officeInput.address} onChange={e => setOfficeInput(p => ({ ...p, address: e.target.value }))}
-                className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
               <div className="text-[10px] text-gray-400">반경 100m 이내 진입 시 자동 출근 · 300m 이탈 시 자동 퇴근</div>
               <button onClick={saveOfficeLocation} disabled={savingOffice}
-                className="w-full py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold disabled:opacity-40">
+                className="w-full py-2.5 rounded-xl border border-[var(--attn-accent)] text-[var(--attn-accent)] text-[13px] font-bold disabled:opacity-40">
                 {savingOffice ? "저장 중..." : "저장"}
               </button>
             </div>
@@ -369,8 +369,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
           <button onClick={() => setShowRequestPanel(v => !v)}
             className="w-full flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-bold text-[#1B2B4B]">출근 요청</span>
-              <span className="px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{checkInRequests.length}건</span>
+              <span className="text-[13px] font-bold text-[var(--attn-accent)]">출근 요청</span>
+              <span className="px-2 py-0.5 rounded-full bg-[var(--attn-accent)] text-white text-[11px] font-bold">{checkInRequests.length}건</span>
             </div>
             <span className="text-gray-400 text-[12px]">{showRequestPanel ? "접기" : "펼치기"}</span>
           </button>
@@ -380,12 +380,12 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 <div key={req.id} className="bg-gray-50 rounded-xl px-3 py-2.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-[13px] font-bold text-[#1B2B4B]">{req.name}</div>
+                      <div className="text-[13px] font-bold text-[var(--attn-accent)]">{req.name}</div>
                       <div className="text-[11px] text-gray-500">{req.date} · 요청 {fmtTime(req.requestedAt)}</div>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => handleApproveRequest(req)}
-                        className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
+                        className="px-3 py-1.5 rounded-lg bg-[var(--attn-accent)] text-white text-[12px] font-bold">승인</button>
                       <button onClick={() => setChangeReqRejectId(req.id)}
                         className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
                     </div>
@@ -393,7 +393,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                   {changeReqRejectId === req.id && (
                     <div className="mt-2 flex gap-1.5">
                       <input type="text" placeholder="거절 사유" value={changeReqRejectReason} onChange={e => setChangeReqRejectReason(e.target.value)}
-                        className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[#1B2B4B]" />
+                        className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[var(--attn-accent)]" />
                       <button onClick={() => handleRejectRequest(req, changeReqRejectReason)}
                         className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-[12px] font-bold">확인</button>
                     </div>
@@ -411,8 +411,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
           <button onClick={() => setShowChangeReqPanel(v => !v)}
             className="w-full flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-bold text-[#1B2B4B]">수정 요청</span>
-              <span className="px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{changeRequests.filter(r => r.status === "pending").length}건</span>
+              <span className="text-[13px] font-bold text-[var(--attn-accent)]">수정 요청</span>
+              <span className="px-2 py-0.5 rounded-full bg-[var(--attn-accent)] text-white text-[11px] font-bold">{changeRequests.filter(r => r.status === "pending").length}건</span>
             </div>
             <span className="text-gray-400 text-[12px]">{showChangeReqPanel ? "접기" : "펼치기"}</span>
           </button>
@@ -422,7 +422,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 <div key={req.id} className="bg-gray-50 rounded-xl px-3 py-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="text-[13px] font-bold text-[#1B2B4B]">{req.name} · {req.date}</div>
+                      <div className="text-[13px] font-bold text-[var(--attn-accent)]">{req.name} · {req.date}</div>
                       <div className="text-[11px] text-gray-500">
                         {req.requestedStatus}{req.requestedCheckIn ? ` · ${req.requestedCheckIn.slice(11, 16)}` : ""}
                         {req.requestedCheckOut ? ` ~ ${req.requestedCheckOut.slice(11, 16)}` : ""}
@@ -431,7 +431,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                     </div>
                     <div className="flex gap-1.5 shrink-0">
                       <button onClick={() => approveMobileChangeRequest(req)}
-                        className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold">승인</button>
+                        className="px-3 py-1.5 rounded-lg bg-[var(--attn-accent)] text-white text-[12px] font-bold">승인</button>
                       <button onClick={() => { setChangeReqRejectId(req.id); setChangeReqRejectReason(""); }}
                         className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold">거절</button>
                     </div>
@@ -439,7 +439,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                   {changeReqRejectId === req.id && (
                     <div className="mt-2 flex gap-1.5">
                       <input type="text" placeholder="거절 사유" value={changeReqRejectReason} onChange={e => setChangeReqRejectReason(e.target.value)}
-                        className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[#1B2B4B]" />
+                        className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 text-[12px] outline-none focus:border-[var(--attn-accent)]" />
                       <button onClick={() => rejectMobileChangeRequest(req, changeReqRejectReason)}
                         className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-[12px] font-bold">확인</button>
                     </div>
@@ -454,19 +454,19 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       {/* 오늘 출퇴근 현황 카드 */}
       {month === now.getMonth() + 1 && year === now.getFullYear() && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">오늘 출퇴근</div>
+          <div className="text-[13px] font-bold text-[var(--attn-accent)] mb-2">오늘 출퇴근</div>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-3 text-[13px]">
                 <span className="text-gray-500">출근</span>
-                <span className="font-bold text-[#1B2B4B]">{todayRec?.checkInTime ? fmtTime(todayRec.checkInTime) : "미출근"}</span>
+                <span className="font-bold text-[var(--attn-accent)]">{todayRec?.checkInTime ? fmtTime(todayRec.checkInTime) : "미출근"}</span>
                 {todayRec?.checkInTime && isLate(todayRec) && (
                   <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-500 text-[11px] font-bold">지각</span>
                 )}
               </div>
               <div className="flex items-center gap-3 text-[13px]">
                 <span className="text-gray-500">퇴근</span>
-                <span className="font-bold text-[#1B2B4B]">{todayRec?.checkOutTime ? fmtTime(todayRec.checkOutTime) : "-"}</span>
+                <span className="font-bold text-[var(--attn-accent)]">{todayRec?.checkOutTime ? fmtTime(todayRec.checkOutTime) : "-"}</span>
               </div>
               {myUserDoc?.workStartTime && (
                 <div className="text-[11px] text-gray-400">정규: {myUserDoc.workStartTime} ~ {myUserDoc.workEndTime || "-"}</div>
@@ -475,7 +475,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
             <div className="flex flex-col gap-2 items-end">
               {todayRec?.status === "출근" && !todayRec?.checkOutTime && (
                 <button onClick={handleCheckOut} disabled={checkingOut}
-                  className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                  className="px-5 py-2.5 rounded-xl bg-[var(--attn-accent)] text-white text-[13px] font-bold disabled:opacity-50">
                   {checkingOut ? "처리 중..." : "퇴근"}
                 </button>
               )}
@@ -490,7 +490,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                       setRequestCheckInTime(String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0"));
                       setShowCheckInRequestModal(true);
                     }} disabled={requestingCheckIn}
-                      className="px-4 py-2.5 rounded-xl border-2 border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold disabled:opacity-50">
+                      className="px-4 py-2.5 rounded-xl border-2 border-[var(--attn-accent)] text-[var(--attn-accent)] text-[12px] font-bold disabled:opacity-50">
                       {requestingCheckIn ? "요청 중..." : "출근 요청"}
                     </button>
                   );
@@ -504,10 +504,10 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
         <div className="flex items-center justify-between mb-3">
           <button onClick={() => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }}
-            className="w-8 h-8 rounded-lg border border-gray-200 text-[#1B2B4B] font-bold">‹</button>
-          <div className="text-[15px] font-black text-[#1B2B4B]">{year}년 {month}월</div>
+            className="w-8 h-8 rounded-lg border border-gray-200 text-[var(--attn-accent)] font-bold">‹</button>
+          <div className="text-[15px] font-black text-[var(--attn-accent)]">{year}년 {month}월</div>
           <button onClick={() => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }}
-            className="w-8 h-8 rounded-lg border border-gray-200 text-[#1B2B4B] font-bold">›</button>
+            className="w-8 h-8 rounded-lg border border-gray-200 text-[var(--attn-accent)] font-bold">›</button>
         </div>
 
         <div className="grid grid-cols-7 gap-1 mb-1">
@@ -533,7 +533,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
             const hasRejected = !!rejectedChangeMap[ds];
             const clickable = isPastOrToday && (canEditAttendance || true); // own cell only
             return (
-              <div key={i} className={`rounded-lg flex flex-col items-center justify-center py-1.5 relative ${ds === todayDateStr ? "ring-2 ring-[#1B2B4B]" : ""} ${isPastOrToday ? "cursor-pointer active:bg-gray-50" : ""}`}
+              <div key={i} className={`rounded-lg flex flex-col items-center justify-center py-1.5 relative ${ds === todayDateStr ? "ring-2 ring-[var(--attn-accent)]" : ""} ${isPastOrToday ? "cursor-pointer active:bg-gray-50" : ""}`}
                 title={tooltip}
                 onClick={() => {
                   if (!isPastOrToday) return;
@@ -579,12 +579,12 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
       {showCheckInRequestModal && (
         <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto">
-            <div className="text-[15px] font-bold text-[#1B2B4B] mb-1">출근 요청</div>
+            <div className="text-[15px] font-bold text-[var(--attn-accent)] mb-1">출근 요청</div>
             <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. 관리자 승인 후 출근 처리됩니다.</div>
             <div className="mb-4">
               <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
               <input type="time" value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
             </div>
             <div className="flex gap-2">
               <button onClick={() => setShowCheckInRequestModal(false)}
@@ -607,7 +607,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                   setRequestingCheckIn(false);
                 }
               }} disabled={requestingCheckIn || !requestCheckInTime}
-                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50">
+                className="flex-1 py-2.5 rounded-xl bg-[var(--attn-accent)] text-white text-[13px] font-bold disabled:opacity-50">
                 {requestingCheckIn ? "요청 중..." : "요청"}
               </button>
             </div>
@@ -621,7 +621,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
           <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[15px] font-bold text-[#1B2B4B]">수정 요청</div>
+                <div className="text-[15px] font-bold text-[var(--attn-accent)]">수정 요청</div>
                 <div className="text-[12px] text-gray-500">{mobileChangeReqCell.date}</div>
               </div>
               <button onClick={() => setMobileChangeReqCell(null)} className="text-gray-400 text-[20px] font-bold">×</button>
@@ -635,7 +635,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
             <div>
               <div className="text-[12px] font-semibold text-gray-600 mb-2">상태</div>
               <select value={mobileChangeReqStatus} onChange={e => setMobileChangeReqStatus(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[14px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none">
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[14px] font-bold text-[var(--attn-accent)] focus:border-[var(--attn-accent)] outline-none">
                 {["출근","휴무","연차","오전반차","오후반차","외근","병가","경조사","조퇴"].map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
@@ -644,25 +644,25 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
                   <input type="time" value={mobileChangeReqTime} onChange={e => setMobileChangeReqTime(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
                 </div>
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">퇴근 시간 (선택)</div>
                   <input type="time" value={mobileChangeReqCheckOut} onChange={e => setMobileChangeReqCheckOut(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
                 </div>
               </>
             )}
             <div>
               <div className="text-[12px] font-semibold text-gray-600 mb-1">요청 사유</div>
               <textarea placeholder="변경 요청 사유를 입력하세요" value={mobileChangeReqReason} onChange={e => setMobileChangeReqReason(e.target.value)} rows={2}
-                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[13px] text-[#1B2B4B] outline-none focus:border-[#1B2B4B] resize-none" />
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[13px] text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)] resize-none" />
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setMobileChangeReqCell(null)}
                 className="flex-1 py-3 rounded-xl border border-gray-200 text-[14px] font-bold text-gray-600">취소</button>
               <button onClick={submitMobileChangeRequest} disabled={submittingMobileChangeReq}
-                className="flex-2 px-8 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-50">
+                className="flex-2 px-8 py-3 rounded-xl bg-[var(--attn-accent)] text-white text-[14px] font-bold disabled:opacity-50">
                 {submittingMobileChangeReq ? "요청 중..." : "수정 요청"}
               </button>
             </div>
@@ -676,7 +676,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
           <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-8 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[15px] font-bold text-[#1B2B4B]">{mobileEditCell.date}</div>
+                <div className="text-[15px] font-bold text-[var(--attn-accent)]">{mobileEditCell.date}</div>
                 <div className="text-[12px] text-gray-500">출근 상태 및 시간을 수정합니다.</div>
               </div>
               <button onClick={() => setMobileEditCell(null)} className="text-gray-400 text-[20px] font-bold">×</button>
@@ -686,7 +686,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
               <div className="grid grid-cols-4 gap-1.5">
                 {["출근", "휴무", "연차", "오전반차", "오후반차", "외근", "병가", "경조사", "조퇴"].map(s => (
                   <button key={s} onClick={() => setMobileEditStatus(s)}
-                    className={`py-2 rounded-xl text-[12px] font-bold transition ${mobileEditStatus === s ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600"}`}>
+                    className={`py-2 rounded-xl text-[12px] font-bold transition ${mobileEditStatus === s ? "bg-[var(--attn-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>
                     {s}
                   </button>
                 ))}
@@ -697,12 +697,12 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
                   <input type="time" value={mobileEditTime} onChange={e => setMobileEditTime(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
                 </div>
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">퇴근 시간 (선택)</div>
                   <input type="time" value={mobileEditCheckOut} onChange={e => setMobileEditCheckOut(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
                 </div>
                 {(() => {
                   const [sh, sm] = (myUserDoc?.workStartTime || "09:00").split(":").map(Number);
@@ -713,7 +713,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
                       <div className="text-[12px] font-semibold text-gray-600 mb-1">지각 사유</div>
                       <input type="text" placeholder="지각 사유를 입력하세요 (선택)"
                         value={mobileEditLateReason} onChange={e => setMobileEditLateReason(e.target.value)}
-                        className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[13px] text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+                        className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[13px] text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
                     </div>
                   ) : null;
                 })()}
@@ -723,7 +723,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser }
               <button onClick={() => setMobileEditCell(null)}
                 className="flex-1 py-3 rounded-xl border border-gray-200 text-[14px] font-bold text-gray-600">취소</button>
               <button onClick={saveMobileEdit} disabled={savingMobileEdit}
-                className="flex-2 px-8 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-50">
+                className="flex-2 px-8 py-3 rounded-xl bg-[var(--attn-accent)] text-white text-[14px] font-bold disabled:opacity-50">
                 {savingMobileEdit ? "저장 중..." : "저장"}
               </button>
             </div>

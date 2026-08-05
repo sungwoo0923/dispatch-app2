@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 
 const CustomSelect = React.forwardRef(function CustomSelect(
-  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name },
+  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name, openOnFocus = false },
   ref
 ) {
   const [open, setOpen] = React.useState(false);
@@ -133,7 +133,16 @@ const CustomSelect = React.forwardRef(function CustomSelect(
         name={name}
         ref={btnRef}
         disabled={disabled}
-        onFocus={onFocus}
+        onFocus={(e) => {
+          // openOnFocus가 켜진 곳(예: 3파트 화물내용/차량톤수 단위 선택)은 탭으로
+          // 포커스만 옮겨도 방향키 없이 바로 목록이 펼쳐져야 한다는 요구사항 대응.
+          // 기본값은 false로 기존 동작(클릭/방향키로만 열림)을 그대로 유지한다.
+          if (openOnFocus && !disabled) {
+            setOpen(true);
+            setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+          }
+          onFocus?.(e);
+        }}
         onBlur={onBlur}
         onClick={() => { if (disabled) return; setOpen((v) => !v); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); }}
         onKeyDown={(e) => {
