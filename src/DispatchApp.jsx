@@ -45536,125 +45536,141 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         </div>
       )}
 
-      {/* 검색 + 필터 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4 flex items-center gap-3 flex-wrap">
-        <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
-          <select
-            className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
-            value={qField}
-            onChange={e => { setQField(e.target.value); setSearched(false); }}
-          >
-            <option value="전체">전체</option>
-            <option value="차량번호">차량번호</option>
-            <option value="기사명">기사명</option>
-            <option value="연락처">연락처</option>
-          </select>
-          <input autoComplete="off"
-            className="px-3 h-full text-[13px] w-48 outline-none"
-            placeholder="검색어 입력..."
-            value={q}
-            onChange={e => { setQ(e.target.value); setSearched(false); }}
-            onKeyDown={e => { if (e.key==="Enter") setSearched(true); }}
-          />
+      {/* 자사운임표 메뉴와 동일한 레이아웃 — 왼쪽 검색 패널 / 오른쪽 결과 */}
+      <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
+
+        {/* ───────── 왼쪽: 검색 패널 ───────── */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="mb-4">
+            <label className="block text-[12px] font-bold text-gray-900 mb-1">검색 구분</label>
+            <select
+              className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
+              value={qField}
+              onChange={e => { setQField(e.target.value); setSearched(false); }}
+            >
+              <option value="전체">전체</option>
+              <option value="차량번호">차량번호</option>
+              <option value="기사명">기사명</option>
+              <option value="연락처">연락처</option>
+            </select>
+          </div>
+          <div className="mb-4">
+            <label className="block text-[12px] font-bold text-gray-900 mb-1">검색어</label>
+            <input autoComplete="off"
+              className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
+              placeholder="차량번호·기사명·연락처"
+              value={q}
+              onChange={e => { setQ(e.target.value); setSearched(false); }}
+              onKeyDown={e => { if (e.key==="Enter") setSearched(true); }}
+            />
+          </div>
           <button onClick={()=>setSearched(true)}
-            className="px-4 h-full bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
+            className="w-full py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition mb-5">
             검색
           </button>
+
+          <div className="mb-1.5">
+            <label className="block text-[12px] font-bold text-gray-900 mb-2">등급</label>
+            <div className="flex flex-col gap-1.5">
+              {["전체","일반","직영","지입","블랙"].map(g => (
+                <button key={g} onClick={() => setGradeFilter(g)}
+                  className={`px-3 py-2 rounded-lg text-[12px] font-semibold border text-left transition ${gradeFilter===g ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"}`}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-gray-100 text-[12px] text-gray-400 font-medium">
+            총 <b className="text-[#1B2B4B]">{filtered.length}</b>명
+          </div>
         </div>
-        <div className="flex gap-1.5">
-          {["전체","일반","직영","지입","블랙"].map(g => (
-            <button key={g} onClick={() => setGradeFilter(g)}
-              className={`h-[34px] px-3 rounded-full text-[12px] font-semibold border transition ${gradeFilter===g ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-              {g}
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto text-[13px] text-gray-400 font-medium">
-          총 <b className="text-[#1B2B4B]">{filtered.length}</b>명
+
+        {/* ───────── 오른쪽: 검색 결과 ───────── */}
+        <div className="min-w-0">
+          {/* 미조회 상태 */}
+          {!showAll && !searched && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center py-20 text-gray-400">
+              <div className="text-[15px] font-semibold">검색어를 입력하거나 전체보기 버튼을 누르세요.</div>
+            </div>
+          )}
+
+          {/* 테이블 */}
+          {(showAll || searched) && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#1B2B4B]">
+                    <th className="px-3 py-3 text-white text-center w-10">
+                      <input autoComplete="off"
+                        type="checkbox"
+                        onChange={toggleAll}
+                        checked={filtered.length > 0 && selected.size === filtered.length}
+                      />
+                    </th>
+                    {["순번","차량번호","이름","전화번호","등급","메모","팝업","삭제"].map(h => (
+                      <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paged.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="text-center py-16 text-gray-400 text-[14px]">
+                        {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
+                      </td>
+                    </tr>
+                  ) : paged.map((r, i) => {
+                    const docId = r.id;
+                    if (!docId) return null;
+                    const grade = r.등급 || "일반";
+                    const memoPopupOn = grade === "블랙" ? !!(r.메모 && String(r.메모).trim()) : r.팝업표시 === true;
+                    return (
+                      <tr key={`${docId}_${i}`}
+                        className={`border-b border-gray-100 transition hover:bg-blue-50/40 cursor-pointer ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
+                        onDoubleClick={() => setEditDriverModal({ ...r })}>
+                        <td className="px-3 py-2.5 text-center">
+                          <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
+                        </td>
+                        <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
+                        <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap">{r.차량번호||"-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
+                        </td>
+                        <td className="px-2 py-2.5 text-center max-w-[200px]">
+                          {(r.메모 || "").length > 18 ? (
+                            <span className="text-[13px] text-gray-500">
+                              {(r.메모 || "").slice(0, 18)}…
+                            </span>
+                          ) : (
+                            <span className="text-[13px] text-gray-500">{r.메모 || ""}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {(r.메모 || "").trim() && (
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${memoPopupOn ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-400"}`}>
+                              {memoPopupOn ? "ON" : "OFF"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <button
+                            className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
+                            onClick={(e)=>{ e.stopPropagation(); if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
+                            삭제
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* 미조회 상태 */}
-      {!showAll && !searched && (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <div className="text-[15px] font-semibold">검색어를 입력하거나 전체보기 버튼을 누르세요.</div>
-        </div>
-      )}
-
-      {/* 테이블 */}
-      {(showAll || searched) && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-[#1B2B4B]">
-                <th className="px-3 py-3 text-white text-center w-10">
-                  <input autoComplete="off"
-                    type="checkbox"
-                    onChange={toggleAll}
-                    checked={filtered.length > 0 && selected.size === filtered.length}
-                  />
-                </th>
-                {["순번","차량번호","이름","전화번호","등급","메모","팝업","삭제"].map(h => (
-                  <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {paged.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="text-center py-16 text-gray-400 text-[14px]">
-                    {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
-                  </td>
-                </tr>
-              ) : paged.map((r, i) => {
-                const docId = r.id;
-                if (!docId) return null;
-                const grade = r.등급 || "일반";
-                const memoPopupOn = grade === "블랙" ? !!(r.메모 && String(r.메모).trim()) : r.팝업표시 === true;
-                return (
-                  <tr key={`${docId}_${i}`}
-                    className={`border-b border-gray-100 transition hover:bg-blue-50/40 cursor-pointer ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
-                    onDoubleClick={() => setEditDriverModal({ ...r })}>
-                    <td className="px-3 py-2.5 text-center">
-                      <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
-                    </td>
-                    <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap">{r.차량번호||"-"}</td>
-                    <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
-                    <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
-                    </td>
-                    <td className="px-2 py-2.5 text-center max-w-[200px]">
-                      {(r.메모 || "").length > 18 ? (
-                        <span className="text-[13px] text-gray-500">
-                          {(r.메모 || "").slice(0, 18)}…
-                        </span>
-                      ) : (
-                        <span className="text-[13px] text-gray-500">{r.메모 || ""}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {(r.메모 || "").trim() && (
-                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${memoPopupOn ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-400"}`}>
-                          {memoPopupOn ? "ON" : "OFF"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <button
-                        className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
-                        onClick={(e)=>{ e.stopPropagation(); if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
-                        삭제
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && (
