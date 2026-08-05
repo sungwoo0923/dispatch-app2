@@ -167,7 +167,7 @@ export default function DriverSearchPage() {
   };
 
   return (
-    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", minHeight: "100vh", background: "#f0f2f5" }}>
+    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", minHeight: "100vh", background: "#f0f2f5", overscrollBehaviorY: "contain", touchAction: "pan-y" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
 
       {/* 헤더 */}

@@ -29,9 +29,22 @@
         }, { passive: false });
 
         // Force zoom = 1.0 permanently (overrides Chrome browser-level zoom / foldable screen switch)
+        // ⚠️ 일부 폴더블 기기(갤럭시Z폴드 등)에서 스크롤하는 동안 visualViewport의
+        // resize 이벤트가 실제 확대/축소 없이도 계속 발생하고, 그때마다 scale 값이
+        // 순간적으로 0.95~1.05 범위를 살짝 벗어나 보고되는 경우가 있었다. 이 아래
+        // forceResetZoom은 그때마다 뷰포트 meta를 지웠다가 다시 쓰는 "토글" 방식으로
+        // 강제 리플로우를 일으키는데, 스크롤 중 반복 호출되면 그 자체가 레이아웃을
+        // 계속 다시 그리게 만들어 화면이 떨리며 스크롤이 계속 맨 위로 튕겨나가는
+        // 증상의 원인이 됐다. (1) 리셋 자체에 짧은 쿨다운을 둬 연속 호출을 막고,
+        // (2) visualViewport resize는 즉시 반응하지 않고 살짝 디바운스해서, 진짜
+        // 핀치줌처럼 값이 안정적으로 유지될 때만 반응하도록 방어한다.
+        var lastZoomReset = 0;
         function forceResetZoom() {
           var meta = document.querySelector('meta[name=viewport]');
           if (!meta) return;
+          var now = Date.now();
+          if (now - lastZoomReset < 400) return; // 최근에 이미 리셋했으면 중복 실행하지 않음
+          lastZoomReset = now;
           // Toggle trick: remove then re-add to force Chrome to re-evaluate at scale 1
           meta.content = 'width=device-width, initial-scale=1.0';
           // Use rAF so browser processes the above before we lock it down
@@ -49,9 +62,13 @@
         });
         // visualViewport API: detect any browser-level zoom and snap back
         if (window.visualViewport) {
+          var zoomCheckTimer = null;
           window.visualViewport.addEventListener('resize', function() {
-            var scale = window.visualViewport.scale;
-            if (scale < 0.95 || scale > 1.05) { forceResetZoom(); }
+            clearTimeout(zoomCheckTimer);
+            zoomCheckTimer = setTimeout(function() {
+              var scale = window.visualViewport.scale;
+              if (scale < 0.95 || scale > 1.05) { forceResetZoom(); }
+            }, 150);
           });
         }
       })();
