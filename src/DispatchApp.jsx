@@ -18454,6 +18454,7 @@ const [editStopType, setEditStopType] = React.useState("pickup");
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyDriverPick, setCopyDriverPick] = React.useState(null); // 오더복사수정패널 기사정보: 동일 차량번호 기사 여러 명일 때 선택 팝업
 const [clientApplyPopup, setClientApplyPopup] = React.useState(null);
 const [copyClientOptions, setCopyClientOptions] = useState([]);
 const [showCopyClientDropdown, setShowCopyClientDropdown] = useState(false);
@@ -22370,13 +22371,10 @@ checkWarningStatus(c.거래처명, "거래처");
 
           const plate = normalizePlate(e.target.value);
           if (!plate) return;
+          const matches = driverMap.get(plate) || [];
 
-          const match = (drivers || []).find(
-            d => normalizePlate(d.차량번호) === plate
-          );
-
-          // 기존 기사면 아무 작업 안함
-          if (match) return;
+          // 기존 기사면(1명이든 여러 명이든) 아무 작업 안함 — 선택/매칭은 onChange에서 처리
+          if (matches.length > 0) return;
 
           const plateVal = e.target.value;
           driverPanelCallbackRef.current = async (name, fmt) => {
@@ -22391,8 +22389,8 @@ checkWarningStatus(c.거래처명, "거래처");
         onBlur={(e) => {
           const plate = normalizePlate(e.target.value);
           if (!plate) return;
-          const match = (drivers || []).find(d => normalizePlate(d.차량번호) === plate);
-          if (match) return;
+          const matches = driverMap.get(plate) || [];
+          if (matches.length > 0) return;
           const plateVal = e.target.value;
           driverPanelCallbackRef.current = async (name, fmt) => {
             setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: name, 전화번호: fmt, 배차상태: "배차완료" }));
@@ -22406,10 +22404,17 @@ checkWarningStatus(c.거래처명, "거래처");
         onChange={(e) => {
           const v = e.target.value;
           const plate = normalizePlate(v);
+          // ⚠️ 동일 차량번호로 기사가 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
+          // 골라 조용히 매칭해버리던 버그) 스마트검색과 동일하게 선택 팝업을 띄운다.
+          const matches = driverMap.get(plate) || [];
 
-          const match = (drivers || []).find(
-            d => normalizePlate(d.차량번호) === plate
-          );
+          if (matches.length > 1) {
+            setCopyTarget(prev => ({ ...prev, 차량번호: v }));
+            setCopyDriverPick({ list: matches });
+            return;
+          }
+
+          const match = matches[0];
 
           // 🔥 블랙/메모 기사 팝업
           if (match) {
@@ -25019,6 +25024,44 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
         </div>
       )}
 
+
+      {/* ===== 오더복사수정패널 기사정보: 동일 차량번호 기사 여러명 선택 팝업 (PART 4) ===== */}
+      {copyDriverPick && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setCopyDriverPick(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden border" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">기사 선택</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">동일 차량번호에 기사 {copyDriverPick.list?.length}명이 등록되어 있습니다</p>
+              </div>
+              <button className="text-white/60 hover:text-white text-lg" onClick={() => setCopyDriverPick(null)}>✕</button>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-2">
+              {(copyDriverPick.list || []).map((d, i) => (
+                <button key={i}
+                  className="w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 transition flex items-center justify-between"
+                  onClick={() => {
+                    const grade = d?.등급 || d?.grade || "";
+                    if (grade === "블랙") setBlackAlert(d);
+                    else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
+                    setCopyTarget(prev => ({ ...prev, 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호), 배차상태: "배차완료" }));
+                    setCopyDriverPick(null);
+                  }}
+                >
+                  <div>
+                    <div className="font-bold text-[14px] text-gray-800">{d.이름 || "-"}</div>
+                    <div className="text-[12px] text-gray-500 mt-0.5">{formatPhone(d.전화번호)}</div>
+                  </div>
+                  {(d.등급 || d.grade) && <span className="text-[11px] font-semibold text-gray-400">{d.등급 || d.grade}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="p-3 border-t border-gray-100">
+              <button className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition" onClick={() => setCopyDriverPick(null)}>취소</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== 스마트 검색 충돌 팝업 (PART 4) ===== */}
       {smart4ConflictPopup && (
@@ -27707,6 +27750,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyDriverPick, setCopyDriverPick] = React.useState(null); // 오더복사수정패널 기사정보: 동일 차량번호 기사 여러 명일 때 선택 팝업
 const [copyClientOptions, setCopyClientOptions] = React.useState([]);
 const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
 const [copyClientIndex, setCopyClientIndex] = React.useState(0);
@@ -32781,8 +32825,8 @@ setCopyPlaceOptions(list);
       e.preventDefault();
       const plate = normalizePlate(e.target.value);
       if (!plate) return;
-      const match = (drivers || []).find(d => normalizePlate(d.차량번호) === plate);
-      if (match) return;
+      const matches = driverMap.get(plate) || [];
+      if (matches.length > 0) return;
       const plateVal = e.target.value;
       driverPanelCallbackRef5.current = async (name, fmt) => {
         setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: name, 전화번호: fmt, 배차상태: "배차완료" }));
@@ -32799,10 +32843,17 @@ setCopyPlaceOptions(list);
 
       const v = e.target.value;
       const plate = normalizePlate(v);
+      // ⚠️ 동일 차량번호로 기사가 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
+      // 골라 조용히 매칭해버리던 버그) 스마트검색과 동일하게 선택 팝업을 띄운다.
+      const matches = driverMap.get(plate) || [];
 
-      const match = (drivers || []).find(
-        d => normalizePlate(d.차량번호) === plate
-      );
+      if (matches.length > 1) {
+        setCopyTarget(prev => ({ ...(prev || {}), 차량번호: v }));
+        setCopyDriverPick({ list: matches });
+        return;
+      }
+
+      const match = matches[0];
 
       if (match) {
         const grade = match?.등급 || match?.grade || "";
@@ -32830,12 +32881,10 @@ setCopyPlaceOptions(list);
 
       if (!plate) return;
 
-      const match = (drivers || []).find(
-        d => normalizePlate(d.차량번호) === plate
-      );
+      const matches = driverMap.get(plate) || [];
 
-      // 기존 기사 있으면 끝
-      if (match) return;
+      // 기존 기사 있으면(1명이든 여러 명이든) 끝
+      if (matches.length > 0) return;
 
       driverPanelCallbackRef5.current = async (name, fmt) => {
         setCopyTarget(prev => ({ ...prev, 차량번호: plateVal2, 이름: name, 전화번호: fmt, 배차상태: "배차완료" }));
@@ -34222,6 +34271,43 @@ setCopyPlaceOptions(list);
                 <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>setSortModalOpen(false)}>취소</button>
                 <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}>적용</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+{/* ===== 오더복사수정패널 기사정보: 동일 차량번호 기사 여러명 선택 팝업 (PART 5) ===== */}
+      {copyDriverPick && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setCopyDriverPick(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden border" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">기사 선택</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">동일 차량번호에 기사 {copyDriverPick.list?.length}명이 등록되어 있습니다</p>
+              </div>
+              <button className="text-white/60 hover:text-white text-lg" onClick={() => setCopyDriverPick(null)}>✕</button>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-2">
+              {(copyDriverPick.list || []).map((d, i) => (
+                <button key={i}
+                  className="w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 transition flex items-center justify-between"
+                  onClick={() => {
+                    const grade = d?.등급 || d?.grade || "";
+                    if (grade === "블랙") setBlackAlert(d);
+                    else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
+                    setCopyTarget(prev => ({ ...(prev || {}), 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호), 배차상태: "배차완료" }));
+                    setCopyDriverPick(null);
+                  }}
+                >
+                  <div>
+                    <div className="font-bold text-[14px] text-gray-800">{d.이름 || "-"}</div>
+                    <div className="text-[12px] text-gray-500 mt-0.5">{formatPhone(d.전화번호)}</div>
+                  </div>
+                  {(d.등급 || d.grade) && <span className="text-[11px] font-semibold text-gray-400">{d.등급 || d.grade}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="p-3 border-t border-gray-100">
+              <button className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition" onClick={() => setCopyDriverPick(null)}>취소</button>
             </div>
           </div>
         </div>
