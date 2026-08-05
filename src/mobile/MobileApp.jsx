@@ -11305,7 +11305,7 @@ const pickDrop = (c) => {
   };
 
   return (
-    <div className="px-4 py-3 space-y-3">
+    <div className="px-4 py-3 space-y-3" style={{ "--reg-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
       {isLockedShipperEdit && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-800 font-semibold">
           화주사가 등록한 오더입니다. 배차 관련 정보(차량/기사/운임)만 수정할 수 있으며, 주소·시간·화물 정보는 변경할 수 없습니다.
@@ -11485,8 +11485,8 @@ const pickDrop = (c) => {
     <div className="relative flex-1 min-w-0">
       <input autoComplete="off"
         ref={clientNameInputRef}
-        className={`w-full border rounded px-2 py-1.5 text-[13px] transition ${
-          clientNameError ? "border-red-500 ring-2 ring-red-300 animate-pulse" : ""
+        className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
+          clientNameError ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
         }`}
         value={form.거래처명}
         onChange={(e) => {
@@ -11574,7 +11574,7 @@ const pickDrop = (c) => {
         {/* 상차지명 + 드롭다운 전용 */}
         <div className="relative">
           <input autoComplete="off"
-            className="w-full border rounded px-2 py-1 text-sm"
+            className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
             value={form.상차지명}
             onChange={(e) => {
               const val = e.target.value;
@@ -11637,7 +11637,7 @@ const pickDrop = (c) => {
         </div>
 
         <input autoComplete="off"
-          className="w-full border rounded px-2 py-1 text-xs"
+          className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="상차지 주소"
           value={form.상차지주소}
           onChange={(e) =>
@@ -11646,7 +11646,7 @@ const pickDrop = (c) => {
         />
 
         <input autoComplete="off"
-          className="w-full border rounded px-2 py-1 text-xs"
+          className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="상차지 담당자"
           value={form.상차지담당자 || ""}
           onChange={(e) =>
@@ -11655,7 +11655,7 @@ const pickDrop = (c) => {
         />
 
         <input autoComplete="off"
-          className="w-full border rounded px-2 py-1 text-xs"
+          className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="상차지 담당자번호"
           value={form.상차지담당자번호 || ""}
           onChange={(e) =>
@@ -11724,7 +11724,7 @@ const pickDrop = (c) => {
         {/* 하차지명 + 드롭다운 전용 */}
         <div className="relative">
           <input autoComplete="off"
-            className="w-full border rounded px-2 py-1 text-sm"
+            className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
             value={form.하차지명}
             onChange={(e) => {
               const val = e.target.value;
@@ -11793,7 +11793,7 @@ const pickDrop = (c) => {
         </div>
 
         <input autoComplete="off"
-          className="w-full border rounded px-2 py-1 text-xs"
+          className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="하차지 주소"
           value={form.하차지주소}
           onChange={(e) =>
@@ -11802,7 +11802,7 @@ const pickDrop = (c) => {
         />
 
         <input autoComplete="off"
-          className="w-full border rounded px-2 py-1 text-xs"
+          className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="하차지 담당자"
           value={form.하차지담당자 || ""}
           onChange={(e) =>
@@ -11811,7 +11811,7 @@ const pickDrop = (c) => {
         />
 
         <input autoComplete="off"
-          className="w-full border rounded px-2 py-1 text-xs"
+          className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="하차지 담당자번호"
           value={form.하차지담당자번호 || ""}
           onChange={(e) =>
@@ -11855,7 +11855,7 @@ const pickDrop = (c) => {
           label="차량종류"
           input={
             <select
-              className="w-full border rounded px-2 py-1 text-sm"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
               value={form.차종}
               onChange={(e) => update("차종", e.target.value)}
             >
@@ -11880,7 +11880,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="톤수"
           input={
-            <div className="flex items-stretch border border-gray-300 rounded-lg overflow-hidden focus-within:border-[#1B2B4B]">
+            <div className="flex items-stretch border-0 border-b-2 border-gray-300 focus-within:border-[var(--reg-accent)] transition">
               <input autoComplete="off"
                 className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
                 placeholder="예: 1"
@@ -11920,7 +11920,7 @@ const pickDrop = (c) => {
               <div className="flex justify-end">
                 <button type="button" className={`px-1.5 py-0.5 text-[10px] font-bold rounded text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`} onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>
               </div>
-              <div className="flex items-stretch border border-gray-300 rounded-lg overflow-hidden focus-within:border-[#1B2B4B]">
+              <div className="flex items-stretch border-0 border-b-2 border-gray-300 focus-within:border-[var(--reg-accent)] transition">
                 <input autoComplete="off"
                   className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
                   placeholder="예: 3"
@@ -12008,7 +12008,7 @@ const pickDrop = (c) => {
           input={
             <div className="flex flex-wrap gap-1.5">
               <select
-                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
                 value={form.상차방법}
                 onChange={(e) => update("상차방법", e.target.value)}
               >
@@ -12020,7 +12020,7 @@ const pickDrop = (c) => {
                 <option value="수도움">수도움</option>
               </select>
               <select
-                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
                 value={form.하차방법}
                 onChange={(e) => update("하차방법", e.target.value)}
               >
@@ -12047,7 +12047,7 @@ const pickDrop = (c) => {
             <div className="flex flex-wrap gap-1.5">
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
                 <select
-                  className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
+                  className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
                   value={form.지급방식}
                   onChange={(e) => update("지급방식", e.target.value)}
                 >
@@ -12061,7 +12061,7 @@ const pickDrop = (c) => {
                 </select>
               </fieldset>
               <select
-                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
                 value={form.배차방식}
                 onChange={(e) => update("배차방식", e.target.value)}
               >
@@ -12154,7 +12154,7 @@ const pickDrop = (c) => {
           label="청구운임"
           input={
             <input autoComplete="off"
-              className="w-full border rounded px-2 py-1 text-right text-sm"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-bold text-gray-900 bg-transparent text-right focus:outline-none focus:border-[var(--reg-accent)] transition"
               inputMode="numeric"
               value={form.청구운임 ? Number(form.청구운임).toLocaleString() : ""}
               onChange={(e) =>
@@ -12167,7 +12167,7 @@ const pickDrop = (c) => {
           label="기사운임"
           input={
             <input autoComplete="off"
-              className="w-full border rounded px-2 py-1 text-right text-sm"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-bold text-gray-900 bg-transparent text-right focus:outline-none focus:border-[var(--reg-accent)] transition"
               inputMode="numeric"
               value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
               onChange={(e) =>
@@ -12180,7 +12180,7 @@ const pickDrop = (c) => {
           label="수수료"
           input={
             <input autoComplete="off"
-              className="w-full border rounded px-2 py-1 text-right text-sm bg-gray-50"
+              className="w-full border-0 border-b-2 border-gray-200 rounded-none px-1 py-1.5 text-[13px] font-bold text-gray-500 bg-transparent text-right"
               value={form.수수료 || 0}
               readOnly
             />
@@ -12234,7 +12234,7 @@ const pickDrop = (c) => {
           label="차량번호"
           input={
             <input autoComplete="off"
-              className="w-full border rounded px-2 py-1 text-sm"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
               value={form.차량번호}
               onChange={(e) => {
                 const v = e.target.value;
@@ -12275,7 +12275,7 @@ const pickDrop = (c) => {
           label="기사명"
           input={
             <input autoComplete="off"
-              className="w-full border rounded px-2 py-1 text-sm"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
               value={form.기사명 || ""}
               onChange={(e) => update("기사명", e.target.value)}
             />
@@ -12288,7 +12288,7 @@ const pickDrop = (c) => {
           label="연락처"
           input={
             <input autoComplete="off"
-              className="w-full border rounded px-2 py-1 text-sm"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
               value={form.전화번호 || ""}
               onChange={(e) => update("전화번호", e.target.value)}
             />
@@ -12320,7 +12320,7 @@ const pickDrop = (c) => {
           label="적요"
           input={
             <textarea
-              className="w-full border rounded px-2 py-1 text-sm h-16 disabled:bg-gray-100 disabled:text-gray-400"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-medium text-gray-900 bg-transparent h-16 focus:outline-none focus:border-[var(--reg-accent)] transition disabled:text-gray-400"
               value={form.적요}
               disabled={isLockedShipperEdit}
               onChange={(e) => update("적요", e.target.value)}
@@ -12342,7 +12342,7 @@ const pickDrop = (c) => {
           }
           input={
             <textarea
-              className="w-full border rounded px-2 py-1 text-sm h-16"
+              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-medium text-gray-900 bg-transparent h-16 focus:outline-none focus:border-[var(--reg-accent)] transition"
               placeholder="운송 기사님께 전달할 내용을 입력하세요"
               value={form.전달사항 || ""}
               onChange={(e) => update("전달사항", e.target.value)}
