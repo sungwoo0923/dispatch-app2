@@ -10103,6 +10103,9 @@ const similar = placeList.filter(p => {
           setPickupActive((i) => Math.min(i + 1, list.length - 1));
         } else if (e.key === "ArrowUp") {
           setPickupActive((i) => Math.max(i - 1, 0));
+        } else if (e.key === "Escape") {
+          setShowPickupDropdown(false);
+          setPickupOptions([]);
         } else if (e.key === "Tab") {
           const p = list[pickupActive];
           if (p) {
@@ -10264,6 +10267,9 @@ className={`
         setPlaceActive((i) => Math.min(i + 1, list.length - 1))
       } else if (e.key === "ArrowUp") {
         setPlaceActive((i) => Math.max(i - 1, 0))
+      } else if (e.key === "Escape") {
+        setShowPlaceDropdown(false);
+        setPlaceOptions([]);
       } else if (e.key === "Tab") {
         const p = list[placeActive]
         if (p) {
@@ -10530,6 +10536,8 @@ className={`
         setVehicleActive((i) => Math.min(i + 1, list.length - 1));
       } else if (e.key === "ArrowUp") {
         setVehicleActive((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Escape") {
+        setShowVehicleDropdown(false);
       } else if (e.key === "Tab") {
         const pick = list[vehicleActive];
         if (pick) {
@@ -10904,6 +10912,9 @@ className={`
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setStopPlaceActive(i => Math.max(i - 1, 0));
+              } else if (e.key === "Escape") {
+                setShowStopDropdown(false);
+                setActiveStopIdx(null);
               } else if (e.key === "Tab") {
                 const list = stopPlaceOptions;
                 if (showStopDropdown && list.length > 0) {
@@ -11439,6 +11450,10 @@ className={`
           배차상태: "배차완료",
         }));
 
+        setDriverDropdownOpen(false);
+      }
+
+      if (e.key === "Escape") {
         setDriverDropdownOpen(false);
       }
 
@@ -21827,6 +21842,9 @@ checkWarningStatus(c.거래처명, "거래처");
               setShowCopyClientDropdown(false);
             }
           }
+          if(e.key==="Escape"){
+            setShowCopyClientDropdown(false);
+          }
         }}
 
         onBlur={()=>setTimeout(()=>setShowCopyClientDropdown(false),150)}
@@ -21931,6 +21949,9 @@ checkWarningStatus(c.거래처명, "거래처");
               if(e.key==="ArrowUp"){
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.max(i-1,0));
+              }
+              if(e.key==="Escape"){
+                setShowCopyPlaceDropdown(false);
               }
               if(e.key==="Enter"){
                 e.preventDefault();
@@ -22115,6 +22136,10 @@ checkWarningStatus(c.거래처명, "거래처");
             onKeyDown={(e)=>{
               if(!showCopyPlaceDropdown || copyPlaceType!=="drop") return;
 
+              if (e.key === "Escape") {
+                setShowCopyPlaceDropdown(false);
+                return;
+              }
               if(e.key==="ArrowDown"){
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
@@ -23341,6 +23366,10 @@ value={copyTarget?.화물수량 || ""}
                 onKeyDown={(e) => {
                   if (!showEditClientDropdown) return;
 
+                  if (e.key === "Escape") {
+                    setShowEditClientDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setEditClientActiveIndex((i) =>
@@ -23543,6 +23572,10 @@ value={copyTarget?.화물수량 || ""}
                 onKeyDown={(e) => {
                   if (!showEditPlaceDropdown || editPlaceType !== "pickup") return;
 
+                  if (e.key === "Escape") {
+                    setShowEditPlaceDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setEditActiveIndex((i) =>
@@ -23708,6 +23741,10 @@ value={copyTarget?.화물수량 || ""}
                 onKeyDown={(e) => {
                   if (!showEditPlaceDropdown || editPlaceType !== "drop") return;
 
+                  if (e.key === "Escape") {
+                    setShowEditPlaceDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setEditActiveIndex((i) =>
@@ -30826,6 +30863,10 @@ return (
                 onKeyDown={(e) => {
                   if (!showClientDropdown) return;
 
+                  if (e.key === "Escape") {
+                    setShowClientDropdown(false);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setClientActiveIndex(i => Math.min(i + 1, clientOptions.length - 1));
@@ -31017,6 +31058,10 @@ return (
                 onKeyDown={(e) => {
                   if (!placeOptions.length) return;
 
+                  if (e.key === "Escape") {
+                    setActivePlaceField(null);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setPlaceActiveIndex((i) =>
@@ -31185,6 +31230,10 @@ return (
                 onKeyDown={(e) => {
                   if (!placeOptions.length) return;
 
+                  if (e.key === "Escape") {
+                    setActivePlaceField(null);
+                    return;
+                  }
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setPlaceActiveIndex((i) =>
@@ -32197,6 +32246,10 @@ return (
         onKeyDown={(e)=>{
           if(!showCopyClientDropdown) return;
 
+          if (e.key === "Escape") {
+            setShowCopyClientDropdown(false);
+            return;
+          }
           if(e.key==="ArrowDown"){
             e.preventDefault();
             setCopyClientIndex(i=>Math.min(i+1, copyClientOptions.length-1));
@@ -32332,6 +32385,10 @@ setCopyPlaceOptions(list);
             onKeyDown={(e)=>{
               if(!showCopyPlaceDropdown || copyPlaceType!=="pickup") return;
 
+              if (e.key === "Escape") {
+                setShowCopyPlaceDropdown(false);
+                return;
+              }
               if(e.key==="ArrowDown"){
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
@@ -32505,6 +32562,10 @@ setCopyPlaceOptions(list);
             onKeyDown={(e)=>{
               if(!showCopyPlaceDropdown || copyPlaceType!=="drop") return;
 
+              if (e.key === "Escape") {
+                setShowCopyPlaceDropdown(false);
+                return;
+              }
               if(e.key==="ArrowDown"){
                 e.preventDefault();
                 setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
@@ -41022,6 +41083,7 @@ const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
 const [emailBody, setEmailBody] = useState("");
 const [editInfoClientDropOpen, setEditInfoClientDropOpen] = useState(false);
+const [editInfoClientActiveIdx, setEditInfoClientActiveIdx] = useState(0);
 const [generalEmailOpen, setGeneralEmailOpen] = useState(false);
 const [generalEmailTo, setGeneralEmailTo] = useState("");
 const [generalEmailSubject, setGeneralEmailSubject] = useState("");
@@ -41030,6 +41092,7 @@ const [generalEmailSending, setGeneralEmailSending] = useState(false);
 const [generalEmailFiles, setGeneralEmailFiles] = useState([]);
 const [generalEmailAddrOpen, setGeneralEmailAddrOpen] = useState(false);
 const [generalEmailAddrQuery, setGeneralEmailAddrQuery] = useState("");
+const [generalEmailAddrActiveIdx, setGeneralEmailAddrActiveIdx] = useState(0);
 const [batchSendList, setBatchSendList] = useState([]); // [{name, email, start, end, mapped, totals, clientInfo}]
 const [batchSendOpen, setBatchSendOpen] = useState(false);
 const [batchSending, setBatchSending] = useState(false);
@@ -42424,14 +42487,32 @@ const handleBatchSettle = async (targetStatus) => {
                           <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
                             <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] outline-none"
                               placeholder="거래처명으로 검색" value={generalEmailAddrQuery}
-                              onChange={e => setGeneralEmailAddrQuery(e.target.value)} autoFocus />
+                              onChange={e => { setGeneralEmailAddrQuery(e.target.value); setGeneralEmailAddrActiveIdx(0); }}
+                              onKeyDown={e => {
+                                const opts = (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery)));
+                                if (e.key === "ArrowDown") { e.preventDefault(); setGeneralEmailAddrActiveIdx(i => Math.min(i + 1, opts.length - 1)); }
+                                else if (e.key === "ArrowUp") { e.preventDefault(); setGeneralEmailAddrActiveIdx(i => Math.max(i - 1, 0)); }
+                                else if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  const c = opts[generalEmailAddrActiveIdx];
+                                  if (!c) return;
+                                  const cur = generalEmailTo.trim();
+                                  const existing = cur ? cur.split(",").map(s => s.trim()).filter(Boolean) : [];
+                                  if (!existing.includes(c.이메일)) existing.push(c.이메일);
+                                  setGeneralEmailTo(existing.join(", "));
+                                  setGeneralEmailAddrQuery("");
+                                  setGeneralEmailAddrOpen(false);
+                                } else if (e.key === "Escape") { e.preventDefault(); setGeneralEmailAddrOpen(false); }
+                              }}
+                              autoFocus />
                           </div>
                           {(clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).length === 0 ? (
                             <div className="px-4 py-6 text-center text-[13px] text-gray-400">
                               {generalEmailAddrQuery ? "검색 결과 없음" : "등록된 이메일 없음 (거래처관리에서 이메일 등록)"}
                             </div>
                           ) : (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).map((c, i) => (
-                            <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-[13px] border-b border-gray-50"
+                            <div key={i} className={`px-4 py-2.5 cursor-pointer flex items-center justify-between text-[13px] border-b border-gray-50 ${i===generalEmailAddrActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                              onMouseEnter={() => setGeneralEmailAddrActiveIdx(i)}
                               onMouseDown={e => {
                                 e.preventDefault();
                                 const cur = generalEmailTo.trim();
@@ -42974,22 +43055,23 @@ const handleBatchSettle = async (targetStatus) => {
                     <label className="text-[12px] font-semibold text-gray-500 mb-1 block">거래처명 (검색하면 정보 자동 입력)</label>
                     <input autoComplete="off" className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                       value={editInfo["거래처명"]||""}
-                      onChange={e => { setEditInfo(p=>({...p, 거래처명: e.target.value})); setEditInfoClientDropOpen(true); }}
+                      onChange={e => { setEditInfo(p=>({...p, 거래처명: e.target.value})); setEditInfoClientDropOpen(true); setEditInfoClientActiveIdx(0); }}
                       onFocus={() => setEditInfoClientDropOpen(true)}
                       onBlur={() => setTimeout(() => setEditInfoClientDropOpen(false), 180)}
                       onKeyDown={e => {
-                        if (e.key === "Escape") setEditInfoClientDropOpen(false);
+                        const opts = (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).slice(0, 12);
+                        if (e.key === "Escape") { setEditInfoClientDropOpen(false); return; }
+                        if (e.key === "ArrowDown" && editInfoClientDropOpen) { e.preventDefault(); setEditInfoClientActiveIdx(i => Math.min(i + 1, opts.length - 1)); return; }
+                        if (e.key === "ArrowUp" && editInfoClientDropOpen) { e.preventDefault(); setEditInfoClientActiveIdx(i => Math.max(i - 1, 0)); return; }
                         if (e.key === "Enter") {
-                          const q = (editInfo["거래처명"]||"").toLowerCase();
-                          const match = (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes(q))[0];
+                          const match = editInfoClientDropOpen ? opts[editInfoClientActiveIdx] : opts[0];
                           if (match) {
                             setEditInfo({ 거래처명: match.거래처명, 사업자번호: match.사업자번호||"", 대표자: match.대표자||match.사업자명||"", 업태: match.업태||"", 종목: match.종목||"", 주소: match.주소||"", 담당자: match.담당자||"", 연락처: match.연락처||"", 이메일: match.이메일||"" });
                             setEditInfoClientDropOpen(false);
                           }
                         }
                         if (e.key === "Tab" && editInfoClientDropOpen) {
-                          const q = (editInfo["거래처명"]||"").toLowerCase();
-                          const match = (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes(q))[0];
+                          const match = opts[editInfoClientActiveIdx] || opts[0];
                           if (match) {
                             setEditInfo({ 거래처명: match.거래처명, 사업자번호: match.사업자번호||"", 대표자: match.대표자||match.사업자명||"", 업태: match.업태||"", 종목: match.종목||"", 주소: match.주소||"", 담당자: match.담당자||"", 연락처: match.연락처||"", 이메일: match.이메일||"" });
                             setEditInfoClientDropOpen(false);
@@ -43002,7 +43084,8 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="absolute z-[300] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                         {(clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).slice(0, 12).map((c, i) => (
                           <div key={i}
-                            className="px-4 py-2.5 text-[13px] cursor-pointer hover:bg-blue-50 flex items-center justify-between border-b border-gray-50"
+                            className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between border-b border-gray-50 ${i===editInfoClientActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                            onMouseEnter={() => setEditInfoClientActiveIdx(i)}
                             onMouseDown={e => {
                               e.preventDefault();
                               setEditInfo({ 거래처명: c.거래처명||"", 사업자번호: c.사업자번호||"", 대표자: c.대표자||c.사업자명||"", 업태: c.업태||"", 종목: c.종목||"", 주소: c.주소||"", 담당자: c.담당자||"", 연락처: c.연락처||"", 이메일: c.이메일||"" });
