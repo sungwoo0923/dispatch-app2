@@ -337,16 +337,22 @@ export default function App() {
     };
   }, [isTablet]);
 
-  // 스플래시
+  // 스플래시 — 예전엔 인증/데이터 로딩이 훨씬 먼저 끝나도 무조건 모바일 3초 /
+  // PC 1.5초를 다 채운 뒤에야 화면이 넘어갔다(특히 일부 폴더블 기기에서 "로딩이
+  // 오래 걸린다"는 문의의 상당 부분이 실제 로딩이 아니라 이 고정 대기시간이었음).
+  // 이제는 "최소 노출 시간"만 짧게 보장(브랜드 화면이 순간 반짝이고 사라지는 것
+  // 방지용)하고, 실제 인증 처리(loading)가 끝나는 즉시 그 다음으로 넘어간다 —
+  // 로딩이 최소 시간보다 오래 걸리면 로딩이 끝나는 순간 바로 전환되고, 로딩이 더
+  // 빨리 끝나면 최소 시간만 채우고 전환된다.
+  const [minSplashDone, setMinSplashDone] = useState(false);
   useEffect(() => {
-    if (isSmartPhone()) {
-      const timer = setTimeout(() => setSplashDone(true), 3000);
-      return () => clearTimeout(timer);
-    } else {
-      const timer = setTimeout(() => setSplashDone(true), 1500);
-      return () => clearTimeout(timer);
-    }
+    const MIN_MS = isSmartPhone() ? 500 : 350;
+    const timer = setTimeout(() => setMinSplashDone(true), MIN_MS);
+    return () => clearTimeout(timer);
   }, []);
+  useEffect(() => {
+    if (!loading && minSplashDone) setSplashDone(true);
+  }, [loading, minSplashDone]);
 
   const updateShownRef = useRef(false);
 
