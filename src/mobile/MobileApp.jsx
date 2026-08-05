@@ -14810,6 +14810,26 @@ const M_CITIES = {
   ],
   제주:[{n:"서귀포시",la:33.253,lo:126.560},{n:"제주시",la:33.499,lo:126.531}],
 };
+// 주소 텍스트(지도 클릭으로 만든 라벨이든, 자동완성/지오코딩으로 얻은 실제 주소든)에서
+// 시/도 이름을 뽑아낸다 — 지도에 화살표를 그릴 때 입력 방식(지도 클릭/수기 검색)에
+// 상관없이 항상 같은 방식으로 출발·도착 지역을 찾기 위함.
+const M_PROV_NORM = [
+  ["서울특별시","서울"],["서울시","서울"],["부산광역시","부산"],["대구광역시","대구"],
+  ["인천광역시","인천"],["광주광역시","광주"],["대전광역시","대전"],["울산광역시","울산"],
+  ["세종특별자치시","세종"],["세종시","세종"],["경기도","경기"],
+  ["강원특별자치도","강원"],["강원도","강원"],
+  ["충청북도","충북"],["충청남도","충남"],
+  ["전라북도","전북"],["전북특별자치도","전북"],["전라남도","전남"],
+  ["경상북도","경북"],["경상남도","경남"],
+  ["제주특별자치도","제주"],["제주도","제주"],
+];
+const deriveMapProvince = (addr) => {
+  const s = String(addr || "");
+  if (!s.trim()) return null;
+  for (const [full, abbr] of M_PROV_NORM) if (s.includes(full)) return abbr;
+  for (const p of M_PROVINCES) if (s.includes(p)) return p;
+  return null;
+};
 
 // 통합 운임조회용 차량 타입 (PC와 동일한 요율)
 const MOBILE_VT = [
@@ -14981,9 +15001,14 @@ function MobileFareInquiry({ cardVersionB = false }) {
   };
 
   const onMapProvClick=(prov)=>{
-    if(!mapCityStep)return;
-    if(mapCityStep==="from")setMapFromProv(prov);
+    // 상/하차지 지역 버튼을 먼저 누르지 않아도, 지도를 바로 클릭하면 첫 클릭은
+    // 출발지(상차지), 이미 출발지가 정해진 상태에서의 다음 클릭은 도착지(하차지)로
+    // 자동 판별한다. 버튼으로 명시적으로 눌러둔 상태(mapCityStep)가 있으면 그걸 우선한다.
+    const target = mapCityStep || (!fromCoord ? "from" : (!toCoord ? "to" : "from"));
+    if(target==="from")setMapFromProv(prov);
     else setMapToProv(prov);
+    setMapCityStep(target);
+    setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);
   };
 
   const onMapCitySelect=(city)=>{
@@ -15010,6 +15035,20 @@ function MobileFareInquiry({ cardVersionB = false }) {
   };
 
   const curFromProv=mapFromProv,curToProv=mapToProv;
+
+  // 출발→도착 화살표를 그리기 위한 시/도 — 지도로 직접 찍었으면 그 지역을 쓰고,
+  // 수기 검색/자동완성/조회버튼의 지오코딩으로 좌표만 채워진 경우엔 확정된 주소
+  // 텍스트에서 시/도를 추출해 화살표가 항상 나오게 한다.
+  const arrowFromProv = curFromProv || deriveMapProvince(fromCoord?.address || fromSearch);
+  const arrowToProv = curToProv || deriveMapProvince(toCoord?.address || toSearch);
+  let mArrowPath = null;
+  if (fromCoord && toCoord && arrowFromProv && arrowToProv) {
+    const pf = M_PROVINCE_LABEL_POS[arrowFromProv];
+    const pt = M_PROVINCE_LABEL_POS[arrowToProv];
+    if (pf && pt) {
+      mArrowPath = `M ${pf[0]},${pf[1]} Q ${(pf[0]+pt[0])/2},${(pf[1]+pt[1])/2-40} ${pt[0]},${pt[1]}`;
+    }
+  }
 
   const [mapTf,setMapTf]=useState({scale:1,tx:0,ty:0});
   const mapTouchRef=useRef({mode:null,dist:0,scale:1,tx:0,ty:0,startX:0,startY:0});
@@ -15124,104 +15163,117 @@ function MobileFareInquiry({ cardVersionB = false }) {
               </button>
             </div>
 
-            {/* 도/시 지도 */}
-            {!mapSubCityStep&&!(mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv))&&(
-              <div style={{flex:1,overflow:"hidden",touchAction:"none",position:"relative",minHeight:180}}
-                onTouchStart={onMapPinchStart} onTouchMove={onMapPinchMove} onTouchEnd={onMapPinchEnd}>
-                <svg viewBox="0 0 524 631"
-                  style={{width:"100%",height:"100%",display:"block",transform:`translate(${mapTf.tx}px,${mapTf.ty}px) scale(${mapTf.scale})`,transformOrigin:"50% 50%",userSelect:"none"}}
-                  preserveAspectRatio="xMidYMid meet">
-                  <rect width="524" height="631" fill="white"/>
-                  {M_PROVINCES.map(prov=>{
-                    const isFr=prov===curFromProv,isTo=prov===curToProv,isHov=prov===mapHover;
-                    let fill=M_PROVINCE_COLORS[prov]||"#c8d8e8";
-                    if(isFr)fill="#3b82f6";else if(isTo)fill="#f97316";else if(isHov)fill="#9ac0e8";
+            {/* 도/시 지도 — 항상 표시. 지역을 클릭하면 팝업으로 시/군/구를 고른다.
+                버튼을 먼저 누르지 않아도 첫 클릭은 출발지, 그 다음 클릭은 도착지로 자동 판별. */}
+            <div style={{flex:1,overflow:"hidden",touchAction:"none",position:"relative",minHeight:180}}
+              onTouchStart={onMapPinchStart} onTouchMove={onMapPinchMove} onTouchEnd={onMapPinchEnd}>
+              <svg viewBox="0 0 524 631"
+                style={{width:"100%",height:"100%",display:"block",transform:`translate(${mapTf.tx}px,${mapTf.ty}px) scale(${mapTf.scale})`,transformOrigin:"50% 50%",userSelect:"none"}}
+                preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <marker id="mNfArr" markerWidth="10" markerHeight="10" refX="6" refY="5" orient="auto">
+                    <path d="M 0,0 L 9,5 L 0,10 Z" fill="#3b82f6"/>
+                  </marker>
+                </defs>
+                <rect width="524" height="631" fill="white"/>
+                {M_PROVINCES.map(prov=>{
+                  const isFr=prov===curFromProv,isTo=prov===curToProv,isHov=prov===mapHover;
+                  let fill=M_PROVINCE_COLORS[prov]||"#c8d8e8";
+                  if(isFr)fill="#3b82f6";else if(isTo)fill="#f97316";else if(isHov)fill="#9ac0e8";
+                  return(
+                    <g key={prov}>
+                      <path d={M_PROVINCE_PATHS[prov]} fill={fill}
+                        stroke={isFr||isTo?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.7)"}
+                        strokeWidth={isFr||isTo?2:1}
+                        style={{cursor:"pointer"}}
+                        onMouseEnter={()=>setMapHover(prov)} onMouseLeave={()=>setMapHover(null)}
+                        onClick={()=>onMapProvClick(prov)}/>
+                    </g>
+                  );
+                })}
+                {M_PROVINCES.map(prov=>{
+                  if(prov===curFromProv||prov===curToProv)return null;
+                  const isSmall=M_SMALL.includes(prov);
+                  const[lx,ly]=M_PROVINCE_LABEL_POS[prov]||[0,0];
+                  return(
+                    <text key={`ml-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                      fontSize={isSmall?9:11} fontWeight="700" fill="#1B2B4B" style={{pointerEvents:"none"}}>{prov}</text>
+                  );
+                })}
+                {[curFromProv&&{prov:curFromProv,label:"출",color:"#3b82f6"},curToProv&&{prov:curToProv,label:"하",color:"#f97316"}]
+                  .filter(Boolean).map(({prov,label,color})=>{
+                    const pos=M_PROVINCE_LABEL_POS[prov];if(!pos)return null;
+                    const[bx,by]=pos;
                     return(
-                      <g key={prov}>
-                        <path d={M_PROVINCE_PATHS[prov]} fill={fill}
-                          stroke={isFr||isTo?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.7)"}
-                          strokeWidth={isFr||isTo?2:1}
-                          style={{cursor:"pointer"}}
-                          onMouseEnter={()=>setMapHover(prov)} onMouseLeave={()=>setMapHover(null)}
-                          onClick={()=>onMapProvClick(prov)}/>
+                      <g key={label} style={{pointerEvents:"none"}}>
+                        <circle cx={bx} cy={by} r={14} fill={color} stroke="white" strokeWidth="2"/>
+                        <text x={bx} y={by} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="white">{label}</text>
                       </g>
                     );
                   })}
-                  {M_PROVINCES.map(prov=>{
-                    if(prov===curFromProv||prov===curToProv)return null;
-                    const isSmall=M_SMALL.includes(prov);
-                    const[lx,ly]=M_PROVINCE_LABEL_POS[prov]||[0,0];
-                    return(
-                      <text key={`ml-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                        fontSize={isSmall?9:11} fontWeight="700" fill="#1B2B4B" style={{pointerEvents:"none"}}>{prov}</text>
-                    );
-                  })}
-                  {[curFromProv&&{prov:curFromProv,label:"출",color:"#3b82f6"},curToProv&&{prov:curToProv,label:"하",color:"#f97316"}]
-                    .filter(Boolean).map(({prov,label,color})=>{
-                      const pos=M_PROVINCE_LABEL_POS[prov];if(!pos)return null;
-                      const[bx,by]=pos;
-                      return(
-                        <g key={label} style={{pointerEvents:"none"}}>
-                          <circle cx={bx} cy={by} r={14} fill={color} stroke="white" strokeWidth="2"/>
-                          <text x={bx} y={by} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="white">{label}</text>
-                        </g>
-                      );
-                    })}
-                </svg>
-              </div>
-            )}
-
-            {/* 시/군/구 선택 */}
-            {!mapSubCityStep&&mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv)&&(
-              <div className="p-2 flex flex-col" style={{flex:1,overflow:"hidden"}}>
-                <div className="flex items-center justify-between mb-1.5" style={{flexShrink:0}}>
-                  <span className="text-[10px] font-bold text-gray-500">{mapCityStep==="from"?curFromProv:curToProv} 시.군.구</span>
-                  <button onClick={()=>{mapCityStep==="from"?setMapFromProv(null):setMapToProv(null);resetMapTf();}}
-                    className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">← 지도</button>
-                </div>
-                <div className="grid grid-cols-3 gap-1 overflow-y-auto">
-                  {(M_CITIES[mapCityStep==="from"?curFromProv:curToProv]||[]).map(city=>(
-                    <button key={city.n} onClick={()=>onMapCitySelect(city)}
-                      className="px-1 py-1.5 text-[9px] font-semibold text-gray-600 border border-gray-100 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
-                      {city.n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 읍/면/동 선택 */}
-            {mapSubCityStep&&(
-              <div className="p-2 flex flex-col" style={{flex:1,overflow:"hidden"}}>
-                <div className="flex items-center justify-between mb-1.5" style={{flexShrink:0}}>
-                  <span className="text-[10px] font-bold text-[#1B2B4B]">{mapSubCity?.n}</span>
-                  <button onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep==="from"?"from":"to");}}
-                    className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">← 구/시</button>
-                </div>
-                {mapSubLoading?(
-                  <div className="text-center py-3 text-[10px] text-gray-400">로딩 중...</div>
-                ):(
-                  <div className="grid grid-cols-3 gap-1 overflow-y-auto">
-                    <button onClick={onMapSelectWholeCity}
-                      className="px-1 py-1.5 text-[9px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-blue-50/50 text-center leading-tight">
-                      전체
-                    </button>
-                    {mapSubDistricts.map(sd=>(
-                      <button key={sd.n} onClick={()=>onMapSubDistrictSelect(sd)}
-                        className="px-1 py-1.5 text-[9px] font-semibold text-gray-600 border border-gray-100 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
-                        {sd.n}
-                      </button>
-                    ))}
-                    {!mapSubLoading&&mapSubDistricts.length===0&&(
-                      <div className="col-span-3 text-center text-[9px] text-gray-400 py-2">세부 지역 없음</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                {/* 출발→도착 화살표 — 지도 클릭이든 수기 검색이든, 확정된 상/하차지 주소에서
+                    시/도를 추출해 항상 같은 방식으로 그린다. */}
+                {mArrowPath && <path d={mArrowPath} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" markerEnd="url(#mNfArr)"/>}
+              </svg>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* 시/군/구 선택 팝업 (지도에서 지역 클릭 시) */}
+      {!mapSubCityStep&&mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv)&&(
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center px-6" onClick={()=>{setMapCityStep(null);resetMapTf();}}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] max-h-[70vh] flex flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className={`px-5 py-3.5 flex items-center gap-2 ${mapCityStep==="from"?(cardVersionB?"bg-[#1B2B4B]":"bg-blue-600"):"bg-orange-400"}`}>
+              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-[11px] font-black shrink-0">{mapCityStep==="from"?"출":"하"}</span>
+              <span className="text-white font-bold text-[14px]">{mapCityStep==="from"?curFromProv:curToProv} 시·군·구 선택</span>
+              <button onClick={()=>{setMapCityStep(null);resetMapTf();}} className="ml-auto text-white/70 hover:text-white text-lg leading-none">×</button>
+            </div>
+            <div className="p-3 overflow-y-auto grid grid-cols-3 gap-1.5">
+              {(M_CITIES[mapCityStep==="from"?curFromProv:curToProv]||[]).map(city=>(
+                <button key={city.n} onClick={()=>onMapCitySelect(city)}
+                  className="px-1.5 py-2.5 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
+                  {city.n}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 읍/면/동 선택 팝업 */}
+      {mapSubCityStep&&(
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center px-6" onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep);}}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] max-h-[70vh] flex flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className={`px-5 py-3.5 flex items-center gap-2 ${mapSubCityStep==="from"?(cardVersionB?"bg-[#1B2B4B]":"bg-blue-600"):"bg-orange-400"}`}>
+              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-[11px] font-black shrink-0">{mapSubCityStep==="from"?"출":"하"}</span>
+              <span className="text-white font-bold text-[14px]">{mapSubCity?.n} 세부 지역</span>
+              <button onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep);}} className="ml-auto text-white/70 hover:text-white text-lg leading-none">×</button>
+            </div>
+            <div className="p-3 overflow-y-auto">
+              {mapSubLoading?(
+                <div className="text-center py-6 text-[12px] text-gray-400">로딩 중...</div>
+              ):(
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button onClick={onMapSelectWholeCity}
+                    className="px-1.5 py-2.5 text-[11px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-blue-50/50 text-center leading-tight">
+                    {mapSubCity?.n} 전체
+                  </button>
+                  {mapSubDistricts.map(sd=>(
+                    <button key={sd.n} onClick={()=>onMapSubDistrictSelect(sd)}
+                      className="px-1.5 py-2.5 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
+                      {sd.n}
+                    </button>
+                  ))}
+                  {!mapSubLoading&&mapSubDistricts.length===0&&(
+                    <div className="col-span-3 text-center text-[11px] text-gray-400 py-3">세부 지역 정보 없음</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 혼적 화물 */}
       {freightMode==="혼적"&&(
