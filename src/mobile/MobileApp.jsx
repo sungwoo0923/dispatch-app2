@@ -14887,6 +14887,32 @@ function MobileFareInquiry({ cardVersionB = false }) {
   const [mapSubCity,setMapSubCity]=useState(null);
   const [mapSubDistricts,setMapSubDistricts]=useState([]);
   const [mapSubLoading,setMapSubLoading]=useState(false);
+  // 지도에서 지역을 클릭하지 않고 상/하차지 입력칸에 텍스트만 입력해도 조회할 수 있게
+  // 하기 위한 상태 — 입력칸 자동완성에서 항목을 선택하지 않고 그냥 타이핑만 한 경우
+  // fromCoord/toCoord가 null이라 결과가 계산되지 않는데, 이때 "조회" 버튼을 누르면
+  // 입력된 텍스트를 좌표로 지오코딩해 채워 넣는다.
+  const [nfSearching,setNfSearching]=useState(false);
+  const [nfSearchError,setNfSearchError]=useState("");
+  const geocodeAddrSimple=async(addr)=>{
+    const url=`https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
+    const res=await fetch(url,{headers:{appKey:MOBILE_TMAP_KEY,Accept:"application/json"}});
+    const data=await res.json();
+    const coord=data?.coordinateInfo?.coordinate?.[0];
+    if(!coord||!parseFloat(coord.lat))throw new Error(`"${addr}" 위치를 찾을 수 없습니다`);
+    return {lat:parseFloat(coord.lat),lon:parseFloat(coord.lon),address:addr};
+  };
+  const runFareSearch=async()=>{
+    if(!fromSearch.trim()||!toSearch.trim()){setNfSearchError("상차지와 하차지를 모두 입력하세요");return;}
+    setNfSearching(true);setNfSearchError("");
+    try{
+      if(!fromCoord)setFromCoord(await geocodeAddrSimple(fromSearch.trim()));
+      if(!toCoord)setToCoord(await geocodeAddrSimple(toSearch.trim()));
+    }catch(err){
+      setNfSearchError(err.message||"조회 중 오류가 발생했습니다");
+    }finally{
+      setNfSearching(false);
+    }
+  };
 
   const result=useMemo(()=>{
     if(!fromCoord||!toCoord)return null;
@@ -15019,7 +15045,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
       <div className="flex rounded-xl border border-gray-200 overflow-hidden shadow-sm">
         {["독차","혼적"].map(m=>(
           <button key={m} onClick={()=>{setFreightMode(m);setMixWeightKg("");setMixCbm("");}}
-            className={`flex-1 py-2.5 text-[13px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500"}`}>{m}</button>
+            className={`flex-1 py-2.5 text-[13px] font-bold transition ${freightMode===m?(cardVersionB?"bg-[#1B2B4B] text-white":"bg-blue-600 text-white"):"bg-white text-gray-500"}`}>{m}</button>
         ))}
       </div>
 
@@ -15065,6 +15091,21 @@ function MobileFareInquiry({ cardVersionB = false }) {
               {vias.length<3&&<button onClick={addVia} className="text-[10px] font-semibold text-[#1B2B4B]/70 border border-dashed border-[#1B2B4B]/30 rounded-md px-2 py-0.5">+ 경유</button>}
               {(fromCoord||toCoord||vias.length>0)&&<button onClick={reset} className="text-[10px] text-gray-400 hover:text-red-500">초기화</button>}
             </div>
+            {/* 지도에서 지역을 클릭하지 않아도, 입력칸에 텍스트만 넣고 이 버튼으로 조회할 수 있다 */}
+            <button onClick={runFareSearch} disabled={nfSearching}
+              className={`w-full py-2 rounded-lg text-[12px] font-bold text-white disabled:opacity-50 flex items-center justify-center gap-1.5 ${cardVersionB?"bg-[#1B2B4B]":"bg-blue-600"}`}>
+              {nfSearching ? (
+                <>
+                  <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/>
+                  </svg>
+                  조회 중...
+                </>
+              ) : "조회"}
+            </button>
+            {nfSearchError && (
+              <div className="text-[11px] text-red-500 font-semibold">{nfSearchError}</div>
+            )}
           </div>
 
           {/* 오른쪽: 지도 패널 */}
@@ -15072,7 +15113,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
             {/* 상/하차 선택 토글 */}
             <div className="flex border-b border-gray-100" style={{flexShrink:0}}>
               <button onClick={()=>{setMapCityStep("from");setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);resetMapTf();}}
-                className={`flex-1 py-1.5 text-[10px] font-bold transition ${mapCityStep==="from"?"bg-[#1B2B4B] text-white":"text-gray-400 hover:bg-gray-50"}`}>
+                className={`flex-1 py-1.5 text-[10px] font-bold transition ${mapCityStep==="from"?(cardVersionB?"bg-[#1B2B4B] text-white":"bg-blue-600 text-white"):"text-gray-400 hover:bg-gray-50"}`}>
                 상차지 지역
               </button>
               <div className="w-px bg-gray-100"/>
@@ -15204,12 +15245,13 @@ function MobileFareInquiry({ cardVersionB = false }) {
       {freightMode==="독차"&&(
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
           <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">차량 선택</p>
-          <div className="grid grid-cols-5 gap-1.5">
+          <select value={vehicle} onChange={e=>setVehicle(e.target.value)}
+            className={`w-full py-2.5 px-3 rounded-lg text-[13px] font-bold border-2 outline-none appearance-none bg-no-repeat ${cardVersionB?"border-[#1B2B4B] text-[#1B2B4B]":"border-blue-600 text-blue-600"}`}
+            style={{backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231B2B4B' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",backgroundPosition:"right 10px center",backgroundSize:"16px",paddingRight:"36px"}}>
             {MOBILE_VT.map(v=>(
-              <button key={v.id} onClick={()=>setVehicle(v.id)}
-                className={`py-2 rounded-lg text-[11px] font-bold transition ${vehicle===v.id?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{v.name}</button>
+              <option key={v.id} value={v.id}>{v.name}</option>
             ))}
-          </div>
+          </select>
         </div>
       )}
 
@@ -15219,7 +15261,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
         <div className="flex gap-2">
           {MOBILE_CARGO_TYPES.map(ct=>(
             <button key={ct.id} onClick={()=>setCargoType(ct.id)}
-              className={`flex-1 py-2 rounded-xl text-[12px] font-bold transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600"}`}>{ct.name}</button>
+              className={`flex-1 py-2 rounded-xl text-[12px] font-bold transition ${cargoType===ct.id?(cardVersionB?"bg-[#1B2B4B] text-white":"bg-blue-600 text-white"):"bg-gray-100 text-gray-600"}`}>{ct.name}</button>
           ))}
         </div>
       </div>
@@ -15236,7 +15278,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
               {id:"lg",label:"리프트",sub:MOBILE_SL[vehicle]>0?`+${Number((MOBILE_SL[vehicle]/10000).toFixed(1))}만`:null,active:liftgate,set:()=>setLiftgate(p=>!p)},
             ].map(opt=>(
               <button key={opt.id} onClick={opt.set}
-                className={`flex items-center gap-1 px-3 py-2 rounded-xl text-[12px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200"}`}>
+                className={`flex items-center gap-1 px-3 py-2 rounded-xl text-[12px] font-bold border-2 transition ${opt.active?(cardVersionB?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-blue-600 text-white border-blue-600"):"bg-white text-gray-500 border-gray-200"}`}>
                 {opt.label}
                 {opt.sub&&<span className={`text-[10px] ${opt.active?"text-white/70":"text-gray-400"}`}>{opt.sub}</span>}
               </button>
@@ -15247,8 +15289,8 @@ function MobileFareInquiry({ cardVersionB = false }) {
 
       {/* 결과 카드 */}
       {result&&fromCoord&&toCoord&&(
-        <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
-          style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
+        <div className={`rounded-2xl overflow-hidden shadow-xl ${cardVersionB?"border border-[#1B2B4B]/10":"border border-blue-600/10"}`}
+          style={{background:cardVersionB?"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)":"linear-gradient(150deg,#0d3a7a 0%,#1d4ed8 50%,#2563eb 100%)"}}>
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90":"bg-blue-400/90"} text-white`}>{result.mode==="혼적"?"혼적":"독차"}</span>
