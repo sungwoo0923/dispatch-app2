@@ -16282,9 +16282,14 @@ const calcFareMobile = () => {
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-[11px] text-gray-400">청구</div>
-                      <div className="text-[17px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">기사 {drv.toLocaleString()}원</div>
+                      <div className="flex items-baseline justify-end gap-1">
+                        <span className="text-[11px] text-gray-400 font-semibold">청구 :</span>
+                        <span className="text-[16px] font-extrabold text-gray-900 tabular-nums">{fare.toLocaleString()}원</span>
+                      </div>
+                      <div className="flex items-baseline justify-end gap-1 mt-0.5">
+                        <span className="text-[11px] text-gray-400 font-semibold">기사 :</span>
+                        <span className="text-[13px] font-extrabold text-amber-600 tabular-nums">{drv.toLocaleString()}원</span>
+                      </div>
                     </div>
                   </div>
                   {fares.length > 1 && (
