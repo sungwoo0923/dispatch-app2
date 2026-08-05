@@ -540,6 +540,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const [result, setResult] = useState([]);
   const [searched, setSearched] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  // 표준운임 이력이 없을 때, 화면 전환 없이 팝업 안에서 바로 전국표준운임표로
+  // 조회해 결과를 보여주기 위한 상태 (전국운임 탭의 nfFrom/nfTo/nfResult 등을 그대로 재사용)
+  const [showNoResultPopup, setShowNoResultPopup] = useState(false);
 
   // 표준운임 경유지 포함 토글
   const [includeVia, setIncludeVia] = useState(false);
@@ -874,7 +877,16 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
       }
     }
     const count = applyResult(forward);
-    if (count === 0) alert("조회된 데이터가 없습니다.");
+    if (count === 0) {
+      // 전국표준운임표 탭의 상태를 그대로 재사용해 팝업 안에서 바로 조회할 수 있게
+      // 현재 검색한 상/하차지를 미리 채워 넣는다.
+      const fromLabel = pickup || pickupAddr;
+      const toLabel = drop || dropAddr;
+      setNfFrom(fromLabel); setNfTo(toLabel);
+      setNfFromCoord(null); setNfToCoord(null);
+      setNfResult(null); setNfError("");
+      setShowNoResultPopup(true);
+    }
   };
 
   const reset = () => {
@@ -1322,6 +1334,85 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
             </div>
           )}
         </>
+      )}
+
+      {/* 표준운임 이력 없음 → 전국표준운임표 연동 조회 팝업 */}
+      {showNoResultPopup && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center px-4" onClick={() => setShowNoResultPopup(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[520px] max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <div className="text-white font-bold text-[15px]">조회 결과 없음</div>
+                <div className="text-white/60 text-[12px] mt-0.5">전국표준운임표로 검색하시겠습니까?</div>
+              </div>
+              <button onClick={() => setShowNoResultPopup(false)} className="text-white/60 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="p-5">
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <div className="text-[11px] font-bold text-gray-500 mb-1">상차지</div>
+                  <input autoComplete="off" className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                    value={nfFrom} onChange={e => { setNfFrom(e.target.value); setNfFromCoord(null); }} placeholder="상차지 주소/지명" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-gray-500 mb-1">하차지</div>
+                  <input autoComplete="off" className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                    value={nfTo} onChange={e => { setNfTo(e.target.value); setNfToCoord(null); }} placeholder="하차지 주소/지명" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mb-4">
+                <select className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                  value={nfVehicleCategory} onChange={e => setNfVehicleCategory(Number(e.target.value))}>
+                  {VEHICLE_CATEGORIES.map((c, i) => <option key={i} value={i}>{c.label}</option>)}
+                </select>
+                <button onClick={lookupNationalFare} disabled={nfLoading}
+                  className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                  {nfLoading ? "조회 중..." : "조회"}
+                </button>
+              </div>
+
+              {nfError && (
+                <div className="px-3 py-2 mb-3 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-600">{nfError}</div>
+              )}
+
+              {nfResult && (
+                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="bg-[#1B2B4B] px-4 py-2.5">
+                    <div className="text-white font-bold text-[13px] truncate">{nfResult.from} → {nfResult.to}</div>
+                    <div className="text-white/60 text-[11px] mt-0.5">
+                      도로거리 {nfResult.km}km · {cat.label}
+                      {cat.multiplier > 1 && <span className="ml-1 text-blue-300">({Math.round((cat.multiplier-1)*100)}% 할증)</span>}
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[13px]">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          {FARE_TYPES.map(ft => (
+                            <th key={ft.label} className="px-2 py-2 text-center text-[11px] font-bold text-gray-500 whitespace-nowrap border-r border-gray-100 last:border-r-0">{ft.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          {FARE_TYPES.map(ft => {
+                            const fare = calcFare(nfResult.km, ft, cat.multiplier);
+                            return (
+                              <td key={ft.label} className="px-2 py-3 text-center text-[13px] font-bold text-gray-800 border-r border-gray-100 last:border-r-0">
+                                {fare ? fare.toLocaleString() : <span className="text-[11px] text-gray-400 font-normal">별도협의</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="px-4 py-2 text-[10px] text-gray-400">T-Map 도로거리 기준 참고 시세이며, 실제 운임과 차이가 있을 수 있습니다.</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

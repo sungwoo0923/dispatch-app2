@@ -15716,6 +15716,10 @@ function MobileStandardFare({ onBack, cardVersionB = false }) {
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
   const [showNoResultPopup, setShowNoResultPopup] = useState(false);
+  // 자사운임표 결과 없음 팝업 안에서 바로 전국표준운임표로 조회하기 위한 상태
+  const [nrLoading, setNrLoading] = useState(false);
+  const [nrError, setNrError] = useState("");
+  const [nrResult, setNrResult] = useState(null);
 const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   const [pickupAddr, setPickupAddr] = useState("");
   const [drop, setDrop] = useState("");
@@ -16074,7 +16078,44 @@ const calcFareMobile = () => {
 
   setMatchedRows(finalList);
   setResult(true);
-  if (finalList.length === 0) setShowNoResultPopup(true);
+  if (finalList.length === 0) { setShowNoResultPopup(true); setNrResult(null); setNrError(""); }
+};
+
+// 자사운임표에서 조회한 상/하차지 기록이 없을 때, 팝업 안에서 바로 전국표준운임표
+// 로직(거리 기반 추정)으로 조회해 결과를 보여준다 — 화면 이동 없이 팝업 내에서 완결.
+const runNationalFareInPopup = async () => {
+  const fromAddr = (searchMode === "address" ? (pickupAddr || pickup) : pickup).trim();
+  const toAddr = (searchMode === "address" ? (dropAddr || drop) : drop).trim();
+  if (!fromAddr || !toAddr) { setNrError("상차지와 하차지를 모두 입력하세요"); return; }
+  setNrLoading(true); setNrError(""); setNrResult(null);
+  try {
+    const geocode = async (addr) => {
+      const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
+      const res = await fetch(url, { headers: { appKey: MOBILE_TMAP_KEY, Accept: "application/json" } });
+      const data = await res.json();
+      const coord = data?.coordinateInfo?.coordinate?.[0];
+      if (!coord || !parseFloat(coord.lat)) throw new Error(`"${addr}" 위치를 찾을 수 없습니다`);
+      return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+    };
+    const [fromC, toC] = await Promise.all([geocode(fromAddr), geocode(toAddr)]);
+    const straight = mHaversine(fromC.lat, fromC.lon, toC.lat, toC.lon);
+    const dist = Math.round(straight * 1.25);
+    const vtId = MOBILE_VT.find(v => v.id === vehicle || v.name === vehicle)?.id || "1ton";
+    const vt = MOBILE_VT.find(v => v.id === vtId) || MOBILE_VT[2];
+    const rawBase = vt.base + vt.perKm * dist;
+    const fare = Math.max(vt.min, rawBase);
+    const avg = Math.round(fare / 5000) * 5000;
+    setNrResult({
+      from: fromAddr, to: toAddr, distance: dist, vehicleName: vt.name,
+      min: Math.round(avg * 0.83 / 5000) * 5000,
+      max: Math.round(avg * 1.17 / 5000) * 5000,
+      avg,
+    });
+  } catch (err) {
+    setNrError(err.message || "조회 중 오류가 발생했습니다");
+  } finally {
+    setNrLoading(false);
+  }
 };
 
 
@@ -16452,12 +16493,46 @@ const calcFareMobile = () => {
       )}
 
       {showNoResultPopup && (
-        <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
-          <div className="bg-white p-5 rounded-2xl w-[300px] text-center">
+        <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center px-6" onClick={() => setShowNoResultPopup(false)}>
+          <div className="bg-white p-5 rounded-2xl w-full max-w-[320px] text-center" onClick={e => e.stopPropagation()}>
             <div className="text-[16px] font-bold mb-2">조회 결과 없음</div>
-            <div className="text-[13px] text-gray-500 mb-4">해당 상/하차지 기록이 없습니다.</div>
-            <button onClick={() => setShowNoResultPopup(false)}
-              className={`w-full py-2.5 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[13px]`}>확인</button>
+            <div className="text-[13px] text-gray-500 mb-1">해당 상/하차지 기록이 없습니다.</div>
+            <div className="text-[13px] text-gray-700 font-semibold mb-4">전국표준운임표로 검색하시겠습니까?</div>
+
+            {nrResult && (
+              <div className={`rounded-xl overflow-hidden mb-3 text-left ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
+                <div className="p-3.5">
+                  <div className="text-white/60 text-[11px] font-semibold mb-1 truncate">{nrResult.from} → {nrResult.to}</div>
+                  <div className="text-white/40 text-[10px] mb-2">약 {nrResult.distance}km · {nrResult.vehicleName} 기준</div>
+                  <div className="text-[10px] text-white/40 font-semibold mb-0.5">예상 운임 (VAT 별도)</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-[18px] font-black text-white">{nrResult.min.toLocaleString()}</span>
+                    <span className="text-white/30 text-[13px]">~</span>
+                    <span className="text-[18px] font-black text-white">{nrResult.max.toLocaleString()}원</span>
+                  </div>
+                  <div className="text-[11px] text-yellow-300 font-bold mt-1">평균 {nrResult.avg.toLocaleString()}원</div>
+                </div>
+              </div>
+            )}
+            {nrError && (
+              <div className="px-3 py-2 mb-3 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-600 text-left">{nrError}</div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={() => setShowNoResultPopup(false)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl font-bold text-[13px]">닫기</button>
+              <button onClick={runNationalFareInPopup} disabled={nrLoading}
+                className={`flex-1 py-2.5 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[13px] disabled:opacity-50 flex items-center justify-center gap-1.5`}>
+                {nrLoading ? (
+                  <>
+                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/>
+                    </svg>
+                    조회 중...
+                  </>
+                ) : nrResult ? "다시 조회" : "조회"}
+              </button>
+            </div>
           </div>
         </div>
       )}
