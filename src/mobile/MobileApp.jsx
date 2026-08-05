@@ -10238,7 +10238,7 @@ const handleAssignClick = () => {
 // ======================================================================
 // 스마트 오더 분석
 // ======================================================================
-function SmartOrderParser({ clients, onApply, onClose }) {
+function SmartOrderParser({ clients, onApply, onClose, cardVersionB = false }) {
   const [text, setText] = useState("");
   const [result, setResult] = useState(null);
   const [parsing, setParsing] = useState(false);
@@ -10490,13 +10490,13 @@ function SmartOrderParser({ clients, onApply, onClose }) {
   const hasResult = result && Object.keys(result).length > 0;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: "rgba(15,25,50,0.97)" }}>
+    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: "rgba(15,25,50,0.97)", "--smart-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
       <div className="flex-1 min-h-[56px]" onClick={onClose} />
       <div className="relative bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "calc(100dvh - 56px)" }} onClick={e => e.stopPropagation()}>
         <div className="flex justify-center pt-3 pb-0 shrink-0">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
-        <div className="bg-[#1B2B4B] px-5 py-4 shrink-0">
+        <div className="bg-[var(--smart-accent)] px-5 py-4 shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-white font-bold text-[16px]">스마트 오더 분석</div>
@@ -10507,7 +10507,7 @@ function SmartOrderParser({ clients, onApply, onClose }) {
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4" data-fare-scroll>
           <textarea
-            className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+            className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none focus:outline-none focus:border-[var(--smart-accent)] bg-gray-50"
             rows={7}
             placeholder={"오더 내용을 그대로 붙여넣으세요\n\n예:\n1.상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n상차시간: 16시\n\n하차지: 순수본\n전라북도 익산시 왕궁면 무왕로 2182\n중량: 400KG / 1파렛트\n냉장차량"}
             value={text}
@@ -10516,7 +10516,7 @@ function SmartOrderParser({ clients, onApply, onClose }) {
           <button
             onClick={parse}
             disabled={!text.trim() || parsing}
-            className="w-full mt-3 py-3 rounded-2xl bg-[#1B2B4B] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40"
+            className="w-full mt-3 py-3 rounded-2xl bg-[var(--smart-accent)] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40"
           >
             {parsing ? "분석 중..." : "분석하기"}
           </button>
@@ -13780,6 +13780,7 @@ const pickDrop = (c) => {
       {showSmartParser && (
         <SmartOrderParser
           clients={clients || []}
+          cardVersionB={cardVersionB}
           onApply={(parsed) => {
             setForm(prev => ({
               ...prev,
