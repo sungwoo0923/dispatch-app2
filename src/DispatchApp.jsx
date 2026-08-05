@@ -30236,9 +30236,9 @@ return (
             적용된다. (예전에는 날짜를 하나만 골라도 바로 필터링되어, 시작일만
             고르고 종료일을 고르는 중에도 목록이 계속 바뀌어 보였다. 조회 버튼이
             날짜용/검색어용 2개로 따로 있던 것도 혼란스러워 하나로 합쳤다.) */}
-        <CustomDatePicker className="w-[132px] border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0 bg-white" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
-        <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
-        <CustomDatePicker className="w-[132px] border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0 bg-white" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
+        <CustomDatePicker className="w-[150px] border border-gray-300 rounded-lg px-2 py-1.5 text-[13px] font-semibold flex-shrink-0 bg-white" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
+        <span className="text-gray-400 text-[13px] flex-shrink-0">~</span>
+        <CustomDatePicker className="w-[150px] border border-gray-300 rounded-lg px-2 py-1.5 text-[13px] font-semibold flex-shrink-0 bg-white" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
 
         {/* 검색창 (통합) — 조회 버튼이 날짜/검색어 공용이라, 날짜만 바꾸고 아직
             조회를 누르지 않은 상태면 천천히 깜빡여 클릭을 유도한다. */}

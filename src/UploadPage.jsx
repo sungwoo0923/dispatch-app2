@@ -630,26 +630,26 @@ export default function UploadPage() {
                   <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>배차 정보</span>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <InfoBox label="기사명" value={order.이름 || "-"} />
                   <InfoBox label="차량번호" value={order.차량번호 || "-"} />
                   <InfoBox label="연락처" value={order.전화번호 || "-"} />
-                  <div style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px" }}>
-                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>상차일</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.상차일 || "-"}</div>
+                  <div style={{ borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
+                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>상차일</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>{order.상차일 || "-"}</div>
                     <div style={{ fontSize: 10, color: "#ef4444", marginTop: 2 }}>* 상차일 기준으로 선택하세요</div>
                   </div>
                 </div>
 
-                <div style={{ marginTop: 10, background: "#f8fafc", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>상차지</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.상차지명 || "-"}</div>
+                <div style={{ marginTop: 16, display: "flex", alignItems: "flex-end", gap: 10 }}>
+                  <div style={{ flex: 1, borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
+                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>상차지</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>{order.상차지명 || "-"}</div>
                   </div>
-                  <div style={{ color: "#94a3b8", fontSize: 16 }}>→</div>
-                  <div style={{ flex: 1, textAlign: "right" }}>
-                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>하차지</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
+                  <div style={{ color: "#94a3b8", fontSize: 16, paddingBottom: 8 }}>→</div>
+                  <div style={{ flex: 1, textAlign: "right", borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
+                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>하차지</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
                   </div>
                 </div>
 
@@ -765,8 +765,8 @@ export default function UploadPage() {
                 </div>
 
                 {/* 상차일 */}
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                     <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>상차일</label>
                     <span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>* 상차일 기준으로 선택하세요</span>
                   </div>
@@ -774,31 +774,37 @@ export default function UploadPage() {
                     type="date"
                     value={manualDate}
                     onChange={e => setManualDate(e.target.value)}
-                    style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none" }}
+                    style={underlineInputStyle}
+                    onFocus={e => { e.target.style.borderColor = "#1B2B4B"; }}
+                    onBlur={e => { e.target.style.borderColor = "#e2e8f0"; }}
                   />
                 </div>
 
                 {/* 차량번호 */}
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 4 }}>차량번호</label>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>차량번호</label>
                   <input
                     type="text"
                     value={manualCar}
                     onChange={e => setManualCar(e.target.value)}
                     placeholder="예: 12가 3456"
-                    style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none" }}
+                    style={underlineInputStyle}
+                    onFocus={e => { e.target.style.borderColor = "#1B2B4B"; }}
+                    onBlur={e => { e.target.style.borderColor = "#e2e8f0"; }}
                   />
                 </div>
 
                 {/* 기사명 */}
                 <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 4 }}>기사명</label>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>기사명</label>
                   <input
                     type="text"
                     value={manualName}
                     onChange={e => setManualName(e.target.value)}
                     placeholder="기사 이름을 입력하세요"
-                    style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none" }}
+                    style={underlineInputStyle}
+                    onFocus={e => { e.target.style.borderColor = "#1B2B4B"; }}
+                    onBlur={e => { e.target.style.borderColor = "#e2e8f0"; }}
                   />
                 </div>
               </div>
@@ -809,7 +815,7 @@ export default function UploadPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                 <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
                 <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>업로드 전 확인사항</span>
-                <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: allChecked ? "#059669" : "#94a3b8" }}>
+                <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: allChecked ? "#1B2B4B" : "#94a3b8" }}>
                   {checks.filter(Boolean).length}/{checks.length} 완료
                 </span>
               </div>
@@ -817,24 +823,27 @@ export default function UploadPage() {
                 <div key={i} onClick={() => setChecks(prev => { const n=[...prev]; n[i]=!n[i]; return n; })}
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
                     borderRadius: 10, marginBottom: 8, cursor: "pointer",
-                    background: checks[i] ? "#f0fdf4" : "#f8fafc",
-                    border: `1.5px solid ${checks[i] ? "#86efac" : "#e2e8f0"}`,
+                    background: checks[i] ? "#1B2B4B" : "#f8fafc",
+                    border: `1.5px solid ${checks[i] ? "#1B2B4B" : "#e2e8f0"}`,
                     transition: "all 0.15s" }}>
                   <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                    background: checks[i] ? "#1B2B4B" : "white",
-                    border: `2px solid ${checks[i] ? "#1B2B4B" : "#cbd5e1"}`,
+                    background: checks[i] ? "white" : "white",
+                    border: `2px solid ${checks[i] ? "white" : "#cbd5e1"}`,
                     display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {checks[i] && <span style={{ color: "white", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                    {checks[i] && <span style={{ color: "#1B2B4B", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
                   </div>
-                  <span style={{ fontSize: 13, color: checks[i] ? "#166534" : "#374151",
+                  <span style={{ fontSize: 13, color: checks[i] ? "#ffffff" : "#374151",
                     fontWeight: checks[i] ? 700 : 400 }}>{text}</span>
                 </div>
               ))}
-              {!allChecked && (
-                <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, color: "#94a3b8" }}>
-                  모든 항목 확인 후 다음으로 진행할 수 있습니다
+              <div style={{ marginTop: 10, background: "#eef2f8", border: "1.5px solid #c7d2e3", borderRadius: 10, padding: "12px 14px" }}>
+                <div style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 800, lineHeight: 1.6 }}>
+                  ⚠️ 파렛트 전표나 거래명세서가 없는 경우에도, 위 항목을 모두 체크해야 다음 단계로 진행할 수 있습니다.
                 </div>
-              )}
+                <div style={{ fontSize: 12.5, color: "#374151", fontWeight: 600, marginTop: 6, lineHeight: 1.6 }}>
+                  해당 서류가 없다면 "미업로드시 운임 보류에 동의합니다" 항목에 동의하는 것으로 체크해주세요. 이후 서류 없이 업로드를 진행할 수 있습니다.
+                </div>
+              </div>
             </div>
 
             {/* 다음 버튼: 확인사항을 모두 체크해야 활성화 */}
@@ -1172,6 +1181,20 @@ const cardStyle = {
   boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)",
 };
 
+const underlineInputStyle = {
+  width: "100%",
+  padding: "8px 2px",
+  border: "none",
+  borderBottom: "2px solid #e2e8f0",
+  borderRadius: 0,
+  fontSize: 14,
+  fontFamily: "inherit",
+  boxSizing: "border-box",
+  outline: "none",
+  background: "transparent",
+  transition: "border-color 0.15s",
+};
+
 const btnOutline = {
   padding: "10px 24px",
   borderRadius: 8,
@@ -1189,9 +1212,9 @@ const btnOutline = {
 // ────────────────────────────────────────
 function InfoBox({ label, value }) {
   return (
-    <div style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px" }}>
-      <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+    <div style={{ borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
+      <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
     </div>
   );
 }
