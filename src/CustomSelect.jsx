@@ -10,6 +10,12 @@ const CustomSelect = React.forwardRef(function CustomSelect(
   const wrapRef = React.useRef(null);
   const btnRef = React.useRef(null);
   const menuRef = React.useRef(null);
+  // openOnFocus가 켜진 셀렉트를 마우스로 처음 클릭하면: mousedown이 버튼에 포커스를
+  // 주면서 onFocus가 먼저 발생해 목록을 여는데, 뒤이어 발생하는 click 이벤트의 토글
+  // 로직이 그걸 즉시 다시 닫아버려 "한 번 클릭하면 열렸다 바로 닫히고, 다시 눌러야
+  // 열리는" 버그가 있었다. 포커스가 방금 목록을 열었다는 걸 기록해뒀다가, 바로 이어지는
+  // click에서는 토글을 건너뛰어(이미 열려있는 상태 유지) 이 경합을 없앤다.
+  const justOpenedByFocusRef = React.useRef(false);
   React.useImperativeHandle(ref, () => ({
     focus: () => btnRef.current?.focus(),
     scrollIntoView: (opts) => btnRef.current?.scrollIntoView(opts),
@@ -80,6 +86,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
     const onDocDown = (e) => {
       if (wrapRef.current && wrapRef.current.contains(e.target)) return;
       if (menuRef.current && menuRef.current.contains(e.target)) return;
+      justOpenedByFocusRef.current = false;
       setOpen(false);
     };
     document.addEventListener("mousedown", onDocDown);
@@ -139,12 +146,23 @@ const CustomSelect = React.forwardRef(function CustomSelect(
           // 기본값은 false로 기존 동작(클릭/방향키로만 열림)을 그대로 유지한다.
           if (openOnFocus && !disabled) {
             setOpen(true);
+            justOpenedByFocusRef.current = true;
             setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
           }
           onFocus?.(e);
         }}
-        onBlur={onBlur}
-        onClick={() => { if (disabled) return; setOpen((v) => !v); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); }}
+        onBlur={(e) => { justOpenedByFocusRef.current = false; onBlur?.(e); }}
+        onClick={() => {
+          if (disabled) return;
+          if (justOpenedByFocusRef.current) {
+            // 이번 클릭은 방금 포커스가 이미 연 것과 같은 상호작용 — 다시 닫지 않는다.
+            justOpenedByFocusRef.current = false;
+            setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+            return;
+          }
+          setOpen((v) => !v);
+          setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+        }}
         onKeyDown={(e) => {
           onKeyDown?.(e);
           if (disabled || e.defaultPrevented) return;
