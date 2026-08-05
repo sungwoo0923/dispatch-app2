@@ -12181,7 +12181,7 @@ const pickDrop = (c) => {
           input={
             <input autoComplete="off"
               className="w-full border-0 border-b-2 border-gray-200 rounded-none px-1 py-1.5 text-[13px] font-bold text-gray-500 bg-transparent text-right"
-              value={form.수수료 || 0}
+              value={Number(form.수수료 || 0).toLocaleString()}
               readOnly
             />
           }

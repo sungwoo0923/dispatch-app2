@@ -15689,19 +15689,22 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
         let cargoVal = cargo, cargoType = "파레트";
         // ⚠️ 예전 버그로 화물내용을 비운 채 "없음"으로 저장했던 이력 데이터가
         // 문자 그대로 "없음"으로 남아있을 수 있다 — 이 경우 빈 값으로 취급한다.
-        if (cargo === "없음") { cargoVal = ""; cargoType = "없음"; }
+        // ⚠️ 드롭다운의 "없음" 옵션은 value=""(빈 문자열)이다 — 여기서 리터럴
+        // 문자열 "없음"을 타입값으로 넣으면 어떤 <option>과도 일치하지 않아 셀렉트가
+        // 빈칸으로 보이는 버그가 있었다. "없음"을 의미할 땐 항상 빈 문자열로 통일한다.
+        if (cargo === "없음") { cargoVal = ""; cargoType = ""; }
         else if (/파레트|파렛트/.test(cargo)) { cargoVal = cargo.replace(/파레트|파렛트/g,""); cargoType="파레트"; }
         else if (/박스/.test(cargo)) { cargoVal = cargo.replace(/박스/g,""); cargoType="박스"; }
         else if (/통/.test(cargo)) { cargoVal = cargo.replace(/통/g,""); cargoType="통"; }
         else if (!cargo.trim()) { cargoType = "파레트"; }
-        else { cargoType="없음"; }
+        else { cargoType=""; }
         const ton = s.차량톤수 || s.톤수값 || "";
         let tonVal = ton, tonType = "톤";
-        if (ton === "없음") { tonVal = ""; tonType = "없음"; }
+        if (ton === "없음") { tonVal = ""; tonType = ""; }
         else if (/톤/.test(ton)) { tonVal = ton.replace(/톤/g,""); tonType="톤"; }
         else if (/kg/i.test(ton)) { tonVal = ton.replace(/kg/gi,""); tonType="kg"; }
         else if (!ton.trim()) { tonType = "톤"; }
-        else { tonType="없음"; }
+        else { tonType=""; }
         return { ...emptyStop(), ...s, 화물내용: cargoVal, 화물타입: cargoType, 톤수값: tonVal, 톤수타입: tonType };
       });
       setEditList(initList.length ? initList : [emptyStop()]);
