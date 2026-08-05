@@ -49344,10 +49344,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         </div>
       )}
 
-      {/* ===== 단일 통합 카드 ===== */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* 헤더 */}
-        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+      {/* ===== 세로형 구획 — 구성마다 독립된 카드로 명확히 구분 ===== */}
+      <div className="space-y-4">
+
+        {/* 상단 헤더 카드 */}
+        <div className="bg-[#1B2B4B] rounded-2xl px-6 py-5 flex items-center justify-between shadow-sm">
           <div>
             <h2 className="text-white font-bold text-[16px]">회사 정보</h2>
             <p className="text-white/50 text-[12px] mt-0.5">{appData?.companyName || companyName}</p>
@@ -49359,159 +49360,152 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           )}
         </div>
 
-        {/* ── 기본 정보 (가로형 테이블) ── */}
-        <div className="border-b border-gray-100">
+        {/* 기본 정보 카드 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-5">기본 정보</p>
           {appData ? (
-            <>
-              {/* 1행: 회사명 / 대표자 / 사업자번호 / 연락처 / 이메일 */}
-              <div className="grid grid-cols-5 divide-x divide-gray-100">
-                {[
-                  { label: "회사명", value: appData.companyName },
-                  { label: "대표자", value: appData.representative || appData.대표자 || appData.ceo },
-                  { label: "사업자번호", value: appData.businessNumber || appData.사업자번호 },
-                  { label: "연락처", value: appData.phone || appData.연락처 },
-                  { label: "이메일", value: appData.email },
-                ].map(({ label, value }) => (
-                  <div key={label} className="px-7 py-6">
-                    <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">{label}</div>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+              {[
+                { label: "회사명", value: appData.companyName },
+                { label: "대표자", value: appData.representative || appData.대표자 || appData.ceo },
+                { label: "사업자번호", value: appData.businessNumber || appData.사업자번호 },
+                { label: "연락처", value: appData.phone || appData.연락처 },
+                { label: "이메일", value: appData.email },
+                { label: "회사 코드", value: appData.companyCode, mono: true },
+                { label: "승인일", value: appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : null },
+                { label: "주소", value: appData.address || appData.주소, span: true },
+              ].map(({ label, value, mono, span }) => (
+                <div key={label} className={span ? "col-span-2" : ""}>
+                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">{label}</div>
+                  {mono ? (
+                    <div className="text-[14px] font-mono font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 inline-block px-3 py-1 rounded-lg">{value || "-"}</div>
+                  ) : (
                     <div className="text-[15px] font-semibold text-gray-800">{value || "-"}</div>
-                  </div>
-                ))}
-              </div>
-              {/* 2행: 주소 / 회사코드 / 승인일 */}
-              <div className="grid grid-cols-4 divide-x divide-gray-100 border-t border-gray-100">
-                <div className="px-7 py-6 col-span-2">
-                  <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">주소</div>
-                  <div className="text-[15px] font-semibold text-gray-800">{appData.address || appData.주소 || "-"}</div>
+                  )}
                 </div>
-                <div className="px-7 py-6">
-                  <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">회사 코드</div>
-                  <div className="text-[15px] font-mono font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 inline-block px-3 py-1 rounded-lg">{appData.companyCode || "-"}</div>
-                </div>
-                <div className="px-7 py-6">
-                  <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wide">승인일</div>
-                  <div className="text-[15px] font-semibold text-gray-800">
-                    {appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : "-"}
-                  </div>
-                </div>
-              </div>
-            </>
+              ))}
+            </div>
           ) : (
-            <div className="px-6 py-10 text-[14px] text-gray-400 text-center">가입 승인 후 표시됩니다.</div>
+            <div className="py-8 text-[14px] text-gray-400 text-center">가입 승인 후 표시됩니다.</div>
           )}
         </div>
 
-        {/* ── 하단 3열: 계좌정보 | 사업자등록증 | 매출비밀번호 ── */}
-        <div className="grid grid-cols-3 divide-x divide-gray-100">
-          {/* 계좌 정보 */}
-          <div className="p-8">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">계좌 정보</p>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">은행</label>
-                  <select
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
-                    value={bankForm.bank}
-                    onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
-                  >
-                    <option value="">은행 선택</option>
-                    {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">예금주</label>
-                  <input autoComplete="off"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                    placeholder="예금주 이름"
-                    value={bankForm.accountHolder}
-                    onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
-                  />
-                </div>
+        {/* 계좌 정보 카드 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-5">계좌 정보</p>
+          <div className="max-w-[420px] space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">은행</label>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
+                  value={bankForm.bank}
+                  onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
+                >
+                  <option value="">은행 선택</option>
+                  {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">계좌번호</label>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">예금주</label>
                 <input autoComplete="off"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="숫자만 입력 (하이픈 제외)"
-                  value={bankForm.accountNumber}
-                  onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
+                  placeholder="예금주 이름"
+                  value={bankForm.accountHolder}
+                  onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
                 />
               </div>
-              {appData?.계좌은행 && (
-                <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/10 rounded-xl px-4 py-3">
-                  <div className="text-[11px] font-semibold text-gray-400 mb-1">현재 등록된 계좌</div>
-                  <div className="text-[15px] font-bold text-[#1B2B4B]">{appData.계좌은행} {appData.계좌번호}</div>
-                  <div className="text-[13px] text-gray-500 mt-0.5">예금주: {appData.예금주 || "-"}</div>
-                </div>
-              )}
-              <button
-                className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
-                disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
-                onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
-              >
-                계좌 저장
-              </button>
             </div>
-          </div>
-
-          {/* 사업자등록증 */}
-          <div className="p-8">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
-              <button
-                className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-              >
-                {uploading ? uploadProgress : "파일 선택"}
-              </button>
-              <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
-                onChange={e => handleFileUpload(e.target.files?.[0])} />
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">계좌번호</label>
+              <input autoComplete="off"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                placeholder="숫자만 입력 (하이픈 제외)"
+                value={bankForm.accountNumber}
+                onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
+              />
             </div>
-            <div
-              className={`border-2 border-dashed rounded-xl transition min-h-[180px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
-              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
+            {appData?.계좌은행 && (
+              <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/10 rounded-xl px-4 py-3">
+                <div className="text-[11px] font-semibold text-gray-400 mb-1">현재 등록된 계좌</div>
+                <div className="text-[15px] font-bold text-[#1B2B4B]">{appData.계좌은행} {appData.계좌번호}</div>
+                <div className="text-[13px] text-gray-500 mt-0.5">예금주: {appData.예금주 || "-"}</div>
+              </div>
+            )}
+            <button
+              className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
+              disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
+              onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
             >
-              {filePreviewSrc ? (
-                <div className="p-3 space-y-3 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
-                    <div className="flex gap-1.5 shrink-0">
-                      {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}>이미지 복사</button>}
-                      <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}>다운로드</button>
-                    </div>
-                  </div>
-                  {isImage && (
-                    <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[200px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
-                  )}
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                  <svg className="w-10 h-10 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
-                  <p className="text-[12px] text-gray-400 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 매출관리 비밀번호 */}
-          <div className="p-8">
-            {isAdmin && <RevenuePasswordSection companyName={companyName} />}
-          </div>
-
-          {/* 결제일(계산서→입금) 규칙 */}
-          <div className="p-8 border-t border-gray-100">
-            {isAdmin && <PaymentDateRuleSection companyName={companyName} />}
+              계좌 저장
+            </button>
           </div>
         </div>
+
+        {/* 사업자등록증 카드 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-5">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
+            <button
+              className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? uploadProgress : "파일 선택"}
+            </button>
+            <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+              onChange={e => handleFileUpload(e.target.files?.[0])} />
+          </div>
+          <div
+            className={`border-2 border-dashed rounded-xl transition min-h-[180px] max-w-[420px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
+          >
+            {filePreviewSrc ? (
+              <div className="p-3 space-y-3 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
+                  <div className="flex gap-1.5 shrink-0">
+                    {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}>이미지 복사</button>}
+                    <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}>다운로드</button>
+                  </div>
+                </div>
+                {isImage && (
+                  <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[200px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
+                <svg className="w-10 h-10 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
+                <p className="text-[12px] text-gray-400 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 매출관리 비밀번호 카드 */}
+        {isAdmin && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="max-w-[420px]">
+              <RevenuePasswordSection companyName={companyName} />
+            </div>
+          </div>
+        )}
+
+        {/* 결제일(계산서→입금) 규칙 카드 */}
+        {isAdmin && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="max-w-[420px]">
+              <PaymentDateRuleSection companyName={companyName} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 계좌 확인 팝업 */}
