@@ -4891,7 +4891,7 @@ setOpenMemo={setOpenMemo}
         {registeredSummary && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] px-6" onClick={() => setRegisteredSummary(null)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="bg-[#1B2B4B] px-5 py-4 flex items-center gap-2">
+              <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-4 flex items-center gap-2`}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
                 <h3 className="text-white font-bold text-[15px]">
                   {registeredSummary.length > 1 ? `${registeredSummary.length}건 등록 완료` : "등록 완료"}
@@ -4908,7 +4908,7 @@ setOpenMemo={setOpenMemo}
                       {o.거래처명 || "-"}{o.차량톤수 ? ` · ${o.차량톤수}` : ""}{o.차량종류 ? ` · ${o.차량종류}` : ""}
                     </div>
                     {o.청구운임 > 0 && (
-                      <div className="text-[12px] font-semibold text-[#1B2B4B]">{fmtMoney(o.청구운임)}</div>
+                      <div className={`text-[12px] font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>{fmtMoney(o.청구운임)}</div>
                     )}
                   </div>
                 ))}
@@ -4916,7 +4916,7 @@ setOpenMemo={setOpenMemo}
               <div className="px-5 py-4">
                 <button
                   onClick={() => setRegisteredSummary(null)}
-                  className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-[14px]"
+                  className={`w-full py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[14px]`}
                 >
                   확인
                 </button>
@@ -5096,7 +5096,8 @@ setOpenMemo={setOpenMemo}
 }
 const SALES_PIN_KEY = "exec_intel_pin_v1";
 
-function SalesPinGate({ onVerified }) {
+function SalesPinGate({ onVerified, cardVersionB = false }) {
+  const accent = cardVersionB ? "#1B2B4B" : "#2563eb";
   const hasPin = !!localStorage.getItem(SALES_PIN_KEY);
   const [mode, setMode] = useState(hasPin ? "verify" : "setup1");
   const [entered, setEntered] = useState("");
@@ -5130,7 +5131,7 @@ function SalesPinGate({ onVerified }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f4f6f9", display: "flex", flexDirection: "column" }}>
-      <div style={{ background: "#1B2B4B", padding: "16px 20px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ background: accent, padding: "16px 20px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ width: 34, height: 34, background: "rgba(255,255,255,0.12)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -5144,19 +5145,19 @@ function SalesPinGate({ onVerified }) {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 24px" }}>
         <div style={{ width: "100%", maxWidth: 340 }}>
           <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: "#1B2B4B", marginBottom: 6 }}>{heading}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: accent, marginBottom: 6 }}>{heading}</h2>
             <p style={{ fontSize: 13, color: "#9ca3af" }}>{sub}</p>
           </div>
           <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 20 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid", transition: "all 0.15s", background: i < entered.length ? "#1B2B4B" : "white", borderColor: i < entered.length ? "#1B2B4B" : "#d1d5db" }} />
+              <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid", transition: "all 0.15s", background: i < entered.length ? accent : "white", borderColor: i < entered.length ? accent : "#d1d5db" }} />
             ))}
           </div>
           {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", fontWeight: 600, marginBottom: 16, background: "#fef2f2", borderRadius: 10, padding: "9px 12px" }}>{error}</div>}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
             {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
               <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
-                style={{ height: 58, borderRadius: 14, fontSize: 20, fontWeight: 700, border: "none", cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, background: d === "←" ? "#f1f5f9" : "white", color: "#1B2B4B", boxShadow: d === null ? "none" : "0 2px 8px rgba(0,0,0,0.07)", transition: "all 0.1s", WebkitTapHighlightColor: "transparent" }}>
+                style={{ height: 58, borderRadius: 14, fontSize: 20, fontWeight: 700, border: "none", cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, background: d === "←" ? "#f1f5f9" : "white", color: accent, boxShadow: d === null ? "none" : "0 2px 8px rgba(0,0,0,0.07)", transition: "all 0.1s", WebkitTapHighlightColor: "transparent" }}>
                 {d}
               </button>
             ))}
@@ -5173,7 +5174,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
   const fmtWon = (v) => Number(v).toLocaleString("ko-KR");
 
-  if (!verified) return <SalesPinGate onVerified={() => { sessionStorage.setItem("sales_ok", "1"); setVerified(true); }} />;
+  if (!verified) return <SalesPinGate cardVersionB={cardVersionB} onVerified={() => { sessionStorage.setItem("sales_ok", "1"); setVerified(true); }} />;
 
   // 고정거래처 오더를 dispatch orders 형식으로 변환하여 합산
   const normalizeFixed = (r) => ({
@@ -14522,43 +14523,43 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
   }, [hireDate]);
 
   return (
-    <div className="px-4 py-5 space-y-4 pb-24">
+    <div className="px-4 py-5 space-y-4 pb-24" style={{ "--myinfo-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
       {/* 입사일 / 연차·월차 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">입사일 / 연차·월차</div>
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-[12px] text-gray-500 font-semibold flex-shrink-0">입사일</span>
           <select value={hireY || ""} onChange={e => handleHireDateChange(Number(e.target.value), hireM, hireD)}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
             <option value="">년</option>
             {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
           </select>
           <select value={hireM || ""} onChange={e => handleHireDateChange(hireY, Number(e.target.value), hireD)}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
             <option value="">월</option>
             {monthOptions.map(m => <option key={m} value={m}>{m}월</option>)}
           </select>
           <select value={hireD || ""} onChange={e => handleHireDateChange(hireY, hireM, Number(e.target.value))}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]">
+            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
             <option value="">일</option>
             {dayOptions.map(d => <option key={d} value={d}>{d}일</option>)}
           </select>
           {hireDateSaving && <span className="text-[10px] text-gray-400">저장중</span>}
           {yearsOfService && (
-            <span className="ml-auto text-[13px] font-bold text-[#1B2B4B]">{yearsOfService}</span>
+            <span className="ml-auto text-[13px] font-bold text-[var(--myinfo-accent)]">{yearsOfService}</span>
           )}
         </div>
         {leave ? (
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.leaveLabel}</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.leaveLabel}</div>
               <div className="text-[10px] text-gray-400 mt-0.5">구분</div>
             </div>
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.used}일</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.used}일</div>
               <div className="text-[10px] text-gray-400 mt-0.5">사용</div>
             </div>
-            <div className="bg-[#1B2B4B] rounded-xl p-2.5 text-center">
+            <div className="bg-[var(--myinfo-accent)] rounded-xl p-2.5 text-center">
               <div className="text-[15px] font-extrabold text-white">{leave.remaining}일</div>
               <div className="text-[10px] text-white/50 mt-0.5">잔여</div>
             </div>
@@ -14566,11 +14567,11 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
               총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계
             </div>
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.sickDays}일</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.sickDays}일</div>
               <div className="text-[10px] text-gray-400 mt-0.5">병가</div>
             </div>
             <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{leave.fieldDays}일</div>
+              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.fieldDays}일</div>
               <div className="text-[10px] text-gray-400 mt-0.5">외근</div>
             </div>
           </div>
@@ -14581,7 +14582,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
       {/* 프로필 카드 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
+        <div className={`${cardVersionB ? "bg-[var(--myinfo-accent)]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
           <div>
             <div className="text-white text-[17px] font-extrabold tracking-tight">{myName}</div>
             {myRole && <div className="text-white/60 text-[12px] mt-0.5">{myRole}</div>}
@@ -16629,7 +16630,7 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
             <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
               {[["청구운임","청구가"],["기사운임","기사운임"]].map(([val,label])=>(
                 <button key={val} type="button" onClick={()=>setFareField(val)}
-                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all ${fareField===val ? "bg-[#1B2B4B] text-white shadow-sm" : "text-gray-500"}`}>
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all ${fareField===val ? (cardVersionB ? "bg-[#1B2B4B] text-white shadow-sm" : "bg-blue-600 text-white shadow-sm") : "text-gray-500"}`}>
                   {label}
                 </button>
               ))}
