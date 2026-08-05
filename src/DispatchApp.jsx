@@ -10434,6 +10434,7 @@ className={`
   <CustomSelect
    className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.화물타입 || ""}
+        openOnFocus
 
         onChange={(e) => {
           const type = e.target.value;
@@ -10606,6 +10607,7 @@ className={`
       <CustomSelect
         className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 border-l border-l-[#1B2B4B] appearance-none cursor-pointer"
         value={form.톤수타입}
+        openOnFocus
 
         onChange={(e) => {
           const type = e.target.value;
@@ -11075,6 +11077,7 @@ className={`
               <CustomSelect
                 className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.화물타입 ?? "파레트"}
+                openOnFocus
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
@@ -11126,6 +11129,7 @@ className={`
               <CustomSelect
                 className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                 value={stop.톤수타입 ?? "톤"}
+                openOnFocus
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
