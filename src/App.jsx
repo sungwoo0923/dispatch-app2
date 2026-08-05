@@ -110,6 +110,13 @@ export default function App() {
       return;
     }
     // 이 시점에서는 phone UA가 아닌데 screen.width < 768 → 안드로이드 폰이 데스크탑 요청한 경우
+    // ⚠️ 폴더블(갤럭시Z폴드 등) 일부 기기에서 스크롤할 때 주소창이 접혔다 펴지며
+    // resize 이벤트가 계속 발생하는데, 매번 viewport meta content를 다시 쓰면
+    // 그 자체가 리플로우를 유발해 다시 resize를 트리거하는 피드백 루프가 생겨
+    // 화면이 떨리며 스크롤이 계속 맨 위로 튕기는 증상이 나타났다. 실제로 계산된
+    // 값이 바뀔 때만, 그것도 살짝 디바운스해서 반영하도록 방어한다.
+    let lastScaleContent = null;
+    let scaleTimer = null;
     const applyScale = () => {
       const screenW = window.screen.width || window.innerWidth;
       if (screenW >= 768) return; // 실제 폰 화면이 아니면 무시
@@ -118,14 +125,22 @@ export default function App() {
       const w = Math.min(screenW, window.innerWidth);
       const TARGET = 1200;
       const scale = Math.min(1, w / TARGET).toFixed(3);
-      meta.content = `width=${TARGET}, initial-scale=${scale}, minimum-scale=0.2, maximum-scale=5.0, user-scalable=yes`;
+      const content = `width=${TARGET}, initial-scale=${scale}, minimum-scale=0.2, maximum-scale=5.0, user-scalable=yes`;
+      if (content === lastScaleContent) return; // 값이 그대로면 재적용하지 않음(리플로우 방지)
+      lastScaleContent = content;
+      meta.content = content;
+    };
+    const applyScaleDebounced = () => {
+      clearTimeout(scaleTimer);
+      scaleTimer = setTimeout(applyScale, 120);
     };
     applyScale();
-    window.addEventListener("resize", applyScale);
+    window.addEventListener("resize", applyScaleDebounced);
     const onOri = () => setTimeout(applyScale, 150);
     window.addEventListener("orientationchange", onOri);
     return () => {
-      window.removeEventListener("resize", applyScale);
+      clearTimeout(scaleTimer);
+      window.removeEventListener("resize", applyScaleDebounced);
       window.removeEventListener("orientationchange", onOri);
     };
   }, [isTablet]);
@@ -134,6 +149,11 @@ export default function App() {
   useEffect(() => {
     if (!isTablet) return;
 
+    // ⚠️ 위 applyScale과 동일한 이유로, 계산된 값이 실제로 바뀔 때만(디바운스 포함)
+    // meta content를 다시 쓴다 — 폴더블 기기에서 스크롤 중 resize가 연속 발생해도
+    // 화면이 떨리며 상단으로 튕기지 않도록 방지.
+    let lastViewportContent = null;
+    let viewportTimer = null;
     const updateViewport = () => {
       let meta = document.querySelector('meta[name="viewport"]');
       if (!meta) {
@@ -147,16 +167,24 @@ export default function App() {
       const w = Math.min(window.screen.width || window.innerWidth, window.innerWidth);
       const TARGET = 1200;
       const scale = Math.min(1, (w / TARGET)).toFixed(3);
-      meta.content = `width=${TARGET}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=5.0, user-scalable=yes`;
+      const content = `width=${TARGET}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=5.0, user-scalable=yes`;
+      if (content === lastViewportContent) return;
+      lastViewportContent = content;
+      meta.content = content;
+    };
+    const updateViewportDebounced = () => {
+      clearTimeout(viewportTimer);
+      viewportTimer = setTimeout(updateViewport, 120);
     };
 
     updateViewport();
-    window.addEventListener("resize", updateViewport);
+    window.addEventListener("resize", updateViewportDebounced);
     const onOrientationChange = () => setTimeout(updateViewport, 120);
     window.addEventListener("orientationchange", onOrientationChange);
 
     return () => {
-      window.removeEventListener("resize", updateViewport);
+      clearTimeout(viewportTimer);
+      window.removeEventListener("resize", updateViewportDebounced);
       window.removeEventListener("orientationchange", onOrientationChange);
       const meta = document.querySelector('meta[name="viewport"]');
       if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
