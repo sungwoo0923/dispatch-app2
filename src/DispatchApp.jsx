@@ -13095,8 +13095,13 @@ className={`
               className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
               onClick={async () => {
                 const { plate, name, phone } = driverConflictPopup.input;
-                const newPlate = plate + "_" + Date.now();
-                await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                // ⚠️ 위 "기존 정보 덮어쓰기"와 똑같이 차량번호만으로 upsertDriver를 부르면
+                // upsertDriver가 "같은 차량번호 = 같은 문서"로 보고 기존 기사(예: 이봉우)
+                // 문서를 그대로 덮어써버려, "별도 등록"을 눌러도 실제로는 업데이트가
+                // 되어버리는 버그가 있었다 — 새 기사가 목록에 추가로 뜨지 않고, 방금 입력한
+                // 이름도 사라지는 것처럼 보였던 원인. id를 직접 새로 발급해서 넘기면
+                // upsertDriver가 차량번호로 기존 문서를 찾지 않고 진짜 별도 문서를 만든다.
+                await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: name, 전화번호: phone });
                 setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
                 setSmartDriverQuery(""); setSmartDriverMatched([]);
                 setDriverConflictPopup(null);
@@ -25027,7 +25032,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <div className="px-6 pb-6 grid grid-cols-2 gap-3">
               <button className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold" onClick={()=>{ const ex=smart4ConflictPopup.existing; smart4ConflictPopup.setTarget(p=>({...p,차량번호:ex.차량번호,이름:ex.이름,전화번호:formatPhone(ex.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>기존 정보 사용</button>
               <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>새 정보로 업데이트</button>
-              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>신규 기사로 별도 등록</button>
+              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({id: crypto.randomUUID(), 차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>신규 기사로 별도 등록</button>
             </div>
           </div>
         </div>
@@ -34239,7 +34244,7 @@ setCopyPlaceOptions(list);
             <div className="px-6 pb-6 grid grid-cols-2 gap-3">
               <button className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold" onClick={()=>{ const ex=smart5ConflictPopup.existing; smart5ConflictPopup.setTarget(p=>({...p,차량번호:ex.차량번호,이름:ex.이름,전화번호:formatPhone(ex.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>기존 정보 사용</button>
               <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>새 정보로 업데이트</button>
-              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>신규 기사로 별도 등록</button>
+              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({id: crypto.randomUUID(), 차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>신규 기사로 별도 등록</button>
             </div>
           </div>
         </div>
