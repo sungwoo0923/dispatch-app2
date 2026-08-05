@@ -927,7 +927,7 @@ function buildOrderCopyText(order) {
     ``,
     `${order.화물내용 || "-"} ${order.차량톤수 || order.톤수 || ""} ${order.차량종류 || order.차종 || ""}`.trim(),
     ``,
-    `${order.차량번호 || "-"} ${order.기사명 || ""} ${order.전화번호 || ""}`.trim(),
+    `${order.차량번호 || "-"} ${order.기사명 || ""} ${formatPhone(order.전화번호)}`.trim(),
     `${money}원 ${payText} 배차되었습니다.`,
   ].join("\n");
 }
@@ -1286,6 +1286,17 @@ const isUrgentOrder = (o = {}) => {
 };
 const normalizePhone = (p = "") =>
   String(p).replace(/[^\d+]/g, "");
+// 전화번호 숫자→하이픈 자동 포맷 (PC formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  if (digits.length === 11) return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  if (digits.length === 10) {
+    if (digits.startsWith("02")) return digits.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+    return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+  if (digits.length === 8) return digits.replace(/(\d{4})(\d{4})/, "$1-$2");
+  return digits;
+};
 // ======================================================================
 //  메인 컴포넌트
 // ======================================================================
@@ -7664,7 +7675,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
           </div>
           <div>
             <label className={labelCls}>연락처</label>
-            <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" />
+            <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(formatPhone(e.target.value))} placeholder="010-0000-0000" inputMode="tel" />
           </div>
         </div>
 
@@ -9432,7 +9443,7 @@ const handleAssignClick = () => {
                       <div className="px-4 py-3 bg-blue-50">
                         <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
                         <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
-                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
                         <div className="flex gap-2">
                           <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                             onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
@@ -11647,7 +11658,7 @@ const pickDrop = (c) => {
           placeholder="상차지 담당자번호"
           value={form.상차지담당자번호 || ""}
           onChange={(e) =>
-            update("상차지담당자번호", e.target.value)
+            update("상차지담당자번호", formatPhone(e.target.value))
           }
         />
 
@@ -11803,7 +11814,7 @@ const pickDrop = (c) => {
           placeholder="하차지 담당자번호"
           value={form.하차지담당자번호 || ""}
           onChange={(e) =>
-            update("하차지담당자번호", e.target.value)
+            update("하차지담당자번호", formatPhone(e.target.value))
           }
         />
 
@@ -13079,7 +13090,7 @@ const pickDrop = (c) => {
           <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             value={newClientForm.담당자번호}
-            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: e.target.value }))}
+            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: formatPhone(e.target.value) }))}
             placeholder="연락처 (선택)"
           />
         </div>
@@ -13358,7 +13369,7 @@ const pickDrop = (c) => {
                 className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="연락처"
                 value={stop.담당자번호 || ""}
-                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자번호: e.target.value } : s))}
+                onChange={e => { const v = formatPhone(e.target.value); setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자번호: v } : s)); }}
               />
             </div>
             {/* 화물내용 + 타입 */}
@@ -13849,7 +13860,7 @@ const buildManagerLine = (name, phone) => {
   if (!name && !phone) return ""; // 둘 다 없으면 아예 출력 안 함
 
   const safeName = name || "";
-  const safePhone = phone ? ` (${phone})` : "";
+  const safePhone = phone ? ` (${formatPhone(phone)})` : "";
 
   return `담당자 : ${safeName}${safePhone}`;
 };
@@ -13888,7 +13899,7 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
   const driverName =
     order.기사명 || order.이름 || order.기사 || "-";
   const driverPhone =
-    order.전화번호 || order.전화 || "-";
+    formatPhone(order.전화번호 || order.전화) || "-";
  // 🔧 파렛트 추출 (1파 / 2파 / 3파렛트 / 3PLT 대응)
   const extractPallet = (text) => {
   if (!text || typeof text !== "string") return "";
@@ -13964,8 +13975,8 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
       const _dNumMf=_dHasMf?`${_dStopsMf.length+1}.`:"";
       const _pConMf=buildManagerLine(order.상차지담당자,order.상차지담당자번호);
       const _dConMf=buildManagerLine(order.하차지담당자,order.하차지담당자번호);
-      const _pStopsTextMf=_pHasMf?_pStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _dStopsTextMf=_dHasMf?_dStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _pStopsTextMf=_pHasMf?_pStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _dStopsTextMf=_dHasMf?_dStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
       const _mainDCargoMf=(_dHasMf||_pHasMf)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
       const _mainDTonMf=(_dHasMf||_pHasMf)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
 
@@ -14018,7 +14029,7 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
         return buildShortUploadUrlMobile(oid, token);
       })();
 
-      const pm = (n, p) => (!n && !p) ? "" : p ? `담당자 : ${n || ""} (${p})` : `담당자 : ${n}`;
+      const pm = (n, p) => (!n && !p) ? "" : p ? `담당자 : ${n || ""} (${formatPhone(p)})` : `담당자 : ${n}`;
 
       let dateNotice2 = "";
       let dropTimeText2 = timeOrNow(order.하차시간) + (order.하차시간기준 ? ` ${order.하차시간기준}` : "");
@@ -14051,8 +14062,8 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
       const _dNumMd=_dHasMd?`${_dStopsMd.length+1}.`:"";
       const pickupMgr = pm(order.상차지담당자, order.상차지담당자번호);
       const dropMgr = pm(order.하차지담당자, order.하차지담당자번호);
-      const _pStopsTextMd=_pHasMd?_pStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _dStopsTextMd=_dHasMd?_dStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${s.담당자번호})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _pStopsTextMd=_pHasMd?_pStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+      const _dStopsTextMd=_dHasMd?_dStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
       const _mainDCargoMd=(_dHasMd||_pHasMd)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
       const _mainDTonMd=(_dHasMd||_pHasMd)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
 

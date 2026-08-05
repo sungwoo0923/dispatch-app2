@@ -12638,7 +12638,7 @@ className={`
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="전화번호"
                   value={editContactData.phone}
-                  onChange={e => setEditContactData(p => ({ ...p, phone: e.target.value }))}
+                  onChange={e => setEditContactData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
                   onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
                 />
                 <div className="flex gap-1.5 pt-0.5">
@@ -15811,7 +15811,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 onChange={e=>{setEditList(prev=>{const c=[...prev];c[idx].담당자=e.target.value;return c;});}} />
               <input autoComplete="off" className={inputCls} placeholder="연락처" value={stop.담당자번호}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
+                onChange={e=>{const v=formatPhone(e.target.value);setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
             </div>
 
             {/* 담당자 선택 팝업 (복수 담당자) */}
@@ -16123,7 +16123,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
                 placeholder="전화번호 입력"
                 inputMode="numeric"
                 value={form.전화번호}
-                onChange={e => setForm(p => ({ ...p, 전화번호: e.target.value.replace(/[^\d-]/g, "") }))}
+                onChange={e => setForm(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
               />
             </div>
             <div>
@@ -21964,7 +21964,7 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -22155,7 +22155,7 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -23579,7 +23579,7 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">상차지 연락처</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
@@ -23744,7 +23744,7 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div>
                 <label className="text-sm font-medium">하차지 연락처</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
@@ -31027,7 +31027,7 @@ return (
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.상차지담당자번호 || ""}
-                  onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: formatPhone(e.target.value) }))}
                 />
               </div>
               <div>
@@ -31196,7 +31196,7 @@ return (
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.하차지담당자번호 || ""}
-                  onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: formatPhone(e.target.value) }))}
                 />
               </div>
               <div>
@@ -32333,7 +32333,7 @@ setCopyPlaceOptions(list);
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -32506,7 +32506,7 @@ setCopyPlaceOptions(list);
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:formatPhone(e.target.value)}))}
         />
       </Field>
 
@@ -39419,7 +39419,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             </div>
             <input autoComplete="off" placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
             <input autoComplete="off" placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
-            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(formatPhone(e.target.value))} className="border p-2 rounded w-full mb-2" />
             {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✔ 기존 등록 차량 / 기사 자동 매칭됨</div>}
             {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">➕ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
             <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
@@ -39449,7 +39449,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: e.target.value}))} placeholder="010-0000-0000" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
               </div>
             </div>
             <div className="flex gap-2 px-6 pb-6">
@@ -39840,7 +39840,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="상차지 연락처">
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       {/* 경유 상차지 */}
                       {(() => {
@@ -39935,7 +39935,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="하차지 연락처">
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       {/* 경유 하차지 */}
                       {(() => {
@@ -39985,7 +39985,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                     className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-blue-400"
                                     placeholder="전화번호"
                                     value={editingDriver7Data.전화번호}
-                                    onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: e.target.value }))}
+                                    onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
                                   />
                                   <div className="flex gap-2">
                                     <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
@@ -46570,7 +46570,7 @@ React.useEffect(() => {
                   <div>
                     <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
-                      value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
+                      value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: formatPhone(e.target.value) }))} />
                   </div>
                   <div className="col-span-2">
                     <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
