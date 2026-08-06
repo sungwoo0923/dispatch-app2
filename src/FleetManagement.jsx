@@ -9,6 +9,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import * as XLSX from "xlsx";
+import { geocodeAddress } from "./tmapFareCalc";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -1080,36 +1081,203 @@ function RegistrationTab({ usersMap, myCompanyName }) {
 
 // ─── HistoryTab ──────────────────────────────────────────────────────────────
 
-// ─── 노선관리 탭 (지입/직영 차량별 배차 노선) ──────────────────────────────────
-// 왼쪽: 지입/직영 차량 검색 목록, 오른쪽: 선택한 차량의 배차(오더) 내역 + 금액.
-// dispatchData는 부모(DispatchApp)의 실시간 배차 데이터를 그대로 받으므로,
-// 실시간배차현황/배차현황에서 지입/직영 기사에게 배차되는 순간 자동으로 반영된다.
-function RouteManagementTab({ drivers, dispatchData }) {
-  const [q, setQ] = useState("");
-  const [selectedId, setSelectedId] = useState(null);
+// ─── 주소 축약 유틸 ───────────────────────────────────────────────────────────
+// "충북 청주시 서원구 2순환로1814번길87(장성동)" → "충북청주" 처럼 시/도 + 시/군/구
+// 수준으로만 줄여서, 관제 카드에서 전체 지번주소 대신 한눈에 보이는 대략적 위치로 쓴다.
+const PROVINCE_ABBR = {
+  "서울특별시": "서울", "서울시": "서울", "서울": "서울",
+  "부산광역시": "부산", "부산시": "부산", "부산": "부산",
+  "대구광역시": "대구", "대구시": "대구", "대구": "대구",
+  "인천광역시": "인천", "인천시": "인천", "인천": "인천",
+  "광주광역시": "광주", "광주시": "광주", "광주": "광주",
+  "대전광역시": "대전", "대전시": "대전", "대전": "대전",
+  "울산광역시": "울산", "울산시": "울산", "울산": "울산",
+  "세종특별자치시": "세종", "세종시": "세종", "세종": "세종",
+  "경기도": "경기", "경기": "경기",
+  "강원특별자치도": "강원", "강원도": "강원", "강원": "강원",
+  "충청북도": "충북", "충북": "충북",
+  "충청남도": "충남", "충남": "충남",
+  "전북특별자치도": "전북", "전라북도": "전북", "전북": "전북",
+  "전라남도": "전남", "전남": "전남",
+  "경상북도": "경북", "경북": "경북",
+  "경상남도": "경남", "경남": "경남",
+  "제주특별자치도": "제주", "제주도": "제주", "제주": "제주",
+};
+
+function abbrevAddr(addr) {
+  const s = String(addr || "").trim();
+  if (!s) return "";
+  const tokens = s.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return "";
+  const t0 = tokens[0];
+  const prov = PROVINCE_ABBR[t0] || (t0.length > 2 ? t0.slice(0, 2) : t0);
+  const t1 = tokens[1] || "";
+  const city = t1.replace(/(특별자치시|특별자치도|광역시|자치시|자치군|자치구)$/, "").replace(/(시|군|구)$/, "");
+  return city ? `${prov}${city}` : prov;
+}
+
+// ─── 요일 유틸 ────────────────────────────────────────────────────────────────
+const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function weekdayKoOf(dateStr) {
+  const d = new Date(`${dateStr}T12:00:00+09:00`);
+  return WEEKDAYS_KO[d.getDay()] || "";
+}
+function nowKstMinutes() {
+  const d = new Date(Date.now() + 9 * 3600000);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+function parseTimeToMin(t) {
+  const m = String(t || "").match(/(\d{1,2}):(\d{2})/);
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+}
+
+// ─── 오더 진행상태 판정 ────────────────────────────────────────────────────────
+// 이 앱의 오더 데이터에는 "상차중/운송중" 같은 실시간 상태 필드가 없으므로(그건
+// 기사용 GPS 앱 연동이 필요한 별도 체계), 선택한 날짜와 상/하차 예정시간을 기준으로
+// 예정/운송중/완료를 근사 계산한다. 배차관리에서 오더를 등록/수정하는 즉시
+// dispatchData가 실시간으로 갱신되므로 이 판정도 그때그때 다시 계산된다.
+const PROG_META = {
+  scheduled: { label: "상차 예정", bg: "#eff6ff", fg: "#3b82f6" },
+  progress: { label: "운송중", bg: "#fffbeb", fg: "#d97706" },
+  done: { label: "완료", bg: "#f0fdf4", fg: "#059669" },
+};
+function computeOrderProgress(order, selectedDate, todayStr) {
+  if (selectedDate < todayStr) return "done";
+  if (selectedDate > todayStr) return "scheduled";
+  const nowMin = nowKstMinutes();
+  const pickMin = parseTimeToMin(order.상차시간);
+  const dropMin = parseTimeToMin(order.하차시간);
+  const sameDay = !order.하차일 || order.하차일 === order.상차일;
+  if (sameDay && dropMin != null && nowMin >= dropMin) return "done";
+  if (pickMin != null && nowMin < pickMin) return "scheduled";
+  return "progress";
+}
+
+// ─── 이동거리/예상시간 뱃지 ────────────────────────────────────────────────────
+// Tmap 지오코딩 + 직선거리*1.25 보정(estimateDistanceFare와 동일 기준)으로 대략적인
+// 이동거리를 구하고, 평균 60km/h 가정으로 예상 소요시간을 계산한다. 같은 주소쌍은
+// 캐시하고, 요청은 순차 처리해 API 과호출을 막는다.
+const _routeDistCache = new Map();
+let _routeDistQueue = [];
+let _routeDistProcessing = false;
+
+function enqueueRouteDist(fromAddr, toAddr, cb) {
+  const key = `${fromAddr}→${toAddr}`;
+  if (_routeDistCache.has(key)) { cb(_routeDistCache.get(key)); return; }
+  _routeDistQueue.push({ fromAddr, toAddr, key, cb });
+  _processRouteDistQueue();
+}
+
+async function _processRouteDistQueue() {
+  if (_routeDistProcessing || _routeDistQueue.length === 0) return;
+  _routeDistProcessing = true;
+  const { fromAddr, toAddr, key, cb } = _routeDistQueue.shift();
+  try {
+    const [from, to] = await Promise.all([geocodeAddress(fromAddr), geocodeAddress(toAddr)]);
+    if (from && to) {
+      const km = Math.round(haversineKm(from.lat, from.lon, to.lat, to.lon) * 1.25 * 10) / 10;
+      const minutes = Math.max(5, Math.round((km / 60) * 60));
+      const result = { km, minutes };
+      _routeDistCache.set(key, result);
+      cb(result);
+    } else {
+      _routeDistCache.set(key, null);
+      cb(null);
+    }
+  } catch {
+    cb(null);
+  }
+  await new Promise(r => setTimeout(r, 350));
+  _routeDistProcessing = false;
+  _processRouteDistQueue();
+}
+
+function RouteDistanceBadge({ fromAddr, toAddr }) {
+  const [info, setInfo] = useState(() =>
+    fromAddr && toAddr ? _routeDistCache.get(`${fromAddr}→${toAddr}`) : null
+  );
+  useEffect(() => {
+    if (!fromAddr || !toAddr) return;
+    const key = `${fromAddr}→${toAddr}`;
+    if (_routeDistCache.has(key)) { setInfo(_routeDistCache.get(key)); return; }
+    setInfo(undefined);
+    enqueueRouteDist(fromAddr, toAddr, setInfo);
+  }, [fromAddr, toAddr]);
+  if (!fromAddr || !toAddr) return null;
+  if (info === undefined) return <span style={{ fontSize: 12, color: "#d1d5db" }}>거리 계산중…</span>;
+  if (!info) return null;
+  const timeLabel = info.minutes >= 60 ? `${Math.floor(info.minutes / 60)}시간 ${info.minutes % 60}분` : `${info.minutes}분`;
+  return (
+    <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700, background: "#f8f9fb", padding: "2px 8px", borderRadius: 99, border: "1px solid #eef0f3", whiteSpace: "nowrap" }}>
+      🚚 약 {info.km}km · {timeLabel}
+    </span>
+  );
+}
+
+// ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
+
+function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, onOpenDetail }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ padding: "12px 16px", borderBottom: orders.length ? "1px solid #f0f2f5" : "none", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ width: 36, height: 36, borderRadius: 9, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="18" height="18" fill="none" stroke="white" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" /></svg>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{driver.이름}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 99, background: driver.등급 === "직영" ? NAVY : "#e5e9f2", color: driver.등급 === "직영" ? "#fff" : NAVY }}>{driver.등급}</span>
+            {isOffDay && <span style={{ fontSize: 12, fontWeight: 700, color: "#ef4444", background: "#fef2f2", padding: "1px 7px", borderRadius: 99 }}>근무 불가일</span>}
+          </div>
+          <div style={{ fontSize: 13, color: "#6b7280", fontFamily: "monospace", marginTop: 2 }}>
+            {driver.차량번호}{driver.전화번호 && driver.전화번호 !== "-" ? ` · ${driver.전화번호}` : ""}{driver.거주지 ? ` · 거주지 ${driver.거주지}` : ""}
+          </div>
+        </div>
+        <button onClick={() => onOpenDetail(driver)} style={{ marginLeft: "auto", padding: "6px 12px", borderRadius: 8, border: "1px solid " + NAVY, background: "#fff", color: NAVY, fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+          상세보기
+        </button>
+      </div>
+      {orders.length === 0 ? (
+        <div style={{ padding: "16px 16px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
+          {selectedDate > todayStr ? "예정된 배차가 없습니다" : selectedDate < todayStr ? "배차 내역이 없습니다" : "오늘 배차 내역이 없습니다"}
+        </div>
+      ) : (
+        orders.map((r, i) => {
+          const prog = computeOrderProgress(r, selectedDate, todayStr);
+          const meta = PROG_META[prog];
+          return (
+            <div key={r._id || i} style={{ padding: "10px 16px", borderTop: i > 0 ? "1px solid #f3f4f6" : "none", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 9px", borderRadius: 99, background: meta.bg, color: meta.fg, flexShrink: 0 }}>{meta.label}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                <span>{abbrevAddr(r.상차지주소) || r.상차지명 || "-"}</span>
+                <span style={{ color: "#9ca3af" }}>→</span>
+                <span>{abbrevAddr(r.하차지주소) || r.하차지명 || "-"}</span>
+              </div>
+              <span style={{ fontSize: 13, color: "#6b7280", whiteSpace: "nowrap" }}>
+                {r.상차시간 || "즉시"} ~ {r.하차시간 || "즉시"}{r.하차일 && r.하차일 !== r.상차일 ? ` (${r.하차일})` : ""}
+              </span>
+              <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
+              <span style={{ marginLeft: "auto", fontSize: 13, color: "#9ca3af" }}>{r.거래처명 || ""}</span>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// ─── 기사 상세 모달 (기존 전체 이력/주요노선/엑셀다운로드 기능 이관) ─────────────
+
+function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
 
-  const filteredDrivers = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    if (!query) return drivers;
-    return drivers.filter(d =>
-      (d.이름 || "").toLowerCase().includes(query) ||
-      (d.차량번호 || "").toLowerCase().includes(query)
-    );
-  }, [drivers, q]);
-
-  const selectedDriver = drivers.find(d => d.id === selectedId) || null;
-
   const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
 
-  // 선택한 차량의 전체 배차 이력(기간 필터 전) — 요약 통계/주요 노선은 항상 전체
-  // 이력 기준으로 계산하고, 아래 표만 기간으로 좁혀서 볼 수 있게 한다.
   const allDriverOrders = useMemo(() => {
-    if (!selectedDriver) return [];
-    const name = (selectedDriver.이름 || "").trim();
-    const plate = (selectedDriver.차량번호 || "").trim();
+    const name = (driver.이름 || "").trim();
+    const plate = (driver.차량번호 || "").trim();
     if (!name && !plate) return [];
     return (dispatchData || [])
       .filter(r => {
@@ -1118,7 +1286,7 @@ function RouteManagementTab({ drivers, dispatchData }) {
         return (!!name && rName === name) || (!!plate && rPlate === plate);
       })
       .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
-  }, [selectedDriver, dispatchData]);
+  }, [driver, dispatchData]);
 
   const driverOrders = useMemo(() => {
     return allDriverOrders.filter(r => {
@@ -1138,9 +1306,6 @@ function RouteManagementTab({ drivers, dispatchData }) {
   const totalDriverFare = driverOrders.reduce((s, r) => s + toWon(r.기사운임), 0);
   const totalMargin = totalFare - totalDriverFare;
 
-  // 주요 노선 — 상차지명 → 하차지명 조합별로 묶어 빈도/평균운임/최근일을 보여준다.
-  // "노선관리"라는 이름에 맞게, 개별 오더 나열뿐 아니라 이 차량이 실제로 반복해서
-  // 뛰는 노선이 무엇인지 한눈에 파악할 수 있게 하는 게 목적이다.
   const topRoutes = useMemo(() => {
     const map = new Map();
     allDriverOrders.forEach(r => {
@@ -1157,7 +1322,7 @@ function RouteManagementTab({ drivers, dispatchData }) {
   }, [allDriverOrders]);
 
   const handleExport = () => {
-    if (!selectedDriver || !driverOrders.length) return;
+    if (!driverOrders.length) return;
     const rows = driverOrders.map(r => ({
       상차일: r.상차일 || "", 거래처명: r.거래처명 || "", 상차지명: r.상차지명 || "",
       하차지명: r.하차지명 || "", 차량종류: r.차량종류 || "", 배차상태: r.배차상태 || "",
@@ -1166,139 +1331,95 @@ function RouteManagementTab({ drivers, dispatchData }) {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "노선내역");
-    XLSX.writeFile(wb, `${selectedDriver.이름}_노선내역.xlsx`);
+    XLSX.writeFile(wb, `${driver.이름}_노선내역.xlsx`);
   };
 
   return (
-    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-      {/* 왼쪽: 검색 */}
-      <div style={{ width: 320, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-        <div style={{ padding: 14, borderBottom: "1px solid #e5e7eb" }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: NAVY, marginBottom: 8 }}>지입/직영 차량 검색</div>
-          <input
-            placeholder="기사명 또는 차량번호 검색"
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 15, outline: "none", boxSizing: "border-box" }}
-          />
-          <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>총 {drivers.length}대</div>
-        </div>
-        <div style={{ maxHeight: 620, overflowY: "auto" }}>
-          {filteredDrivers.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", fontSize: 15, color: "#9ca3af", lineHeight: 1.6 }}>
-              지입/직영 등급 기사가 없습니다.<br />기사관리에서 등급을 지정해주세요.
-            </div>
-          ) : filteredDrivers.map(d => (
-            <div
-              key={d.id}
-              onClick={() => setSelectedId(d.id)}
-              style={{
-                padding: "12px 14px", cursor: "pointer", borderBottom: "1px solid #f3f4f6",
-                background: selectedId === d.id ? "#eef1f7" : "#fff",
-                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{d.이름}</div>
-                <div style={{ fontSize: 14, color: "#6b7280", fontFamily: "monospace" }}>{d.차량번호}</div>
-              </div>
-              <span style={{
-                fontSize: 13, fontWeight: 800, padding: "2px 8px", borderRadius: 99, flexShrink: 0,
-                background: d.등급 === "직영" ? NAVY : "#e5e9f2", color: d.등급 === "직영" ? "#fff" : NAVY,
-              }}>{d.등급}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 오른쪽: 오더 내역 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {!selectedDriver ? (
-          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 16 }}>
-            왼쪽에서 지입/직영 차량을 선택하면 배차 노선(오더) 내역이 표시됩니다.
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div style={{ background: "#f4f6f9", borderRadius: 14, width: "min(1040px, 100%)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,.25)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: "sticky", top: 0, background: NAVY, padding: "16px 20px", display: "flex", alignItems: "center", zIndex: 1 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{driver.이름} <span style={{ fontWeight: 600, fontSize: 14, color: "rgba(255,255,255,.7)", fontFamily: "monospace" }}>{driver.차량번호}</span></div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 2 }}>{driver.등급} · {driver.전화번호 || ""}{driver.거주지 ? ` · 거주지 ${driver.거주지}` : ""}</div>
           </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: NAVY }}>{selectedDriver.이름}</div>
-                <div style={{ fontSize: 15, color: "#6b7280", fontFamily: "monospace" }}>{selectedDriver.차량번호} · {selectedDriver.등급} · {selectedDriver.전화번호 || ""}</div>
-              </div>
-              <div style={{ marginLeft: "auto", display: "flex", gap: 24, flexWrap: "wrap" }}>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, color: "#9ca3af" }}>오더 건수</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{driverOrders.length}건</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, color: "#9ca3af" }}>청구운임 합계</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{totalFare.toLocaleString()}원</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, color: "#9ca3af" }}>기사운임 합계</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981" }}>{totalDriverFare.toLocaleString()}원</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, color: "#9ca3af" }}>수수료(마진)</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#f59e0b" }}>{totalMargin.toLocaleString()}원</div>
-                </div>
-              </div>
+          <button onClick={onClose} style={{ marginLeft: "auto", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 8, background: "rgba(255,255,255,.15)", cursor: "pointer", color: "#fff", padding: 0 }}>
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+
+        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16, display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>오더 건수</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{driverOrders.length}건</div>
             </div>
-
-            {/* 주요 노선 */}
-            {topRoutes.length > 0 && (
-              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-                <div style={{ padding: "12px 16px", borderBottom: "1px solid #e5e7eb", fontSize: 16, fontWeight: 800, color: NAVY }}>
-                  주요 노선 (전체 이력 기준, 빈도순)
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, padding: 14 }}>
-                  {topRoutes.map((rt, i) => (
-                    <div key={i} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, background: "#f9fafb" }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
-                        {rt.from} <span style={{ color: "#9ca3af" }}>→</span> {rt.to}
-                      </div>
-                      <div style={{ fontSize: 13, color: "#6b7280", display: "flex", justifyContent: "space-between" }}>
-                        <span>{rt.count}회</span>
-                        <span>평균 {Math.round(rt.fareSum / rt.count).toLocaleString()}원</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>최근 {rt.lastDate || "-"}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 필터 바 */}
-            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280" }}>기간</span>
-              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-                style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }} />
-              <span style={{ color: "#9ca3af" }}>~</span>
-              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-                style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }} />
-              {(fromDate || toDate) && (
-                <button onClick={() => { setFromDate(""); setToDate(""); }}
-                  style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", fontSize: 13, cursor: "pointer" }}>
-                  초기화
-                </button>
-              )}
-              <input
-                placeholder="거래처/상하차지 검색"
-                value={orderSearch}
-                onChange={e => setOrderSearch(e.target.value)}
-                style={{ flex: 1, minWidth: 160, padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13, outline: "none" }}
-              />
-              <button onClick={handleExport} disabled={!driverOrders.length}
-                style={{
-                  padding: "6px 14px", borderRadius: 6, border: "1px solid " + NAVY,
-                  background: driverOrders.length ? NAVY : "#e5e7eb", color: driverOrders.length ? "#fff" : "#9ca3af",
-                  fontSize: 13, fontWeight: 700, cursor: driverOrders.length ? "pointer" : "not-allowed",
-                }}>
-                엑셀 다운로드
-              </button>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>청구운임 합계</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{totalFare.toLocaleString()}원</div>
             </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>기사운임 합계</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981" }}>{totalDriverFare.toLocaleString()}원</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>수수료(마진)</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#f59e0b" }}>{totalMargin.toLocaleString()}원</div>
+            </div>
+          </div>
 
+          {topRoutes.length > 0 && (
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-              <div style={{ overflowX: "auto" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid #e5e7eb", fontSize: 16, fontWeight: 800, color: NAVY }}>
+                주요 노선 (전체 이력 기준, 빈도순)
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, padding: 14 }}>
+                {topRoutes.map((rt, i) => (
+                  <div key={i} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, background: "#f9fafb" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
+                      {rt.from} <span style={{ color: "#9ca3af" }}>→</span> {rt.to}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#6b7280", display: "flex", justifyContent: "space-between" }}>
+                      <span>{rt.count}회</span>
+                      <span>평균 {Math.round(rt.fareSum / rt.count).toLocaleString()}원</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>최근 {rt.lastDate || "-"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280" }}>기간</span>
+            <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+              style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }} />
+            <span style={{ color: "#9ca3af" }}>~</span>
+            <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+              style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }} />
+            {(fromDate || toDate) && (
+              <button onClick={() => { setFromDate(""); setToDate(""); }}
+                style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", fontSize: 13, cursor: "pointer" }}>
+                초기화
+              </button>
+            )}
+            <input
+              placeholder="거래처/상하차지 검색"
+              value={orderSearch}
+              onChange={e => setOrderSearch(e.target.value)}
+              style={{ flex: 1, minWidth: 160, padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13, outline: "none" }}
+            />
+            <button onClick={handleExport} disabled={!driverOrders.length}
+              style={{
+                padding: "6px 14px", borderRadius: 6, border: "1px solid " + NAVY,
+                background: driverOrders.length ? NAVY : "#e5e7eb", color: driverOrders.length ? "#fff" : "#9ca3af",
+                fontSize: 13, fontWeight: 700, cursor: driverOrders.length ? "pointer" : "not-allowed",
+              }}>
+              엑셀 다운로드
+            </button>
+          </div>
+
+          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
                 <thead>
                   <tr style={{ background: NAVY }}>
@@ -1324,11 +1445,142 @@ function RouteManagementTab({ drivers, dispatchData }) {
                   ))}
                 </tbody>
               </table>
-              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ─── 노선관리 탭 (지입/직영 전체 차량 실시간 관제) ─────────────────────────────
+// 진입 시 지입/직영 기사 전원의 "선택 날짜" 오더 진행상황을 카드 목록으로 한눈에
+// 보여준다. dispatchData는 부모(DispatchApp)의 실시간 배차 데이터를 그대로 받으므로,
+// 실시간배차현황/배차현황에서 지입/직영 기사에게 배차되는 순간 자동으로 반영된다.
+// 기사 1명의 전체 이력/주요노선/엑셀다운로드는 카드의 "상세보기"로 이동했다.
+function RouteManagementTab({ drivers, dispatchData }) {
+  const [q, setQ] = useState("");
+  const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow"
+  const [detailDriver, setDetailDriver] = useState(null);
+
+  const todayStr = kstDateStr();
+  const selectedDate = useMemo(() => {
+    const offset = dayMode === "yesterday" ? -86400000 : dayMode === "tomorrow" ? 86400000 : 0;
+    return kstDateStr(new Date(Date.now() + offset));
+  }, [dayMode]);
+  const weekdayLabel = weekdayKoOf(selectedDate);
+
+  const filteredDrivers = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return drivers;
+    return drivers.filter(d =>
+      (d.이름 || "").toLowerCase().includes(query) ||
+      (d.차량번호 || "").toLowerCase().includes(query) ||
+      (d.거주지 || "").toLowerCase().includes(query)
+    );
+  }, [drivers, q]);
+
+  // 선택 날짜(상차일 기준) 오더를 차량번호 우선, 없으면 이름으로 매칭해 빠르게 찾을 수
+  // 있도록 인덱스를 만든다.
+  const ordersByPlate = useMemo(() => {
+    const m = new Map();
+    (dispatchData || []).forEach(r => {
+      if ((r.상차일 || "") !== selectedDate) return;
+      const p = (r.차량번호 || "").trim();
+      if (!p) return;
+      if (!m.has(p)) m.set(p, []);
+      m.get(p).push(r);
+    });
+    return m;
+  }, [dispatchData, selectedDate]);
+
+  const ordersByName = useMemo(() => {
+    const m = new Map();
+    (dispatchData || []).forEach(r => {
+      if ((r.상차일 || "") !== selectedDate) return;
+      const n = (r.이름 || "").trim();
+      if (!n) return;
+      if (!m.has(n)) m.set(n, []);
+      m.get(n).push(r);
+    });
+    return m;
+  }, [dispatchData, selectedDate]);
+
+  const driverRows = useMemo(() => {
+    const rows = filteredDrivers.map(d => {
+      const plate = (d.차량번호 || "").trim();
+      const name = (d.이름 || "").trim();
+      const raw = (plate && ordersByPlate.get(plate)) || (name && ordersByName.get(name)) || [];
+      const orders = [...raw].sort((a, b) => (parseTimeToMin(a.상차시간) ?? 9999) - (parseTimeToMin(b.상차시간) ?? 9999));
+      const isOffDay = (d.근무요일 && d.근무요일.length) ? !d.근무요일.includes(weekdayLabel) : false;
+      return { driver: d, orders, isOffDay };
+    });
+    return rows.sort((a, b) => {
+      if ((a.orders.length > 0) !== (b.orders.length > 0)) return a.orders.length > 0 ? -1 : 1;
+      const at = a.orders[0] ? (parseTimeToMin(a.orders[0].상차시간) ?? 9999) : 9999;
+      const bt = b.orders[0] ? (parseTimeToMin(b.orders[0].상차시간) ?? 9999) : 9999;
+      if (at !== bt) return at - bt;
+      return (a.driver.이름 || "").localeCompare(b.driver.이름 || "", "ko");
+    });
+  }, [filteredDrivers, ordersByPlate, ordersByName, weekdayLabel]);
+
+  const dispatchedCount = driverRows.filter(r => r.orders.length > 0).length;
+
+  return (
+    <div>
+      {/* 상단 바: 검색 + 어제/당일/내일 + KPI */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+        <input
+          placeholder="기사명, 차량번호, 거주지 검색"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, minWidth: 220, outline: "none", boxSizing: "border-box" }}
+        />
+        <div style={{ display: "flex", gap: 4 }}>
+          {["yesterday", "today", "tomorrow"].map((mode, i) => {
+            const labels = ["어제", "당일", "내일"];
+            return (
+              <button key={mode} onClick={() => setDayMode(mode)}
+                style={{
+                  height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  background: dayMode === mode ? NAVY : "#f3f4f6", color: dayMode === mode ? "#fff" : "#374151", transition: "all .12s",
+                }}>
+                {labels[i]}
+              </button>
+            );
+          })}
+        </div>
+        <span style={{ fontSize: 13, color: "#9ca3af" }}>{selectedDate} ({weekdayLabel})</span>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 16, fontSize: 14, color: "#6b7280" }}>
+          <span>전체 <b style={{ color: NAVY }}>{drivers.length}</b>대</span>
+          <span>배차 <b style={{ color: "#059669" }}>{dispatchedCount}</b>대</span>
+          <span>미배차 <b style={{ color: "#ef4444" }}>{drivers.length - dispatchedCount}</b>대</span>
+        </div>
+      </div>
+
+      {driverRows.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 16 }}>
+          지입/직영 등급 기사가 없습니다.<br />기사관리에서 등급을 지정해주세요.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {driverRows.map(({ driver, orders, isOffDay }) => (
+            <DriverRouteCard
+              key={driver.id}
+              driver={driver}
+              orders={orders}
+              selectedDate={selectedDate}
+              todayStr={todayStr}
+              isOffDay={isOffDay}
+              onOpenDetail={setDetailDriver}
+            />
+          ))}
+        </div>
+      )}
+
+      {detailDriver && (
+        <DriverRouteDetailModal driver={detailDriver} dispatchData={dispatchData} onClose={() => setDetailDriver(null)} />
+      )}
     </div>
   );
 }
@@ -2567,6 +2819,8 @@ export default function FleetManagement({ dispatchData = [] }) {
         차량번호: (raw.차량번호 || raw.carNo || "").trim() || "-",
         전화번호: (raw.전화번호 || raw.phone || "").trim() || "-",
         등급: raw.등급,
+        거주지: raw.거주지 || "",
+        근무요일: raw.근무요일 || [],
       }))
       .sort((a, b) => a.이름.localeCompare(b.이름, "ko"));
   }, [driversRaw]);
