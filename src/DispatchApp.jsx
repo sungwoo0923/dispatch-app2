@@ -17081,6 +17081,180 @@ function realtimeRowPropsEqual(prev, next) {
 
 const RealtimeRow = React.memo(RealtimeRowBase, realtimeRowPropsEqual);
 
+// ══════════════════════════════════════════════════════════════════════════
+// ⭐ 최적매칭 — 우클릭 컨텍스트메뉴에서 "이 오더와 같거나 비슷한 노선(상/하차지·
+// 화물내용·톤수·차량종류)을 과거에 뛰었던 기사"를 찾아 점수순으로 보여주고,
+// 개별/일괄로 "가능하신지" 문자를 바로 보낼 수 있게 하는 배차 보조 도구.
+// 4/5파트 어디서든 재사용할 수 있도록 완전히 독립적인(외부 클로저에 기대지 않는)
+// 컴포넌트로 만들었다 — 이 파일은 도우미 함수들이 특정 컴포넌트 안에 갇혀있는 경우가
+// 많아서, props로 받은 값만으로 전부 계산하게 해 어디서 호출하든 안전하게 동작한다.
+// ══════════════════════════════════════════════════════════════════════════
+function _omNormKey(s = "") {
+  return String(s).toLowerCase().replace(/\s+/g, "").replace(/[()（）\-.,]/g, "");
+}
+function _omExtractTon(text = "") {
+  const m = String(text || "").match(/([\d.]+)\s*톤/);
+  return m ? parseFloat(m[1]) : null;
+}
+function _omNormVehicle(type = "") {
+  const t = String(type || "");
+  if (/냉동/.test(t)) return "냉동";
+  if (/냉장/.test(t)) return "냉장";
+  if (/윙/.test(t)) return "윙바디";
+  if (/탑/.test(t)) return "탑";
+  if (/카고/.test(t)) return "카고";
+  return t.trim();
+}
+// 대상 오더(row) 대비 과거 오더(cand) 유사도 점수 — 상/하차지 일치가 절대적으로 가장
+// 중요하고(둘 다 일치해야 후보로 인정), 화물내용/차량종류/톤수가 비슷할수록 가점.
+function calcOptimalMatchScore(target, cand) {
+  let score = 0;
+  const pickupMatch = _omNormKey(cand.상차지명) === _omNormKey(target.상차지명);
+  const dropMatch = _omNormKey(cand.하차지명) === _omNormKey(target.하차지명);
+  if (!pickupMatch || !dropMatch) return 0; // 노선이 다르면 아예 후보 아님
+  score += 60;
+  const tCargo = String(target.화물내용 || "").trim();
+  const cCargo = String(cand.화물내용 || "").trim();
+  if (tCargo && cCargo) {
+    if (_omNormKey(tCargo) === _omNormKey(cCargo)) score += 20;
+    else if (_omNormKey(cCargo).includes(_omNormKey(tCargo).slice(0, 2))) score += 8;
+  }
+  if (target.차량종류 && cand.차량종류 && _omNormVehicle(target.차량종류) === _omNormVehicle(cand.차량종류)) score += 12;
+  const tTon = _omExtractTon(target.차량톤수);
+  const cTon = _omExtractTon(cand.차량톤수);
+  if (tTon != null && cTon != null && Math.abs(tTon - cTon) <= 0.5) score += 8;
+  return score;
+}
+
+function buildOptimalMatchSmsBody(row, companyName) {
+  const co = companyName ? `${companyName}운송사입니다.` : "운송사입니다.";
+  return [
+    `안녕하세요 ${co}`,
+    `${row.상차일 || ""} ${row.상차지명 || "-"} → ${row.하차지명 || "-"} 건 배차 가능하신지 확인 부탁드립니다.`,
+    `화물: ${row.화물내용 || "-"} / 차량톤수: ${row.차량톤수 || "-"}`,
+    `상차시간: ${row.상차시간 || "즉시"}`,
+  ].join("\n");
+}
+
+function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
+  const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
+  const [selected, setSelected] = React.useState(() => new Set());
+
+  const candidates = React.useMemo(() => {
+    if (!row) return [];
+    const map = new Map();
+    (dispatchData || []).forEach(r => {
+      if (r === row || r._id === row._id) return;
+      const name = (r.이름 || "").trim();
+      const plate = (r.차량번호 || "").trim();
+      if (!name && !plate) return; // 기사 정보가 없는 이력은 후보가 될 수 없음
+      const score = calcOptimalMatchScore(row, r);
+      if (score <= 0) return;
+      const key = `${name}|${plate}`;
+      const prev = map.get(key);
+      const g = prev || { 이름: name, 차량번호: plate, 전화번호: r.전화번호 || "", count: 0, bestScore: 0, totalFare: 0, totalDriverFare: 0, latest: null };
+      g.count += 1;
+      g.bestScore = Math.max(g.bestScore, score);
+      g.totalFare += toWon(r.청구운임);
+      g.totalDriverFare += toWon(r.기사운임);
+      if (!g.전화번호 && r.전화번호) g.전화번호 = r.전화번호;
+      if (!g.latest || String(r.상차일 || "") > String(g.latest.상차일 || "")) g.latest = r;
+      map.set(key, g);
+    });
+    return [...map.values()].sort((a, b) => b.bestScore - a.bestScore || b.count - a.count);
+  }, [row, dispatchData]);
+
+  if (!row) return null;
+
+  const smsBody = buildOptimalMatchSmsBody(row, companyName);
+
+  const sendTo = (phones) => {
+    const list = [...new Set(phones.filter(Boolean))];
+    if (!list.length) return;
+    window.location.href = `sms:${list.join(",")}?body=${encodeURIComponent(smsBody)}`;
+  };
+
+  const toggle = (key) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  const selectedPhones = candidates.filter(c => selected.has(`${c.이름}|${c.차량번호}`)).map(c => c.전화번호.replace(/[^\d]/g, ""));
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-[95vw] max-h-[86vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+          <div>
+            <h3 className="text-white font-bold text-[15px]">최적매칭</h3>
+            <p className="text-white/60 text-[12px] mt-0.5">
+              {row.상차일 || ""} · {row.상차지명 || "-"} → {row.하차지명 || "-"} 건과 같은 노선을 다녀간 기사
+            </p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-lg leading-none">✕</button>
+        </div>
+
+        <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 text-[12px] text-gray-500 shrink-0">
+          화물 <span className="font-semibold text-gray-700">{row.화물내용 || "-"}</span> · 차량톤수 <span className="font-semibold text-gray-700">{row.차량톤수 || "-"}</span> · 상차시간 <span className="font-semibold text-gray-700">{row.상차시간 || "즉시"}</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {candidates.length === 0 ? (
+            <div className="py-16 text-center text-[13px] text-gray-400">
+              같은 노선을 다녀간 기사 이력이 없습니다.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {candidates.map((c) => {
+                const key = `${c.이름}|${c.차량번호}`;
+                const checked = selected.has(key);
+                const avgFare = c.count ? Math.round(c.totalFare / c.count) : 0;
+                return (
+                  <div key={key} className="px-6 py-3 flex items-center gap-3">
+                    <input type="checkbox" checked={checked} onChange={() => toggle(key)} className="w-4 h-4 accent-[#1B2B4B] shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-[14px] text-gray-900">{c.이름 || "-"}</span>
+                        <span className="text-[12px] font-semibold text-gray-500 font-mono">{c.차량번호 || "-"}</span>
+                        <span className="text-[11px] font-semibold text-gray-400">{formatPhone(c.전화번호) || "-"}</span>
+                      </div>
+                      <div className="text-[12px] text-gray-400 mt-0.5">
+                        이 노선 <span className="font-semibold text-[#1B2B4B]">{c.count}</span>회 · 최근 {c.latest?.상차일 || "-"} · 평균운임 {avgFare.toLocaleString()}원
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => sendTo([c.전화번호])}
+                      disabled={!c.전화번호}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
+                    >
+                      문자보내기
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0">
+          <span className="text-[12px] text-gray-400">{selected.size > 0 ? `${selected.size}명 선택됨` : "여러 명을 체크하면 한 번에 문자를 보낼 수 있습니다"}</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">닫기</button>
+            <button
+              onClick={() => sendTo(selectedPhones)}
+              disabled={selectedPhones.length === 0}
+              className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243d6a] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              선택 기사에게 문자보내기
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RealtimeStatus({
   dispatchData,
   liveDataReady = true,
@@ -17364,6 +17538,7 @@ const BANCHAN_NOTICE = ``;
   // 📱 기사전달용 복사 후 SMS 팝업 (Part 4)
   const [smsConfirm4, setSmsConfirm4] = React.useState(null); // { phone, body }
   const [bulkUploadConfirm4, setBulkUploadConfirm4] = React.useState(null); // { phones: string[], body } — 업로드링크 다중 전송 확인
+  const [optimalMatchRow4, setOptimalMatchRow4] = React.useState(null); // 최적매칭 대상 오더
   /*
   {
     rowId,
@@ -25294,6 +25469,14 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             문자보내기{selected.length > 1 ? ` (${selected.length}명)` : ""}
           </button>
+          {/* 최적매칭 — 이 노선을 과거에 다녀간 기사를 찾아 배차 가능 여부를 문자로 확인 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => { setOptimalMatchRow4(contextMenu.row); setContextMenu(null); }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
+            최적매칭
+          </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
           <button
@@ -25985,6 +26168,10 @@ setConfirmChange(null);
             </div>
           </div>
         </div>
+      )}
+
+      {optimalMatchRow4 && (
+        <OptimalMatchModal row={optimalMatchRow4} dispatchData={dispatchData} companyName={userCompany} onClose={() => setOptimalMatchRow4(null)} />
       )}
 
       {deliveryConfirm && (
@@ -27969,6 +28156,7 @@ const savePanelMemoE5 = (memo, show, notice) => {
   const [confirmChange, setConfirmChange] = React.useState(null);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
   const [bulkUploadConfirm5, setBulkUploadConfirm5] = React.useState(null); // { phones: string[], body } — 업로드링크 다중 전송 확인
+  const [optimalMatchRow5, setOptimalMatchRow5] = React.useState(null); // 최적매칭 대상 오더
   // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
   const [editReqPopup, setEditReqPopup] = React.useState(null);
   const [cancelReqPopup, setCancelReqPopup] = React.useState(null);
@@ -34201,6 +34389,10 @@ setCopyPlaceOptions(list);
           </div>
         </div>
       )}
+
+      {optimalMatchRow5 && (
+        <OptimalMatchModal row={optimalMatchRow5} dispatchData={dispatchData} companyName={userCompany} onClose={() => setOptimalMatchRow5(null)} />
+      )}
       {editReqPopup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -34964,6 +35156,14 @@ setCopyPlaceOptions(list);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             문자보내기{selected.size > 1 ? ` (${selected.size}명)` : ""}
+          </button>
+          {/* 최적매칭 — 이 노선을 과거에 다녀간 기사를 찾아 배차 가능 여부를 문자로 확인 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => { setOptimalMatchRow5(contextMenuDS.row); setContextMenuDS(null); }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
+            최적매칭
           </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
