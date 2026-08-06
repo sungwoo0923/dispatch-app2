@@ -17126,14 +17126,64 @@ function calcOptimalMatchScore(target, cand) {
   return score;
 }
 
+// 하차일이 상차일과 다르면(익일 하차 등) "8/7 오전 9시"처럼 월/일을 앞에 붙여준다.
+function _omDropTimeLabel(row) {
+  const time = row.하차시간 || "즉시";
+  if (!row.하차일 || row.하차일 === row.상차일) return time;
+  const m = String(row.하차일).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return time;
+  return `${Number(m[2])}/${Number(m[3])} ${time}`;
+}
 function buildOptimalMatchSmsBody(row, companyName) {
   const co = companyName ? `${companyName}운송사입니다.` : "운송사입니다.";
   return [
     `안녕하세요 ${co}`,
-    `${row.상차일 || ""} ${row.상차지명 || "-"} → ${row.하차지명 || "-"} 건 배차 가능하신지 확인 부탁드립니다.`,
-    `화물: ${row.화물내용 || "-"} / 차량톤수: ${row.차량톤수 || "-"}`,
-    `상차시간: ${row.상차시간 || "즉시"}`,
+    `${row.상차지명 || "-"} → ${row.하차지명 || "-"} 건`,
+    `배차 가능하신지 확인 부탁드립니다.`,
+    `★어려우신 경우 답장 안 주셔도 됩니다★`,
+    ``,
+    `${row.상차일 || ""}`,
+    ``,
+    `상차지 : ${row.상차지명 || "-"}`,
+    `${row.상차지주소 || ""}`,
+    `상차시간 : ${row.상차시간 || "즉시"}`,
+    ``,
+    `하차지 : ${row.하차지명 || "-"}`,
+    `${row.하차지주소 || ""}`,
+    `하차시간 : ${_omDropTimeLabel(row)}`,
+    ``,
+    `화물내용 : ${row.화물내용 || "-"}`,
+    `차량톤수 : ${row.차량톤수 || "-"}`,
   ].join("\n");
+}
+
+// 이 기사가 이 노선을 주로 어느 요일/시간대에 뛰었는지 요약 — "주로 화,목요일 · 오후 운행"
+const _omWeekdays = ["일", "월", "화", "수", "목", "금", "토"];
+function summarizeDayPattern(records) {
+  if (!records || !records.length) return null;
+  const wdCount = {};
+  let amCount = 0, pmCount = 0;
+  records.forEach(r => {
+    const m = String(r.상차일 || "").match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) {
+      const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      const w = _omWeekdays[dt.getDay()];
+      wdCount[w] = (wdCount[w] || 0) + 1;
+    }
+    const t = String(r.상차시간 || "");
+    if (t.includes("오전")) amCount++;
+    else if (t.includes("오후")) pmCount++;
+  });
+  const sorted = Object.entries(wdCount).sort((a, b) => b[1] - a[1]);
+  if (!sorted.length) return null;
+  const top = sorted[0][1];
+  const topDays = sorted.filter(([, c]) => c === top).map(([w]) => w);
+  const timeLabel = amCount === 0 && pmCount === 0 ? ""
+    : amCount >= pmCount * 2 ? " · 주로 오전 운행"
+    : pmCount >= amCount * 2 ? " · 주로 오후 운행"
+    : "";
+  const prefix = records.length >= 2 && top >= 2 ? "주로 " : "";
+  return `${prefix}${topDays.join(",")}요일${timeLabel}`;
 }
 
 function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
@@ -17152,16 +17202,19 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
       if (score <= 0) return;
       const key = `${name}|${plate}`;
       const prev = map.get(key);
-      const g = prev || { 이름: name, 차량번호: plate, 전화번호: r.전화번호 || "", count: 0, bestScore: 0, totalFare: 0, totalDriverFare: 0, latest: null };
+      const g = prev || { 이름: name, 차량번호: plate, 전화번호: r.전화번호 || "", count: 0, bestScore: 0, totalFare: 0, totalDriverFare: 0, latest: null, records: [] };
       g.count += 1;
       g.bestScore = Math.max(g.bestScore, score);
       g.totalFare += toWon(r.청구운임);
       g.totalDriverFare += toWon(r.기사운임);
       if (!g.전화번호 && r.전화번호) g.전화번호 = r.전화번호;
       if (!g.latest || String(r.상차일 || "") > String(g.latest.상차일 || "")) g.latest = r;
+      g.records.push(r);
       map.set(key, g);
     });
-    return [...map.values()].sort((a, b) => b.bestScore - a.bestScore || b.count - a.count);
+    return [...map.values()]
+      .map(g => ({ ...g, dayPattern: summarizeDayPattern(g.records) }))
+      .sort((a, b) => b.bestScore - a.bestScore || b.count - a.count);
   }, [row, dispatchData]);
 
   if (!row) return null;
@@ -17221,6 +17274,7 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
                       </div>
                       <div className="text-[12px] text-gray-400 mt-0.5">
                         이 노선 <span className="font-semibold text-[#1B2B4B]">{c.count}</span>회 · 최근 {c.latest?.상차일 || "-"} · 평균운임 {avgFare.toLocaleString()}원
+                        {c.dayPattern && <> · {c.dayPattern}</>}
                       </div>
                     </div>
                     <button
