@@ -3453,6 +3453,55 @@ useEffect(() => {
   return () => unsub();
 }, [userCompany, role]);
 
+  // ⭐ 예약 이메일 발송 체커 — 진짜 서버 크론이 아니라, 이 회사 소속 계정이 프로그램을
+  // 열어두고 있는 동안 1분마다 예약시각이 지난 이메일을 대신 발송해주는 방식이다(브라우저
+  // 기반 best-effort 스케줄러). 여러 탭/계정이 동시에 켜져 있어도 상태를 먼저 "sending"으로
+  // 바꿔 선점하기 때문에 중복 발송되지 않는다.
+  useEffect(() => {
+    const company = userCompany || localStorage.getItem("userCompany") || "";
+    if (!company) return;
+    let cancelled = false;
+    const runScheduledEmailCheck = async () => {
+      try {
+        const q = query(
+          collection(db, "scheduledEmails"),
+          where("companyName", "==", company),
+          where("status", "==", "pending")
+        );
+        const snap = await getDocs(q);
+        const nowMs = Date.now();
+        for (const d of snap.docs) {
+          if (cancelled) return;
+          const data = d.data();
+          const sendAtMs = data.sendAt?.toMillis ? data.sendAt.toMillis() : new Date(data.sendAt).getTime();
+          if (!sendAtMs || sendAtMs > nowMs) continue;
+          // 선점(다른 탭/계정이 동시에 같은 메일을 또 보내지 않도록)
+          try {
+            await updateDoc(doc(db, "scheduledEmails", d.id), { status: "sending" });
+          } catch { continue; }
+          try {
+            const res = await fetch("/api/send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to: data.to, subject: data.subject, html: data.html,
+                attachments: data.attachments || [], fromName: data.fromName || "",
+              }),
+            });
+            await updateDoc(doc(db, "scheduledEmails", d.id), res.ok
+              ? { status: "sent", sentAt: serverTimestamp() }
+              : { status: "failed", error: `서버 오류(${res.status})` });
+          } catch (e) {
+            await updateDoc(doc(db, "scheduledEmails", d.id), { status: "failed", error: e?.message || "네트워크 오류" }).catch(() => {});
+          }
+        }
+      } catch { /* 조용히 무시 — 다음 주기에 재시도 */ }
+    };
+    runScheduledEmailCheck();
+    const timer = setInterval(runScheduledEmailCheck, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [userCompany]);
+
   // ⭐ 출근기록부: 자동 출근체크 + 주말 출근여부 팝업
   const [weekendCheckPopup, setWeekendCheckPopup] = useState(false);
   useEffect(() => {
@@ -11260,7 +11309,7 @@ className={`
         <div className="text-right">
           <button
             type="button"
-            className="text-xs text-red-500 hover:text-red-700"
+            className="text-[11px] font-semibold text-gray-400 hover:text-red-500 transition"
             onClick={() => setStopDeleteIdx(idx)}
           >
             삭제
@@ -11274,7 +11323,7 @@ className={`
     <div className="flex justify-between pt-3">
       <button
         type="button"
-        className="px-3 py-1.5 text-sm border rounded"
+        className="px-3 py-1.5 text-sm font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30 rounded-lg hover:bg-[#1B2B4B]/5 transition"
         onClick={() => {
           setStopList(prev => [
             ...prev,
@@ -11292,7 +11341,7 @@ className={`
       <div className="flex gap-2">
         <button
           type="button"
-          className="px-3 py-1.5 text-sm border rounded"
+          className="px-3 py-1.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
           onClick={() => setStopPopupOpen(false)}
         >
           취소
@@ -11300,7 +11349,7 @@ className={`
 
                 <button
           type="button"
-          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded"
+          className="px-3 py-1.5 text-sm font-semibold bg-[#1B2B4B] text-white rounded-lg hover:bg-[#243a60] transition"
           onClick={() => {
             // 🔥 저장 전 화물내용/톤수에 타입 합치기
             const finalList = stopList.map(s => {
@@ -17196,6 +17245,31 @@ async function fetchPrinterInfo() {
   } catch { return null; }
 }
 
+// Firestore 문서 크기(1MB) 안에서 안전하게 저장 가능한 첨부파일 총량 — base64라 원본보다
+// 커지는 점 감안해 여유있게 700KB로 제한한다. 초과하면 예약발송을 지원하지 않는다.
+const SCHEDULED_EMAIL_ATTACH_LIMIT = 700 * 1024;
+function scheduledEmailAttachSize(attachments) {
+  return (attachments || []).reduce((sum, a) => sum + (a?.content?.length || 0), 0);
+}
+// 정산관리의 이메일 발송 지점들이 공용으로 쓰는 "예약발송 등록" — 즉시 보내는 대신
+// scheduledEmails 컬렉션에 저장해두면, DispatchApp의 예약 이메일 체커가 예약시각에 맞춰
+// 대신 발송한다(위쪽 useEffect 참고).
+async function scheduleEmailDoc({ companyName, to, subject, html, attachments = [], fromName, sendAt, type = "예약메일", meta = {} }) {
+  await addDoc(collection(db, "scheduledEmails"), {
+    companyName: companyName || "",
+    to, subject, html,
+    attachments,
+    fromName: fromName || "",
+    sendAt,
+    status: "pending",
+    type,
+    meta,
+    createdAt: serverTimestamp(),
+    createdByUid: auth.currentUser?.uid || "",
+    createdByEmail: auth.currentUser?.email || "",
+  });
+}
+
 function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
   const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
   const [selected, setSelected] = React.useState(() => new Set());
@@ -17247,18 +17321,18 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-[95vw] max-h-[86vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
-          <div>
-            <h3 className="text-white font-bold text-[15px]">최적매칭</h3>
-            <p className="text-white/60 text-[12px] mt-0.5">
+      <div className="bg-white rounded-2xl shadow-2xl w-[840px] max-w-[95vw] max-h-[86vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <h3 className="text-white font-bold text-[15px] whitespace-nowrap">최적매칭</h3>
+            <p className="text-white/60 text-[12px] mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
               {row.상차일 || ""} · {row.상차지명 || "-"} → {row.하차지명 || "-"} 건과 같은 노선을 다녀간 기사
             </p>
           </div>
-          <button onClick={onClose} className="text-white/60 hover:text-white text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-lg leading-none shrink-0">✕</button>
         </div>
 
-        <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 text-[12px] text-gray-500 shrink-0">
+        <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 text-[12px] text-gray-500 shrink-0 whitespace-nowrap overflow-x-auto">
           화물 <span className="font-semibold text-gray-700">{row.화물내용 || "-"}</span> · 차량톤수 <span className="font-semibold text-gray-700">{row.차량톤수 || "-"}</span> · 상차시간 <span className="font-semibold text-gray-700">{row.상차시간 || "즉시"}</span>
         </div>
 
@@ -17277,12 +17351,12 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
                   <div key={key} className="px-6 py-3 flex items-center gap-3">
                     <input type="checkbox" checked={checked} onChange={() => toggle(key)} className="w-4 h-4 accent-[#1B2B4B] shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-nowrap whitespace-nowrap">
                         <span className="font-bold text-[14px] text-gray-900">{c.이름 || "-"}</span>
                         <span className="text-[12px] font-semibold text-gray-500 font-mono">{c.차량번호 || "-"}</span>
                         <span className="text-[11px] font-semibold text-gray-400">{formatPhone(c.전화번호) || "-"}</span>
                       </div>
-                      <div className="text-[12px] text-gray-400 mt-0.5">
+                      <div className="text-[12px] text-gray-400 mt-0.5 whitespace-nowrap">
                         이 노선 <span className="font-semibold text-[#1B2B4B]">{c.count}</span>회 · 최근 {c.latest?.상차일 || "-"} · 평균운임 {avgFare.toLocaleString()}원
                         {c.dayPattern && <> · {c.dayPattern}</>}
                       </div>
@@ -17301,14 +17375,14 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0">
-          <span className="text-[12px] text-gray-400">{selected.size > 0 ? `${selected.size}명 선택됨` : "여러 명을 체크하면 한 번에 문자를 보낼 수 있습니다"}</span>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">닫기</button>
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-nowrap shrink-0">
+          <span className="text-[12px] text-gray-400 truncate min-w-0">{selected.size > 0 ? `${selected.size}명 선택됨` : "여러 명을 체크하면 한 번에 문자를 보낼 수 있습니다"}</span>
+          <div className="flex gap-2 shrink-0 whitespace-nowrap">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap">닫기</button>
             <button
               onClick={() => sendTo(selectedPhones)}
               disabled={selectedPhones.length === 0}
-              className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243d6a] disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243d6a] disabled:opacity-40 disabled:cursor-not-allowed transition whitespace-nowrap"
             >
               선택 기사에게 문자보내기
             </button>
@@ -41719,6 +41793,31 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
 
   const [emailLogs, setEmailLogs] = useState([]);
   const [showEmailHistory, setShowEmailHistory] = useState(false);
+
+  // ★ 이메일 예약발송 — 거래명세서/미수금 발송(공용 상태)과 일반 이메일 발송 각각의
+  // "예약발송" 체크박스 + 발송시각. 켜져 있으면 즉시 전송 대신 scheduledEmails에 저장한다.
+  const [emailScheduleOn, setEmailScheduleOn] = useState(false);
+  const [emailScheduleAt, setEmailScheduleAt] = useState("");
+  const [generalEmailScheduleOn, setGeneralEmailScheduleOn] = useState(false);
+  const [generalEmailScheduleAt, setGeneralEmailScheduleAt] = useState("");
+  const [scheduledEmailListOpen, setScheduledEmailListOpen] = useState(false);
+  const [scheduledEmailList, setScheduledEmailList] = useState([]);
+  useEffect(() => {
+    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
+    if (!co) return;
+    const unsub = onSnapshot(collection(db, "scheduledEmails"), (snap) => {
+      const rows = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(r => (r.companyName || "").trim() === co)
+        .sort((a, b) => {
+          const at = a.sendAt?.toMillis ? a.sendAt.toMillis() : new Date(a.sendAt || 0).getTime();
+          const bt = b.sendAt?.toMillis ? b.sendAt.toMillis() : new Date(b.sendAt || 0).getTime();
+          return at - bt;
+        });
+      setScheduledEmailList(rows);
+    });
+    return () => unsub();
+  }, [userCompany]);
 // ── 이메일 발송 이력 ──
   React.useEffect(() => {
     const unsub = onSnapshot(
@@ -42648,6 +42747,7 @@ const handleBatchSettle = async (targetStatus) => {
                     const found = (clients||[]).find(c=>c.거래처명===client);
                     setEmailTo(found?.연락처이메일 || found?.이메일 || "");
                     setEmailBody(`안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: ${COMPANY_PRINT.phone || "-"}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                    setEmailScheduleOn(false); setEmailScheduleAt("");
                     setEmailModalOpen(true);
                   }}
                   className="px-3 py-1.5 rounded bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
@@ -42661,11 +42761,21 @@ const handleBatchSettle = async (targetStatus) => {
                     setGeneralEmailSubject(client ? `${client} 관련 안내` : "");
                     setGeneralEmailBody(`안녕하세요, ${client ? `${client} 담당자님.` : "담당자님."}\n\n${COMPANY_PRINT.name}입니다.\n\n\n\n감사합니다.\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
                     setGeneralEmailFiles([]);
+                    setGeneralEmailScheduleOn(false); setGeneralEmailScheduleAt("");
                     setGeneralEmailOpen(true);
                   }}
                   className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition"
                 >
                   일반 이메일
+                </button>
+                <button onClick={() => setScheduledEmailListOpen(true)}
+                  className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition relative">
+                  예약메일함
+                  {scheduledEmailList.filter(s => s.status === "pending").length > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold align-middle">
+                      {scheduledEmailList.filter(s => s.status === "pending").length}
+                    </span>
+                  )}
                 </button>
                 <button onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className="px-3 py-1.5 rounded border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">거래처 정보</button>
               </div>
@@ -43230,18 +43340,54 @@ const handleBatchSettle = async (targetStatus) => {
                     </button>
                   </div>
 
+                  {/* 예약발송 */}
+                  <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" className="w-4 h-4 accent-[#1B2B4B]"
+                        checked={generalEmailScheduleOn}
+                        onChange={(e) => setGeneralEmailScheduleOn(e.target.checked)} />
+                      <span className="text-[13px] font-bold text-gray-700">예약발송</span>
+                    </label>
+                    {generalEmailScheduleOn && (
+                      <input type="datetime-local"
+                        className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        value={generalEmailScheduleAt}
+                        onChange={(e) => setGeneralEmailScheduleAt(e.target.value)} />
+                    )}
+                  </div>
+
                   <div className="flex gap-3 pt-2">
                     <button onClick={() => setGeneralEmailOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]">취소</button>
                     <button
-                      disabled={generalEmailSending || !generalEmailTo.trim() || !generalEmailSubject.trim()}
+                      disabled={generalEmailSending || !generalEmailTo.trim() || !generalEmailSubject.trim() || (generalEmailScheduleOn && !generalEmailScheduleAt)}
                       onClick={async () => {
                         if (!generalEmailTo.trim()) return showAlert("수신 이메일을 입력하세요.");
                         if (!generalEmailSubject.trim()) return showAlert("제목을 입력하세요.");
+                        if (generalEmailScheduleOn && !generalEmailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
+                        if (generalEmailScheduleOn && new Date(generalEmailScheduleAt).getTime() <= Date.now()) return showAlert("예약 시각은 현재 시각 이후여야 합니다.");
                         setGeneralEmailSending(true);
                         const bodyLines = (generalEmailBody || "").split("\n").map(l => `<p style="margin:0 0 6px">${l || "&nbsp;"}</p>`).join("");
                         const cardSection = (includeCardGeneral && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                         const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSection}</div>`;
+                        const attachments = generalEmailFiles.map(f => ({ filename: f.name, content: f.base64, encoding: "base64" }));
+                        const fromName = `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
                         try {
+                          if (generalEmailScheduleOn) {
+                            if (scheduledEmailAttachSize(attachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
+                              showAlert("첨부파일 용량이 너무 커서 예약발송을 지원하지 않습니다. 예약발송 체크를 해제하고 바로 보내주세요.");
+                              setGeneralEmailSending(false);
+                              return;
+                            }
+                            await scheduleEmailDoc({
+                              companyName: userCompany, to: generalEmailTo, subject: generalEmailSubject, html: bodyHtml,
+                              attachments, fromName, sendAt: new Date(generalEmailScheduleAt),
+                              type: "일반이메일", meta: { client: client || "-", body: generalEmailBody || "" },
+                            });
+                            showAlert(`${new Date(generalEmailScheduleAt).toLocaleString("ko-KR")}에 발송 예약되었습니다.`);
+                            setGeneralEmailOpen(false);
+                            setGeneralEmailSending(false);
+                            return;
+                          }
                           const res = await fetch("/api/send-email", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -43249,8 +43395,8 @@ const handleBatchSettle = async (targetStatus) => {
                               to: generalEmailTo,
                               subject: generalEmailSubject,
                               html: bodyHtml,
-                              attachments: generalEmailFiles.map(f => ({ filename: f.name, content: f.base64, encoding: "base64" })),
-                              fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`,
+                              attachments,
+                              fromName,
                             }),
                           });
                           if (res.ok) {
@@ -43270,7 +43416,7 @@ const handleBatchSettle = async (targetStatus) => {
                       }}
                       className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] disabled:opacity-50"
                     >
-                      {generalEmailSending ? "발송 중..." : "발송"}
+                      {generalEmailSending ? "처리 중..." : generalEmailScheduleOn ? "예약발송 등록" : "발송"}
                     </button>
                   </div>
                 </div>
@@ -43440,6 +43586,59 @@ const handleBatchSettle = async (targetStatus) => {
 )}
 
 {/* 이메일 발송 모달 */}
+          {/* 예약메일함 */}
+          {scheduledEmailListOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setScheduledEmailListOpen(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+                  <div>
+                    <div className="text-white font-bold text-[15px]">예약메일함</div>
+                    <div className="text-white/60 text-[12px] mt-0.5">프로그램을 열어둔 계정이 있을 때 예약시각에 자동 발송됩니다</div>
+                  </div>
+                  <button className="text-white/60 hover:text-white text-xl" onClick={() => setScheduledEmailListOpen(false)}>×</button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {scheduledEmailList.length === 0 ? (
+                    <div className="py-16 text-center text-[13px] text-gray-400">예약된 메일이 없습니다.</div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {scheduledEmailList.map((s) => {
+                        const sendAtMs = s.sendAt?.toMillis ? s.sendAt.toMillis() : new Date(s.sendAt || 0).getTime();
+                        const statusLabel = { pending: "대기중", sending: "발송 중", sent: "발송완료", failed: "발송실패" }[s.status] || s.status;
+                        const statusCls = { pending: "text-amber-600 bg-amber-50", sending: "text-blue-600 bg-blue-50", sent: "text-emerald-600 bg-emerald-50", failed: "text-red-600 bg-red-50" }[s.status] || "text-gray-500 bg-gray-50";
+                        return (
+                          <div key={s.id} className="px-6 py-3 flex items-center gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${statusCls} shrink-0`}>{statusLabel}</span>
+                                <span className="font-bold text-[13px] text-gray-900 truncate">{s.type || "예약메일"} · {s.meta?.client || s.to}</span>
+                              </div>
+                              <div className="text-[11px] text-gray-400 mt-0.5 truncate">
+                                {s.to} · {sendAtMs ? new Date(sendAtMs).toLocaleString("ko-KR") : "-"}
+                                {s.status === "failed" && s.error && <span className="text-red-500"> · {s.error}</span>}
+                              </div>
+                            </div>
+                            {s.status === "pending" && (
+                              <button
+                                onClick={() => deleteDoc(doc(db, "scheduledEmails", s.id)).catch(() => {})}
+                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-[11px] font-semibold text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition shrink-0"
+                              >
+                                예약취소
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 py-4 border-t border-gray-100 shrink-0">
+                  <button onClick={() => setScheduledEmailListOpen(false)} className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition">닫기</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {emailModalOpen && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
               <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto"
@@ -43504,6 +43703,22 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
                     발송 버튼 클릭 시 거래명세서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
                   </div>
+
+                  {/* 예약발송 */}
+                  <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" className="w-4 h-4 accent-[#1B2B4B]"
+                        checked={emailScheduleOn}
+                        onChange={(e) => setEmailScheduleOn(e.target.checked)} />
+                      <span className="text-[13px] font-bold text-gray-700">예약발송</span>
+                    </label>
+                    {emailScheduleOn && (
+                      <input type="datetime-local"
+                        className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        value={emailScheduleAt}
+                        onChange={(e) => setEmailScheduleAt(e.target.value)} />
+                    )}
+                  </div>
                 </div>
 
                 {/* 버튼 */}
@@ -43523,10 +43738,12 @@ const handleBatchSettle = async (targetStatus) => {
                       showAlert("내용이 클립보드에 복사되었습니다.");
                     }}>내용 복사</button>
                   <button
-                    disabled={!emailTo.trim() || emailSending}
+                    disabled={!emailTo.trim() || emailSending || (emailScheduleOn && !emailScheduleAt)}
                     className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
+                      if (emailScheduleOn && !emailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
+                      if (emailScheduleOn && new Date(emailScheduleAt).getTime() <= Date.now()) return showAlert("예약 시각은 현재 시각 이후여야 합니다.");
                       setEmailSending(true);
 
                       // ★ PDF + 엑셀 동시 생성
@@ -43588,7 +43805,25 @@ const handleBatchSettle = async (targetStatus) => {
                       const cardSectionInvoice = (includeCardInvoice && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                       const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSectionInvoice}</div>`;
 
+                      const fromNameInvoice = `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
                       try {
+                        if (emailScheduleOn) {
+                          if (scheduledEmailAttachSize(fileAttachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
+                            showAlert("첨부파일(PDF/엑셀) 용량이 너무 커서 예약발송을 지원하지 않습니다. 예약발송 체크를 해제하고 바로 보내주세요.");
+                            setEmailSending(false);
+                            return;
+                          }
+                          await scheduleEmailDoc({
+                            companyName: userCompany, to: emailTo, subject, html: bodyHtml,
+                            attachments: fileAttachments, fromName: fromNameInvoice, sendAt: new Date(emailScheduleAt),
+                            type: "거래명세서", meta: { client, body: emailBody },
+                          });
+                          logEmail({ type:"거래명세서(예약)", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
+                          showAlert(`${new Date(emailScheduleAt).toLocaleString("ko-KR")}에 발송 예약되었습니다.`);
+                          setEmailModalOpen(false);
+                          setEmailSending(false);
+                          return;
+                        }
                         const res = await fetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -43596,7 +43831,7 @@ const handleBatchSettle = async (targetStatus) => {
                             to: emailTo,
                             subject,
                             html: bodyHtml,
-                            fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`,
+                            fromName: fromNameInvoice,
                             attachments: fileAttachments, // PDF
                             excelData: {                  // ★ 엑셀은 서버에서 생성
                               client,
@@ -43854,6 +44089,7 @@ const handleBatchSettle = async (targetStatus) => {
     const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
     const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
     setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+    setEmailScheduleOn(false); setEmailScheduleAt("");
     setArEmailOpen(true);
   }}
   className={`px-3 py-2 rounded-lg text-[13px] font-semibold transition border ${selClient ? "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white" : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"}`}
@@ -44624,6 +44860,22 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
                     선택한 월 범위의 미수금 내역이 <b>엑셀 + 미수금 보고서 PDF</b> 로 자동 첨부됩니다.
                   </div>
+
+                  {/* 예약발송 */}
+                  <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" className="w-4 h-4 accent-[#1B2B4B]"
+                        checked={emailScheduleOn}
+                        onChange={(e) => setEmailScheduleOn(e.target.checked)} />
+                      <span className="text-[13px] font-bold text-gray-700">예약발송</span>
+                    </label>
+                    {emailScheduleOn && (
+                      <input type="datetime-local"
+                        className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        value={emailScheduleAt}
+                        onChange={(e) => setEmailScheduleAt(e.target.value)} />
+                    )}
+                  </div>
                 </div>
 
                 {/* 버튼 */}
@@ -44637,10 +44889,12 @@ const handleBatchSettle = async (targetStatus) => {
                   <button className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
                     onClick={() => { navigator.clipboard.writeText(emailBody); showAlert("복사되었습니다."); }}>내용 복사</button>
                   <button
-                    disabled={!emailTo.trim() || emailSending}
+                    disabled={!emailTo.trim() || emailSending || (emailScheduleOn && !emailScheduleAt)}
                     className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim()&&!emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
+                      if (emailScheduleOn && !emailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
+                      if (emailScheduleOn && new Date(emailScheduleAt).getTime() <= Date.now()) return showAlert("예약 시각은 현재 시각 이후여야 합니다.");
                       setEmailSending(true);
                       const from=parseInt(arEmailFromMM,10), to=parseInt(arEmailToMM,10);
                       const filteredMonthRows = monthRowsRaw.filter(r => { const m=parseInt(r.mm,10); return m>=from&&m<=to; });
@@ -44735,11 +44989,30 @@ const handleBatchSettle = async (targetStatus) => {
                       const bodyLines = emailBody.split("\n").map(l=>`<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("");
                       const cardSectionAr = (includeCardAr && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                       const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSectionAr}</div>`;
+                      const fromNameAr = `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
                       try {
+                        if (emailScheduleOn) {
+                          if (scheduledEmailAttachSize(fileAttachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
+                            showAlert("첨부파일(PDF/엑셀) 용량이 너무 커서 예약발송을 지원하지 않습니다. 예약발송 체크를 해제하고 바로 보내주세요.");
+                            setEmailSending(false);
+                            return;
+                          }
+                          await scheduleEmailDoc({
+                            companyName: userCompany, to: emailTo, subject, html: bodyHtml,
+                            attachments: fileAttachments, fromName: fromNameAr, sendAt: new Date(emailScheduleAt),
+                            type: "미수금", meta: { client: selClient, body: emailBody },
+                          });
+                          logEmail({ type:"미수금(예약)", client:selClient, to:emailTo, subject, body: emailBody, status:"success" });
+                          showAlert(`${new Date(emailScheduleAt).toLocaleString("ko-KR")}에 발송 예약되었습니다.`);
+                          setArEmailOpen(false);
+                          setShowEmailHistory(false);
+                          setEmailSending(false);
+                          return;
+                        }
                         const res = await fetch("/api/send-email", {
                           method:"POST",
                           headers:{"Content-Type":"application/json"},
-                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments, fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀` }),
+                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments, fromName: fromNameAr }),
                         });
                         if (res.ok) {
                           logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"success" });
