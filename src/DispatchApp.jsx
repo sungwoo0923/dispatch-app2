@@ -8300,7 +8300,7 @@ const rec = {
   // ★ auth 사용자 객체는 displayName을 설정한 적이 없어 항상 비어있어서(회원가입 어디서도
   // updateProfile을 호출하지 않음), 예전엔 항상 이메일이 담당자명으로 찍혔다.
   // users/{uid}.name(실명, myRealName)을 우선 사용한다.
-  createdByName: myRealName || auth.currentUser?.displayName || auth.currentUser?.email || null,
+  createdByName: (typeof myRealName !== "undefined" && myRealName) || auth.currentUser?.displayName || auth.currentUser?.email || null,
   companyName: userCompany || localStorage.getItem("userCompany") || "돌캐",
 
   // 🔥 여기 안으로 넣어
