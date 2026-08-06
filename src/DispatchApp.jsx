@@ -1790,12 +1790,20 @@ const markEditRequestSeen = async (order) => {
   }
   if (!id) id = crypto.randomUUID();
 
+  // ★ 담당자(등록자) — 이 기사 문서를 최초로 만든 스태프 이름을 기록해둔다(기사관리
+  // 목록의 "담당자" 컬럼용, 지입/직영 기사 전용). 이미 등록자가 있으면 이후 수정으로
+  // 덮어쓰지 않고 최초 등록자를 그대로 유지한다.
+  const existingDriverDoc = drivers.find(d => d.id === id);
+  const registeredBy = existingDriverDoc?.등록자 || driver.등록자 ||
+    (!existingDriverDoc ? (user?.displayName || user?.email?.split("@")[0] || "") : undefined);
+
   const data = {
     ...driver,
     id,
     companyName: driver.companyName || viewCompany,
     updatedAt: serverTimestamp(),
     createdAt: driver.createdAt || serverTimestamp(),
+    ...(registeredBy !== undefined ? { 등록자: registeredBy } : {}),
   };
 
   await setDoc(
@@ -45359,7 +45367,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
-  const perPage = 100;
+  const perPage = 20;
   const [editDriverModal, setEditDriverModal] = React.useState(null); // 더블클릭 수정 팝업
 
   // 기사정리 팝업 상태
@@ -45713,6 +45721,23 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           <div className="mt-5 pt-4 border-t border-gray-100 text-[12px] text-gray-400 font-medium">
             총 <b className="text-[#1B2B4B]">{filtered.length}</b>명
           </div>
+
+          {/* 페이지네이션 — 검색창 아래(좌측 패널)로 이동 */}
+          {(showAll || searched) && totalPages > 1 && (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <button disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===1 ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                이전
+              </button>
+              <span className="text-[12px] font-semibold text-gray-600 whitespace-nowrap">
+                {page} <span className="text-gray-400">/ {totalPages}</span>
+              </span>
+              <button disabled={page===totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===totalPages ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                다음
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ───────── 오른쪽: 검색 결과 ───────── */}
@@ -45737,15 +45762,15 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                         checked={filtered.length > 0 && selected.size === filtered.length}
                       />
                     </th>
-                    {["순번","차량번호","이름","전화번호","등급","메모","팝업","삭제"].map(h => (
-                      <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
+                    {[["순번",""],["차량번호","w-[92px]"],["이름",""],["전화번호",""],["담당자",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                      <th key={h} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-16 text-gray-400 text-[14px]">
+                      <td colSpan={10} className="text-center py-16 text-gray-400 text-[14px]">
                         {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                       </td>
                     </tr>
@@ -45762,9 +45787,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                           <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                         </td>
                         <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
-                        <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap">{r.차량번호||"-"}</td>
+                        <td className="px-2 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap w-[92px] overflow-hidden text-ellipsis">{r.차량번호||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.등록자 || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">
                           <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
                         </td>
@@ -46069,23 +46095,6 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* 페이지네이션 */}
-      {(showAll || searched) && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 mt-4">
-          <button disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}
-            className={`px-4 py-2 rounded-lg text-[13px] font-semibold border transition ${page===1 ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
-            이전
-          </button>
-          <span className="text-[13px] font-semibold text-gray-600">
-            {page} <span className="text-gray-400">/ {totalPages}</span>
-          </span>
-          <button disabled={page===totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}
-            className={`px-4 py-2 rounded-lg text-[13px] font-semibold border transition ${page===totalPages ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
-            다음
-          </button>
         </div>
       )}
 
