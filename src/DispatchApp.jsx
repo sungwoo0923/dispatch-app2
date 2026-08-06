@@ -45364,7 +45364,8 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [selected, setSelected] = React.useState(new Set());
   const [gradeFilter, setGradeFilter] = React.useState("전체");
   const [showAddForm, setShowAddForm] = React.useState(false);
-  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
+  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 근무요일:[] });
+  const WEEKDAYS = ["월","화","수","목","금","토","일"];
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const perPage = 20;
@@ -45495,6 +45496,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const addNew = async () => {
     const 차량번호 = (newForm.차량번호||"").replace(/\s+/g,"");
     if (!차량번호) return showAlert("차량번호는 필수입니다.");
+    const isFleet = newForm.등급 === "지입" || newForm.등급 === "직영";
     await upsertDriver({
       id: crypto.randomUUID(),
       차량번호,
@@ -45502,8 +45504,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
       전화번호: (newForm.전화번호||"").replace(/\D/g,""),
       메모: newForm.메모,
       등급: newForm.등급 || "일반",
+      거주지: isFleet ? (newForm.거주지||"") : "",
+      근무요일: isFleet ? (newForm.근무요일||[]) : [],
     });
-    setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
+    setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 근무요일:[] });
     setShowAddForm(false);
     showAlert("등록 완료");
   };
@@ -45666,6 +45670,39 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                   <option value="블랙">블랙</option>
                 </CustomSelect>
               </div>
+              {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
+              {(newForm.등급 === "지입" || newForm.등급 === "직영") && (
+                <>
+                  <div>
+                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">거주지</label>
+                    <input autoComplete="off"
+                      className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                      placeholder="예: 경기 김포시"
+                      value={newForm.거주지}
+                      onChange={e => setNewForm(p => ({ ...p, 거주지: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">근무가능요일</label>
+                    <div className="flex gap-1.5">
+                      {WEEKDAYS.map(d => {
+                        const on = (newForm.근무요일 || []).includes(d);
+                        return (
+                          <button key={d} type="button"
+                            onClick={() => setNewForm(p => {
+                              const cur = p.근무요일 || [];
+                              return { ...p, 근무요일: cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d] };
+                            })}
+                            className={`w-9 h-9 rounded-lg text-[12px] font-bold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]"}`}
+                          >
+                            {d}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="px-6 pb-5 flex gap-3">
               <button onClick={()=>setShowAddForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
@@ -45762,7 +45799,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                         checked={filtered.length > 0 && selected.size === filtered.length}
                       />
                     </th>
-                    {[["순번",""],["차량번호","w-[92px]"],["이름",""],["전화번호",""],["담당자",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                    {[["순번",""],["차량번호","w-[92px]"],["이름",""],["전화번호",""],["담당자",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
                       <th key={h} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}>{h}</th>
                     ))}
                   </tr>
@@ -45770,7 +45807,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 <tbody>
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-center py-16 text-gray-400 text-[14px]">
+                      <td colSpan={12} className="text-center py-16 text-gray-400 text-[14px]">
                         {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                       </td>
                     </tr>
@@ -45791,6 +45828,8 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.등록자 || "-") : "-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.거주지 || "-") : "-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">
                           <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
                         </td>
@@ -45865,6 +45904,37 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                   <option value="블랙">블랙</option>
                 </select>
               </div>
+              {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
+              {(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영") && (
+                <>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">거주지</label>
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      placeholder="예: 경기 김포시"
+                      value={editDriverModal.거주지||""}
+                      onChange={(e) => setEditDriverModal(p => ({ ...p, 거주지: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">근무가능요일</label>
+                    <div className="flex gap-1.5">
+                      {WEEKDAYS.map(d => {
+                        const on = (editDriverModal.근무요일 || []).includes(d);
+                        return (
+                          <button key={d} type="button"
+                            onClick={() => setEditDriverModal(p => {
+                              const cur = p.근무요일 || [];
+                              return { ...p, 근무요일: cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d] };
+                            })}
+                            className={`w-9 h-9 rounded-lg text-[12px] font-bold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]"}`}
+                          >
+                            {d}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
                 <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
