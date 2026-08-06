@@ -1896,6 +1896,7 @@ const markEditRequestSeen = async (order) => {
     upsertClient,
     removeClient,
     approvedShippers,
+    myRealName,
   };
 }  // ← ⭐ 이거 반드시 필요
 
@@ -3614,6 +3615,7 @@ useEffect(() => {
     upsertClient,
     removeClient,
     approvedShippers,
+    myRealName,
   } = useRealtimeCollections(user, userCompany, role);
 
 
@@ -4352,6 +4354,7 @@ return (
         {menu === "실시간배차현황" && (
           <RealtimeStatus
             role={role}
+            userCompany={userCompany}
             menu={menu}
             dispatchData={dispatchDataFiltered}
             liveDataReady={liveDataReady}
@@ -8294,7 +8297,10 @@ const rec = {
   updatedAt: now,
   createdByUid: auth.currentUser?.uid || null,
   createdByEmail: auth.currentUser?.email || null,
-  createdByName: auth.currentUser?.displayName || auth.currentUser?.email || null,
+  // ★ auth 사용자 객체는 displayName을 설정한 적이 없어 항상 비어있어서(회원가입 어디서도
+  // updateProfile을 호출하지 않음), 예전엔 항상 이메일이 담당자명으로 찍혔다.
+  // users/{uid}.name(실명, myRealName)을 우선 사용한다.
+  createdByName: myRealName || auth.currentUser?.displayName || auth.currentUser?.email || null,
   companyName: userCompany || localStorage.getItem("userCompany") || "돌캐",
 
   // 🔥 여기 안으로 넣어
@@ -11083,7 +11089,10 @@ className={`
                   setStopContactPickerIdx(null);
                   setStopContactPickerOpts([]);
                 }}>
-                <span className="text-[13px] font-semibold text-gray-800">{contact.name}</span>
+                <span className="text-[13px] font-semibold text-gray-800 flex items-center gap-1.5">
+                  {contact.name}
+                  {contact.isPrimary && <span className="shrink-0 text-[9px] font-bold px-1 py-0.5 rounded-full bg-[#1B2B4B] text-white">대표</span>}
+                </span>
                 <span className="text-[12px] text-gray-500">{contact.phone}</span>
               </div>
             ))}
@@ -12780,7 +12789,10 @@ className={`
                   className="cursor-pointer min-w-0 pr-16"
                   onClick={() => closeContactPopup(c)}
                 >
-                  <div className="font-bold text-gray-900 text-[14px] truncate">{c.name || "-"}</div>
+                  <div className="font-bold text-gray-900 text-[14px] truncate flex items-center gap-1.5">
+                    {c.name || "-"}
+                    {c.isPrimary && <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white">대표</span>}
+                  </div>
                   <div className="text-[13px] font-bold text-gray-700 truncate mt-1">{c.phone || "-"}</div>
                 </div>
               </div>
@@ -14648,6 +14660,7 @@ setConfirmChange(null);
     <RealtimeStatus
       key={bottomStatusKey}
       role={role}
+      userCompany={userCompany}
       menu={menu}
       dispatchData={dispatchData}
       liveDataReady={liveDataReady}
@@ -15924,7 +15937,10 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                       setContactPickerIdx(null);
                       setContactPickerOpts([]);
                     }}>
-                    <span className="text-[13px] font-semibold text-gray-800">{contact.name}</span>
+                    <span className="text-[13px] font-semibold text-gray-800 flex items-center gap-1.5">
+                      {contact.name}
+                      {contact.isPrimary && <span className="shrink-0 text-[9px] font-bold px-1 py-0.5 rounded-full bg-[#1B2B4B] text-white">대표</span>}
+                    </span>
                     <span className="text-[12px] text-gray-500">{contact.phone}</span>
                   </div>
                 ))}
@@ -17079,6 +17095,7 @@ function RealtimeStatus({
   upsertDriver,
   upsertClient,
   role = "admin",
+  userCompany = "",
   menu,
   darkMode = false,
   isEmbedded = false,
@@ -17346,6 +17363,7 @@ const BANCHAN_NOTICE = ``;
   const [deliveryConfirm, setDeliveryConfirm] = React.useState(null);
   // 📱 기사전달용 복사 후 SMS 팝업 (Part 4)
   const [smsConfirm4, setSmsConfirm4] = React.useState(null); // { phone, body }
+  const [bulkUploadConfirm4, setBulkUploadConfirm4] = React.useState(null); // { phones: string[], body } — 업로드링크 다중 전송 확인
   /*
   {
     rowId,
@@ -21307,6 +21325,7 @@ const head = isDark
             <div className="flex items-baseline gap-1.5 min-w-0">
               <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
               <span className="text-[11px] font-bold text-gray-900 truncate">{c.phone || "-"}</span>
+              {c.isPrimary && <span className="shrink-0 text-[9px] font-bold px-1 py-0.5 rounded-full bg-[#1B2B4B] text-white">대표</span>}
             </div>
           </div>
         ))}
@@ -21446,7 +21465,22 @@ const head = isDark
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:bg-[#243a60] transition whitespace-nowrap">일괄동기화</button>
     <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
     <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
-    <button onClick={()=>{const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+    <button onClick={()=>{
+  const selRows = rows.filter(r => selected.includes(r._id));
+  const phones = [...new Set(selRows.map(r => String(r.전화번호||"").replace(/[^\d]/g,"")).filter(Boolean))];
+  if (phones.length === 0) {
+    // 배차완료(전화번호 있는) 오더를 체크하지 않았으면 기존 동작 그대로 — 클립보드 복사만.
+    const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;
+    const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;
+    const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+    navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));
+    return;
+  }
+  // 배차완료된 오더를 1건 이상 체크한 상태 — 여러 기사에게 한 번에 문자로 보낼지 확인.
+  const url = `${window.location.origin}/driver-upload`;
+  const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+  setBulkUploadConfirm4({ phones, body: msg });
+}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크{selected.length>1?` (${selected.length})`:""}</button>
     <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
 
     <button onClick={()=>{
@@ -25233,25 +25267,32 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             첨부현황
           </button>
-          {/* 문자보내기 */}
+          {/* 문자보내기 — 체크박스로 여러 건을 선택해둔 채 우클릭하면 선택된 오더 전체의
+              기사 번호를 받는사람으로 한 번에 연결한다(휴대폰 연결 앱은 sms: URI에 쉼표로
+              구분된 번호를 다중 수신자로 지원). 아무것도 선택 안 했으면 우클릭한 1건만. */}
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenu.row;
-              const phone = String(r.전화번호 || "").replace(/[^\d]/g, "");
-              if (!phone) { showAlert("전화번호가 없습니다."); setContextMenu(null); return; }
-              const dateStr = (() => {
-                const d = r.상차일 || "";
-                if (d.includes("-")) { const [,mo,dy] = d.split("-"); return `${Number(mo)}월 ${Number(dy)}일`; }
-                return d;
-              })();
-              const body = `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
-              window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
+              const targets = selected.length > 0 ? rows.filter(x => selected.includes(x._id)) : [r];
+              const phones = [...new Set(targets.map(x => String(x.전화번호 || "").replace(/[^\d]/g, "")).filter(Boolean))];
+              if (!phones.length) { showAlert("전화번호가 없습니다."); setContextMenu(null); return; }
+              const body = targets.length > 1
+                ? `안녕하세요 ${userCompany || "저희"}운송사입니다.`
+                : (() => {
+                    const dateStr = (() => {
+                      const d = r.상차일 || "";
+                      if (d.includes("-")) { const [,mo,dy] = d.split("-"); return `${Number(mo)}월 ${Number(dy)}일`; }
+                      return d;
+                    })();
+                    return `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
+                  })();
+              window.location.href = `sms:${phones.join(",")}?body=${encodeURIComponent(body)}`;
               setContextMenu(null);
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            문자보내기
+            문자보내기{selected.length > 1 ? ` (${selected.length}명)` : ""}
           </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
@@ -25913,6 +25954,33 @@ setConfirmChange(null);
                     setSmsConfirm4(null);
                   }}
                 >문자 보내기</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 업로드링크 다중 전송 확인 팝업 (Part 4) — 체크한 배차완료 오더가 1건 이상일 때 */}
+      {bulkUploadConfirm4 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">업로드 안내 메시지 전송</h3>
+            </div>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
+                선택한 <span className="font-semibold text-[#1B2B4B]">{bulkUploadConfirm4.phones.length}명</span>의 기사에게<br />
+                업로드 안내 메시지 창을 여시겠습니까?
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setBulkUploadConfirm4(null)}>취소</button>
+                <button
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
+                  onClick={() => {
+                    window.location.href = `sms:${bulkUploadConfirm4.phones.join(",")}?body=${encodeURIComponent(bulkUploadConfirm4.body)}`;
+                    setBulkUploadConfirm4(null);
+                  }}
+                >메시지 창 열기</button>
               </div>
             </div>
           </div>
@@ -27900,6 +27968,7 @@ const savePanelMemoE5 = (memo, show, notice) => {
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
   const [smsConfirm5, setSmsConfirm5] = React.useState(null);
+  const [bulkUploadConfirm5, setBulkUploadConfirm5] = React.useState(null); // { phones: string[], body } — 업로드링크 다중 전송 확인
   // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
   const [editReqPopup, setEditReqPopup] = React.useState(null);
   const [cancelReqPopup, setCancelReqPopup] = React.useState(null);
@@ -30211,6 +30280,7 @@ return (
             <div className="flex items-baseline gap-1.5 min-w-0">
               <span className="font-bold text-gray-900 text-[12px] truncate">{c.name || "-"}</span>
               <span className="text-[11px] font-bold text-gray-900 truncate">{c.phone || "-"}</span>
+              {c.isPrimary && <span className="shrink-0 text-[9px] font-bold px-1 py-0.5 rounded-full bg-[#1B2B4B] text-white">대표</span>}
             </div>
           </div>
         ))}
@@ -30389,7 +30459,23 @@ return (
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
-          <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+          <button onClick={()=>{
+  const selArr=[...selected];
+  const selRows = filtered.filter(r => selected.has(getId(r)));
+  const phones = [...new Set(selRows.map(r => String(r.전화번호||"").replace(/[^\d]/g,"")).filter(Boolean))];
+  if (phones.length === 0) {
+    // 배차완료(전화번호 있는) 오더를 체크하지 않았으면 기존 동작 그대로 — 클립보드 복사만.
+    const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;
+    const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;
+    const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+    navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));
+    return;
+  }
+  // 배차완료된 오더를 1건 이상 체크한 상태 — 여러 기사에게 한 번에 문자로 보낼지 확인.
+  const url = `${window.location.origin}/driver-upload`;
+  const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+  setBulkUploadConfirm5({ phones, body: msg });
+}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크{selected.size>1?` (${selected.size})`:""}</button>
           <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input autoComplete="off" type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
           <button className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
@@ -34089,6 +34175,32 @@ setCopyPlaceOptions(list);
           </div>
         </div>
       )}
+      {/* 업로드링크 다중 전송 확인 팝업 (Part 5) — 체크한 배차완료 오더가 1건 이상일 때 */}
+      {bulkUploadConfirm5 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">업로드 안내 메시지 전송</h3>
+            </div>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
+                선택한 <span className="font-semibold text-[#1B2B4B]">{bulkUploadConfirm5.phones.length}명</span>의 기사에게<br />
+                업로드 안내 메시지 창을 여시겠습니까?
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-medium" onClick={() => setBulkUploadConfirm5(null)}>취소</button>
+                <button
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-medium"
+                  onClick={() => {
+                    window.location.href = `sms:${bulkUploadConfirm5.phones.join(",")}?body=${encodeURIComponent(bulkUploadConfirm5.body)}`;
+                    setBulkUploadConfirm5(null);
+                  }}
+                >메시지 창 열기</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {editReqPopup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -34828,23 +34940,30 @@ setCopyPlaceOptions(list);
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             첨부현황
           </button>
-          {/* 문자보내기 */}
+          {/* 문자보내기 — 체크박스로 여러 건을 선택해둔 채 우클릭하면 선택된 오더 전체의
+              기사 번호를 받는사람으로 한 번에 연결한다(휴대폰 연결 앱은 sms: URI에 쉼표로
+              구분된 번호를 다중 수신자로 지원). 아무것도 선택 안 했으면 우클릭한 1건만. */}
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenuDS.row;
-              const phone = String(r.전화번호 || "").replace(/[^\d]/g, "");
-              if (!phone) { showAlert("전화번호가 없습니다."); setContextMenuDS(null); return; }
-              const dateStr = (() => {
-                const d = r.상차일 || "";
-                if (d.includes("-")) { const [,mo,dy] = d.split("-"); return `${Number(mo)}월 ${Number(dy)}일`; }
-                return d;
-              })();
-              const body = `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
-              window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
+              const targets = selected.size > 0 ? filtered.filter(x => selected.has(getId(x))) : [r];
+              const phones = [...new Set(targets.map(x => String(x.전화번호 || "").replace(/[^\d]/g, "")).filter(Boolean))];
+              if (!phones.length) { showAlert("전화번호가 없습니다."); setContextMenuDS(null); return; }
+              const body = targets.length > 1
+                ? `안녕하세요 ${userCompany || "저희"}운송사입니다.`
+                : (() => {
+                    const dateStr = (() => {
+                      const d = r.상차일 || "";
+                      if (d.includes("-")) { const [,mo,dy] = d.split("-"); return `${Number(mo)}월 ${Number(dy)}일`; }
+                      return d;
+                    })();
+                    return `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
+                  })();
+              window.location.href = `sms:${phones.join(",")}?body=${encodeURIComponent(body)}`;
               setContextMenuDS(null);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            문자보내기
+            문자보내기{selected.size > 1 ? ` (${selected.size}명)` : ""}
           </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"

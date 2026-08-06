@@ -10,6 +10,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap 
 import L from "leaflet";
 import * as XLSX from "xlsx";
 import { geocodeAddress } from "./tmapFareCalc";
+import CustomDatePicker from "./CustomDatePicker";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -1282,7 +1283,12 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["상태", "경로", "상차", "하차", "이동정보", "거래처"];
+const ROUTE_COLS = ["상태", "상차지", "하차지", "상차", "하차", "이동정보", "배차담당자", "거래처"];
+
+// 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
+function creatorLabel(r) {
+  return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
+}
 
 function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail }) {
   const first = orders[0];
@@ -1352,24 +1358,27 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                     <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
                       <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: meta.dot, flexShrink: 0 }} />
+                          <span style={{
+                            width: 7, height: 7, borderRadius: "50%", background: meta.dot, flexShrink: 0,
+                            animation: prog === "progress" ? "fmBlink 2.4s ease-in-out infinite" : "none",
+                          }} />
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
                         </span>
                       </td>
                       <td style={{ padding: "10px 16px" }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-                          {abbrevAddr(r.상차지주소) || r.상차지명 || "-"}
-                          <span style={{ color: "#9ca3af", fontWeight: 500 }}> → </span>
-                          {abbrevAddr(r.하차지주소) || r.하차지명 || "-"}
-                        </span>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</div>
+                        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1 }}>{r.상차일 || "-"} · {abbrevAddr(r.상차지주소) || "-"}</div>
+                      </td>
+                      <td style={{ padding: "10px 16px" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</div>
+                        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1 }}>{r.하차일 || "-"} · {abbrevAddr(r.하차지주소) || "-"}</div>
                       </td>
                       <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{r.상차시간 || "즉시"}</td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>
-                        {r.하차시간 || "즉시"}{r.하차일 && r.하차일 !== r.상차일 ? ` (${r.하차일})` : ""}
-                      </td>
+                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{r.하차시간 || "즉시"}</td>
                       <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                       </td>
+                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#6b7280", whiteSpace: "nowrap" }}>{creatorLabel(r)}</td>
                       <td style={{ padding: "10px 16px", fontSize: 13, color: "#6b7280" }}>{r.거래처명 || "-"}</td>
                     </tr>
                   );
@@ -1586,6 +1595,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
 function RouteManagementTab({ drivers, dispatchData, liveDrivers = [] }) {
   const [q, setQ] = useState("");
   const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow"
+  const [customDate, setCustomDate] = useState(""); // 배차관리(3파트)와 동일한 달력에서 임의 날짜 선택 시
   const [detailDriver, setDetailDriver] = useState(null);
   const [onlyIdle, setOnlyIdle] = useState(false); // 배차 없는(오늘 놀고 있는) 차량만 보기
 
@@ -1593,9 +1603,10 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [] }) {
 
   const todayStr = kstDateStr();
   const selectedDate = useMemo(() => {
+    if (customDate) return customDate;
     const offset = dayMode === "yesterday" ? -86400000 : dayMode === "tomorrow" ? 86400000 : 0;
     return kstDateStr(new Date(Date.now() + offset));
-  }, [dayMode]);
+  }, [dayMode, customDate]);
   const weekdayLabel = weekdayKoOf(selectedDate);
 
   const filteredDrivers = useMemo(() => {
@@ -1668,17 +1679,31 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [] }) {
         <div style={{ display: "flex", gap: 4 }}>
           {["yesterday", "today", "tomorrow"].map((mode, i) => {
             const labels = ["어제", "당일", "내일"];
+            const active = !customDate && dayMode === mode;
             return (
-              <button key={mode} onClick={() => setDayMode(mode)}
+              <button key={mode} onClick={() => { setDayMode(mode); setCustomDate(""); }}
                 style={{
                   height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                  background: dayMode === mode ? NAVY : "#f3f4f6", color: dayMode === mode ? "#fff" : "#374151", transition: "all .12s",
+                  background: active ? NAVY : "#f3f4f6", color: active ? "#fff" : "#374151", transition: "all .12s",
                 }}>
                 {labels[i]}
               </button>
             );
           })}
         </div>
+        {/* 배차관리(3파트)와 동일한 CustomDatePicker — 어제/당일/내일 범위를 벗어난 임의 날짜 조회 */}
+        <CustomDatePicker
+          value={customDate}
+          onChange={(e) => setCustomDate(e.target.value)}
+          placeholder="날짜 선택"
+          className={`h-[34px] px-3 rounded-lg text-[13px] font-bold border-0 cursor-pointer ${customDate ? "bg-[#1B2B4B] text-white" : "bg-[#f3f4f6] text-[#374151]"}`}
+        />
+        {customDate && (
+          <button onClick={() => setCustomDate("")}
+            style={{ height: 34, padding: "0 10px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            ✕
+          </button>
+        )}
         <span style={{ fontSize: 13, color: "#9ca3af" }}>{selectedDate} ({weekdayLabel})</span>
         <button onClick={() => setOnlyIdle(v => !v)}
           style={{
