@@ -19,6 +19,7 @@ const ShipperApp = React.lazy(() => import("./shipper/ShipperApp"));
 const DispatchApp = React.lazy(() => import("./DispatchApp"));
 const MobileApp = React.lazy(() => import("./mobile/MobileApp"));
 const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
+const CafeApp = React.lazy(() => import("./cafe/CafeApp"));
 
 import DriverHome from "./driver/DriverHome";
 import DriverLogin from "./driver/DriverLogin";
@@ -30,6 +31,8 @@ import Signup from "./Signup";
 import ShipperLogin from "./shipper/ShipperLogin";
 import ShipperSignup from "./shipper/ShipperSignup";
 import ShipperPending from "./shipper/ShipperPending";
+import CafeLogin from "./cafe/CafeLogin";
+import CafeSignup from "./cafe/CafeSignup";
 
 import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
@@ -555,12 +558,25 @@ export default function App() {
                   ? <Navigate to="/driver-home" replace />
                   : role === "shipper"
                     ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
-                    : <Navigate to="/app" replace />
+                    : role === "cafeUser"
+                      ? <Navigate to="/cafe" replace />
+                      : <Navigate to="/app" replace />
                 : <Login />
             }
           />
 
           <Route path="/signup" element={<Signup />} />
+
+          <Route path="/cafe-login" element={user && role === "cafeUser" ? <Navigate to="/cafe" replace /> : <CafeLogin />} />
+          <Route path="/cafe-signup" element={user && role === "cafeUser" ? <Navigate to="/cafe" replace /> : <CafeSignup />} />
+          <Route
+            path="/cafe/*"
+            element={
+              user && role === "cafeUser"
+                ? <CafeApp user={user} />
+                : <Navigate to="/cafe-login" replace />
+            }
+          />
 
           <Route
             path="/transport-login"
@@ -628,7 +644,7 @@ export default function App() {
           <Route
             path="/app"
             element={
-              user && role !== "shipper" && role !== "driver" && approved
+              user && role !== "shipper" && role !== "driver" && role !== "cafeUser" && approved
                 ? (isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
                 : <Navigate to="/login" replace />
             }
@@ -648,7 +664,9 @@ export default function App() {
                   ? <Navigate to="/shipper" replace />
                   : role === "driver"
                     ? <Navigate to="/driver-home" replace />
-                    : <Navigate to="/app" replace />
+                    : role === "cafeUser"
+                      ? <Navigate to="/cafe" replace />
+                      : <Navigate to="/app" replace />
                 : <Navigate to="/login" replace />
             }
           />

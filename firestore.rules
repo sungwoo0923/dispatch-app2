@@ -82,6 +82,24 @@ service cloud.firestore {
     }
 
     // ────────────────────────────────────────────────────────────
+    // 배차마당(카페형 오더 공유 사이트) — 게시글 본문은 로그인 사용자 전체 공개,
+    // 연락처(전화번호)는 별도 서브문서에 두고 "배차완료" 상태에서 당사자(등록자/신청자)만
+    // 읽을 수 있게 제한한다.
+    // ────────────────────────────────────────────────────────────
+    match /cafeOrders/{orderId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+
+      match /contact/{docId} {
+        allow read: if isSignedIn() &&
+          get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.status == "confirmed" &&
+          (request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.posterUid ||
+           request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.applicantUid);
+        allow write: if isSignedIn();
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────
     // 그 외 모든 컬렉션 — 로그인한 사용자만 접근 가능
     // (운송사/화주사/기사 전용 화면은 전부 Firebase Auth 로그인 후에만 진입하므로
     // 기존 기능에는 영향이 없고, 로그인 없는 제3자의 접근만 차단한다)

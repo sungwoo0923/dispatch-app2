@@ -9,6 +9,7 @@ import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import CustomDatePicker from "./CustomDatePicker";
+import { createCafeOrder } from "./cafe/cafeApi";
 import AdminMenu from "./AdminMenu";
 import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
@@ -3500,6 +3501,19 @@ useEffect(() => {
     runScheduledEmailCheck();
     const timer = setInterval(runScheduledEmailCheck, 60000);
     return () => { cancelled = true; clearInterval(timer); };
+  }, [userCompany]);
+
+  // ⭐ 배차마당(카페사이트) 공유 온/오프 — companySettings/{회사명}.cafeSyncOn.
+  // 회사정보 화면에서 토글하고, 여기서는 배차요청장의 "배차마당 등록" 버튼이
+  // 참고할 수 있도록 실시간으로 구독만 해 둔다.
+  const [cafeSyncOn, setCafeSyncOn] = useState(false);
+  useEffect(() => {
+    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
+    if (!co) return;
+    const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
+      setCafeSyncOn(!!snap.data()?.cafeSyncOn);
+    }, () => {});
+    return () => unsub();
   }, [userCompany]);
 
   // ⭐ 출근기록부: 자동 출근체크 + 주말 출근여부 팝업
@@ -8246,7 +8260,7 @@ const palletFareRules = {
 };
 
 // ⭐ 실제 저장 함수
-const doSave = async () => {
+const doSave = async (shareToCafe = false) => {
   if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
   if (isSaving) return;
   setIsSaving(true);
@@ -8374,6 +8388,36 @@ await Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
   return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder });
 }));
+
+// ★ 배차마당(카페사이트) 공유 — "배차마당 등록" 버튼으로 저장했고, 회사 설정에서
+// 온(on) 상태일 때만 카페 게시판에도 같은 오더를 올린다. 실패해도 정작 오더 저장
+// 자체는 이미 끝났으므로 여기서 막지 않고 조용히 넘어간다.
+if (shareToCafe && cafeSyncOn) {
+  (async () => {
+    try {
+      const printerInfo = await fetchPrinterInfo();
+      await createCafeOrder({
+        companyName: rec.companyName,
+        posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "",
+        posterNickname: rec.companyName,
+        posterUid: auth.currentUser?.uid || "",
+        source: "company",
+        상차지명: rec.상차지명 || "", 상차지주소: rec.상차지주소 || "",
+        하차지명: rec.하차지명 || "", 하차지주소: rec.하차지주소 || "",
+        화물내용: rec.화물내용 || "", 차량톤수: rec.차량톤수 || "", 차량종류: rec.차량종류 || "",
+        지급방식: rec.지급방식 || "", 상차방법: rec.상차방법 || "", 하차방법: rec.하차방법 || "",
+        상차일: rec.상차일 || "", 상차시간: rec.상차시간 || "", 하차일: rec.하차일 || "", 하차시간: rec.하차시간 || "",
+        운임: rec.청구운임 ? String(rec.청구운임) : "",
+        혼적: !!rec.혼적, 운행유형: rec.운행유형 || "편도", 긴급: !!rec.긴급,
+        경유여부: (rec.경유상차목록?.length > 0 || rec.경유하차목록?.length > 0),
+        메모: rec.메모 || "",
+      }, {
+        posterPhone: printerInfo?.phone || "",
+        posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || "",
+      });
+    } catch (e) { console.error("배차마당 등록 실패:", e); }
+  })();
+}
 
 // ★ UI 즉시 초기화 (Firestore 백그라운드 기다리지 않음)
 const reset = {
@@ -13718,21 +13762,17 @@ setConfirmChange(null);
       </div>
     )}
 
-    {/* 즉시공유 */}
+    {/* 배차마당 등록 — 저장과 동시에(온 상태일 때) 배차마당 카페사이트에도 공유 */}
     <div className="px-6 py-4">
       <button type="button"
-        className="w-full py-2.5 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-lg font-semibold text-[13px] transition"
-        onClick={async () => {
-          const text = makeFullDetailText(form);
-          try {
-            await navigator.clipboard.writeText(text);
-            showAlert("전체 상세 메시지가 복사되었습니다.");
-          } catch {
-            prompt("아래 내용을 복사하세요.", text);
-          }
-        }}>
-        즉시공유 (카톡 / 문자)
+        disabled={isSaving}
+        className="w-full py-2.5 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-lg font-semibold text-[13px] transition disabled:opacity-50"
+        onClick={() => doSave(true)}>
+        {isSaving ? "저장 중..." : cafeSyncOn ? "저장 + 배차마당 등록" : "배차마당 등록 (공유 OFF 상태)"}
       </button>
+      {!cafeSyncOn && (
+        <p className="text-[11px] text-gray-400 mt-1.5 text-center">회사정보에서 배차마당 공유를 켜면 이 오더가 배차마당에도 함께 올라갑니다.</p>
+      )}
     </div>
 
   </div>
@@ -13820,7 +13860,7 @@ setConfirmChange(null);
       disabled={isSaving}
       className={`flex-1 py-2.5 rounded-lg text-white font-bold text-[13px] transition
         ${isSaving ? "bg-gray-400 cursor-not-allowed" : "bg-[#1B2B4B] hover:bg-[#243a60]"}`}
-      onClick={doSave}>
+      onClick={() => doSave(false)}>
       {isSaving ? "저장 중..." : multiCount > 1 ? `${multiCount}건 등록하기` : "배차등록하기"}
     </button>
   </div>
@@ -50020,6 +50060,26 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const [bankConfirmOpen, setBankConfirmOpen] = React.useState(false);
   const [bankSaving, setBankSaving] = React.useState(false);
 
+  // ★ 배차마당(카페사이트) 공유 온/오프 — companySettings/{회사명}.cafeSyncOn
+  const [cafeSyncOn, setCafeSyncOn] = React.useState(false);
+  const [cafeSyncSaving, setCafeSyncSaving] = React.useState(false);
+  React.useEffect(() => {
+    if (!companyName) return;
+    const unsub = onSnapshot(doc(db, "companySettings", companyName), (snap) => {
+      setCafeSyncOn(!!snap.data()?.cafeSyncOn);
+    });
+    return () => unsub();
+  }, [companyName]);
+  const toggleCafeSync = async () => {
+    if (cafeSyncSaving) return;
+    setCafeSyncSaving(true);
+    try {
+      await setDoc(doc(db, "companySettings", companyName), { cafeSyncOn: !cafeSyncOn }, { merge: true });
+    } finally {
+      setCafeSyncSaving(false);
+    }
+  };
+
   // 수정 요청 상태
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [editForm, setEditForm] = React.useState({});
@@ -50280,6 +50340,20 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               수정 요청
             </button>
           )}
+        </div>
+
+        {/* 배차마당 공유 온/오프 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between">
+          <div>
+            <p className="text-[13px] font-bold text-gray-800">배차마당 공유</p>
+            <p className="text-[12px] text-gray-400 mt-0.5">
+              켜두면 배차요청장에서 "배차마당 등록" 버튼으로 저장한 오더가 배차마당(카페사이트)에도 함께 올라갑니다.
+            </p>
+          </div>
+          <button onClick={toggleCafeSync} disabled={cafeSyncSaving}
+            className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${cafeSyncOn ? "bg-[#1B2B4B]" : "bg-gray-300"} ${cafeSyncSaving ? "opacity-60 cursor-wait" : "cursor-pointer"}`}>
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${cafeSyncOn ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
         </div>
 
         {/* 기본 정보 카드 */}

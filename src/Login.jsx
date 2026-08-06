@@ -49,6 +49,9 @@ export default function Login() {
             <Link to="/shipper-login" className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all">
               화주사 로그인
             </Link>
+            <Link to="/cafe-login" className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all">
+              배차마당
+            </Link>
           </div>
         </nav>
 
