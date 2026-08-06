@@ -9,7 +9,6 @@ import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import CustomDatePicker from "./CustomDatePicker";
-import { createCafeOrder } from "./cafe/cafeApi";
 import AdminMenu from "./AdminMenu";
 import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
@@ -8390,13 +8389,18 @@ await Promise.all(Array.from({ length: saveCount }, (_, i) => {
 }));
 
 // ★ 배차마당(카페사이트) 공유 — "배차마당 등록" 버튼으로 저장했고, 회사 설정에서
-// 온(on) 상태일 때만 카페 게시판에도 같은 오더를 올린다. 실패해도 정작 오더 저장
-// 자체는 이미 끝났으므로 여기서 막지 않고 조용히 넘어간다.
-if (shareToCafe && cafeSyncOn) {
+// 온(on) 상태일 때만 카페 게시판에도 같은 오더를 올린다. 배차마당은 이 프로그램과
+// 완전히 분리된 별도 사이트(별도 저장소/배포)라 코드는 공유하지 않고, 같은
+// Firestore 프로젝트의 cafeOrders 컬렉션에 직접(self-contained) 기록만 한다.
+// 실패해도 정작 오더 저장 자체는 이미 끝났으므로 여기서 막지 않고 조용히 넘어간다.
+// ★ cafeSyncOn은 typeof로 방어 — 이 팝업이 놓인 클로저가 어떤 경로로 렌더링되든
+// (미확인 스코프 경계로 인해 상단 useState가 안 잡힐 수 있는 경우까지) 절대 오더
+// 저장 자체를 깨뜨리지 않도록 한다.
+if (shareToCafe && typeof cafeSyncOn !== "undefined" && cafeSyncOn) {
   (async () => {
     try {
       const printerInfo = await fetchPrinterInfo();
-      await createCafeOrder({
+      const cafeRef = await addDoc(collection(db, "cafeOrders"), {
         companyName: rec.companyName,
         posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "",
         posterNickname: rec.companyName,
@@ -8411,7 +8415,12 @@ if (shareToCafe && cafeSyncOn) {
         혼적: !!rec.혼적, 운행유형: rec.운행유형 || "편도", 긴급: !!rec.긴급,
         경유여부: (rec.경유상차목록?.length > 0 || rec.경유하차목록?.length > 0),
         메모: rec.메모 || "",
-      }, {
+        status: "open",
+        applicantUid: null, applicantName: null, applicantNickname: null,
+        applyRequestedAt: null, confirmedAt: null,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+      await setDoc(doc(db, "cafeOrders", cafeRef.id, "contact", "info"), {
         posterPhone: printerInfo?.phone || "",
         posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || "",
       });
@@ -13768,9 +13777,9 @@ setConfirmChange(null);
         disabled={isSaving}
         className="w-full py-2.5 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-lg font-semibold text-[13px] transition disabled:opacity-50"
         onClick={() => doSave(true)}>
-        {isSaving ? "저장 중..." : cafeSyncOn ? "저장 + 배차마당 등록" : "배차마당 등록 (공유 OFF 상태)"}
+        {isSaving ? "저장 중..." : (typeof cafeSyncOn !== "undefined" && cafeSyncOn) ? "저장 + 배차마당 등록" : "배차마당 등록 (공유 OFF 상태)"}
       </button>
-      {!cafeSyncOn && (
+      {!(typeof cafeSyncOn !== "undefined" && cafeSyncOn) && (
         <p className="text-[11px] text-gray-400 mt-1.5 text-center">회사정보에서 배차마당 공유를 켜면 이 오더가 배차마당에도 함께 올라갑니다.</p>
       )}
     </div>
