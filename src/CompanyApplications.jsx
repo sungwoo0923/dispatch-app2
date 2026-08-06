@@ -171,6 +171,7 @@ export default function CompanyApplications() {
         if (d.address) { updatePayload.address = d.address; updatePayload.주소 = d.address; }
         if (d.businessNumber) { updatePayload.businessNumber = d.businessNumber; updatePayload.사업자번호 = d.businessNumber; }
         if (d.phone) { updatePayload.phone = d.phone; updatePayload.연락처 = d.phone; }
+        if (d.fax) { updatePayload.fax = d.fax; updatePayload.팩스 = d.fax; }
         if (d.email) updatePayload.email = d.email;
         await updateDoc(doc(db, "transportApplications", req.transportApplicationId), updatePayload);
       }
@@ -550,6 +551,7 @@ export default function CompanyApplications() {
                       ["주소", "address"],
                       ["사업자번호", "businessNumber"],
                       ["연락처", "phone"],
+                      ["팩스", "fax"],
                       ["이메일", "email"],
                     ].map(([label, key]) => {
                       const orig = (reviewingEdit.originalData || {})[key] || "-";

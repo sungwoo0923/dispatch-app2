@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
-  const { to, subject, html, attachments: atts } = req.body || {};
+  const { to, subject, html, attachments: atts, fromName } = req.body || {};
   if (!to || !subject) return res.status(400).json({ error: "수신자 누락" });
 
   try {
@@ -17,8 +17,11 @@ export default async function handler(req, res) {
       socketTimeout: 10000,
     });
 
+    // ★ 발신 메일 계정 자체는 공용 SMTP(r15332525@daum.net)를 그대로 쓰지만,
+    // 받는 사람에게 보이는 "보낸사람" 표시 이름은 호출한 회사명으로 바꿔준다
+    // (예전엔 어느 회사가 보내도 항상 "RUN25 배차팀"으로 고정 표시됐음).
     const mailOptions = {
-      from: '"RUN25 배차팀" <r15332525@daum.net>',
+      from: `"${(fromName || "배차팀").replace(/"/g, "")}" <r15332525@daum.net>`,
       to, subject, html: html || subject,
     };
 

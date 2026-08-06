@@ -677,7 +677,7 @@ export default function ShipperSettlement() {
                     const res = await fetch("/api/send-email", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ to: emailTo, subject: emailSubject, html: bodyHtml, attachments: [attachment] }),
+                      body: JSON.stringify({ to: emailTo, subject: emailSubject, html: bodyHtml, attachments: [attachment], fromName: userData?.companyName || "배차팀" }),
                     });
                     if (res.ok) {
                       alert(`${emailTo} 로 발송 완료`);

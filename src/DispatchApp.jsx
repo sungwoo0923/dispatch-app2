@@ -64,23 +64,6 @@ function CountUp({ value, duration = 900 }) {
 }
 
 /* -------------------------------------------------
-   발행사(우리 회사) 고정 정보
---------------------------------------------------*/
-const COMPANY = {
-  name: "(주)돌캐",
-  bizNo: "329-81-00967",
-  addr: "인천 서구 청마로19번길 21 4층 402호",
-  ceo: "고현정",
-  bizType: "운수업",
-  bizItem: "화물운송주선",
-  tel: "1533-2525",
-  fax: "032-569-8881",
-  bank: "기업은행 955-040276-04-018",
-  email: "r15332525@run25.co.kr",
-  sealImage: "/seal.png",
-};
-
-/* -------------------------------------------------
    공통 상수 (차량종류, 결제/배차 방식)
 --------------------------------------------------*/
 const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
@@ -2812,7 +2795,7 @@ function CustomAlert({ message, onClose }) {
 }
 // ============================================================
 export {
-  cellBase, COMPANY, DISPATCH_TYPES,
+  cellBase, DISPATCH_TYPES,
   headBase, inputBase, PAY_TYPES, todayStr, VEHICLE_TYPES
 };
 // ===================== DispatchApp.jsx (PART 1/8) — END =====================
@@ -4591,6 +4574,7 @@ return (
             <ClientSettlement
               dispatchData={dispatchDataFiltered}
               setDispatchData={setDispatchData}
+              userCompany={userCompany}
               clients={clients}
               setClients={(next) => next.forEach(upsertClient)}
               upsertClient={upsertClient}
@@ -9031,7 +9015,7 @@ setCopyOpen(false);
       const plate = r.차량번호 || "-";
       const name = r.이름 || "-";
       const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
-      return `[RUN25 운송장 업로드 안내]
+      return `[${userCompany || "운송사"} 운송장 업로드 안내]
 
 ✅ 상차일: ${dStr}
 ✅ 거래처: ${r.거래처명 || "-"}
@@ -9044,7 +9028,7 @@ setCopyOpen(false);
       const text = shareTextForRow(r);
       const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
       if (isMobile && navigator.share) {
-        try { await navigator.share({ title: "RUN25 업로드 안내", text, url }); } catch { }
+        try { await navigator.share({ title: `${userCompany || "운송사"} 업로드 안내`, text, url }); } catch { }
         return;
       }
       try {
@@ -16385,7 +16369,7 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
   );
 }
 
-function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
+function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, companyName = "" }) {
   const [clientQ, setClientQ] = React.useState(initialClient || "");
   const [searched, setSearched] = React.useState(false);
   const now = new Date();
@@ -16435,7 +16419,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
       return d;
     })();
     const lines = [
-      "안녕하세요 돌캐 운송사입니다.",
+      `안녕하세요 ${companyName || "저희"}운송사입니다.`,
       "",
       `📅 ${dateStr}`,
       `상차 : ${r.상차지명 || "-"}`,
@@ -17154,6 +17138,7 @@ function buildOptimalMatchSmsBody(row, companyName) {
     ``,
     `화물내용 : ${row.화물내용 || "-"}`,
     `차량톤수 : ${row.차량톤수 || "-"}`,
+    `차량종류 : ${row.차량종류 || "-"}`,
   ].join("\n");
 }
 
@@ -17184,6 +17169,31 @@ function summarizeDayPattern(records) {
     : "";
   const prefix = records.length >= 2 && top >= 2 ? "주로 " : "";
   return `${prefix}${topDays.join(",")}요일${timeLabel}`;
+}
+
+// 보고서/출력물에 찍히는 "우리 회사" 정보와 "출력한 담당자" 정보 — 예전엔 각 보고서
+// 템플릿마다 (주)돌캐/RUN25/특정 계정 이름이 문자열로 고정 박혀있어 다른 운송사가
+// 로그인해도 항상 그 정보로 인쇄됐다. 어느 컴포넌트에서 호출하든 안전하도록(외부
+// 클로저에 기대지 않도록) db/auth 전역 import만 사용하는 순수 함수로 분리한다.
+async function fetchCompanyPrintInfo(companyName) {
+  const co = (companyName || "").trim();
+  if (!co) return null;
+  try {
+    const snap = await getDocs(collection(db, "transportApplications"));
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규" && d.status === "approved");
+    if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규");
+    if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.status === "approved");
+    return found || null;
+  } catch { return null; }
+}
+async function fetchPrinterInfo() {
+  try {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return null;
+    const snap = await getDoc(doc(db, "users", uid));
+    return snap.exists() ? snap.data() : null;
+  } catch { return null; }
 }
 
 function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
@@ -20268,8 +20278,23 @@ React.useEffect(() => {
   if (dailyCloseOpen) runDailyClose();
 }, [dailyCloseOpen]);
 // ===================== 일마감 보고서 출력 =====================
-const handleDailyReport = () => {
+const handleDailyReport = async () => {
   if (!dailyCloseResult) return;
+  // ★ 보고서 상단 회사정보/하단 담당자 — 로그인한 회사의 사업자정보와 이 계정의
+  // 실명/직책을 그때그때 조회해 찍는다(예전엔 특정 회사·계정 이름이 고정 박혀있었음).
+  const [companyInfo, printerInfo] = await Promise.all([
+    fetchCompanyPrintInfo(userCompany),
+    fetchPrinterInfo(),
+  ]);
+  const printCo = companyInfo?.companyName || userCompany || "";
+  const printPhone = companyInfo?.phone || companyInfo?.연락처 || "";
+  const printFax = companyInfo?.fax || companyInfo?.팩스 || companyInfo?.팩스번호 || "";
+  const printEmail = companyInfo?.email || "";
+  const printAddr = companyInfo?.address || companyInfo?.주소 || "";
+  const printerName = printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "";
+  const printerPosition = printerInfo?.position || "";
+  const printerLabel = [printerName, printerPosition].filter(Boolean).join(" ") || "-";
+
   const targetDate = dailyCloseResult.date;
   const targetRows = rows.filter(r => r.상차일 === targetDate);
 
@@ -20535,13 +20560,13 @@ const handleDailyReport = () => {
   <!-- 상단 헤더 -->
   <div class="top-header">
     <div>
-      <div class="logo">RUN25</div>
+      <div class="logo">${printCo}</div>
       <div class="tagline">화물 운송 전문</div>
     </div>
     <div class="contact">
-      010-5504-1821 &nbsp;|&nbsp; FAX 1533-2525<br>
-      sungwoo0923@nate.com<br>
-      인천 서구 청마로19번길 21 (성주빌딩) 4층
+      ${printPhone || "-"}${printFax ? ` &nbsp;|&nbsp; FAX ${printFax}` : ""}<br>
+      ${printEmail || ""}<br>
+      ${printAddr || ""}
     </div>
   </div>
 
@@ -20632,7 +20657,7 @@ const handleDailyReport = () => {
 
   <div class="report-footer">
     <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
-    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: 박성우 팀장</div>
+    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
 
@@ -21337,6 +21362,7 @@ const head = isDark
     initialClient={attachStatusClient}
     dispatchData={dispatchData}
     db={db}
+    companyName={userCompany}
   />
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
@@ -27578,8 +27604,23 @@ React.useEffect(() => {
   if (dailyCloseOpen) runDailyClose();
 }, [dailyCloseOpen]);
 // ===================== 일마감 보고서 출력 =====================
-const handleDailyReport = () => {
+const handleDailyReport = async () => {
   if (!dailyCloseResult) return;
+  // ★ 보고서 상단 회사정보/하단 담당자 — 로그인한 회사의 사업자정보와 이 계정의
+  // 실명/직책을 그때그때 조회해 찍는다(예전엔 특정 회사·계정 이름이 고정 박혀있었음).
+  const [companyInfo, printerInfo] = await Promise.all([
+    fetchCompanyPrintInfo(userCompany),
+    fetchPrinterInfo(),
+  ]);
+  const printCo = companyInfo?.companyName || userCompany || "";
+  const printPhone = companyInfo?.phone || companyInfo?.연락처 || "";
+  const printFax = companyInfo?.fax || companyInfo?.팩스 || companyInfo?.팩스번호 || "";
+  const printEmail = companyInfo?.email || "";
+  const printAddr = companyInfo?.address || companyInfo?.주소 || "";
+  const printerName = printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "";
+  const printerPosition = printerInfo?.position || "";
+  const printerLabel = [printerName, printerPosition].filter(Boolean).join(" ") || "-";
+
   const targetDate = dailyCloseResult.dateEnd || dailyCloseResult.date;
   const rangeStart = appliedStartDate || targetDate;
   const rangeEnd   = appliedEndDate   || targetDate;
@@ -27756,8 +27797,8 @@ const handleDailyReport = () => {
 </div>
 <div class="page-wrap" id="pageWrap">
   <div class="top-header">
-    <div><div class="logo">RUN25</div><div class="tagline">화물 운송 전문</div></div>
-    <div class="contact">010-5504-1821 &nbsp;|&nbsp; FAX 1533-2525<br>sungwoo0923@nate.com<br>인천 서구 청마로19번길 21 (성주빌딩) 4층</div>
+    <div><div class="logo">${printCo}</div><div class="tagline">화물 운송 전문</div></div>
+    <div class="contact">${printPhone || "-"}${printFax ? ` &nbsp;|&nbsp; FAX ${printFax}` : ""}<br>${printEmail || ""}<br>${printAddr || ""}</div>
   </div>
   <div class="title-bar">
     <div class="doc-title">일 일 &nbsp; 업 무 보 고</div>
@@ -27803,7 +27844,7 @@ const handleDailyReport = () => {
   </table>
   <div class="report-footer">
     <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
-    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: 박성우 팀장</div>
+    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -30306,6 +30347,7 @@ return (
     initialClient={attachStatusDSClient}
     dispatchData={dispatchData}
     db={db}
+    companyName={userCompany}
   />
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
@@ -40876,7 +40918,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
 
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
-function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
+function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
 
   // ★ 오더 상세 팝업
   const [orderPopup, setOrderPopup] = useState(null);
@@ -41179,14 +41221,47 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     setEnd(`${THIS_YEAR}-12-31`);
   };
 
-  const COMPANY_PRINT = {
-    name: "(주)돌캐", ceo: "고현정", bizNo: "329-81-00967",
-    type: "운수업", item: "화물운송주선",
-    addr: "인천 서구 청마로19번길 21 4층 402호",
-    contact: "TEL 1533-2525 / FAX 032-569-8881",
-    bank: "기업은행 955-040276-04-018",
-    email: "r15332525@run25.co.kr", seal: "/seal.png",
-  };
+  // ★ 거래명세서/이메일 발신정보에 찍히는 "우리 회사" 정보 — 예전엔 (주)돌캐로 고정돼
+  // 있어서 어느 운송사가 로그인해도 항상 돌캐 정보로 인쇄/발송됐다. 로그인한 회사의
+  // transportApplications(회사관리에서 등록한 사업자정보) 문서를 실시간으로 읽어와
+  // 회사마다 자기 정보로 찍히게 한다.
+  const [companyInfoDoc, setCompanyInfoDoc] = React.useState(null);
+  React.useEffect(() => {
+    const co = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
+    if (!co) return;
+    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규" && d.status === "approved");
+      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규");
+      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.status === "approved");
+      setCompanyInfoDoc(found || null);
+    }, () => {});
+    return () => unsub();
+  }, [userCompany]);
+
+  const COMPANY_PRINT = React.useMemo(() => {
+    const d = companyInfoDoc || {};
+    const co = (userCompany || d.companyName || "").trim();
+    const phone = d.phone || d.연락처 || "";
+    const fax = d.fax || d.팩스 || d.팩스번호 || "";
+    const contactParts = [];
+    if (phone) contactParts.push(`TEL ${phone}`);
+    if (fax) contactParts.push(`FAX ${fax}`);
+    return {
+      name: co,
+      ceo: d.representative || d.대표자 || d.ceo || "",
+      bizNo: d.businessNumber || d.사업자번호 || "",
+      type: d.업태 || "운수업",
+      item: d.종목 || "화물운송주선",
+      addr: d.address || d.주소 || "",
+      phone,
+      fax,
+      contact: contactParts.join(" / "),
+      bank: d.계좌은행 ? `${d.계좌은행} ${d.계좌번호 || ""}`.trim() : "",
+      email: d.email || "",
+      seal: d.직인이미지 || "/seal.png",
+    };
+  }, [companyInfoDoc, userCompany]);
 
   const buildBatchInvoiceHtml = (item, cp) => {
     const rows = item.mapped || [];
@@ -41795,7 +41870,10 @@ const buildArEmailReportHtml = (filteredRows, clientName, year, from, to, compan
 };
 
 // ===================== 미수금 보고서 출력 =====================
-const handleARReport = () => {
+const handleARReport = async () => {
+  // ★ 하단 담당자 표시용 — 출력을 누른 이 계정의 실명/직책을 그때그때 조회한다.
+  const printerInfo = await fetchPrinterInfo();
+  const printerLabel = [printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "", printerInfo?.position || ""].filter(Boolean).join(" ") || "-";
   const fromIdx = parseInt(arFromMM, 10);
   const toIdx   = parseInt(arToMM,   10);
   const yFrom   = parseInt(arFromYear, 10);
@@ -42048,8 +42126,8 @@ if (total === 0) return `<td class="zero">-</td>`;
 
 <div class="page-wrap" id="pageWrap">
   <div class="top-header">
-    <div><div class="logo">RUN25</div><div class="tagline">화물 운송 전문</div></div>
-    <div class="contact">010-5504-1821 &nbsp;|&nbsp; FAX 1533-2525<br>sungwoo0923@nate.com<br>인천 서구 청마로19번길 21 (성주빌딩) 4층</div>
+    <div><div class="logo">${COMPANY_PRINT.name}</div><div class="tagline">화물 운송 전문</div></div>
+    <div class="contact">${COMPANY_PRINT.contact || "-"}<br>${COMPANY_PRINT.email || ""}<br>${COMPANY_PRINT.addr || ""}</div>
   </div>
 
   <div class="title-bar">
@@ -42125,7 +42203,7 @@ if (total === 0) return `<td class="zero">-</td>`;
 
   <div class="report-footer">
     <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
-    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: 박성우 팀장</div>
+    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
 
@@ -42569,7 +42647,7 @@ const handleBatchSettle = async (targetStatus) => {
                     if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
                     const found = (clients||[]).find(c=>c.거래처명===client);
                     setEmailTo(found?.연락처이메일 || found?.이메일 || "");
-                    setEmailBody(`안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: 010-4249-1821\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                    setEmailBody(`안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: ${COMPANY_PRINT.phone || "-"}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
                     setEmailModalOpen(true);
                   }}
                   className="px-3 py-1.5 rounded bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
@@ -43172,6 +43250,7 @@ const handleBatchSettle = async (targetStatus) => {
                               subject: generalEmailSubject,
                               html: bodyHtml,
                               attachments: generalEmailFiles.map(f => ({ filename: f.name, content: f.base64, encoding: "base64" })),
+                              fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`,
                             }),
                           });
                           if (res.ok) {
@@ -43318,12 +43397,12 @@ const handleBatchSettle = async (targetStatus) => {
 
                 const subject = `[거래명세서] ${item.name} ${item.start}~${item.end}`;
                 const totalAmt = (item.totals?.공급가||0)+(item.totals?.세액||0);
-                const bodyText = `안녕하세요, ${item.name} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${item.start}~${item.end} 기간 거래명세서를 발송드립니다.\n\n총 ${item.mapped?.length||0}건\n공급가액: ${(item.totals?.공급가||0).toLocaleString()}원\n부가세: ${(item.totals?.세액||0).toLocaleString()}원\n합계: ${totalAmt.toLocaleString()}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: 010-4249-1821\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`;
+                const bodyText = `안녕하세요, ${item.name} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${item.start}~${item.end} 기간 거래명세서를 발송드립니다.\n\n총 ${item.mapped?.length||0}건\n공급가액: ${(item.totals?.공급가||0).toLocaleString()}원\n부가세: ${(item.totals?.세액||0).toLocaleString()}원\n합계: ${totalAmt.toLocaleString()}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: ${COMPANY_PRINT.phone || "-"}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`;
                 const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyText.split("\n").map(l=>`<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("")}</div>`;
                 const res = await fetch("/api/send-email", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to: item.email, subject, html: bodyHtml, attachments }),
+                  body: JSON.stringify({ to: item.email, subject, html: bodyHtml, attachments, fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀` }),
                 });
                 if (res.ok) {
                   logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"success" });
@@ -43517,6 +43596,7 @@ const handleBatchSettle = async (targetStatus) => {
                             to: emailTo,
                             subject,
                             html: bodyHtml,
+                            fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`,
                             attachments: fileAttachments, // PDF
                             excelData: {                  // ★ 엑셀은 서버에서 생성
                               client,
@@ -44659,7 +44739,7 @@ const handleBatchSettle = async (targetStatus) => {
                         const res = await fetch("/api/send-email", {
                           method:"POST",
                           headers:{"Content-Type":"application/json"},
-                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments }),
+                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments, fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀` }),
                         });
                         if (res.ok) {
                           logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"success" });
@@ -49783,6 +49863,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
       address: appData?.address || appData?.주소 || "",
       businessNumber: appData?.businessNumber || appData?.사업자번호 || "",
       phone: appData?.phone || appData?.연락처 || "",
+      fax: appData?.fax || appData?.팩스 || appData?.팩스번호 || "",
       email: appData?.email || "",
     });
     setEditModalOpen(true);
@@ -49802,6 +49883,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           address: appData?.address || appData?.주소 || "",
           businessNumber: appData?.businessNumber || appData?.사업자번호 || "",
           phone: appData?.phone || appData?.연락처 || "",
+          fax: appData?.fax || appData?.팩스 || appData?.팩스번호 || "",
           email: appData?.email || "",
         },
         requestedData: editForm,
@@ -49937,6 +50019,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 { label: "대표자", value: appData.representative || appData.대표자 || appData.ceo },
                 { label: "사업자번호", value: appData.businessNumber || appData.사업자번호 },
                 { label: "연락처", value: appData.phone || appData.연락처 },
+                { label: "팩스", value: appData.fax || appData.팩스 || appData.팩스번호 },
                 { label: "이메일", value: appData.email },
                 { label: "회사 코드", value: appData.companyCode, mono: true },
                 { label: "승인일", value: appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : null },
@@ -50134,6 +50217,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 { label: "주소", key: "address" },
                 { label: "사업자번호", key: "businessNumber" },
                 { label: "연락처", key: "phone" },
+                { label: "팩스", key: "fax" },
                 { label: "이메일", key: "email" },
               ].map(({ label, key }) => (
                 <div key={key}>
