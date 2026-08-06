@@ -84,10 +84,13 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
     const el = btnRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const popupWidth = 320;
+    // 팝업 실제 폭(320px)이 뷰포트보다 넓으면(모바일 분할화면/좁은 창) 뷰포트에 맞춰 줄인다 —
+    // 그렇지 않으면 아래 left 클램프의 상한(vw - popupWidth - 8)이 음수가 되어 팝업이
+    // 화면 밖으로 밀려나거나 엉뚱한 위치에 뜬다. CSS의 max-w-[94vw]와 값을 맞춘다.
+    const popupWidth = Math.min(320, window.innerWidth - 16);
     const spaceBelow = window.innerHeight - r.bottom;
     const openUp = spaceBelow < 360 && r.top > spaceBelow;
-    const left = Math.min(Math.max(r.left, 8), window.innerWidth - popupWidth - 8);
+    const left = Math.min(Math.max(r.left, 8), Math.max(8, window.innerWidth - popupWidth - 8));
     setMenuRect({
       left,
       top: openUp ? undefined : r.bottom + 4,
