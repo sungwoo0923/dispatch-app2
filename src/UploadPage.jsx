@@ -661,7 +661,7 @@ export default function UploadPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <InfoBox label="기사명" value={order.이름 || "-"} />
                   <InfoBox label="차량번호" value={order.차량번호 || "-"} />
-                  <InfoBox label="연락처" value={order.전화번호 || "-"} />
+                  <InfoBox label="연락처" value={order.전화번호 ? <MaskedPhone value={order.전화번호} /> : "-"} />
                   <div style={{ borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
                     <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>상차일</div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>{order.상차일 || "-"}</div>
@@ -895,10 +895,10 @@ export default function UploadPage() {
               ))}
               <div style={{ marginTop: 10, background: "#eef2f8", border: "1.5px solid #c7d2e3", borderRadius: 10, padding: "12px 14px" }}>
                 <div style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 800, lineHeight: 1.6 }}>
-                  ⚠️ 파렛트 전표나 거래명세서가 없는 경우에도, 위 항목을 모두 체크해야 다음 단계로 진행할 수 있습니다.
+                  ⚠️ 파렛트 전표나 거래명세서가 없다면 업로드하지 않으셔도 됩니다.
                 </div>
                 <div style={{ fontSize: 12.5, color: "#374151", fontWeight: 600, marginTop: 6, lineHeight: 1.6 }}>
-                  해당 서류가 없다면 "미업로드시 운임 보류에 동의합니다" 항목에 동의하는 것으로 체크해주세요. 이후 서류 없이 업로드를 진행할 수 있습니다.
+                  위 항목만 모두 체크하면 다음 단계로 진행할 수 있습니다.
                 </div>
               </div>
             </div>
@@ -1271,7 +1271,27 @@ function InfoBox({ label, value }) {
   return (
     <div style={{ borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
       <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+      {/* lineHeight를 명시하지 않으면 숫자만 있는 값(전화번호 등)이 한글이 섞인 값보다
+          글꼴 세로 정렬 기준이 달라 밑줄에서 붕 뜬 것처럼 위로 치우쳐 보였다 — 모든
+          필드가 동일한 기준선을 갖도록 고정 line-height를 준다. */}
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", lineHeight: "20px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
     </div>
+  );
+}
+
+// 전화번호: 하이픈 포맷 + 뒷자리 블러 마스킹 (010-7763-**** 형태에서 마지막 그룹만
+// CSS blur로 흐리게 처리 — 가운데 자리까지는 그대로 보이고 맨 뒷자리만 안 보이게)
+function MaskedPhone({ value }) {
+  const d = String(value || "").replace(/[^\d]/g, "");
+  if (!d) return <>-</>;
+  let parts;
+  if (d.length === 11) parts = [d.slice(0, 3), d.slice(3, 7), d.slice(7, 11)];
+  else if (d.length === 10) parts = [d.slice(0, 3), d.slice(3, 6), d.slice(6, 10)];
+  else return <>{value}</>;
+  return (
+    <span>
+      {parts[0]}-{parts[1]}-
+      <span style={{ filter: "blur(4px)", userSelect: "none" }}>{parts[2]}</span>
+    </span>
   );
 }
