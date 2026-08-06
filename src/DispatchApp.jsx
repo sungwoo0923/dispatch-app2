@@ -899,6 +899,21 @@ let dispatchCache = [];
     if (dispatchSaveTimer) clearTimeout(dispatchSaveTimer);
     dispatchSaveTimer = setTimeout(() => safeSave("dispatchData", v), 800);
   };
+
+  // ★ 담당자(등록자) 표시용 실명 — auth 사용자 객체는 displayName을 한 번도 설정한 적이
+  // 없어(회원가입/로그인 어디서도 updateProfile을 호출하지 않음) 항상 null이라, 지금까지
+  // upsertDriver의 등록자 스탬프가 이메일 앞부분(계정 아이디, 예: "tjddnqkf")으로만 찍히던
+  // 버그가 있었다. users/{uid} 문서에 저장된 실제 이름(name)을 우선 가져와 사용한다.
+  const [myRealName, setMyRealName] = useState("");
+  useEffect(() => {
+    if (!user?.uid) { setMyRealName(""); return; }
+    let cancelled = false;
+    getDoc(doc(db, "users", user.uid)).then(snap => {
+      if (!cancelled) setMyRealName(snap.exists() ? (snap.data().name || "") : "");
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.uid]);
+
   // ===================== 하차지(places) Firestore 실시간 구독 =====================
 const [places, setPlaces] = useState([]);
 
@@ -1795,7 +1810,7 @@ const markEditRequestSeen = async (order) => {
   // 덮어쓰지 않고 최초 등록자를 그대로 유지한다.
   const existingDriverDoc = drivers.find(d => d.id === id);
   const registeredBy = existingDriverDoc?.등록자 || driver.등록자 ||
-    (!existingDriverDoc ? (user?.displayName || user?.email?.split("@")[0] || "") : undefined);
+    (!existingDriverDoc ? (myRealName || user?.displayName || user?.email?.split("@")[0] || "") : undefined);
 
   const data = {
     ...driver,
@@ -6461,6 +6476,7 @@ const filterPlaces = (q) => {
       
     };
     const cargoInputRef = React.useRef(null);
+    const cargoTypeTabbedRef = React.useRef(false); // 화물타입 "없음" 선택이 Tab으로 확정됐는지 추적(아래 참고)
     const tonInputRef = React.useRef(null);
     const payTypeRef = React.useRef(null);
     // 필수값 미입력 필드를 빨간 테두리로 깜빡여 알려주기 위한 상태
@@ -10453,6 +10469,7 @@ className={`
         value={form.화물타입 || ""}
         openOnFocus
 
+        onKeyDown={(e) => { cargoTypeTabbedRef.current = e.key === "Tab"; }}
         onChange={(e) => {
           const type = e.target.value;
           onChange("화물타입", type);
@@ -10471,10 +10488,17 @@ className={`
 
           if (!type) {
             onChange("화물내용", cleaned + extras);
-            setTimeout(() => cargoInputRef.current?.focus(), 0);
+            // Tab으로 "없음"이 확정된 경우엔 브라우저가 이미 다음 칸(차량종류)으로 포커스를
+            // 옮기는 중이라, 여기서 화물내용 입력창으로 되돌리면 Tab이 씹힌 것처럼 계속
+            // 화물내용으로 튕겨 돌아온다 — 마우스 클릭/Enter로 확정했을 때만(포커스가 아직
+            // 이 드롭다운에 남아있는 경우) 자유 입력이 편하도록 텍스트칸으로 옮겨준다.
+            if (!cargoTypeTabbedRef.current) {
+              setTimeout(() => cargoInputRef.current?.focus(), 0);
+            }
           } else {
             onChange("화물내용", `${cleaned}${type}${extras}`);
           }
+          cargoTypeTabbedRef.current = false;
         }}
       >
         <option value="">없음</option>
