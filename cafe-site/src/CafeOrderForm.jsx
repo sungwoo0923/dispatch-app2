@@ -1,35 +1,73 @@
 // ======================= cafe-site/src/CafeOrderForm.jsx =======================
-// 배차마당 오더 작성/수정 모달 — 운송 프로그램(3파트) 오더등록과 동일한 필드 구성.
-import React, { useState, useEffect } from "react";
-import { VEHICLE_TYPES, PAY_TYPES, LOAD_METHODS } from "./cafeConstants";
+// 배차마당 오더 작성/수정 모달 — 운송 프로그램(3파트) 오더등록과 동일한 필드 구성 및
+// 입력 UI(날짜/시간 선택기, 톤수 단위, 운임 콤마 등)를 쓴다.
+import React, { useState, useEffect, useMemo } from "react";
+import { VEHICLE_TYPES, PAY_TYPES, LOAD_METHODS, TON_UNITS } from "./cafeConstants";
 import { createCafeOrder, updateCafeOrder } from "./cafeApi";
+import CustomDatePicker from "./CustomDatePicker";
+import TimeAmPmPicker from "./TimeAmPmPicker";
+import PlaceAutocomplete from "./PlaceAutocomplete";
 
 const emptyForm = {
   상차지명: "", 상차지주소: "", 하차지명: "", 하차지주소: "",
-  화물내용: "", 차량톤수: "", 차량종류: "",
+  화물내용: "", 차량톤수: "", 차량종류: "", 리프트: false,
   지급방식: "", 상차방법: "", 하차방법: "",
   상차일: "", 상차시간: "", 하차일: "", 하차시간: "",
-  운임: "", 메모: "",
+  운임: "", 협의: false, 메모: "",
   혼적: false, 운행유형: "편도", 긴급: false, 경유여부: false,
 };
 
 const field = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B] transition";
 const label = "text-[12px] font-bold text-gray-500 mb-1 block";
 
-export default function CafeOrderForm({ profile, editing, onClose, onSaved }) {
+// 실제로 존재하지 않을 법한 예시 — 자사 등록 거래처와 혼동되지 않게 가공의 이름만 쓴다.
+const PLACEHOLDERS = {
+  상차지명: "예: 다온물류창고",
+  하차지명: "예: 청호식품 남부지점",
+  화물내용: "예: 잡화 10파레트",
+};
+
+export default function CafeOrderForm({ profile, editing, onClose, onSaved, orders = [] }) {
   const [form, setForm] = useState(emptyForm);
+  const [tonUnit, setTonUnit] = useState("톤");
+  const [tonValue, setTonValue] = useState("");
+  const [fareDigits, setFareDigits] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (editing) {
       setForm({ ...emptyForm, ...editing });
+      // 기존 값에서 톤수/운임을 편집용 내부 상태로 역파싱
+      const t = String(editing.차량톤수 || "");
+      const tm = t.match(/^([\d.]+)\s*(kg|톤)?$/i);
+      if (tm) { setTonValue(tm[1]); setTonUnit(tm[2] ? (tm[2].toLowerCase() === "kg" ? "kg" : "톤") : "톤"); }
+      else { setTonValue(t); setTonUnit(t ? "직접입력" : "톤"); }
+      setFareDigits(String(editing.운임 || "").replace(/[^\d]/g, ""));
     } else {
       setForm(emptyForm);
+      setTonUnit("톤");
+      setTonValue("");
+      setFareDigits("");
     }
   }, [editing]);
 
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+  // 배차마당에 그동안 올라온 오더들의 상/하차지 이름+주소를 모아 "자주 쓰는 장소" 풀로 쓴다.
+  const placePool = useMemo(() => {
+    const map = new Map();
+    orders.forEach(o => {
+      [[o.상차지명, o.상차지주소], [o.하차지명, o.하차지주소]].forEach(([name, addr]) => {
+        if (!name?.trim()) return;
+        const key = `${name.trim()}|${(addr || "").trim()}`;
+        if (!map.has(key)) map.set(key, { name: name.trim(), addr: (addr || "").trim() });
+      });
+    });
+    return [...map.values()];
+  }, [orders]);
+
+  const showLift = /윙|카고/.test(form.차량종류 || "");
 
   const submit = async () => {
     setError("");
@@ -38,11 +76,16 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved }) {
     if (!form.상차일) return setError("상차일을 선택해주세요.");
     setSaving(true);
     try {
+      const finalForm = {
+        ...form,
+        차량톤수: tonValue.trim() ? `${tonValue.trim()}${tonUnit === "직접입력" ? "" : tonUnit}` : "",
+        운임: form.협의 ? "협의가능" : (fareDigits ? `${Number(fareDigits).toLocaleString()}원` : ""),
+      };
       if (editing) {
-        await updateCafeOrder(editing.id, form);
+        await updateCafeOrder(editing.id, finalForm);
       } else {
         await createCafeOrder({
-          ...form,
+          ...finalForm,
           companyName: profile.companyName,
           posterName: profile.name,
           posterNickname: profile.nickname,
@@ -67,55 +110,87 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* 상/하차지 */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={label}>상차지명 *</label>
-              <input className={field} value={form.상차지명} onChange={e => set("상차지명", e.target.value)} placeholder="예: 인천 크레팜" />
-            </div>
-            <div>
-              <label className={label}>하차지명 *</label>
-              <input className={field} value={form.하차지명} onChange={e => set("하차지명", e.target.value)} placeholder="예: 부산 대한항공" />
-            </div>
-            <div>
-              <label className={label}>상차지 주소</label>
-              <input className={field} value={form.상차지주소} onChange={e => set("상차지주소", e.target.value)} />
-            </div>
-            <div>
-              <label className={label}>하차지 주소</label>
-              <input className={field} value={form.하차지주소} onChange={e => set("하차지주소", e.target.value)} />
-            </div>
+          {/* 상차지 */}
+          <div>
+            <label className={label}>상차지명 / 주소 *</label>
+            <PlaceAutocomplete
+              nameValue={form.상차지명}
+              addrValue={form.상차지주소}
+              onChangeName={v => set("상차지명", v)}
+              onChangeAddr={v => set("상차지주소", v)}
+              places={placePool}
+              namePlaceholder={PLACEHOLDERS.상차지명}
+              addrPlaceholder="주소 검색 또는 직접입력"
+            />
+          </div>
+          {/* 하차지 */}
+          <div>
+            <label className={label}>하차지명 / 주소 *</label>
+            <PlaceAutocomplete
+              nameValue={form.하차지명}
+              addrValue={form.하차지주소}
+              onChangeName={v => set("하차지명", v)}
+              onChangeAddr={v => set("하차지주소", v)}
+              places={placePool}
+              namePlaceholder={PLACEHOLDERS.하차지명}
+              addrPlaceholder="주소 검색 또는 직접입력"
+            />
           </div>
 
           {/* 상/하차 일시 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>상차일 *</label>
-              <input type="date" className={field} value={form.상차일} onChange={e => set("상차일", e.target.value)} />
+              <CustomDatePicker value={form.상차일} onChange={e => set("상차일", e.target.value)} className={field} placeholder="날짜 선택" showIcon />
             </div>
             <div>
               <label className={label}>상차시간</label>
-              <input className={field} placeholder="예: 09:00 / 즉시" value={form.상차시간} onChange={e => set("상차시간", e.target.value)} />
+              <TimeAmPmPicker value={form.상차시간} onChange={v => set("상차시간", v)} />
             </div>
             <div>
               <label className={label}>하차일</label>
-              <input type="date" className={field} value={form.하차일} onChange={e => set("하차일", e.target.value)} />
+              <CustomDatePicker value={form.하차일} onChange={e => set("하차일", e.target.value)} className={field} placeholder="날짜 선택" showIcon />
             </div>
             <div>
               <label className={label}>하차시간</label>
-              <input className={field} placeholder="예: 14:00" value={form.하차시간} onChange={e => set("하차시간", e.target.value)} />
+              <TimeAmPmPicker value={form.하차시간} onChange={v => set("하차시간", v)} />
             </div>
           </div>
 
           {/* 화물 정보 */}
+          <div>
+            <label className={label}>화물내용 *</label>
+            <input className={field} value={form.화물내용} onChange={e => set("화물내용", e.target.value)} placeholder={PLACEHOLDERS.화물내용} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className={label}>화물내용 *</label>
-              <input className={field} value={form.화물내용} onChange={e => set("화물내용", e.target.value)} placeholder="예: 잡화 10파레트" />
-            </div>
             <div>
               <label className={label}>차량톤수</label>
-              <input className={field} placeholder="예: 5톤" value={form.차량톤수} onChange={e => set("차량톤수", e.target.value)} />
+              <div className="relative">
+                <input
+                  className={`${field} pr-[76px]`}
+                  inputMode={tonUnit === "직접입력" ? "text" : "decimal"}
+                  placeholder={tonUnit === "직접입력" ? "예: 1톤 카고급" : "예: 1.1 / 1200"}
+                  value={tonValue}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (tonUnit === "직접입력") setTonValue(v);
+                    else setTonValue(v.replace(/[^\d.]/g, ""));
+                  }}
+                  onKeyDown={e => {
+                    if (tonUnit === "직접입력") return;
+                    if (!/[\d.]/.test(e.key) && !["Backspace", "Delete", "Tab", "ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                />
+                <select
+                  value={tonUnit}
+                  onChange={e => { setTonUnit(e.target.value); setTonValue(""); }}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-md px-1.5 py-1 outline-none cursor-pointer bg-white"
+                >
+                  {TON_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
             </div>
             <div>
               <label className={label}>차량종류</label>
@@ -125,6 +200,12 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved }) {
               </select>
             </div>
           </div>
+          {showLift && (
+            <button type="button" onClick={() => set("리프트", !form.리프트)}
+              className={`px-3 py-1.5 text-[12px] font-bold rounded-lg border transition ${form.리프트 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              {form.리프트 ? "✓ " : ""}리프트 차량
+            </button>
+          )}
 
           {/* 지급/상하차방법 */}
           <div className="grid grid-cols-3 gap-3">
@@ -153,8 +234,24 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved }) {
 
           {/* 운임 */}
           <div>
-            <label className={label}>운임 (선택 — 협의가능이면 비워두세요)</label>
-            <input className={field} placeholder="예: 350,000원 / 협의" value={form.운임} onChange={e => set("운임", e.target.value)} />
+            <label className={label}>운임</label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  className={`${field} pr-9`}
+                  inputMode="numeric"
+                  disabled={form.협의}
+                  placeholder="숫자만 입력"
+                  value={fareDigits ? Number(fareDigits).toLocaleString() : ""}
+                  onChange={e => setFareDigits(e.target.value.replace(/[^\d]/g, ""))}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-gray-400 font-semibold pointer-events-none">원</span>
+              </div>
+              <button type="button" onClick={() => set("협의", !form.협의)}
+                className={`shrink-0 px-3 py-2.5 text-[12px] font-bold rounded-lg border transition ${form.협의 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                {form.협의 ? "✓ " : ""}협의가능
+              </button>
+            </div>
           </div>
 
           {/* 옵션 토글들 */}
