@@ -8683,9 +8683,13 @@ function MobileOrderDetail({
 
     if (candidates.length === 0) return [];
 
-    // 거래처 일치 이력이 있으면 1순위만, 없으면 전체
-    const tier1 = formClient ? candidates.filter(c => c.isClientMatch) : [];
-    const finalList = tier1.length > 0 ? tier1 : candidates;
+    // ⚠️ 예전엔 "같은 거래처 이력이 하나라도 있으면 그것만" 보여주고 나머지는 전부
+    // 숨겼는데, 그러면 같은 노선이라도 거래처가 다르면(예: 같은 상차지를 쓰는 다른
+    // 화주) 화물/톤수가 정확히 일치하는 진짜 참고할 이력이 통째로 안 보이는 문제가
+    // 있었다. 사용자가 원하는 건 "내가 입력한 화물/톤수가 보통 얼마에 청구됐는지"라
+    // 거래처로 걸러내지 않고 전부 보여주되, 같은 거래처 이력은 점수(+100)로 이미
+    // 위쪽에 오도록만 한다.
+    const finalList = candidates;
 
     finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
     return finalList.slice(0, 50);
@@ -11000,9 +11004,12 @@ const fareMatches = useMemo(() => {
 
   if (candidates.length === 0) return [];
 
-  // 거래처 일치 이력이 있으면 1순위만, 없으면 전체
-  const tier1 = formClient ? candidates.filter(c => c.isClientMatch) : [];
-  const finalList = tier1.length > 0 ? tier1 : candidates;
+  // ⚠️ 예전엔 "같은 거래처 이력이 하나라도 있으면 그것만" 보여주고 나머지는 전부
+  // 숨겼는데, 그러면 같은 노선이라도 거래처가 다르면(예: 같은 상차지를 쓰는 다른
+  // 화주) 화물/톤수가 정확히 일치하는 진짜 참고할 이력이 통째로 안 보이는 문제가
+  // 있었다. 거래처로 걸러내지 않고 전부 보여주되, 같은 거래처 이력은 점수(+100)로
+  // 이미 위쪽에 오도록만 한다.
+  const finalList = candidates;
 
   finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
   return finalList.slice(0, 50);
