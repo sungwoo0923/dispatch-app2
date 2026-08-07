@@ -1065,15 +1065,30 @@ function FareMatchModal({ order, orders, onClose }) {
       .slice(0, 15);
   }, [order, orders]);
 
+  // ⭐ PC 운임조회와 동일한 로직 — 평균 대신 "대표 운임(최빈값)"을 쓰고,
+  // 지금 이 오더의 톤수 이하 이력만으로 범위를 좁힌다.
+  const extractTon = (s = "") => { const m = String(s).replace(/\s+/g, "").match(/(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : null; };
   const summary = useMemo(() => {
     if (matches.length < 2) return null;
-    const fares = matches.map((m) => Number(m.order.청구운임) || 0);
+    const tonInput = extractTon(order.차량톤수 || order.톤수 || "");
+    const rows = matches
+      .map((m) => ({ fare: Number(m.order.청구운임) || 0, ton: extractTon(m.order.차량톤수 || m.order.톤수 || "") }))
+      .filter((r) => r.fare > 0)
+      .filter((r) => tonInput == null ? true : (r.ton != null && r.ton <= tonInput));
+    if (!rows.length) return { count: 0, tonInput };
+    const fares = rows.map((r) => r.fare);
+    const freq = new Map();
+    fares.forEach((f) => freq.set(f, (freq.get(f) || 0) + 1));
+    let modeFare = null, modeCount = 0;
+    freq.forEach((cnt, fare) => { if (cnt > modeCount) { modeCount = cnt; modeFare = fare; } });
     return {
+      count: rows.length,
+      tonInput,
       min: Math.min(...fares),
       max: Math.max(...fares),
-      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      modeFare, modeCount,
     };
-  }, [matches]);
+  }, [matches, order.차량톤수, order.톤수]);
 
   if (!order) return null;
 
@@ -1096,19 +1111,28 @@ function FareMatchModal({ order, orders, onClose }) {
         </div>
 
         {summary && (
-          <div className="bg-gray-50 rounded-2xl px-4 py-4 mb-4 flex justify-between text-center">
-            <div>
-              <div className="text-xs text-gray-400 font-bold mb-0.5">최저</div>
-              <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.min)}</div>
+          <div className="bg-gray-50 rounded-2xl px-4 py-4 mb-4">
+            <div className="text-[11px] font-bold text-gray-400 mb-2">
+              조회 운임 범위 ({summary.count}건{summary.tonInput != null ? ` · ${order.차량톤수 || order.톤수 || summary.tonInput + "톤"} 이하` : ""})
             </div>
-            <div>
-              <div className="text-xs text-gray-400 font-bold mb-0.5">평균</div>
-              <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.avg)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-400 font-bold mb-0.5">최고</div>
-              <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.max)}</div>
-            </div>
+            {summary.count === 0 ? (
+              <div className="py-3 text-center text-sm font-semibold text-gray-400">입력한 톤수 이하의 과거 이력이 없습니다.</div>
+            ) : (
+              <div className="flex justify-between text-center">
+                <div>
+                  <div className="text-xs text-gray-400 font-bold mb-0.5">최저</div>
+                  <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.min)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 font-bold mb-0.5">대표 ({summary.modeCount}건)</div>
+                  <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.modeFare)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 font-bold mb-0.5">최고</div>
+                  <div className="text-lg font-extrabold" style={{ color: NAVY }}>{fmtMoney(summary.max)}</div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1120,20 +1144,16 @@ function FareMatchModal({ order, orders, onClose }) {
           <div className="flex flex-col gap-3 pb-2">
             {matches.map((m, i) => {
               const o = m.order;
-              const tagStyle = m.tagLabel === "완전일치"
-                ? { backgroundColor: NAVY, color: "#fff" }
-                : m.tagLabel === "부분일치"
-                  ? { backgroundColor: "#d1fae5", color: "#047857" }
-                  : { backgroundColor: "#f3f4f6", color: "#6b7280" };
+              const tagCls = m.tagLabel === "완전일치" ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500";
               return (
                 <div key={o._id || o.id || i} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={tagStyle}>{m.tagLabel}</span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${tagCls}`}>{m.tagLabel}</span>
                     <span className="text-xs text-gray-400 font-semibold">{getPickupDate(o) || "-"}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-base text-gray-700 font-semibold truncate inline-flex items-center gap-1">
-                      <Package className="w-4 h-4 text-amber-500 shrink-0" /> {o.화물내용 || "-"}
+                      <Package className="w-4 h-4 text-gray-400 shrink-0" /> {o.화물내용 || "-"}
                     </span>
                     <span className="text-xl font-extrabold shrink-0" style={{ color: NAVY }}>{fmtMoney(o.청구운임)}</span>
                   </div>
