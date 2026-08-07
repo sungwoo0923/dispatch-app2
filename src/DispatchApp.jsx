@@ -18868,38 +18868,6 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
   const [closeFileResult, setCloseFileResult] = React.useState(null);
 
-  // ⭐ 다목적지 단가표 매칭 (3파트와 동일) — 선택수정 중인 오더(editTarget)의
-  // 하차지명/주소가 단가표 메뉴에 등록된 하차지와 겹치면 "단가표" 버튼이
-  // 천천히 깜빡이고, 눌렀을 때 그 하차지에 등록된 모든 톤수 단가를 보여준다.
-  const [multiRateSheets4, setMultiRateSheets4] = React.useState([]);
-  React.useEffect(() => {
-    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
-    if (!co) { setMultiRateSheets4([]); return; }
-    const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
-    const unsub = onSnapshot(q, (snap) => {
-      setMultiRateSheets4(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, () => {});
-    return () => unsub();
-  }, [userCompany]);
-  const [rateSheetLookupOpen4, setRateSheetLookupOpen4] = React.useState(false);
-  const normRateText4 = (s) => String(s || "").replace(/[\s()（）·]/g, "").toLowerCase();
-  const rateSheetMatches4 = React.useMemo(() => {
-    const dropName = normRateText4(editTarget?.하차지명);
-    const dropAddr = normRateText4(editTarget?.하차지주소).slice(0, 12);
-    if (!dropName && !dropAddr) return [];
-    const results = [];
-    (multiRateSheets4 || []).forEach(sheet => {
-      (sheet.rows || []).forEach(r => {
-        const rName = normRateText4(r.name);
-        const rAddr = normRateText4(r.address).slice(0, 12);
-        const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName)));
-        const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
-        if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
-      });
-    });
-    return results;
-  }, [editTarget?.하차지명, editTarget?.하차지주소, multiRateSheets4]);
-
   // === 유사 운임조회 (선택수정 전용 업그레이드) ===
   const handleFareSearch = () => {
     const row = editTarget;
@@ -19088,6 +19056,41 @@ React.useEffect(() => {
   if (itemTop < viewTop) list.scrollTop = itemTop;
 }, [copyActiveIndex]);
   const [editTarget, setEditTarget] = React.useState(null);
+
+  // ⭐ 다목적지 단가표 매칭 (3파트와 동일) — 선택수정 중인 오더(editTarget)의
+  // 하차지명/주소가 단가표 메뉴에 등록된 하차지와 겹치면 "단가표" 버튼이
+  // 천천히 깜빡이고, 눌렀을 때 그 하차지에 등록된 모든 톤수 단가를 보여준다.
+  // ⚠️ editTarget보다 반드시 아래에 둬야 한다 — useMemo factory는 렌더 중
+  // 즉시 실행되므로, 아직 선언되지 않은 editTarget을 참조하면 TDZ 크래시가 난다.
+  const [multiRateSheets4, setMultiRateSheets4] = React.useState([]);
+  React.useEffect(() => {
+    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
+    if (!co) { setMultiRateSheets4([]); return; }
+    const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
+    const unsub = onSnapshot(q, (snap) => {
+      setMultiRateSheets4(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [userCompany]);
+  const [rateSheetLookupOpen4, setRateSheetLookupOpen4] = React.useState(false);
+  const normRateText4 = (s) => String(s || "").replace(/[\s()（）·]/g, "").toLowerCase();
+  const rateSheetMatches4 = React.useMemo(() => {
+    const dropName = normRateText4(editTarget?.하차지명);
+    const dropAddr = normRateText4(editTarget?.하차지주소).slice(0, 12);
+    if (!dropName && !dropAddr) return [];
+    const results = [];
+    (multiRateSheets4 || []).forEach(sheet => {
+      (sheet.rows || []).forEach(r => {
+        const rName = normRateText4(r.name);
+        const rAddr = normRateText4(r.address).slice(0, 12);
+        const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName)));
+        const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
+        if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
+      });
+    });
+    return results;
+  }, [editTarget?.하차지명, editTarget?.하차지주소, multiRateSheets4]);
+
   const [farePanelOpen, setFarePanelOpen] = React.useState(false);
   const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
   const [copyFareFilter, setCopyFareFilter] = React.useState("all");
