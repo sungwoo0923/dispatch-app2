@@ -3515,6 +3515,19 @@ useEffect(() => {
     return () => unsub();
   }, [userCompany]);
 
+  // ⭐ 다목적지 단가표(multiRateSheets) — 단가표 메뉴에서 등록해 둔 표를
+  // 3파트 배차등록 폼에서 "단가표" 버튼으로 바로 조회할 수 있도록 실시간 구독.
+  const [multiRateSheets, setMultiRateSheets] = useState([]);
+  useEffect(() => {
+    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
+    if (!co) { setMultiRateSheets([]); return; }
+    const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
+    const unsub = onSnapshot(q, (snap) => {
+      setMultiRateSheets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [userCompany]);
+
   // ⭐ 출근기록부: 자동 출근체크 + 주말 출근여부 팝업
   const [weekendCheckPopup, setWeekendCheckPopup] = useState(false);
   useEffect(() => {
@@ -4483,7 +4496,7 @@ return (
           </div>
         )}
         {menu === "단가표" && (
-          <RateCard dispatchData={dispatchDataFiltered} userCompany={userCompany || localStorage.getItem("userCompany") || ""} />
+          <RateCard dispatchData={dispatchDataFiltered} userCompany={userCompany || localStorage.getItem("userCompany") || ""} clients={clients} />
         )}
 
         {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
@@ -8474,6 +8487,27 @@ if (_carNo && _name) {
 };
 const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
+    // ⭐ 다목적지 단가표 매칭 — 지금 입력 중인 하차지명/주소가 단가표 메뉴에 등록된
+    // 하차지와 겹치면 "단가표" 버튼이 천천히 깜빡인다. 팝업을 열면 사용자가 입력한
+    // 차량톤수 하나만이 아니라, 그 하차지에 등록된 모든 톤수 단가를 한꺼번에 보여준다.
+    const [rateSheetLookupOpen, setRateSheetLookupOpen] = React.useState(false);
+    const normRateText = (s) => String(s || "").replace(/[\s()（）·]/g, "").toLowerCase();
+    const rateSheetMatches = React.useMemo(() => {
+      const dropName = normRateText(form.하차지명);
+      const dropAddr = normRateText(form.하차지주소).slice(0, 12);
+      if (!dropName && !dropAddr) return [];
+      const results = [];
+      (multiRateSheets || []).forEach(sheet => {
+        (sheet.rows || []).forEach(r => {
+          const rName = normRateText(r.name);
+          const rAddr = normRateText(r.address).slice(0, 12);
+          const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName)));
+          const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
+          if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
+        });
+      });
+      return results;
+    }, [form.하차지명, form.하차지주소, multiRateSheets]);
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [fare3Filter, setFare3Filter] = React.useState("all");
@@ -9703,6 +9737,20 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
       className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-blue-600 border border-blue-300 hover:bg-blue-50 transition"
     >
       운임조회
+    </button>
+
+    {/* 단가표 — 지금 입력한 하차지명/주소가 단가표 메뉴에 등록되어 있으면 천천히 깜빡인다 */}
+    <button
+      type="button"
+      onClick={() => setRateSheetLookupOpen(true)}
+      className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition ${
+        rateSheetMatches.length > 0
+          ? "bg-emerald-50 text-emerald-700 border-emerald-400 animate-pulse"
+          : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+      }`}
+      title={rateSheetMatches.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
+    >
+      단가표
     </button>
 
     {/* AI 추천 */}
@@ -14304,6 +14352,75 @@ setConfirmChange(null);
           onClick={() => { setFareQuickOpen(false); setFareModalOpen(true); }}>
           전체 이력 보기
         </button>
+      </div>
+    </div>
+  </div>
+)}
+{/* ⭐ 다목적지 단가표 조회 팝업 — 하차지명/주소가 일치하는 하차지의 모든 톤수 단가를 한번에 보여준다 */}
+{rateSheetLookupOpen && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setRateSheetLookupOpen(false)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-bold text-[15px]">단가표 조회</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">
+            {(form.하차지명 || "").trim() ? `"${form.하차지명}"와(과) 일치하는 등록된 단가표` : "하차지명을 입력하면 단가표 메뉴에 등록된 단가와 매칭해 보여줍니다"}
+          </p>
+        </div>
+        <button onClick={() => setRateSheetLookupOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+      </div>
+      <div className="overflow-y-auto flex-1 p-5">
+        {rateSheetMatches.length === 0 ? (
+          <div className="text-center py-16 text-gray-400 text-[13px]">
+            일치하는 단가표가 없습니다.<br/>
+            <span className="text-[12px] text-gray-300">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {rateSheetMatches.map(({ sheet, row, nameHit }, i) => (
+              <div key={sheet.id + row.id + i} className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[12.5px]">
+                    <span className="text-gray-400">기준지</span>
+                    <span className="font-bold text-[#1B2B4B]">{sheet.baseName || "-"}</span>
+                    <span className="text-gray-300">→</span>
+                    <span className="font-bold text-[#1B2B4B]">{row.name}</span>
+                  </div>
+                  {nameHit
+                    ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">이름 일치</span>
+                    : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">주소 일치</span>}
+                </div>
+                {row.address && <div className="px-4 py-1.5 text-[11.5px] text-gray-500">{row.address}</div>}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[12.5px]">
+                    <thead>
+                      <tr className="bg-white border-b border-gray-100">
+                        {(sheet.columns || []).map(c => (
+                          <th key={c.id} className="px-3 py-2 text-center text-[11px] font-bold text-gray-500 whitespace-nowrap">{c.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {(sheet.columns || []).map(c => {
+                          const v = Number(row.prices?.[c.id] || 0);
+                          return (
+                            <td key={c.id} className="px-3 py-2.5 text-center whitespace-nowrap">
+                              {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+        <button onClick={() => setRateSheetLookupOpen(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
       </div>
     </div>
   </div>
