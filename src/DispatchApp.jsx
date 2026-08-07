@@ -4483,7 +4483,7 @@ return (
           </div>
         )}
         {menu === "단가표" && (
-          <RateCard dispatchData={dispatchDataFiltered} />
+          <RateCard dispatchData={dispatchDataFiltered} userCompany={userCompany || localStorage.getItem("userCompany") || ""} />
         )}
 
         {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
