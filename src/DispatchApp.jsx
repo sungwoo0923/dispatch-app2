@@ -3515,19 +3515,6 @@ useEffect(() => {
     return () => unsub();
   }, [userCompany]);
 
-  // ⭐ 다목적지 단가표(multiRateSheets) — 단가표 메뉴에서 등록해 둔 표를
-  // 3파트 배차등록 폼에서 "단가표" 버튼으로 바로 조회할 수 있도록 실시간 구독.
-  const [multiRateSheets, setMultiRateSheets] = useState([]);
-  useEffect(() => {
-    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
-    if (!co) { setMultiRateSheets([]); return; }
-    const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
-    const unsub = onSnapshot(q, (snap) => {
-      setMultiRateSheets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, () => {});
-    return () => unsub();
-  }, [userCompany]);
-
   // ⭐ 출근기록부: 자동 출근체크 + 주말 출근여부 팝업
   const [weekendCheckPopup, setWeekendCheckPopup] = useState(false);
   useEffect(() => {
@@ -8490,6 +8477,18 @@ const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
     // ⭐ 다목적지 단가표 매칭 — 지금 입력 중인 하차지명/주소가 단가표 메뉴에 등록된
     // 하차지와 겹치면 "단가표" 버튼이 천천히 깜빡인다. 팝업을 열면 사용자가 입력한
     // 차량톤수 하나만이 아니라, 그 하차지에 등록된 모든 톤수 단가를 한꺼번에 보여준다.
+    // ⚠️ 이 등록 폼은 상위(DispatchApp)와 별개 클로저라 상위에 선언한 상태를 그대로
+    // 참조할 수 없다 — 반드시 이 스코프 안에서 직접 구독해야 한다.
+    const [multiRateSheets, setMultiRateSheets] = React.useState([]);
+    React.useEffect(() => {
+      const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
+      if (!co) { setMultiRateSheets([]); return; }
+      const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
+      const unsub = onSnapshot(q, (snap) => {
+        setMultiRateSheets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, () => {});
+      return () => unsub();
+    }, [userCompany]);
     const [rateSheetLookupOpen, setRateSheetLookupOpen] = React.useState(false);
     const normRateText = (s) => String(s || "").replace(/[\s()（）·]/g, "").toLowerCase();
     const rateSheetMatches = React.useMemo(() => {
@@ -9745,7 +9744,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
       onClick={() => setRateSheetLookupOpen(true)}
       className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition ${
         rateSheetMatches.length > 0
-          ? "bg-emerald-50 text-emerald-700 border-emerald-400 animate-pulse"
+          ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
           : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
       }`}
       title={rateSheetMatches.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
@@ -14396,8 +14395,8 @@ setConfirmChange(null);
                     <span className="font-bold text-[#1B2B4B]">{row.name}</span>
                   </div>
                   {nameHit
-                    ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">이름 일치</span>
-                    : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">주소 일치</span>}
+                    ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1B2B4B] text-white">이름 일치</span>
+                    : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500 border border-gray-200">주소 일치</span>}
                 </div>
                 {row.address && <div className="px-4 py-1.5 text-[11.5px] text-gray-500">{row.address}</div>}
                 <div className="overflow-x-auto">
@@ -14405,7 +14404,7 @@ setConfirmChange(null);
                     <thead>
                       <tr className="bg-white border-b border-gray-100">
                         {(sheet.columns || []).map(c => (
-                          <th key={c.id} className={`px-3 py-2 text-center text-[11px] font-bold whitespace-nowrap ${c.id === matchedColId ? "text-emerald-700" : "text-gray-500"}`}>{c.label}</th>
+                          <th key={c.id} className={`px-3 py-2 text-center text-[11px] font-bold whitespace-nowrap ${c.id === matchedColId ? "text-[#1B2B4B]" : "text-gray-500"}`}>{c.label}</th>
                         ))}
                       </tr>
                     </thead>
@@ -14415,9 +14414,9 @@ setConfirmChange(null);
                           const v = Number(row.prices?.[c.id] || 0);
                           const isMatch = c.id === matchedColId;
                           return (
-                            <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-emerald-50 ring-2 ring-inset ring-emerald-400 animate-pulse" : ""}`}>
-                              {v ? <span className={`font-bold ${isMatch ? "text-emerald-700" : "text-blue-700"}`}>{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
-                              {isMatch && <div className="text-[9px] font-bold text-emerald-600 mt-0.5">입력한 톤수</div>}
+                            <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
+                              {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                              {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                             </td>
                           );
                         })}
@@ -14690,14 +14689,14 @@ setConfirmChange(null);
               {/* 대표운임(최빈값) — 지금과 같은 화물/톤수 조건에서 가장 자주 청구된 "평소 가격".
                   목록이 최신순/이력순으로 섞여 있어도 이 카드가 항상 기준값 역할을 한다. */}
               {modeFare != null && (
-                <div className="mb-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3">
+                <div className="mb-3 px-4 py-3 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-[11px] font-bold text-emerald-700">💡 이 톤수·화물의 평소 운임(최빈값)</div>
-                    <div className="text-[18px] font-black text-emerald-800 mt-0.5">{modeFare.toLocaleString()}원</div>
-                    <div className="text-[11px] text-emerald-600 mt-0.5">동일 조건 {tier0Total}건 중 {modeCount}건({modeSharePct}%)이 이 가격으로 청구됨</div>
+                    <div className="text-[11px] font-bold text-[#1B2B4B]">이 톤수·화물의 평소 운임(최빈값)</div>
+                    <div className="text-[18px] font-black text-[#1B2B4B] mt-0.5">{modeFare.toLocaleString()}원</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">동일 조건 {tier0Total}건 중 {modeCount}건({modeSharePct}%)이 이 가격으로 청구됨</div>
                   </div>
                   <button onClick={() => { onChange("청구운임", String(modeFare)); setFareModalOpen(false); }}
-                    className="shrink-0 px-3 py-2 text-[12px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition">
+                    className="shrink-0 px-3 py-2 text-[12px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] rounded-lg transition">
                     이 금액 적용
                   </button>
                 </div>
@@ -14798,13 +14797,13 @@ setConfirmChange(null);
                           }`}>{r._cargoText}</span>
                         )}
                         {modeRow && r === modeRow && (r._groupSize || 1) > 1 && (
-                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-full">✓ 가장 흔한 운임 {r._groupSize}건</span>
+                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-[#1B2B4B] bg-[#1B2B4B]/10 border border-[#1B2B4B]/30 rounded-full">가장 흔한 운임 {r._groupSize}건</span>
                         )}
                         {(!modeRow || r !== modeRow) && r._groupSize > 1 && (
                           <span className="px-2 py-1 text-[10px] text-gray-400 border border-gray-200 rounded-full">이력 {r._groupSize}건</span>
                         )}
                         {isOutlierRow(r) && (
-                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-orange-700 bg-orange-100 border border-orange-300 rounded-full">⚠️ 이례적 청구(반복없음)</span>
+                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-orange-700 bg-orange-100 border border-orange-300 rounded-full">이례적 청구(반복없음)</span>
                         )}
                         <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                           </div>
