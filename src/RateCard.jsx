@@ -1,7 +1,11 @@
 // ===================== src/RateCard.jsx =====================
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
+
+// 단가표 메뉴 전체에서 쓰는 표준 차량톤수 목록 — 다목적지 단가표의 기본(삭제 불가) 컬럼으로도 사용된다.
+const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"];
 
 const COMPANY = {
   name: "RUN25",
@@ -154,14 +158,14 @@ const [detailModal, setDetailModal] = useState(null);
   const [excludeDropdown, setExcludeDropdown] = useState([]); // 검색 드롭다운 후보
   const excludeRef = useRef(null);
 
-  // ===================== 다목적지 단가표 (기준지 1곳 → 하차지 여러 곳 × 파렛/차량 구간별 단가) =====================
+  // ===================== 다목적지 단가표 (기준지 1곳 → 하차지 여러 곳 × 차량톤수별 단가) =====================
   // 거래처별로 Firestore(multiRateSheets)에 저장해 다른 직원도 보고 언제든 수정할 수 있게 한다.
   const [pageMode, setPageMode] = useState("노선별"); // 노선별 | 다목적지
   const [multiSheets, setMultiSheets] = useState([]);
   const [multiSelectedId, setMultiSelectedId] = useState(null);
-  const [multiImportOpen, setMultiImportOpen] = useState(false);
-  const [multiImportText, setMultiImportText] = useState("");
+  const [multiUploadOpen, setMultiUploadOpen] = useState(false);
   const [multiSaving, setMultiSaving] = useState(false);
+  const multiFileRef = useRef(null);
 
   useEffect(() => {
     const co = (userCompany || "").trim();
@@ -188,13 +192,9 @@ const [detailModal, setDetailModal] = useState(null);
         baseName: "새 기준지",
         baseAddress: "",
         note: "",
-        columns: [
-          { id: uid(), label: "다마스" },
-          { id: uid(), label: "1톤 윙(1~2파렛)" },
-          { id: uid(), label: "2.5톤 윙(3파렛)" },
-          { id: uid(), label: "3.5톤 윙(4~6파렛)" },
-          { id: uid(), label: "5톤 윙(7~10파렛)" },
-        ],
+        // 단가표 메뉴 표준 차량톤수를 기본 컬럼으로 항상 포함 — 삭제 불가, 이름 고정.
+        // 필요한 톤수만 값을 채우고 나머지는 비워두면 된다. 목록에 없는 구간은 "+ 구간 추가"로 늘리면 된다.
+        columns: STANDARD_TON_LABELS.map(label => ({ id: uid(), label, isDefault: true })),
         rows: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -223,6 +223,8 @@ const [detailModal, setDetailModal] = useState(null);
   };
   const removeMultiColumn = (colId) => {
     if (!selectedSheet) return;
+    const target = (selectedSheet.columns || []).find(c => c.id === colId);
+    if (target?.isDefault) return; // 기본 톤수 컬럼은 삭제 불가
     const nextCols = (selectedSheet.columns || []).filter(c => c.id !== colId);
     const nextRows = (selectedSheet.rows || []).map(r => {
       const prices = { ...(r.prices || {}) };
@@ -233,7 +235,19 @@ const [detailModal, setDetailModal] = useState(null);
   };
   const updateMultiColumnLabel = (colId, label) => {
     if (!selectedSheet) return;
+    const target = (selectedSheet.columns || []).find(c => c.id === colId);
+    if (target?.isDefault) return; // 기본 톤수 컬럼은 이름 고정
     patchSheet(selectedSheet.id, { columns: (selectedSheet.columns || []).map(c => c.id === colId ? { ...c, label } : c) });
+  };
+  // 컬럼 순서 이동(좌/우) — 값은 컬럼 id로 저장되어 있어 순서만 바뀌고 데이터는 그대로 따라간다.
+  const moveMultiColumn = (colId, dir) => {
+    if (!selectedSheet) return;
+    const cols = [...(selectedSheet.columns || [])];
+    const idx = cols.findIndex(c => c.id === colId);
+    const nextIdx = idx + dir;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= cols.length) return;
+    [cols[idx], cols[nextIdx]] = [cols[nextIdx], cols[idx]];
+    patchSheet(selectedSheet.id, { columns: cols });
   };
 
   const addMultiRow = () => {
@@ -254,29 +268,67 @@ const [detailModal, setDetailModal] = useState(null);
     patchSheet(selectedSheet.id, { rows: (selectedSheet.rows || []).map(r => r.id === rowId ? { ...r, prices: { ...(r.prices || {}), [colId]: n } } : r) });
   };
 
-  // 엑셀에서 그대로 복사해 붙여넣기로 일괄 입력 — 1열:하차지명 2열:주소 3열~:구간별 단가
-  // (엑셀에서 헤더 포함 범위를 드래그해 복사한 뒤 그대로 붙여넣으면 자동으로 구간명까지 인식한다)
-  const applyMultiImport = () => {
-    if (!selectedSheet || !multiImportText.trim()) { setMultiImportOpen(false); return; }
-    const lines = multiImportText.split(/\r?\n/).map(l => l.replace(/\r$/, "")).filter(l => l.trim());
-    const cells = lines.map(l => l.split("\t").map(c => c.trim()));
-    const first = cells[0] || [];
-    // 첫 줄 3번째 칸부터가 전부 숫자가 아니면(=글자가 섞여있으면) 헤더로 간주
-    const looksLikeHeader = cells.length > 1 && first.slice(2).some(h => h && !/^[\d,.\s원]+$/.test(h));
-    const colLabels = looksLikeHeader ? first.slice(2) : (selectedSheet.columns || []).map(c => c.label);
-    const columns = colLabels.length
-      ? colLabels.map((label, i) => (selectedSheet.columns || [])[i] || { id: uid(), label: label || `구간${i + 1}` })
-      : (selectedSheet.columns || []);
-    const dataRows = looksLikeHeader ? cells.slice(1) : cells;
-    const newRows = dataRows.map(cols => {
-      const prices = {};
-      columns.forEach((c, i) => { const v = (cols[i + 2] || "").replace(/[^\d]/g, ""); if (v) prices[c.id] = v; });
-      return { id: uid(), name: cols[0] || "", address: cols[1] || "", prices };
-    }).filter(r => r.name);
-    if (!newRows.length) { alert("인식할 수 있는 데이터가 없습니다. 하차지명 칸이 비어있지 않은지 확인해주세요."); return; }
-    patchSheet(selectedSheet.id, { columns, rows: [...(selectedSheet.rows || []), ...newRows] });
-    setMultiImportText("");
-    setMultiImportOpen(false);
+  const normColLabel = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+
+  // 업로드 양식(템플릿) 다운로드 — 현재 단가표의 컬럼명을 헤더로 그대로 내려주므로,
+  // 값만 채워서 업로드하면 컬럼명이 100% 일치해 정확히 매칭된다.
+  const downloadMultiTemplate = (sheet) => {
+    if (!sheet) return;
+    const header = ["하차지", "주소", ...(sheet.columns || []).map(c => c.label)];
+    const example = ["예: 쿠팡(인천13센터)", "인천 서구 북항로 28-23", ...(sheet.columns || []).map(() => "")];
+    const ws = XLSX.utils.aoa_to_sheet([header, example]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "단가표양식");
+    XLSX.writeFile(wb, `단가표_업로드양식_${sheet.baseName || "기준지"}.xlsx`);
+  };
+
+  // 엑셀 파일 업로드 — 1열:하차지명 2열:주소 3열부터:톤수별 단가.
+  // 헤더(1행)의 톤수명을 현재 컬럼명과 정확히 매칭해 해당 컬럼에만 값을 넣는다.
+  // 매칭되는 컬럼이 없으면(예: 표준 목록에 없는 톤수) 새 컬럼을 만들어 추가한다 — 데이터 유실 방지.
+  const handleMultiFileUpload = (file) => {
+    if (!selectedSheet || !file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        if (!rows.length) { alert("빈 파일입니다."); return; }
+        const header = rows[0].map(h => String(h || "").trim());
+        const headerLabels = header.slice(2).filter(h => h);
+        if (!headerLabels.length) { alert("3번째 열부터 톤수(구간) 이름이 있어야 합니다. 업로드 양식을 먼저 다운로드해 사용해주세요."); return; }
+
+        let columns = [...(selectedSheet.columns || [])];
+        // 헤더의 각 톤수명을 기존 컬럼명과 정확히 매칭 → 없으면 새 컬럼(삭제 가능) 추가
+        const colForHeaderIdx = headerLabels.map(label => {
+          let col = columns.find(c => normColLabel(c.label) === normColLabel(label));
+          if (!col) { col = { id: uid(), label, isDefault: false }; columns = [...columns, col]; }
+          return col;
+        });
+
+        const dataRows = rows.slice(1).filter(r => String(r[0] || "").trim());
+        const newRows = dataRows.map(r => {
+          const prices = {};
+          colForHeaderIdx.forEach((col, i) => {
+            const raw = String(r[i + 2] ?? "").replace(/[^\d]/g, "");
+            if (raw) prices[col.id] = raw;
+          });
+          return { id: uid(), name: String(r[0] || "").trim(), address: String(r[1] || "").trim(), prices };
+        });
+        if (!newRows.length) { alert("인식할 수 있는 데이터가 없습니다. 1열(하차지명)이 비어있지 않은지 확인해주세요."); return; }
+
+        const doReplace = (selectedSheet.rows || []).length === 0 || window.confirm(`기존에 등록된 하차지 ${selectedSheet.rows.length}곳이 있습니다.\n확인: 업로드한 내용으로 전체 교체 / 취소: 기존 목록 뒤에 추가`);
+        const finalRows = doReplace ? newRows : [...(selectedSheet.rows || []), ...newRows];
+        patchSheet(selectedSheet.id, { columns, rows: finalRows });
+        setMultiUploadOpen(false);
+      } catch (e) {
+        console.error(e); alert("엑셀 파싱 중 오류가 발생했습니다. 업로드 양식 형식을 확인해주세요.");
+      } finally {
+        if (multiFileRef.current) multiFileRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   const handleMultiPrint = (sheet) => {
@@ -289,23 +341,29 @@ const [detailModal, setDetailModal] = useState(null);
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Malgun Gothic',sans-serif;}
 body{background:white;color:#111;}
-.wrapper{width:1000px;margin:0 auto;padding:36px 40px;}
+.wrapper{width:max-content;min-width:100%;margin:0 auto;padding:36px 40px;}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #1B2B4B;}
 .doc-title{font-size:20px;font-weight:900;color:#1B2B4B;}
 .doc-sub{font-size:12px;color:#666;margin-top:4px;}
-.base-bar{display:flex;gap:16px;align-items:center;background:#F0F4FF;border:1px solid #C7D9FF;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:12.5px;color:#374151;}
+.base-bar{display:flex;gap:16px;align-items:center;background:#F0F4FF;border:1px solid #C7D9FF;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:12.5px;color:#374151;white-space:nowrap;}
 .base-bar b{color:#1B2B4B;}
 .notice{white-space:pre-wrap;margin-bottom:16px;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:8px;font-size:11.5px;color:#374151;line-height:1.75;}
-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+table{border-collapse:collapse;font-size:12px;}
 thead tr{background:#1B2B4B;}
-thead th{color:white;padding:9px 10px;text-align:center;font-weight:700;white-space:nowrap;}
+thead th{color:white;padding:8px 9px;text-align:center;font-weight:700;white-space:nowrap;}
 tbody tr:nth-child(even){background:#F9FAFB;}
-td{padding:8px 10px;text-align:center;border-bottom:1px solid #E5E7EB;white-space:nowrap;}
+td{padding:7px 9px;text-align:center;border-bottom:1px solid #E5E7EB;white-space:nowrap;}
 .td-name{font-weight:700;color:#1B2B4B;text-align:left;}
-.td-addr{color:#6B7280;font-size:11.5px;text-align:left;white-space:normal;}
+.td-addr{color:#6B7280;font-size:11px;text-align:left;white-space:nowrap;}
 .td-price{font-weight:800;color:#2563EB;}
 .footer{margin-top:24px;font-size:10.5px;color:#aaa;}
-@media print{.no-print{display:none!important;}}
+@media print{
+  .no-print{display:none!important;}
+  @page{size:A4 landscape;margin:10mm;}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  table{font-size:10.5px;}
+  td,th{padding:5px 7px;}
+}
 </style></head><body>
 <div class="wrapper">
 <div class="no-print" style="margin-bottom:14px;display:flex;justify-content:flex-end;gap:8px;">
@@ -770,8 +828,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           ) : (
             selectedSheet && (
               <>
-                <button onClick={() => setMultiImportOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
-                  📋 엑셀 붙여넣기로 가져오기
+                <button onClick={() => setMultiUploadOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
+                  엑셀업로드
                 </button>
                 <button onClick={() => handleMultiPrint(selectedSheet)} className="flex items-center gap-2 px-5 py-2.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl hover:bg-[#243a60] transition shadow-sm">
                   🖨 인쇄 / PDF 저장
@@ -1135,16 +1193,26 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                         <tr className="bg-[#1B2B4B]">
                           <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[140px]">하차지</th>
                           <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[200px]">주소</th>
-                          {(selectedSheet.columns || []).map(c => (
-                            <th key={c.id} className="px-2 py-2 text-center text-white font-bold whitespace-nowrap min-w-[120px]">
-                              <div className="flex items-center justify-center gap-1">
-                                <input autoComplete="off"
-                                  className="w-full bg-transparent text-white text-center font-bold text-[12px] border-b border-white/30 focus:border-white focus:outline-none placeholder:text-white/40"
-                                  defaultValue={c.label}
-                                  onBlur={e => updateMultiColumnLabel(c.id, e.target.value)}
-                                  key={c.id + "-label"}
-                                />
-                                <button onClick={() => removeMultiColumn(c.id)} className="text-white/50 hover:text-white text-[12px] leading-none shrink-0">✕</button>
+                          {(selectedSheet.columns || []).map((c, ci, arr) => (
+                            <th key={c.id} className="px-2 py-2 text-center text-white font-bold whitespace-nowrap min-w-[110px]">
+                              <div className="flex items-center justify-center gap-0.5">
+                                <button onClick={() => moveMultiColumn(c.id, -1)} disabled={ci === 0}
+                                  className="text-white/40 hover:text-white text-[10px] leading-none shrink-0 disabled:opacity-0 disabled:pointer-events-none" title="왼쪽으로 이동">◀</button>
+                                {c.isDefault ? (
+                                  <span className="text-white text-[12px] px-0.5">{c.label}</span>
+                                ) : (
+                                  <input autoComplete="off"
+                                    className="w-full bg-transparent text-white text-center font-bold text-[12px] border-b border-white/30 focus:border-white focus:outline-none placeholder:text-white/40"
+                                    defaultValue={c.label}
+                                    onBlur={e => updateMultiColumnLabel(c.id, e.target.value)}
+                                    key={c.id + "-label"}
+                                  />
+                                )}
+                                <button onClick={() => moveMultiColumn(c.id, 1)} disabled={ci === arr.length - 1}
+                                  className="text-white/40 hover:text-white text-[10px] leading-none shrink-0 disabled:opacity-0 disabled:pointer-events-none" title="오른쪽으로 이동">▶</button>
+                                {!c.isDefault && (
+                                  <button onClick={() => removeMultiColumn(c.id)} className="text-white/50 hover:text-white text-[12px] leading-none shrink-0 ml-0.5">✕</button>
+                                )}
                               </div>
                             </th>
                           ))}
@@ -1191,32 +1259,39 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
         </div>
       )}
 
-      {/* 엑셀 붙여넣기로 가져오기 모달 */}
-      {multiImportOpen && selectedSheet && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setMultiImportOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+      {/* 엑셀업로드 모달 */}
+      {multiUploadOpen && selectedSheet && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setMultiUploadOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[15px]">엑셀에서 붙여넣기로 가져오기</h3>
-                <p className="text-white/60 text-[12px] mt-0.5">엑셀에서 표(하차지·주소·단가 열들)를 드래그해 복사한 뒤 아래에 그대로 붙여넣으세요</p>
+                <h3 className="text-white font-bold text-[15px]">엑셀업로드</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">양식을 내려받아 값을 채운 뒤 그대로 업로드하세요</p>
               </div>
-              <button onClick={() => setMultiImportOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+              <button onClick={() => setMultiUploadOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
-            <div className="overflow-y-auto flex-1 p-6">
-              <p className="text-[12px] text-gray-500 mb-3 leading-relaxed">
-                1열: 하차지명 · 2열: 주소 · 3열부터: 구간별 단가 (다마스, 1톤윙 등)<br/>
-                첫 줄에 구간 이름(헤더)을 포함해 복사하면 구간이 자동으로 만들어지고, 데이터만 있으면 기존 구간에 순서대로 채워집니다.
-              </p>
-              <textarea
-                className="w-full h-64 px-3 py-2 text-[12px] font-mono rounded-lg border border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
-                placeholder={"쿠팡(인천13센터)\t인천 서구 북항로 28-23(원창동)\t\t40,000\t60,000\t70,000\t90,000\n..."}
-                value={multiImportText}
-                onChange={e => setMultiImportText(e.target.value)}
-              />
+            <div className="overflow-y-auto flex-1 p-6 space-y-5">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="text-[12px] text-gray-600 leading-relaxed mb-3">
+                  ① 먼저 업로드 양식을 내려받으세요. 지금 이 단가표의 컬럼(하차지·주소·톤수)이 그대로 헤더로 채워져 있습니다.<br/>
+                  ② 양식의 값 칸에 하차지명·주소·톤수별 단가를 채워 넣으세요 (톤수 헤더 이름은 그대로 두어야 정확히 매칭됩니다).<br/>
+                  ③ 완성한 파일을 아래에서 업로드하면 톤수 컬럼명이 일치하는 칸에 자동으로 들어갑니다. 목록에 없는 톤수명을 새로 쓰면 새 구간이 자동으로 추가됩니다.
+                </p>
+                <button onClick={() => downloadMultiTemplate(selectedSheet)} className="w-full py-2 bg-white border border-blue-300 text-blue-700 text-[13px] font-bold rounded-lg hover:bg-blue-100 transition">
+                  업로드 양식 다운로드
+                </button>
+              </div>
+              <div>
+                <label className={labelCls}>완성한 엑셀 파일 업로드</label>
+                <input autoComplete="off" ref={multiFileRef} type="file" accept=".xlsx,.xls,.csv"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleMultiFileUpload(f); }}
+                  className="w-full text-[13px] text-gray-600 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-[#1B2B4B] file:text-white file:text-[12px] file:font-bold file:cursor-pointer hover:file:bg-[#243a60]"
+                />
+                <p className="text-[11px] text-gray-400 mt-2">※ 연락처는 업로드 항목에 포함하지 않습니다</p>
+              </div>
             </div>
-            <div className="border-t border-gray-100 px-6 py-4 bg-gray-50 flex items-center justify-between">
-              <button onClick={() => setMultiImportOpen(false)} className="px-4 py-2 text-[13px] text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
-              <button onClick={applyMultiImport} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition shadow-sm">가져오기</button>
+            <div className="border-t border-gray-100 px-6 py-4 bg-gray-50 flex items-center justify-end">
+              <button onClick={() => setMultiUploadOpen(false)} className="px-4 py-2 text-[13px] text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
             </div>
           </div>
         </div>
@@ -1299,7 +1374,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                   </button>
                 </div>
                 <datalist id="manual-ton-options">
-                  {["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"].map(t => <option key={t} value={t} />)}
+                  {STANDARD_TON_LABELS.map(t => <option key={t} value={t} />)}
                 </datalist>
               <div className="rounded-xl border border-gray-200 overflow-hidden">
                   <table className="w-full text-[12px]">
