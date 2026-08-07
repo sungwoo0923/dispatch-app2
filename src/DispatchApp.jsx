@@ -14578,9 +14578,33 @@ setConfirmChange(null);
 
   const getFareTag = (fare) => {
     const pct = getBarPct(fare);
-    if (pct <= 33) return { label: "저렴", cls: "text-white bg-emerald-600 border-emerald-700 font-extrabold" };
-    if (pct <= 66) return { label: "보통", cls: "text-white bg-gray-600 border-gray-700 font-extrabold" };
-    return { label: "높음", cls: "text-white bg-orange-600 border-orange-700 font-extrabold" };
+    if (pct <= 33) return { label: "저렴", cls: "border-gray-300 text-gray-500" };
+    if (pct <= 66) return { label: "보통", cls: "border-gray-300 text-gray-500" };
+    return { label: "높음", cls: "border-gray-300 text-gray-500" };
+  };
+
+  // ⭐ 상단 "조회 운임 범위" 전용 통계 — 지금 입력한 톤수를 기준으로 범위를 좁힌다.
+  // 화물내용(파렛/박스 등)은 무시하고 톤수만 본다. 입력 톤수보다 무거운 이력은
+  // 제외하고, 가벼운 이력은 그 톤수 차량 용량 "안"에 들어가므로 포함시킨다.
+  // 톤수를 입력하지 않았으면 필터 없이 기존 전체 범위를 그대로 쓴다.
+  const _rangeTonInput = getTotalTonFromOrder(form);
+  const _rangeFares = (fareResult.pastHistoryList || [])
+    .map(r => ({ fare: Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")), ton: getTotalTonFromOrder(r) }))
+    .filter(x => x.fare > 0)
+    .filter(x => _rangeTonInput == null ? true : (x.ton != null && x.ton <= _rangeTonInput));
+  const rangeCount = _rangeFares.length;
+  const rangeMin = rangeCount ? Math.min(..._rangeFares.map(x => x.fare)) : null;
+  const rangeMax = rangeCount ? Math.max(..._rangeFares.map(x => x.fare)) : null;
+  let rangeModeFare = null, rangeModeCount = 0;
+  if (rangeCount) {
+    const freq = new Map();
+    _rangeFares.forEach(x => freq.set(x.fare, (freq.get(x.fare) || 0) + 1));
+    freq.forEach((cnt, fare) => { if (cnt > rangeModeCount) { rangeModeCount = cnt; rangeModeFare = fare; } });
+  }
+  const getRangeBarPct = (fare) => {
+    if (rangeMin == null || rangeMax == null) return 50;
+    const range = rangeMax - rangeMin || 1;
+    return Math.min(100, Math.max(0, ((fare - rangeMin) / range) * 100));
   };
 
   return (
@@ -14607,48 +14631,56 @@ setConfirmChange(null);
 
         <div className="flex-1 overflow-y-auto">
 
-          {/* 운임 범위 요약 */}
+          {/* 운임 범위 요약 — 지금 입력한 톤수 안에 드는 이력만으로 범위를 잡는다 */}
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">조회 운임 범위 ({fareResult.count}건)</span>
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                조회 운임 범위 ({rangeCount}건{_rangeTonInput != null ? ` · ${form.차량톤수 || _rangeTonInput + "톤"} 이하` : ""})
+              </span>
               {trend && (
                 <span className="text-[12px] font-bold text-gray-500">
-                  {trend === "up" ? "📈 상승 추세" : trend === "down" ? "📉 하락 추세" : "📊 안정적"}
+                  {trend === "up" ? "상승 추세" : trend === "down" ? "하락 추세" : "안정적"}
                 </span>
               )}
             </div>
 
+            {rangeCount === 0 ? (
+              <div className="py-6 text-center text-[13px] font-semibold text-gray-400">
+                입력한 톤수 이하의 과거 이력이 없습니다.
+              </div>
+            ) : (
+            <>
             {/* 최저~최고 */}
             <div className="flex items-baseline gap-2 mt-1 mb-4">
-              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{rangeMin.toLocaleString()}</span>
               <span className="text-[18px] font-bold text-gray-300">~</span>
-              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{rangeMax.toLocaleString()}</span>
               <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
             </div>
 
             {/* 범위 바 */}
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
               <div className="absolute inset-0 bg-gray-200 rounded-full" />
-              {/* 평균 마커 */}
+              {/* 대표(최다 청구) 마커 */}
               <div
                 className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
-                style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }}
+                style={{ left: `calc(${getRangeBarPct(rangeModeFare)}% - 6px)` }}
               />
             </div>
             <div className="flex justify-between text-[11px] font-semibold text-gray-400">
-              <span>최저 {fareMin.toLocaleString()}원</span>
-              <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
-              <span>최고 {fareMax.toLocaleString()}원</span>
+              <span>최저 {rangeMin.toLocaleString()}원</span>
+              <span className="text-[#1B2B4B] font-bold">대표 {rangeModeFare.toLocaleString()}원</span>
+              <span>최고 {rangeMax.toLocaleString()}원</span>
             </div>
 
             {/* 빠른 적용 버튼 - AI 추천 통합 */}
 <div className="grid grid-cols-4 gap-2 mt-4">
   {[
-    { label: "최저 운임", sub: "가장 저렴한 이력", value: fareMin, ai: false },
-    { label: "평균 운임", sub: "전체 평균 기준",   value: fareAvg, ai: false },
-    { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax, ai: false },
+    { label: "최저 운임", sub: "가장 저렴한 이력", value: rangeMin, ai: false },
+    { label: "대표 운임", sub: `가장 많이 청구된 금액(${rangeModeCount}건)`, value: rangeModeFare, ai: false },
+    { label: "최고 운임", sub: "가장 높은 이력",   value: rangeMax, ai: false },
     ...(aiResult.fare ? [{
-      label: "🤖 AI 추천",
+      label: "AI 추천",
       sub: aiResult.reason === "EXACT" ? "동일 조건 기반" : "유사 조건 기반",
       value: aiResult.fare,
       ai: true
@@ -14658,24 +14690,23 @@ setConfirmChange(null);
       onClick={() => { onChange("청구운임", String(value)); setFareModalOpen(false); }}
       className={`rounded-xl border px-3 py-3 text-center transition group active:scale-95
         ${ai
-          ? "border-indigo-300 bg-indigo-50 hover:bg-indigo-600 hover:border-indigo-600"
+          ? "border-gray-300 bg-gray-50 hover:bg-[#1B2B4B] hover:border-[#1B2B4B]"
           : "border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:border-[#1B2B4B]"
         }`}>
-      <div className={`text-[10px] font-bold mb-1
-        ${ai ? "text-indigo-500 group-hover:text-white/70" : "text-gray-400 group-hover:text-white/60"}`}>
+      <div className="text-[10px] font-bold mb-1 text-gray-400 group-hover:text-white/60">
         {label}
       </div>
-      <div className={`text-[18px] font-extrabold leading-none
-        ${ai ? "text-indigo-600 group-hover:text-white" : "text-[#1B2B4B] group-hover:text-white"}`}>
+      <div className="text-[18px] font-extrabold leading-none text-[#1B2B4B] group-hover:text-white">
         {value.toLocaleString()}
       </div>
-      <div className={`text-[10px] mt-1
-        ${ai ? "text-indigo-400 group-hover:text-white/50" : "text-gray-400 group-hover:text-white/50"}`}>
+      <div className="text-[10px] mt-1 text-gray-400 group-hover:text-white/50">
         {sub}
       </div>
     </button>
   ))}
 </div>
+            </>
+            )}
           </div>
 
           {/* 과거 운송 기록 */}
@@ -14702,7 +14733,7 @@ setConfirmChange(null);
                 </div>
               )}
 
-              {/* 필터 탭 */}
+              {/* 필터 — 버튼 여러 개 대신 드롭다운 하나로 선택 */}
               {(() => {
                 const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "경로일치": 0 };
                 sortedHistory.forEach(r => {
@@ -14711,36 +14742,14 @@ setConfirmChange(null);
                 });
                 const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
                 return (
-                  <div className="flex gap-1.5 mb-3 flex-wrap">
+                  <select value={fare3Filter} onChange={e => setFare3Filter(e.target.value)}
+                    className="mb-3 text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer bg-white">
                     {tabs.map(t => {
                       const cnt = t === "all" ? sortedHistory.length : (counts[t] || 0);
                       if (t !== "all" && cnt === 0) return null;
-                      return (
-                        <button key={t} onClick={() => setFare3Filter(t)}
-                          className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${fare3Filter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}>
-                          {t === "all" ? `전체 ${cnt}` : `${t} ${cnt}`}
-                        </button>
-                      );
+                      return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>;
                     })}
-                  </div>
-                );
-              })()}
-
-              {(() => {
-                const fares = sortedHistory.map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
-                if (fares.length === 0) return null;
-                const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
-                const mn = Math.min(...fares);
-                const mx = Math.max(...fares);
-                return (
-                  <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
-                    <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
-                    <div className="flex gap-4 flex-wrap">
-                      <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
-                      <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
-                      <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
-                    </div>
-                  </div>
+                  </select>
                 );
               })()}
               <div className="space-y-2">
@@ -14760,52 +14769,43 @@ setConfirmChange(null);
 
                       {isTop && (
                         <div className="bg-[#1B2B4B] px-4 py-1.5 flex items-center gap-1.5">
-                          <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                          <span className="text-white text-[11px] font-bold">최근 유사 운송</span>
                         </div>
                       )}
 
                       <div className="px-4 py-3 bg-white">
-                        {/* 날짜 + 태그 */}
+                        {/* 날짜 + 태그 — 뱃지(알약형) 대신 네모난 틀, 색은 네이비/회색/주황(경고)만 사용 */}
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[13px] font-bold text-gray-600">{r.상차일}</span>
-                          <div className="flex gap-1">
-                            <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full ${
-                              matchLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
-                              : matchLabel === "부분일치" ? "bg-emerald-600 text-white"
-                              : matchLabel === "톤수일치" ? "bg-gray-600 text-white"
-                              : "bg-blue-100 text-blue-700"
+                          <div className="flex gap-1 flex-wrap justify-end">
+                            <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
+                              matchLabel === "완전일치" ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
                             }`}>{matchLabel}</span>
                             {r._palletCount != null && (
-                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
-                            r._palletCount === _inputPalletNum
-                              ? "bg-[#1B2B4B] text-white"
-                              : "bg-gray-100 text-gray-600 border border-gray-300"
+                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
+                            r._palletCount === _inputPalletNum ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
                           }`}>{r._palletCount}파렛</span>
                         )}
                         {r._boxCount != null && r._boxCount >= 0 && (
-                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
-                            r._boxCount === _inputBoxNum
-                              ? "bg-[#1B2B4B] text-white"
-                              : "bg-gray-100 text-gray-600 border border-gray-300"
+                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
+                            r._boxCount === _inputBoxNum ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
                           }`}>{r._boxCount}박스</span>
                         )}
                         {r._cargoText && (
-                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
-                            r._cargoText === _inputCargoStr
-                              ? "bg-[#1B2B4B] text-white"
-                              : "bg-gray-100 text-gray-600 border border-gray-300"
+                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
+                            r._cargoText === _inputCargoStr ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
                           }`}>{r._cargoText}</span>
                         )}
                         {modeRow && r === modeRow && (r._groupSize || 1) > 1 && (
-                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-[#1B2B4B] bg-[#1B2B4B]/10 border border-[#1B2B4B]/30 rounded-full">가장 흔한 운임 {r._groupSize}건</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-[#1B2B4B] text-[#1B2B4B]">가장 흔한 운임 {r._groupSize}건</span>
                         )}
                         {(!modeRow || r !== modeRow) && r._groupSize > 1 && (
-                          <span className="px-2 py-1 text-[10px] text-gray-400 border border-gray-200 rounded-full">이력 {r._groupSize}건</span>
+                          <span className="px-2 py-0.5 text-[10px] rounded border border-gray-300 text-gray-400">이력 {r._groupSize}건</span>
                         )}
                         {isOutlierRow(r) && (
-                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-orange-700 bg-orange-100 border border-orange-300 rounded-full">이례적 청구(반복없음)</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-orange-300 text-orange-700">이례적 청구(반복없음)</span>
                         )}
-                        <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
+                        <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${fareCls}`}>{fareLabel}</span>
                           </div>
                         </div>
 
@@ -14824,9 +14824,9 @@ setConfirmChange(null);
                           if(!allPV.length&&!allDV.length)return null;
                           return(
                             <div className="flex items-center gap-1 flex-wrap mb-1">
-                              <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20 text-[10px] font-bold rounded-full">경유 포함</span>
-                              {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-                              {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                              <span className="px-2 py-0.5 border border-[#1B2B4B]/30 text-[#1B2B4B] text-[10px] font-bold rounded">경유 포함</span>
+                              {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                              {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
                             </div>
                           );
                         })()}
