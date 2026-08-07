@@ -8597,7 +8597,12 @@ function MobileOrderDetail({
 
     orders.forEach(o => {
       if (o.id === order.id) return;
-      if ((o.상차일 || "").slice(0, 10) === todayKST()) return;
+      // ⚠️ 예전엔 "오늘 날짜로 등록된 이력"을 무조건 제외했는데, 그러면 오늘 이미
+      // 확정된(배차완료) 진짜 과거 운임 기록도 조회에서 안 보이는 문제가 있었다.
+      // 지금 조회 중인 오더 자체가 오늘 날짜일 때만(같은 날 중복 입력건과 헷갈리지
+      // 않도록) 오늘자 이력을 제외하고, 그 외에는 날짜 상관없이 전부 비교한다.
+      const todayNow = todayKST();
+      if ((order.상차일 || "").slice(0, 10) === todayNow && (o.상차일 || "").slice(0, 10) === todayNow) return;
       const claim = Number(o.청구운임 || 0);
       const drv = Number(o.기사운임 || 0);
       if (!claim && !drv) return;
@@ -10917,7 +10922,12 @@ const fareMatches = useMemo(() => {
   const candidates = [];
 
   orders.forEach(o => {
-    if ((o.상차일 || "").slice(0, 10) === todayKST()) return;
+    // ⚠️ 예전엔 "오늘 날짜로 등록된 이력"을 무조건 제외했는데, 그러면 오늘 이미
+    // 확정된(배차완료) 진짜 과거 운임 기록도 조회에서 안 보이는 문제가 있었다.
+    // 지금 등록 중인 오더 자체가 오늘 날짜일 때만(같은 날 중복 입력건과 헷갈리지
+    // 않도록) 오늘자 이력을 제외하고, 그 외에는 날짜 상관없이 전부 비교한다.
+    const todayNow = todayKST();
+    if ((form.상차일 || "").slice(0, 10) === todayNow && (o.상차일 || "").slice(0, 10) === todayNow) return;
     const claim = Number(o.청구운임 || 0);
     const drv = Number(o.기사운임 || 0);
     if (!claim && !drv) return;
@@ -16784,7 +16794,8 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
     if (!pickup.trim()||!drop.trim()||!vGroup) { alert("상차지역, 하차지역, 차량종류를 모두 입력하세요."); return; }
     const pu=cleanStr(pickup), dr=cleanStr(drop);
     let matched = dispatchData.filter(r => {
-      if ((r.상차일 || "").slice(0, 10) === todayKST()) return false;
+      // ⚠️ 오늘 등록된 이력도 이미 확정된 청구운임이면 정상적인 과거 이력이므로
+      // 무조건 제외하지 않는다(예전엔 무조건 제외해서 당일 확정건이 조회에서 빠졌었다).
       const pm=cleanStr(r.상차지명||"")+cleanStr(r.상차지주소||"");
       const dm=cleanStr(r.하차지명||"")+cleanStr(r.하차지주소||"");
       if (!pm.includes(pu)||!dm.includes(dr)) return false;
