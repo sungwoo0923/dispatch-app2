@@ -18868,6 +18868,37 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
   const [closeFileResult, setCloseFileResult] = React.useState(null);
 
+  // ⭐ 다목적지 단가표 매칭 (3파트와 동일) — 선택수정 중인 오더(editTarget)의
+  // 하차지명/주소가 단가표 메뉴에 등록된 하차지와 겹치면 "단가표" 버튼이
+  // 천천히 깜빡이고, 눌렀을 때 그 하차지에 등록된 모든 톤수 단가를 보여준다.
+  const [multiRateSheets4, setMultiRateSheets4] = React.useState([]);
+  React.useEffect(() => {
+    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
+    if (!co) { setMultiRateSheets4([]); return; }
+    const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
+    const unsub = onSnapshot(q, (snap) => {
+      setMultiRateSheets4(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [userCompany]);
+  const [rateSheetLookupOpen4, setRateSheetLookupOpen4] = React.useState(false);
+  const normRateText4 = (s) => String(s || "").replace(/[\s()（）·]/g, "").toLowerCase();
+  const rateSheetMatches4 = React.useMemo(() => {
+    const dropName = normRateText4(editTarget?.하차지명);
+    const dropAddr = normRateText4(editTarget?.하차지주소).slice(0, 12);
+    if (!dropName && !dropAddr) return [];
+    const results = [];
+    (multiRateSheets4 || []).forEach(sheet => {
+      (sheet.rows || []).forEach(r => {
+        const rName = normRateText4(r.name);
+        const rAddr = normRateText4(r.address).slice(0, 12);
+        const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName)));
+        const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
+        if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
+      });
+    });
+    return results;
+  }, [editTarget?.하차지명, editTarget?.하차지주소, multiRateSheets4]);
 
   // === 유사 운임조회 (선택수정 전용 업그레이드) ===
   const handleFareSearch = () => {
@@ -23701,6 +23732,86 @@ value={copyTarget?.화물수량 || ""}
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto text-[14px]">
+            {/* ⭐ 다목적지 단가표 조회 팝업 (3파트와 동일) */}
+            {rateSheetLookupOpen4 && (
+              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setRateSheetLookupOpen4(false)}>
+                <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-white font-bold text-[15px]">단가표 조회</h3>
+                      <p className="text-white/60 text-[12px] mt-0.5">
+                        {(editTarget?.하차지명 || "").trim() ? `"${editTarget.하차지명}"와(과) 일치하는 등록된 단가표` : "하차지명이 있어야 단가표 메뉴에 등록된 단가와 매칭해 보여줍니다"}
+                      </p>
+                    </div>
+                    <button onClick={() => setRateSheetLookupOpen4(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+                  </div>
+                  <div className="overflow-y-auto flex-1 p-5">
+                    {rateSheetMatches4.length === 0 ? (
+                      <div className="text-center py-16 text-gray-400 text-[13px]">
+                        일치하는 단가표가 없습니다.<br/>
+                        <span className="text-[12px] text-gray-300">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {rateSheetMatches4.map(({ sheet, row, nameHit }, i) => {
+                          const dropTon = normRateText4(editTarget?.차량톤수);
+                          const matchedColId = dropTon
+                            ? (sheet.columns || []).find(c => {
+                                const cl = normRateText4(c.label);
+                                return cl && (cl === dropTon || cl.includes(dropTon) || dropTon.includes(cl));
+                              })?.id
+                            : null;
+                          return (
+                          <div key={sheet.id + row.id + i} className="rounded-xl border border-gray-200 overflow-hidden">
+                            <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-[12.5px]">
+                                <span className="text-gray-400">기준지</span>
+                                <span className="font-bold text-[#1B2B4B]">{sheet.baseName || "-"}</span>
+                                <span className="text-gray-300">→</span>
+                                <span className="font-bold text-[#1B2B4B]">{row.name}</span>
+                              </div>
+                              {nameHit
+                                ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#1B2B4B] text-white">이름 일치</span>
+                                : <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 border border-gray-200">주소 일치</span>}
+                            </div>
+                            {row.address && <div className="px-4 py-1.5 text-[11.5px] text-gray-500">{row.address}</div>}
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-[12.5px]">
+                                <thead>
+                                  <tr className="bg-white border-b border-gray-100">
+                                    {(sheet.columns || []).map(c => (
+                                      <th key={c.id} className={`px-3 py-2 text-center text-[11px] font-bold whitespace-nowrap ${c.id === matchedColId ? "text-[#1B2B4B]" : "text-gray-500"}`}>{c.label}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    {(sheet.columns || []).map(c => {
+                                      const v = Number(row.prices?.[c.id] || 0);
+                                      const isMatch = c.id === matchedColId;
+                                      return (
+                                        <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
+                                          {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                                          {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+                    <button onClick={() => setRateSheetLookupOpen4(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* ===================== 📦 운임조회 중앙 모달 ===================== */}
 {farePanelOpen && fareResult && (() => {
   const fareMin = fareResult.min;
@@ -23988,7 +24099,19 @@ value={copyTarget?.화물수량 || ""}
               >
                 업체전달
               </button>
-              <div className="ml-auto">
+              <div className="ml-auto flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setRateSheetLookupOpen4(true)}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${
+                    rateSheetMatches4.length > 0
+                      ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
+                      : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+                  }`}
+                  title={rateSheetMatches4.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
+                >
+                  단가표
+                </button>
                 <button
                   onClick={handleFareSearch}
                   className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
@@ -29462,6 +29585,38 @@ if (mode === "driver") {
     } catch { showAlert("사업자등록증 복사에 실패했습니다. PDF는 이미지 복사를 지원하지 않습니다."); }
   };
 
+  // ⭐ 다목적지 단가표 매칭 (3파트와 동일) — 선택수정 중인 오더(editTarget)의
+  // 하차지명/주소가 단가표 메뉴에 등록된 하차지와 겹치면 "단가표" 버튼이
+  // 천천히 깜빡이고, 눌렀을 때 그 하차지에 등록된 모든 톤수 단가를 보여준다.
+  const [multiRateSheets5, setMultiRateSheets5] = React.useState([]);
+  React.useEffect(() => {
+    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
+    if (!co) { setMultiRateSheets5([]); return; }
+    const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
+    const unsub = onSnapshot(q, (snap) => {
+      setMultiRateSheets5(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, [userCompany]);
+  const [rateSheetLookupOpen5, setRateSheetLookupOpen5] = React.useState(false);
+  const normRateText5 = (s) => String(s || "").replace(/[\s()（）·]/g, "").toLowerCase();
+  const rateSheetMatches5 = React.useMemo(() => {
+    const dropName = normRateText5(editTarget?.하차지명);
+    const dropAddr = normRateText5(editTarget?.하차지주소).slice(0, 12);
+    if (!dropName && !dropAddr) return [];
+    const results = [];
+    (multiRateSheets5 || []).forEach(sheet => {
+      (sheet.rows || []).forEach(r => {
+        const rName = normRateText5(r.name);
+        const rAddr = normRateText5(r.address).slice(0, 12);
+        const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName)));
+        const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
+        if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
+      });
+    });
+    return results;
+  }, [editTarget?.하차지명, editTarget?.하차지주소, multiRateSheets5]);
+
   // 🚀 운임 조회 실행 함수
   const handleFareSearch = () => {
     if (!editTarget) return;
@@ -31612,7 +31767,19 @@ return (
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${(() => { const d = editTarget?.상차일 || ""; const today = todayKST(); return (editTarget.업체전달상태 ? editTarget.업체전달상태 : (d && d < today ? "전달완료" : "미전달")) === "전달완료"; })() ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 업체전달
               </button>
-              <div className="ml-auto">
+              <div className="ml-auto flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setRateSheetLookupOpen5(true)}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${
+                    rateSheetMatches5.length > 0
+                      ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
+                      : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+                  }`}
+                  title={rateSheetMatches5.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
+                >
+                  단가표
+                </button>
                 <button type="button" onClick={handleFareSearch} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition">
                   운임조회
                 </button>
@@ -34149,6 +34316,86 @@ setCopyPlaceOptions(list);
 </div>
 </div>
 )}
+      {/* ⭐ 다목적지 단가표 조회 팝업 (3파트와 동일) */}
+      {rateSheetLookupOpen5 && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setRateSheetLookupOpen5(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">단가표 조회</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">
+                  {(editTarget?.하차지명 || "").trim() ? `"${editTarget.하차지명}"와(과) 일치하는 등록된 단가표` : "하차지명이 있어야 단가표 메뉴에 등록된 단가와 매칭해 보여줍니다"}
+                </p>
+              </div>
+              <button onClick={() => setRateSheetLookupOpen5(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5">
+              {rateSheetMatches5.length === 0 ? (
+                <div className="text-center py-16 text-gray-400 text-[13px]">
+                  일치하는 단가표가 없습니다.<br/>
+                  <span className="text-[12px] text-gray-300">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {rateSheetMatches5.map(({ sheet, row, nameHit }, i) => {
+                    const dropTon = normRateText5(editTarget?.차량톤수);
+                    const matchedColId = dropTon
+                      ? (sheet.columns || []).find(c => {
+                          const cl = normRateText5(c.label);
+                          return cl && (cl === dropTon || cl.includes(dropTon) || dropTon.includes(cl));
+                        })?.id
+                      : null;
+                    return (
+                    <div key={sheet.id + row.id + i} className="rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-[12.5px]">
+                          <span className="text-gray-400">기준지</span>
+                          <span className="font-bold text-[#1B2B4B]">{sheet.baseName || "-"}</span>
+                          <span className="text-gray-300">→</span>
+                          <span className="font-bold text-[#1B2B4B]">{row.name}</span>
+                        </div>
+                        {nameHit
+                          ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#1B2B4B] text-white">이름 일치</span>
+                          : <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 border border-gray-200">주소 일치</span>}
+                      </div>
+                      {row.address && <div className="px-4 py-1.5 text-[11.5px] text-gray-500">{row.address}</div>}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[12.5px]">
+                          <thead>
+                            <tr className="bg-white border-b border-gray-100">
+                              {(sheet.columns || []).map(c => (
+                                <th key={c.id} className={`px-3 py-2 text-center text-[11px] font-bold whitespace-nowrap ${c.id === matchedColId ? "text-[#1B2B4B]" : "text-gray-500"}`}>{c.label}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              {(sheet.columns || []).map(c => {
+                                const v = Number(row.prices?.[c.id] || 0);
+                                const isMatch = c.id === matchedColId;
+                                return (
+                                  <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
+                                    {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                                    {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setRateSheetLookupOpen5(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* 📦 운임조회 결과 모달 (선택수정용) */}
 {fareModalOpen && fareResult && (() => {
   const fareMin = fareResult.min;
