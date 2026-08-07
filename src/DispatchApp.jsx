@@ -7536,6 +7536,7 @@ const [contactQueue, setContactQueue] = React.useState([]);
 const [editingContactIdx, setEditingContactIdx] = React.useState(null);
 const [editContactData, setEditContactData] = React.useState({ name: "", phone: "" });
 const [contactSearchQ, setContactSearchQ] = React.useState("");
+const contactSearchInputRef = React.useRef(null);
 const contactListRef = React.useRef(null);
 // 방향키(←/→)로 활성 카드가 바뀌면, 담당자가 많아 가로 스크롤이 생겼을 때도
 // 항상 활성 카드가 보이는 위치로 자동 스크롤한다. 컨테이너 자체에 position이
@@ -8105,6 +8106,29 @@ function parseStops(text = "") {
 
   // ② 숫자 패턴 없으면 단일
   return [raw];
+}
+
+// ⭐ 좌우 방향키 필드 이동 — data-arrownav-scope로 감싼 영역 안에서, 지금 포커스가
+// 있는 입력창(data-arrownav 붙은 것들) 기준으로 DOM 순서상 이전/다음 칸으로 옮긴다.
+// 일반 입력창은 텍스트 커서를 끝단으로 이어붙이듯 위치시키고(오른쪽으로 넘어가면
+// 다음 칸 맨 앞, 왼쪽으로 넘어가면 이전 칸 맨 뒤), CustomSelect(버튼)는 그냥 포커스만
+// 준다 — 드롭다운을 열지 말지는 CustomSelect 자신의 arrowNav 로직이 처리한다.
+function arrowHopFocus(fromEl, dir) {
+  if (!fromEl) return;
+  const scope = fromEl.closest("[data-arrownav-scope]");
+  if (!scope) return;
+  const fields = Array.from(scope.querySelectorAll("[data-arrownav]")).filter(
+    (el) => !el.disabled && el.offsetParent !== null
+  );
+  const idx = fields.indexOf(fromEl);
+  if (idx === -1) return;
+  const target = fields[idx + dir];
+  if (!target) return;
+  target.focus();
+  if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+    const pos = dir > 0 ? 0 : target.value.length;
+    requestAnimationFrame(() => { try { target.setSelectionRange(pos, pos); } catch {} });
+  }
 }
 
 // 경유 개수 라벨
@@ -10064,6 +10088,20 @@ title="상차지 ↔ 하차지 교체"
 )}
 <form
   onSubmit={handleSubmit}
+  data-arrownav-scope
+  onKeyDown={(e) => {
+    // ⭐ 좌우 방향키 필드 이동 — 입력창에서 커서가 맨 끝/맨 앞에 있을 때만
+    // 옆 칸으로 넘어간다(커서가 글자 중간에 있으면 평소처럼 커서만 움직인다).
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+    if (!el.hasAttribute("data-arrownav")) return;
+    if (el.selectionStart == null) return; // type=number 등 selectionRange 미지원 필드는 기본 동작 유지
+    const atStart = el.selectionStart === 0 && el.selectionEnd === 0;
+    const atEnd = el.selectionStart === el.value.length && el.selectionEnd === el.value.length;
+    if (e.key === "ArrowLeft" && atStart) { e.preventDefault(); arrowHopFocus(el, -1); }
+    else if (e.key === "ArrowRight" && atEnd) { e.preventDefault(); arrowHopFocus(el, 1); }
+  }}
 className="
 grid grid-cols-8 gap-4
 bg-white
@@ -10243,6 +10281,7 @@ const similar = placeList.filter(p => {
 
     <input autoComplete="off"
       id="pickup-place-input"
+      data-arrownav
       className={inputCls}
       placeholder="상차지 검색"
       value={form.상차지명}
@@ -10347,6 +10386,7 @@ className={`
   </div>
 
   <input autoComplete="off"
+    data-arrownav
     className={inputCls}
     value={form.상차지주소}
     onChange={(e) => handlePickupAddrManual(e.target.value)}
@@ -10406,6 +10446,7 @@ className={`
   <input autoComplete="off"
     className={inputCls}
        id="drop-place-input"
+    data-arrownav
     placeholder="하차지 검색"
     value={form.하차지명}
     onChange={(e) => {
@@ -10517,6 +10558,7 @@ className={`
 
   <input autoComplete="off"
     className={inputCls}
+    data-arrownav
     value={form.하차지주소}
     onChange={(e) => handleDropAddrManual(e.target.value)}
     placeholder="자동매칭 또는 수기입력"
@@ -10578,6 +10620,7 @@ className={`
     {/* 입력 */}
     <input autoComplete="off"
       ref={cargoInputRef}
+      data-arrownav
       className={`${inputCls} pr-[62px] text-base${requiredErrors.has("화물내용") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`}
       placeholder={form.화물타입 ? "숫자만 입력" : "예: 2 또는 변압기"}
       value={form.화물타입
@@ -10676,6 +10719,7 @@ className={`
 </div>
 
   <input autoComplete="off"
+    data-arrownav
     className={inputCls}
     placeholder="차량종류 입력 또는 선택 (예: 냉동윙)"
     value={vehicleQuery || form.차량종류}
@@ -10760,6 +10804,7 @@ className={`
     {/* 입력 */}
     <input autoComplete="off"
       ref={tonInputRef}
+      data-arrownav
       className={`${inputCls} pr-[52px] text-base${requiredErrors.has("차량톤수") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`}
       placeholder={form.톤수타입 ? "예: 1" : "예: 5톤 또는 소형"}
       inputMode={form.톤수타입 ? "decimal" : "text"}
@@ -10839,6 +10884,7 @@ className={`
       </label>
 
       <input autoComplete="off"
+        data-arrownav
         className={inputCls}
         value={form.청구운임 ? Number(form.청구운임).toLocaleString() : ""}
         onChange={(e) => {
@@ -10871,6 +10917,7 @@ className={`
       </label>
 
       <input autoComplete="off"
+        data-arrownav
         className={inputCls}
         value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
         onChange={(e) => {
@@ -12810,6 +12857,12 @@ className={`
         } else {
           closeContactPopup(null);
         }
+      } else if (e.key.length === 1 || e.key === "Backspace") {
+        // ⭐ 카드 그리드에 포커스가 있는 상태(방향키로 카드 이동 가능하게 하려고
+        // 일부러 검색창이 아니라 여기에 포커스를 준다)에서도, 글자를 치기 시작하면
+        // 바로 검색창으로 넘겨서 클릭 없이 곧장 검색할 수 있게 한다. preventDefault를
+        // 하지 않으므로 이 키 입력은 포커스가 넘어간 검색창에 그대로 반영된다.
+        contactSearchInputRef.current?.focus();
       }
     }}
   >
@@ -12825,10 +12878,15 @@ className={`
       </div>
       <div className="px-5 pt-4">
         <input autoComplete="off"
+          ref={contactSearchInputRef}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
           placeholder="담당자 이름 또는 전화번호 검색"
           value={contactSearchQ}
           onChange={e => { setContactSearchQ(e.target.value); setContactActive(0); }}
+          onKeyDown={e => {
+            if (e.key === "Escape") { e.preventDefault(); closeContactPopup(null); }
+            else if (e.key === "Enter") { e.preventDefault(); const picked = visible[contactActive]?.c; closeContactPopup(picked || null); }
+          }}
         />
       </div>
       <div ref={contactListRef} className="relative p-5 grid grid-flow-col grid-rows-[repeat(4,min-content)] content-start auto-cols-[260px] gap-3 overflow-x-auto max-h-[70vh]">
