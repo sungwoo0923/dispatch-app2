@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 
 const CustomSelect = React.forwardRef(function CustomSelect(
-  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name, openOnFocus = false },
+  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name, openOnFocus = false, arrowNav = false },
   ref
 ) {
   const [open, setOpen] = React.useState(false);
@@ -140,6 +140,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
         name={name}
         ref={btnRef}
         disabled={disabled}
+        data-arrownav={arrowNav ? "true" : undefined}
         onFocus={(e) => {
           // openOnFocus가 켜진 곳(예: 3파트 화물내용/차량톤수 단위 선택)은 탭으로
           // 포커스만 옮겨도 방향키 없이 바로 목록이 펼쳐져야 한다는 요구사항 대응.
@@ -168,6 +169,21 @@ const CustomSelect = React.forwardRef(function CustomSelect(
           if (disabled || e.defaultPrevented) return;
           if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(e.key)) e.preventDefault();
           if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { setOpen(true); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); return; }
+          // ⭐ arrowNav — 좌우 방향키로 필드 사이를 이동할 때, 이 드롭다운 칸에
+          // 도착하면 먼저 목록이 열리고(위/아래로 훑어볼 수 있게), 선택 없이 같은
+          // 방향키를 한 번 더 누르면 목록을 닫고 옆 칸으로 계속 이동한다. 여기서는
+          // 열고/닫기만 처리하고, 옆 칸으로의 실제 포커스 이동은 이 버튼에 걸린
+          // data-arrownav 마킹을 보고 상위(폼) 레벨의 위임 핸들러가 수행한다.
+          if (arrowNav && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+            if (!open) {
+              setOpen(true);
+              setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+              e.stopPropagation(); // 여는 동작 — 위임 핸들러까지 버블링되어 옆 칸으로 넘어가지 않게 막는다
+              return;
+            }
+            setOpen(false);
+            return; // 닫는 동작 — stopPropagation 하지 않아 위임 핸들러가 옆 칸으로 이동시킨다
+          }
           if (!open) return;
           if (e.key === "ArrowDown") {
             setActiveIdx((i) => {
