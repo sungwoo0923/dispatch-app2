@@ -1,5 +1,7 @@
 // ===================== src/RateCard.jsx =====================
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { db } from "./firebase";
+import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
 
 const COMPANY = {
   name: "RUN25",
@@ -132,7 +134,7 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
   );
 }
 
-export default function RateCard({ dispatchData = [] }) {
+export default function RateCard({ dispatchData = [], userCompany = "" }) {
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
   const [vGroup, setVGroup] = useState("");
@@ -151,6 +153,181 @@ const [detailModal, setDetailModal] = useState(null);
   const [excludeList, setExcludeList] = useState([]);       // 제외할 거래처명 배열
   const [excludeDropdown, setExcludeDropdown] = useState([]); // 검색 드롭다운 후보
   const excludeRef = useRef(null);
+
+  // ===================== 다목적지 단가표 (기준지 1곳 → 하차지 여러 곳 × 파렛/차량 구간별 단가) =====================
+  // 거래처별로 Firestore(multiRateSheets)에 저장해 다른 직원도 보고 언제든 수정할 수 있게 한다.
+  const [pageMode, setPageMode] = useState("노선별"); // 노선별 | 다목적지
+  const [multiSheets, setMultiSheets] = useState([]);
+  const [multiSelectedId, setMultiSelectedId] = useState(null);
+  const [multiImportOpen, setMultiImportOpen] = useState(false);
+  const [multiImportText, setMultiImportText] = useState("");
+  const [multiSaving, setMultiSaving] = useState(false);
+
+  useEffect(() => {
+    const co = (userCompany || "").trim();
+    if (!co) { setMultiSheets([]); return; }
+    const q = query(collection(db, "multiRateSheets"), where("companyName", "==", co));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+      setMultiSheets(list);
+    }, () => {});
+    return () => unsub();
+  }, [userCompany]);
+
+  const selectedSheet = multiSheets.find(s => s.id === multiSelectedId) || null;
+  const uid = () => Math.random().toString(36).slice(2, 10);
+
+  const createMultiSheet = async () => {
+    const co = (userCompany || "").trim();
+    if (!co) { alert("회사 정보를 확인할 수 없습니다."); return; }
+    setMultiSaving(true);
+    try {
+      const ref = await addDoc(collection(db, "multiRateSheets"), {
+        companyName: co,
+        baseName: "새 기준지",
+        baseAddress: "",
+        note: "",
+        columns: [
+          { id: uid(), label: "다마스" },
+          { id: uid(), label: "1톤 윙(1~2파렛)" },
+          { id: uid(), label: "2.5톤 윙(3파렛)" },
+          { id: uid(), label: "3.5톤 윙(4~6파렛)" },
+          { id: uid(), label: "5톤 윙(7~10파렛)" },
+        ],
+        rows: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setMultiSelectedId(ref.id);
+    } catch (e) {
+      console.error(e); alert("단가표 생성에 실패했습니다.");
+    } finally { setMultiSaving(false); }
+  };
+
+  const patchSheet = (id, patch) => {
+    updateDoc(doc(db, "multiRateSheets", id), { ...patch, updatedAt: serverTimestamp() }).catch(e => console.error(e));
+  };
+
+  const removeMultiSheet = async (id) => {
+    if (!window.confirm("이 단가표를 삭제할까요?")) return;
+    try {
+      await deleteDoc(doc(db, "multiRateSheets", id));
+      if (multiSelectedId === id) setMultiSelectedId(null);
+    } catch (e) { console.error(e); alert("삭제에 실패했습니다."); }
+  };
+
+  const addMultiColumn = () => {
+    if (!selectedSheet) return;
+    patchSheet(selectedSheet.id, { columns: [...(selectedSheet.columns || []), { id: uid(), label: "새 구간" }] });
+  };
+  const removeMultiColumn = (colId) => {
+    if (!selectedSheet) return;
+    const nextCols = (selectedSheet.columns || []).filter(c => c.id !== colId);
+    const nextRows = (selectedSheet.rows || []).map(r => {
+      const prices = { ...(r.prices || {}) };
+      delete prices[colId];
+      return { ...r, prices };
+    });
+    patchSheet(selectedSheet.id, { columns: nextCols, rows: nextRows });
+  };
+  const updateMultiColumnLabel = (colId, label) => {
+    if (!selectedSheet) return;
+    patchSheet(selectedSheet.id, { columns: (selectedSheet.columns || []).map(c => c.id === colId ? { ...c, label } : c) });
+  };
+
+  const addMultiRow = () => {
+    if (!selectedSheet) return;
+    patchSheet(selectedSheet.id, { rows: [...(selectedSheet.rows || []), { id: uid(), name: "", address: "", prices: {} }] });
+  };
+  const removeMultiRow = (rowId) => {
+    if (!selectedSheet) return;
+    patchSheet(selectedSheet.id, { rows: (selectedSheet.rows || []).filter(r => r.id !== rowId) });
+  };
+  const updateMultiRowField = (rowId, field, value) => {
+    if (!selectedSheet) return;
+    patchSheet(selectedSheet.id, { rows: (selectedSheet.rows || []).map(r => r.id === rowId ? { ...r, [field]: value } : r) });
+  };
+  const updateMultiRowPrice = (rowId, colId, value) => {
+    if (!selectedSheet) return;
+    const n = String(value).replace(/[^\d]/g, "");
+    patchSheet(selectedSheet.id, { rows: (selectedSheet.rows || []).map(r => r.id === rowId ? { ...r, prices: { ...(r.prices || {}), [colId]: n } } : r) });
+  };
+
+  // 엑셀에서 그대로 복사해 붙여넣기로 일괄 입력 — 1열:하차지명 2열:주소 3열~:구간별 단가
+  // (엑셀에서 헤더 포함 범위를 드래그해 복사한 뒤 그대로 붙여넣으면 자동으로 구간명까지 인식한다)
+  const applyMultiImport = () => {
+    if (!selectedSheet || !multiImportText.trim()) { setMultiImportOpen(false); return; }
+    const lines = multiImportText.split(/\r?\n/).map(l => l.replace(/\r$/, "")).filter(l => l.trim());
+    const cells = lines.map(l => l.split("\t").map(c => c.trim()));
+    const first = cells[0] || [];
+    // 첫 줄 3번째 칸부터가 전부 숫자가 아니면(=글자가 섞여있으면) 헤더로 간주
+    const looksLikeHeader = cells.length > 1 && first.slice(2).some(h => h && !/^[\d,.\s원]+$/.test(h));
+    const colLabels = looksLikeHeader ? first.slice(2) : (selectedSheet.columns || []).map(c => c.label);
+    const columns = colLabels.length
+      ? colLabels.map((label, i) => (selectedSheet.columns || [])[i] || { id: uid(), label: label || `구간${i + 1}` })
+      : (selectedSheet.columns || []);
+    const dataRows = looksLikeHeader ? cells.slice(1) : cells;
+    const newRows = dataRows.map(cols => {
+      const prices = {};
+      columns.forEach((c, i) => { const v = (cols[i + 2] || "").replace(/[^\d]/g, ""); if (v) prices[c.id] = v; });
+      return { id: uid(), name: cols[0] || "", address: cols[1] || "", prices };
+    }).filter(r => r.name);
+    if (!newRows.length) { alert("인식할 수 있는 데이터가 없습니다. 하차지명 칸이 비어있지 않은지 확인해주세요."); return; }
+    patchSheet(selectedSheet.id, { columns, rows: [...(selectedSheet.rows || []), ...newRows] });
+    setMultiImportText("");
+    setMultiImportOpen(false);
+  };
+
+  const handleMultiPrint = (sheet) => {
+    if (!sheet) return;
+    const todayStr = new Date().toLocaleDateString("ko-KR");
+    const cols = sheet.columns || [];
+    const esc = (s) => String(s || "").replace(/</g, "&lt;");
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>단가표_${esc(sheet.baseName)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Malgun Gothic',sans-serif;}
+body{background:white;color:#111;}
+.wrapper{width:1000px;margin:0 auto;padding:36px 40px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #1B2B4B;}
+.doc-title{font-size:20px;font-weight:900;color:#1B2B4B;}
+.doc-sub{font-size:12px;color:#666;margin-top:4px;}
+.base-bar{display:flex;gap:16px;align-items:center;background:#F0F4FF;border:1px solid #C7D9FF;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:12.5px;color:#374151;}
+.base-bar b{color:#1B2B4B;}
+.notice{white-space:pre-wrap;margin-bottom:16px;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:8px;font-size:11.5px;color:#374151;line-height:1.75;}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead tr{background:#1B2B4B;}
+thead th{color:white;padding:9px 10px;text-align:center;font-weight:700;white-space:nowrap;}
+tbody tr:nth-child(even){background:#F9FAFB;}
+td{padding:8px 10px;text-align:center;border-bottom:1px solid #E5E7EB;white-space:nowrap;}
+.td-name{font-weight:700;color:#1B2B4B;text-align:left;}
+.td-addr{color:#6B7280;font-size:11.5px;text-align:left;white-space:normal;}
+.td-price{font-weight:800;color:#2563EB;}
+.footer{margin-top:24px;font-size:10.5px;color:#aaa;}
+@media print{.no-print{display:none!important;}}
+</style></head><body>
+<div class="wrapper">
+<div class="no-print" style="margin-bottom:14px;display:flex;justify-content:flex-end;gap:8px;">
+  <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">인쇄</button>
+  <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">PDF 저장</button>
+</div>
+<div class="header"><div><div class="doc-title">운송 단가표</div><div class="doc-sub">발행일: ${todayStr}</div></div></div>
+<div class="base-bar"><span>기준지 <b>${esc(sheet.baseName) || "-"}</b></span>${sheet.baseAddress ? `<span>${esc(sheet.baseAddress)}</span>` : ""}</div>
+${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
+<table>
+  <thead><tr><th style="text-align:left;">하차지</th><th style="text-align:left;">주소</th>${cols.map(c => `<th>${esc(c.label)}</th>`).join("")}</tr></thead>
+  <tbody>${(sheet.rows || []).map(r => `<tr>
+    <td class="td-name">${esc(r.name) || "-"}</td>
+    <td class="td-addr">${esc(r.address)}</td>
+    ${cols.map(c => { const v = Number(r.prices?.[c.id] || 0); return `<td class="td-price">${v ? v.toLocaleString() + "원" : "-"}</td>`; }).join("")}
+  </tr>`).join("")}</tbody>
+</table>
+<div class="footer">본 자료는 영업 참고용이며 정식 계약서가 아닙니다.</div>
+</div></body></html>`);
+    w.document.close();
+    w.focus();
+  };
 
   // 전체 거래처 목록 (중복 제거)
   const allClients = useMemo(() => {
@@ -572,22 +749,53 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-[18px] font-bold text-[#1B2B4B]">운송 단가표 생성</h2>
-          <p className="text-[12px] text-gray-400 mt-0.5">노선별 톤수 단가표를 자동 생성하여 고객사에 제공하세요</p>
+          <p className="text-[12px] text-gray-400 mt-0.5">
+            {pageMode === "노선별" ? "노선별 톤수 단가표를 자동 생성하여 고객사에 제공하세요" : "기준지 1곳 → 하차지 여러 곳의 파렛/차량 구간별 단가를 한 표로 관리하세요"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setHistoryModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
-            발행 이력
-            {printHistory.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded-full text-[11px] font-bold">{printHistory.length}</span>}
-          </button>
-          <button onClick={openManualModal} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-[13px] font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
-            단가표 작성
-          </button>
-          <button onClick={handlePrint} className="flex items-center gap-2 px-5 py-2.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl hover:bg-[#243a60] transition shadow-sm">
-            🖨 인쇄 / PDF 저장
-          </button>
+          {pageMode === "노선별" ? (
+            <>
+              <button onClick={() => setHistoryModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
+                발행 이력
+                {printHistory.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded-full text-[11px] font-bold">{printHistory.length}</span>}
+              </button>
+              <button onClick={openManualModal} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-[13px] font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
+                단가표 작성
+              </button>
+              <button onClick={handlePrint} className="flex items-center gap-2 px-5 py-2.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl hover:bg-[#243a60] transition shadow-sm">
+                🖨 인쇄 / PDF 저장
+              </button>
+            </>
+          ) : (
+            selectedSheet && (
+              <>
+                <button onClick={() => setMultiImportOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
+                  📋 엑셀 붙여넣기로 가져오기
+                </button>
+                <button onClick={() => handleMultiPrint(selectedSheet)} className="flex items-center gap-2 px-5 py-2.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl hover:bg-[#243a60] transition shadow-sm">
+                  🖨 인쇄 / PDF 저장
+                </button>
+              </>
+            )
+          )}
         </div>
       </div>
 
+      {/* 노선별 단가표 / 다목적지 단가표 전환 탭 */}
+      <div className="flex gap-2 mb-4">
+        {["노선별", "다목적지"].map(m => (
+          <button key={m} onClick={() => setPageMode(m)}
+            className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
+              pageMode === m ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+            }`}>
+            {m === "노선별" ? "노선별 단가표" : "다목적지 단가표"}
+          </button>
+        ))}
+      </div>
+
+      {pageMode === "노선별" && (
+      <>
       {/* 좌우 분할: 왼쪽 검색/입력, 오른쪽 결과 (자사운임표와 동일한 레이아웃) */}
       <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
 
@@ -836,6 +1044,184 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           )}
         </div>
       </div>
+      </>
+      )}
+
+      {pageMode === "다목적지" && (
+        <div className="grid grid-cols-[280px_1fr] gap-4 items-start">
+          {/* 왼쪽: 저장된 단가표 목록 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <button onClick={createMultiSheet} disabled={multiSaving}
+              className="w-full py-2.5 mb-3 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition disabled:opacity-50">
+              + 새 단가표 만들기
+            </button>
+            {multiSheets.length === 0 ? (
+              <div className="text-center text-gray-400 text-[12px] py-8">
+                아직 만든 다목적지 단가표가 없습니다.<br/>기준지(상차지) 1곳을 기준으로 여러 하차지의 단가를 관리해보세요.
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {multiSheets.map(s => (
+                  <button key={s.id} onClick={() => setMultiSelectedId(s.id)}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg border transition ${
+                      multiSelectedId === s.id ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                    }`}>
+                    <div className="font-bold text-[13px] truncate">{s.baseName || "이름 없음"}</div>
+                    <div className={`text-[11px] mt-0.5 ${multiSelectedId === s.id ? "text-white/60" : "text-gray-400"}`}>하차지 {(s.rows || []).length}곳</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 오른쪽: 선택된 단가표 편집/미리보기 */}
+          <div className="min-w-0">
+            {!selectedSheet ? (
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-400">
+                <div className="text-[14px] font-semibold mb-1">왼쪽에서 단가표를 선택하거나 새로 만드세요</div>
+                <div className="text-[12px]">기준지 1곳(예: 화주사 창고) 기준으로 하차지 여러 곳의 단가를 한 표로 관리합니다</div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 기준지 정보 */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-[13px] font-bold text-[#1B2B4B]">기준지(상차지) 정보</div>
+                    <button onClick={() => removeMultiSheet(selectedSheet.id)} className="text-[12px] text-red-400 hover:text-red-600 transition">단가표 삭제</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>기준지명</label>
+                      <input autoComplete="off" className={inputCls} placeholder="예: 태양이엔에스"
+                        defaultValue={selectedSheet.baseName || ""}
+                        onBlur={e => patchSheet(selectedSheet.id, { baseName: e.target.value })}
+                        key={selectedSheet.id + "-base"}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>주소</label>
+                      <input autoComplete="off" className={inputCls} placeholder="기준지 주소"
+                        defaultValue={selectedSheet.baseAddress || ""}
+                        onBlur={e => patchSheet(selectedSheet.id, { baseAddress: e.target.value })}
+                        key={selectedSheet.id + "-addr"}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className={labelCls}>안내사항 (줄바꿈으로 여러 줄 입력, 표 상단에 그대로 표시됩니다)</label>
+                    <textarea
+                      className="w-full px-3 py-2 text-[12.5px] rounded-lg border border-gray-200 focus:border-[#1B2B4B] focus:outline-none leading-relaxed"
+                      rows={3}
+                      placeholder={"예: 1. 파레트(1100*1100), 배차 시 파레트 크기 공지\n2. 하차 후 거래명세서/파레트전표 서명 후 문자 전송"}
+                      defaultValue={selectedSheet.note || ""}
+                      onBlur={e => patchSheet(selectedSheet.id, { note: e.target.value })}
+                      key={selectedSheet.id + "-note"}
+                    />
+                  </div>
+                </div>
+
+                {/* 단가 매트릭스 표 */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <div className="text-[13px] font-bold text-[#1B2B4B]">하차지별 단가표</div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={addMultiColumn} className="px-3 py-1.5 text-[12px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30 rounded-lg hover:bg-[#1B2B4B]/5 transition">+ 구간 추가</button>
+                      <button onClick={addMultiRow} className="px-3 py-1.5 text-[12px] font-semibold text-white bg-[#1B2B4B] rounded-lg hover:bg-[#243a60] transition">+ 하차지 추가</button>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[12.5px]">
+                      <thead>
+                        <tr className="bg-[#1B2B4B]">
+                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[140px]">하차지</th>
+                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[200px]">주소</th>
+                          {(selectedSheet.columns || []).map(c => (
+                            <th key={c.id} className="px-2 py-2 text-center text-white font-bold whitespace-nowrap min-w-[120px]">
+                              <div className="flex items-center justify-center gap-1">
+                                <input autoComplete="off"
+                                  className="w-full bg-transparent text-white text-center font-bold text-[12px] border-b border-white/30 focus:border-white focus:outline-none placeholder:text-white/40"
+                                  defaultValue={c.label}
+                                  onBlur={e => updateMultiColumnLabel(c.id, e.target.value)}
+                                  key={c.id + "-label"}
+                                />
+                                <button onClick={() => removeMultiColumn(c.id)} className="text-white/50 hover:text-white text-[12px] leading-none shrink-0">✕</button>
+                              </div>
+                            </th>
+                          ))}
+                          <th className="px-2 py-2 text-white w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedSheet.rows || []).length === 0 ? (
+                          <tr><td colSpan={(selectedSheet.columns || []).length + 3} className="py-12 text-center text-gray-400">
+                            하차지를 추가하거나, 엑셀에서 복사해 붙여넣기로 한번에 가져오세요
+                          </td></tr>
+                        ) : (selectedSheet.rows || []).map((r, i) => (
+                          <tr key={r.id} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}>
+                            <td className="px-2 py-1.5">
+                              <input autoComplete="off" className="w-full px-2 py-1.5 text-[12.5px] font-semibold text-[#1B2B4B] rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
+                                defaultValue={r.name} onBlur={e => updateMultiRowField(r.id, "name", e.target.value)} key={r.id + "-name"} />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input autoComplete="off" className="w-full px-2 py-1.5 text-[12px] text-gray-600 rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
+                                defaultValue={r.address} onBlur={e => updateMultiRowField(r.id, "address", e.target.value)} key={r.id + "-addr"} />
+                            </td>
+                            {(selectedSheet.columns || []).map(c => (
+                              <td key={c.id} className="px-2 py-1.5">
+                                <input autoComplete="off" className="w-full px-2 py-1.5 text-[12.5px] font-bold text-blue-700 text-right rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
+                                  placeholder="-"
+                                  defaultValue={r.prices?.[c.id] ? Number(r.prices[c.id]).toLocaleString() : ""}
+                                  onBlur={e => updateMultiRowPrice(r.id, c.id, e.target.value)}
+                                  key={r.id + c.id + "-price"} />
+                              </td>
+                            ))}
+                            <td className="px-2 py-1.5 text-center">
+                              <button onClick={() => removeMultiRow(r.id)} className="w-6 h-6 rounded-full bg-red-50 border border-red-200 text-red-500 hover:bg-red-100 text-[12px] leading-none flex items-center justify-center mx-auto transition">✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="px-5 py-3 text-[11px] text-gray-400 border-t border-gray-100">※ 입력칸에서 벗어나면(포커스 아웃) 자동 저장됩니다 · 연락처는 별도로 관리하지 않습니다</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 엑셀 붙여넣기로 가져오기 모달 */}
+      {multiImportOpen && selectedSheet && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setMultiImportOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">엑셀에서 붙여넣기로 가져오기</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">엑셀에서 표(하차지·주소·단가 열들)를 드래그해 복사한 뒤 아래에 그대로 붙여넣으세요</p>
+              </div>
+              <button onClick={() => setMultiImportOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-6">
+              <p className="text-[12px] text-gray-500 mb-3 leading-relaxed">
+                1열: 하차지명 · 2열: 주소 · 3열부터: 구간별 단가 (다마스, 1톤윙 등)<br/>
+                첫 줄에 구간 이름(헤더)을 포함해 복사하면 구간이 자동으로 만들어지고, 데이터만 있으면 기존 구간에 순서대로 채워집니다.
+              </p>
+              <textarea
+                className="w-full h-64 px-3 py-2 text-[12px] font-mono rounded-lg border border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
+                placeholder={"쿠팡(인천13센터)\t인천 서구 북항로 28-23(원창동)\t\t40,000\t60,000\t70,000\t90,000\n..."}
+                value={multiImportText}
+                onChange={e => setMultiImportText(e.target.value)}
+              />
+            </div>
+            <div className="border-t border-gray-100 px-6 py-4 bg-gray-50 flex items-center justify-between">
+              <button onClick={() => setMultiImportOpen(false)} className="px-4 py-2 text-[13px] text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+              <button onClick={applyMultiImport} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition shadow-sm">가져오기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
 {/* ===================== 직접 단가표 작성 모달 ===================== */}
       {manualModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setManualModal(false)}>
