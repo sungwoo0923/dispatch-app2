@@ -138,7 +138,57 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
   );
 }
 
-export default function RateCard({ dispatchData = [], userCompany = "" }) {
+// 기준지명 입력용 자동완성 — 기본거래처(clients) 목록에서 검색/선택하면
+// 거래처명+주소가 함께 채워진다. 시트를 바꿀 때마다 부모가 key를 바꿔줘서
+// (아래 selectedSheet.id 기반 key) 내부 상태가 새 시트 값으로 리셋된다.
+function BaseNameAutocomplete({ initialValue, clients = [], onCommit }) {
+  const [value, setValue] = useState(initialValue || "");
+  const [open, setOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const opts = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    const list = (clients || []).filter(c => c.거래처명);
+    if (!q) return list.slice(0, 12);
+    return list.filter(c => (c.거래처명 || "").toLowerCase().includes(q)).slice(0, 12);
+  }, [value, clients]);
+  const commit = (name, addr) => { setValue(name); setOpen(false); onCommit(name, addr); };
+  return (
+    <div className="relative">
+      <input autoComplete="off"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
+        placeholder="기본거래처에서 검색 또는 직접 입력"
+        value={value}
+        onChange={e => { setValue(e.target.value); setOpen(true); setActiveIdx(0); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { setTimeout(() => setOpen(false), 150); onCommit(value, undefined); }}
+        onKeyDown={e => {
+          if (e.key === "Escape") { setOpen(false); return; }
+          if (e.key === "ArrowDown" && open) { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, opts.length - 1)); return; }
+          if (e.key === "ArrowUp" && open) { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); return; }
+          if ((e.key === "Enter" || e.key === "Tab") && open) {
+            const m = opts[activeIdx];
+            if (m) { e.preventDefault(); commit(m.거래처명, m.주소 || ""); }
+          }
+        }}
+      />
+      {open && opts.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+          {opts.map((c, i) => (
+            <div key={c.id || c.거래처명 || i}
+              className={`px-3 py-2 text-[13px] cursor-pointer border-b border-gray-50 ${i === activeIdx ? "bg-blue-100" : "hover:bg-blue-50"}`}
+              onMouseEnter={() => setActiveIdx(i)}
+              onMouseDown={e => { e.preventDefault(); commit(c.거래처명, c.주소 || ""); }}>
+              <div className="font-semibold text-[#1B2B4B]">{c.거래처명}</div>
+              {c.주소 && <div className="text-gray-400 text-[11px] truncate">{c.주소}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function RateCard({ dispatchData = [], userCompany = "", clients = [] }) {
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
   const [vGroup, setVGroup] = useState("");
@@ -1192,11 +1242,16 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className={labelCls}>기준지명</label>
-                      <input autoComplete="off" className={inputCls} placeholder="예: 태양이엔에스"
-                        defaultValue={selectedSheet.baseName || ""}
-                        onBlur={e => patchSheet(selectedSheet.id, { baseName: e.target.value })}
+                      <label className={labelCls}>기준지명 <span className="text-gray-400 font-normal">(기본거래처에서 검색)</span></label>
+                      <BaseNameAutocomplete
                         key={selectedSheet.id + "-base"}
+                        initialValue={selectedSheet.baseName || ""}
+                        clients={clients}
+                        onCommit={(name, addr) => {
+                          const patch = { baseName: name };
+                          if (addr !== undefined) patch.baseAddress = addr;
+                          patchSheet(selectedSheet.id, patch);
+                        }}
                       />
                     </div>
                     <div>
