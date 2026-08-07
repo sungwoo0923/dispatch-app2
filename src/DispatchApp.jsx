@@ -14377,7 +14377,16 @@ setConfirmChange(null);
           </div>
         ) : (
           <div className="space-y-3">
-            {rateSheetMatches.map(({ sheet, row, nameHit }, i) => (
+            {rateSheetMatches.map(({ sheet, row, nameHit }, i) => {
+              // 입력한 차량톤수(form.차량톤수)와 일치하는 컬럼을 찾아 그 칸만 깜빡이는 테두리로 강조
+              const dropTon = normRateText(form.차량톤수);
+              const matchedColId = dropTon
+                ? (sheet.columns || []).find(c => {
+                    const cl = normRateText(c.label);
+                    return cl && (cl === dropTon || cl.includes(dropTon) || dropTon.includes(cl));
+                  })?.id
+                : null;
+              return (
               <div key={sheet.id + row.id + i} className="rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[12.5px]">
@@ -14396,7 +14405,7 @@ setConfirmChange(null);
                     <thead>
                       <tr className="bg-white border-b border-gray-100">
                         {(sheet.columns || []).map(c => (
-                          <th key={c.id} className="px-3 py-2 text-center text-[11px] font-bold text-gray-500 whitespace-nowrap">{c.label}</th>
+                          <th key={c.id} className={`px-3 py-2 text-center text-[11px] font-bold whitespace-nowrap ${c.id === matchedColId ? "text-emerald-700" : "text-gray-500"}`}>{c.label}</th>
                         ))}
                       </tr>
                     </thead>
@@ -14404,9 +14413,11 @@ setConfirmChange(null);
                       <tr>
                         {(sheet.columns || []).map(c => {
                           const v = Number(row.prices?.[c.id] || 0);
+                          const isMatch = c.id === matchedColId;
                           return (
-                            <td key={c.id} className="px-3 py-2.5 text-center whitespace-nowrap">
-                              {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                            <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-emerald-50 ring-2 ring-inset ring-emerald-400 animate-pulse" : ""}`}>
+                              {v ? <span className={`font-bold ${isMatch ? "text-emerald-700" : "text-blue-700"}`}>{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                              {isMatch && <div className="text-[9px] font-bold text-emerald-600 mt-0.5">입력한 톤수</div>}
                             </td>
                           );
                         })}
@@ -14415,7 +14426,8 @@ setConfirmChange(null);
                   </table>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -14544,6 +14556,23 @@ setConfirmChange(null);
     const diff = recent3[0] - recent3[recent3.length - 1];
     trend = diff > 5000 ? "up" : diff < -5000 ? "down" : "flat";
   }
+
+  // ⭐ 대표운임(최빈값) 계산 — 지금과 완전히 같은 화물/톤수(tier 0) 조건 중에서
+  // 가장 자주 청구된 금액을 찾아, "평소 이 가격으로 나갔다"를 판단할 기준으로 삼는다.
+  // 반복 없이 한 번만 등장한(=_groupSize 1) 금액이 대표값과 크게(5% 이상) 다르면
+  // 배차지연 등으로 인한 "이례적 청구"로 보고 목록에서 따로 표시한다.
+  const tier0Rows = sortedHistory.filter(r => r._tier === 0);
+  const tier0Total = tier0Rows.reduce((a, r) => a + (r._groupSize || 1), 0);
+  const modeRow = tier0Rows.reduce((best, r) => (!best || (r._groupSize || 1) > (best._groupSize || 1)) ? r : best, null);
+  const modeFare = modeRow ? Number(String(modeRow.청구운임 || "0").replace(/[^\d]/g, "")) : null;
+  const modeCount = modeRow ? (modeRow._groupSize || 1) : 0;
+  const modeSharePct = tier0Total > 0 ? Math.round((modeCount / tier0Total) * 100) : 0;
+  const isOutlierRow = (r) => {
+    if (r._tier !== 0 || !modeFare || (r._groupSize || 1) > 1) return false;
+    const f = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
+    return f > 0 && Math.abs(f - modeFare) / modeFare >= 0.05;
+  };
+
   sortedHistory = sortFareHistory(sortedHistory, fareSortMode);
 
   const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
@@ -14658,6 +14687,22 @@ setConfirmChange(null);
                 <FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />
               </div>
 
+              {/* 대표운임(최빈값) — 지금과 같은 화물/톤수 조건에서 가장 자주 청구된 "평소 가격".
+                  목록이 최신순/이력순으로 섞여 있어도 이 카드가 항상 기준값 역할을 한다. */}
+              {modeFare != null && (
+                <div className="mb-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-bold text-emerald-700">💡 이 톤수·화물의 평소 운임(최빈값)</div>
+                    <div className="text-[18px] font-black text-emerald-800 mt-0.5">{modeFare.toLocaleString()}원</div>
+                    <div className="text-[11px] text-emerald-600 mt-0.5">동일 조건 {tier0Total}건 중 {modeCount}건({modeSharePct}%)이 이 가격으로 청구됨</div>
+                  </div>
+                  <button onClick={() => { onChange("청구운임", String(modeFare)); setFareModalOpen(false); }}
+                    className="shrink-0 px-3 py-2 text-[12px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition">
+                    이 금액 적용
+                  </button>
+                </div>
+              )}
+
               {/* 필터 탭 */}
               {(() => {
                 const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "경로일치": 0 };
@@ -14752,8 +14797,14 @@ setConfirmChange(null);
                               : "bg-gray-100 text-gray-600 border border-gray-300"
                           }`}>{r._cargoText}</span>
                         )}
-                        {r._groupSize > 1 && (
+                        {modeRow && r === modeRow && (r._groupSize || 1) > 1 && (
+                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-full">✓ 가장 흔한 운임 {r._groupSize}건</span>
+                        )}
+                        {(!modeRow || r !== modeRow) && r._groupSize > 1 && (
                           <span className="px-2 py-1 text-[10px] text-gray-400 border border-gray-200 rounded-full">이력 {r._groupSize}건</span>
+                        )}
+                        {isOutlierRow(r) && (
+                          <span className="px-2.5 py-1 text-[10px] font-extrabold text-orange-700 bg-orange-100 border border-orange-300 rounded-full">⚠️ 이례적 청구(반복없음)</span>
                         )}
                         <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                           </div>
