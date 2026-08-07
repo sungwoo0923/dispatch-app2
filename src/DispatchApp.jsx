@@ -31535,7 +31535,9 @@ return (
   };
   const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
-  return mergeViaCargoText(row.화물내용, [pickupStops, dropStops]) || row.화물내용 || "";
+  const text = mergeViaCargoText(row.화물내용, [pickupStops, dropStops]) || row.화물내용 || "";
+  // ⭐ 화물내용이 길면 칸이 커지는 대신 7글자로 자르고 "더보기"로 팝업 확인
+  return <AddressCell text={text} max={7} />;
 })()
 : key === "차량톤수" ? (() => {
   const parseDedup = (fields) => {

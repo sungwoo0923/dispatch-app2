@@ -14,6 +14,11 @@ import { subscribeCafeOrders, subscribeMyCafeOrders } from "./cafeApi";
 import CafeOrderCard from "./CafeOrderCard";
 import CafeOrderForm from "./CafeOrderForm";
 import CafeOrderDetail from "./CafeOrderDetail";
+import CafeOrderTable from "./CafeOrderTable";
+
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
 
 function LoadingScreen() {
   return (
@@ -36,6 +41,7 @@ export default function CafeApp() {
   const [payFilter, setPayFilter] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [viewMode, setViewMode] = useState("card"); // card | table
   const nav = useNavigate();
   const { id: selectedOrderId } = useParams();
 
@@ -159,38 +165,74 @@ export default function CafeApp() {
         ) : (
           <>
             {tab !== "mine" && (
-              <div className="flex flex-wrap items-center gap-2 mb-5">
-                <input value={q} onChange={e => setQ(e.target.value)} placeholder="상/하차지, 화물내용 검색"
-                  className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white" />
-                <select value={vehicleFilter} onChange={e => setVehicleFilter(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
-                  <option value="">차량종류 전체</option>
-                  {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <select value={payFilter} onChange={e => setPayFilter(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
-                  <option value="">지급방식 전체</option>
-                  {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
-                  className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition shrink-0">
-                  + 오더 등록
-                </button>
-              </div>
+              <>
+                {/* 현황 요약 — 휑해 보이지 않게 한눈에 보이는 숫자 몇 개 */}
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  {[
+                    ["전체 오더", orders.length],
+                    ["대기중", orders.filter(o => o.status === "open").length],
+                    ["오늘 등록", orders.filter(o => o.createdAt?.toDate && sameDay(o.createdAt.toDate(), new Date())).length],
+                  ].map(([l, v]) => (
+                    <div key={l} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                      <div className="text-[11px] font-bold text-gray-400">{l}</div>
+                      <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 mb-5">
+                  <input value={q} onChange={e => setQ(e.target.value)} placeholder="상/하차지, 화물내용 검색"
+                    className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white" />
+                  <select value={vehicleFilter} onChange={e => setVehicleFilter(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
+                    <option value="">차량종류 전체</option>
+                    {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={payFilter} onChange={e => setPayFilter(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
+                    <option value="">지급방식 전체</option>
+                    {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <div className="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
+                    {[["card", "카드형"], ["table", "기본형"]].map(([k, l]) => (
+                      <button key={k} onClick={() => setViewMode(k)}
+                        className={`px-3 py-2 text-[12.5px] font-bold transition ${viewMode === k ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
+                    className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition shrink-0">
+                    + 오더 등록
+                  </button>
+                </div>
+              </>
             )}
 
             {tab === "mine" && (
               <div className="flex items-center justify-between mb-5">
                 <div className="text-[13px] text-gray-500">내가 등록한 오더 {myOrders.length}건</div>
-                <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
-                  className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
-                  + 오더 등록
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
+                    {[["card", "카드형"], ["table", "기본형"]].map(([k, l]) => (
+                      <button key={k} onClick={() => setViewMode(k)}
+                        className={`px-3 py-2 text-[12.5px] font-bold transition ${viewMode === k ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
+                    className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
+                    + 오더 등록
+                  </button>
+                </div>
               </div>
             )}
 
             {listToShow.length === 0 ? (
               <div className="py-24 text-center text-[13px] text-gray-400">등록된 오더가 없습니다.</div>
+            ) : viewMode === "table" ? (
+              <CafeOrderTable orders={listToShow} onClick={openOrder} />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {listToShow.map(o => (
@@ -204,6 +246,7 @@ export default function CafeApp() {
 
       {formOpen && (
         <CafeOrderForm
+          orders={orders}
           profile={profile}
           editing={editingOrder}
           onClose={() => { setFormOpen(false); setEditingOrder(null); }}

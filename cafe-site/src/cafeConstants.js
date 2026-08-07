@@ -6,5 +6,6 @@
 export const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
 export const PAY_TYPES = ["계산서", "착불", "선불", "계좌이체"];
 export const LOAD_METHODS = ["지게차", "수작업", "직접수작업", "수도움", "크레인"];
+export const TON_UNITS = ["톤", "kg", "직접입력"];
 
 export const APPLY_CANCEL_WINDOW_MS = 10000; // 배차신청 후 취소 가능 시간(10초)
