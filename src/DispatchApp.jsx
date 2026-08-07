@@ -15654,7 +15654,7 @@ function LiveLocationPopup({ row, onClose }) {
       if (!window.Tmapv2) { setTimeout(draw, 200); return; }
       const pos = new window.Tmapv2.LatLng(loc.lat, loc.lng);
       if (!mapObjRef.current) {
-        mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "340px", zoom: 15 });
+        mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "600px", zoom: 15 });
       } else {
         mapObjRef.current.setCenter(pos);
       }
@@ -15676,18 +15676,18 @@ function LiveLocationPopup({ row, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
+      <div className="bg-white rounded-2xl shadow-2xl w-[80vw] max-w-[860px] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-5 flex items-center justify-between">
           <div>
-            <h3 className="text-white font-bold text-[15px]">실시간 기사 위치</h3>
-            <p className="text-white/70 text-[12px] mt-0.5">{row?.이름 || "-"} · {row?.차량번호 || "-"}</p>
+            <h3 className="text-white font-bold text-[18px]">실시간 기사 위치</h3>
+            <p className="text-white/70 text-[13px] mt-0.5">{row?.이름 || "-"} · {row?.차량번호 || "-"}</p>
           </div>
-          <button className="text-white/60 hover:text-white text-xl leading-none" onClick={onClose}>×</button>
+          <button className="text-white/60 hover:text-white text-2xl leading-none" onClick={onClose}>×</button>
         </div>
         {loc ? (
           <>
-            <div id={mapElId} style={{ width: "100%", height: 340 }} />
-            <div className="px-5 py-3 text-[12px] text-gray-500 border-t border-gray-100">
+            <div id={mapElId} style={{ width: "100%", height: 600 }} />
+            <div className="px-6 py-4 text-[13px] text-gray-500 border-t border-gray-100">
               {updatedLabel ? `${updatedLabel} 기준 위치` : "위치 정보 수신 중"}
             </div>
           </>
