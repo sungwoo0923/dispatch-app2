@@ -336,23 +336,24 @@ const [detailModal, setDetailModal] = useState(null);
     const todayStr = new Date().toLocaleDateString("ko-KR");
     const cols = sheet.columns || [];
     const esc = (s) => String(s || "").replace(/</g, "&lt;");
+    const fileBase = `단가표_${(sheet.baseName || "기준지").replace(/[\\/:*?"<>|]/g, "")}`;
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>단가표_${esc(sheet.baseName)}</title>
+    w.document.write(`<html><head><title>${esc(sheet.baseName)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Malgun Gothic',sans-serif;}
-body{background:white;color:#111;}
-.wrapper{width:max-content;min-width:100%;margin:0 auto;padding:36px 40px;}
+body{background:#f3f4f6;color:#111;}
+.wrapper{width:max-content;min-width:100%;margin:0 auto;padding:36px 40px;background:white;}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #1B2B4B;}
 .doc-title{font-size:20px;font-weight:900;color:#1B2B4B;}
 .doc-sub{font-size:12px;color:#666;margin-top:4px;}
 .base-bar{display:flex;gap:16px;align-items:center;background:#F0F4FF;border:1px solid #C7D9FF;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:12.5px;color:#374151;white-space:nowrap;}
 .base-bar b{color:#1B2B4B;}
 .notice{white-space:pre-wrap;margin-bottom:16px;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:8px;font-size:11.5px;color:#374151;line-height:1.75;}
-table{border-collapse:collapse;font-size:12px;}
+table{border-collapse:collapse;font-size:12px;border:1px solid #C6CCD8;}
 thead tr{background:#1B2B4B;}
-thead th{color:white;padding:8px 9px;text-align:center;font-weight:700;white-space:nowrap;}
+thead th{color:white;padding:8px 9px;text-align:center;font-weight:700;white-space:nowrap;border:1px solid #2c3d61;}
 tbody tr:nth-child(even){background:#F9FAFB;}
-td{padding:7px 9px;text-align:center;border-bottom:1px solid #E5E7EB;white-space:nowrap;}
+td{padding:7px 9px;text-align:center;border:1px solid #D9DEE8;white-space:nowrap;}
 .td-name{font-weight:700;color:#1B2B4B;text-align:left;}
 .td-addr{color:#6B7280;font-size:11px;text-align:left;white-space:nowrap;}
 .td-price{font-weight:800;color:#2563EB;}
@@ -360,16 +361,17 @@ td{padding:7px 9px;text-align:center;border-bottom:1px solid #E5E7EB;white-space
 @media print{
   .no-print{display:none!important;}
   @page{size:A4 landscape;margin:10mm;}
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   table{font-size:10.5px;}
   td,th{padding:5px 7px;}
 }
 </style></head><body>
-<div class="wrapper">
-<div class="no-print" style="margin-bottom:14px;display:flex;justify-content:flex-end;gap:8px;">
+<div class="no-print" id="toolbar" style="padding:14px 40px;display:flex;justify-content:flex-end;gap:8px;">
   <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">인쇄</button>
-  <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">PDF 저장</button>
+  <button id="pdfBtn" onclick="savePDF()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">PDF 저장</button>
+  <button id="imgBtn" onclick="saveImage()" style="padding:8px 20px;background:#059669;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">이미지 저장</button>
 </div>
+<div class="wrapper" id="captureArea">
 <div class="header"><div><div class="doc-title">운송 단가표</div><div class="doc-sub">발행일: ${todayStr}</div></div></div>
 <div class="base-bar"><span>기준지 <b>${esc(sheet.baseName) || "-"}</b></span>${sheet.baseAddress ? `<span>${esc(sheet.baseAddress)}</span>` : ""}</div>
 ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
@@ -382,7 +384,48 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
   </tr>`).join("")}</tbody>
 </table>
 <div class="footer">본 자료는 영업 참고용이며 정식 계약서가 아닙니다.</div>
-</div></body></html>`);
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+  function withHiddenToolbar(fn) {
+    var toolbar = document.getElementById('toolbar');
+    toolbar.style.display = 'none';
+    return Promise.resolve().then(fn).finally(function () { toolbar.style.display = 'flex'; });
+  }
+  function saveImage() {
+    withHiddenToolbar(function () {
+      return html2canvas(document.getElementById('captureArea'), { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(function (canvas) {
+        var a = document.createElement('a');
+        a.download = '${fileBase}.png';
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+      });
+    });
+  }
+  function savePDF() {
+    withHiddenToolbar(function () {
+      return html2canvas(document.getElementById('captureArea'), { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(function (canvas) {
+        var jsPDF = window.jspdf.jsPDF;
+        var imgData = canvas.toDataURL('image/png');
+        var pdf = new jsPDF('l', 'mm', 'a4');
+        var pageW = 297, pageH = 210;
+        var imgW = pageW, imgH = canvas.height * imgW / canvas.width;
+        var heightLeft = imgH, position = 0;
+        pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+        while (heightLeft > 0) {
+          position = heightLeft - imgH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+          heightLeft -= pageH;
+        }
+        pdf.save('${fileBase}.pdf');
+      });
+    });
+  }
+</script>
+</body></html>`);
     w.document.close();
     w.focus();
   };
@@ -1188,13 +1231,13 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[12.5px]">
+                    <table className="w-full text-[12.5px] border-collapse">
                       <thead>
                         <tr className="bg-[#1B2B4B]">
-                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[140px]">하차지</th>
-                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[200px]">주소</th>
+                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[140px] border border-white/15">하차지</th>
+                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[200px] border border-white/15">주소</th>
                           {(selectedSheet.columns || []).map((c, ci, arr) => (
-                            <th key={c.id} className="px-2 py-2 text-center text-white font-bold whitespace-nowrap min-w-[110px]">
+                            <th key={c.id} className="px-2 py-2 text-center text-white font-bold whitespace-nowrap min-w-[110px] border border-white/15">
                               <div className="flex items-center justify-center gap-0.5">
                                 <button onClick={() => moveMultiColumn(c.id, -1)} disabled={ci === 0}
                                   className="text-white/40 hover:text-white text-[10px] leading-none shrink-0 disabled:opacity-0 disabled:pointer-events-none" title="왼쪽으로 이동">◀</button>
@@ -1216,26 +1259,26 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                               </div>
                             </th>
                           ))}
-                          <th className="px-2 py-2 text-white w-8"></th>
+                          <th className="px-2 py-2 text-white w-8 border border-white/15"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {(selectedSheet.rows || []).length === 0 ? (
-                          <tr><td colSpan={(selectedSheet.columns || []).length + 3} className="py-12 text-center text-gray-400">
-                            하차지를 추가하거나, 엑셀에서 복사해 붙여넣기로 한번에 가져오세요
+                          <tr><td colSpan={(selectedSheet.columns || []).length + 3} className="py-12 text-center text-gray-400 border border-gray-200">
+                            하차지를 추가하거나, 엑셀업로드로 한번에 가져오세요
                           </td></tr>
                         ) : (selectedSheet.rows || []).map((r, i) => (
-                          <tr key={r.id} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}>
-                            <td className="px-2 py-1.5">
+                          <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}>
+                            <td className="px-2 py-1.5 border border-gray-200">
                               <input autoComplete="off" className="w-full px-2 py-1.5 text-[12.5px] font-semibold text-[#1B2B4B] rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
                                 defaultValue={r.name} onBlur={e => updateMultiRowField(r.id, "name", e.target.value)} key={r.id + "-name"} />
                             </td>
-                            <td className="px-2 py-1.5">
+                            <td className="px-2 py-1.5 border border-gray-200">
                               <input autoComplete="off" className="w-full px-2 py-1.5 text-[12px] text-gray-600 rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
                                 defaultValue={r.address} onBlur={e => updateMultiRowField(r.id, "address", e.target.value)} key={r.id + "-addr"} />
                             </td>
                             {(selectedSheet.columns || []).map(c => (
-                              <td key={c.id} className="px-2 py-1.5">
+                              <td key={c.id} className="px-2 py-1.5 border border-gray-200">
                                 <input autoComplete="off" className="w-full px-2 py-1.5 text-[12.5px] font-bold text-blue-700 text-right rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
                                   placeholder="-"
                                   defaultValue={r.prices?.[c.id] ? Number(r.prices[c.id]).toLocaleString() : ""}
@@ -1243,7 +1286,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                                   key={r.id + c.id + "-price"} />
                               </td>
                             ))}
-                            <td className="px-2 py-1.5 text-center">
+                            <td className="px-2 py-1.5 text-center border border-gray-200">
                               <button onClick={() => removeMultiRow(r.id)} className="w-6 h-6 rounded-full bg-red-50 border border-red-200 text-red-500 hover:bg-red-100 text-[12px] leading-none flex items-center justify-center mx-auto transition">✕</button>
                             </td>
                           </tr>
