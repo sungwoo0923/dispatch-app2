@@ -10134,6 +10134,7 @@ shadow-sm
     <div className="flex gap-2">
       <div className="relative flex-1" ref={comboRef}>
         <input autoComplete="off"
+          data-arrownav
           className={inputCls}
           placeholder="거래처 검색/입력"
           value={clientQuery || form.거래처명}
@@ -10193,8 +10194,9 @@ shadow-sm
   } else if (e.key === "Escape") {
     setIsClientOpen(false);
   } else if (e.key === "Tab") {
-    const pick = list[clientActive];
-    if (pick) applyClientSelect(pick.업체명);
+    // ⭐ 탭은 그냥 다음 칸으로 넘어가는 키다 — 드롭다운이 열려있다고
+    // 맨 위(또는 방향키로도 안 만진) 항목을 자동으로 적용해버리면 안 된다.
+    // 여기서는 목록만 닫고, 실제 포커스 이동은 브라우저 기본 Tab 동작에 맡긴다.
     setIsClientOpen(false);
   }
 }}
@@ -10407,6 +10409,7 @@ className={`
   <div className="relative">
         <input autoComplete="off"
       id="pickup-manager"
+      data-arrownav
       className={inputCls}
       value={form.상차지담당자}
       onChange={(e) => onChange("상차지담당자", e.target.value)}
@@ -10420,6 +10423,7 @@ className={`
   <label className={labelCls}>상차지 연락처</label>
   <input autoComplete="off"
     id="pickup-phone"
+    data-arrownav
     className={inputCls}
     value={form.상차지담당자번호}
     onChange={(e) =>
@@ -10576,6 +10580,7 @@ className={`
 
     <input autoComplete="off"
     id="drop-manager"
+    data-arrownav
     className={inputCls}
     value={form.하차지담당자}
     onChange={(e) =>
@@ -10584,13 +10589,14 @@ className={`
     placeholder="담당자 이름"
   />
 
-  
+
 </div>
 
 <div>
   <label className={labelCls}>하차지 연락처</label>
   <input autoComplete="off"
     id="drop-phone"
+    data-arrownav
     className={inputCls}
     value={form.하차지담당자번호}
     onChange={(e) =>
@@ -10757,11 +10763,8 @@ className={`
       } else if (e.key === "Escape") {
         setShowVehicleDropdown(false);
       } else if (e.key === "Tab") {
-        const pick = list[vehicleActive];
-        if (pick) {
-          onChange("차량종류", pick);
-          setVehicleQuery(pick);
-        }
+        // ⭐ 탭은 그냥 다음 칸으로 넘어가는 키다 — 방향키로 고르지 않았는데
+        // 목록 맨 위 항목이 자동으로 적용되면 안 된다. 목록만 닫는다.
         setShowVehicleDropdown(false);
       }
     }}
@@ -11585,6 +11588,7 @@ className={`
         transition-all
       "
       rows={2}
+      data-arrownav
 
       placeholder={"기사 스마트 검색 "}
       value={smartDriverQuery}
@@ -11636,6 +11640,7 @@ className={`
   <label className={labelCls}>차량번호</label>
 
   <input autoComplete="off"
+    data-arrownav
     className={inputCls}
     value={form.차량번호}
     onChange={(e) => handleCarNoChange(e.target.value)}
@@ -11748,6 +11753,7 @@ className={`
 <div>
   <label className={labelCls}>기사명</label>
   <input autoComplete="off"
+    data-arrownav
     className={inputCls}
     value={form.이름}
     placeholder="기사명 입력"
@@ -11760,6 +11766,7 @@ className={`
 <div>
   <label className={labelCls}>전화번호</label>
   <input autoComplete="off"
+    data-arrownav
     className={inputCls}
     value={form.전화번호}
     placeholder="전화번호 입력"
