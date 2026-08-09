@@ -77,6 +77,39 @@ async function findDriverNoticeMobile(name) {
   } catch { return ""; }
 }
 
+// 화물내용이 길면 카드 밖으로 삐져나가지 않도록 일정 글자수에서 자르고
+// "더보기"로 전체 내용을 팝업으로 보여준다(PC 배차현황과 동일한 규칙, 7글자 기준).
+function CargoTag({ text = "", max = 7 }) {
+  const [open, setOpen] = React.useState(false);
+  const str = String(text || "");
+  const isLong = str.length > max;
+  const short = isLong ? str.slice(0, max) + "…" : str;
+  return (
+    <>
+      {short}
+      {isLong && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+          className="text-[0.85em] font-bold underline underline-offset-2 shrink-0"
+        >더보기</button>
+      )}
+      {open && createPortal(
+        <div className="fixed inset-0 z-[100000] bg-black/50 flex items-center justify-center p-6"
+          onClick={(e) => { e.stopPropagation(); setOpen(false); }}>
+          <div className="bg-white rounded-2xl p-5 max-w-[320px] w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[11px] font-bold text-gray-400 mb-1.5">화물내용</div>
+            <div className="text-[15px] font-bold text-gray-900 break-words">{str}</div>
+            <button type="button" onClick={() => setOpen(false)}
+              className="mt-4 w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold">닫기</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // 운임조회 결과 정렬(추천/최신/금액) — PC의 sortFareHistory와 동일한 규칙.
 const FARE_SORT_OPTIONS_MOBILE = [
   { value: "relevance", label: "추천순" },
@@ -3686,8 +3719,10 @@ const title =
       {toast && (
   <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50
                   bg-black text-white px-4 py-3 rounded-xl shadow-lg
-                  flex items-center gap-3 max-w-[90%]">
-    <div className="text-sm whitespace-pre-line">
+                  flex items-center gap-3 max-w-[95vw]">
+    {/* 분할화면 등 화면 폭이 좁아져도 메시지가 3줄로 꺾여 보이지 않도록
+        한 줄 유지, 정말 폭보다 길 때만 잘라서 스크롤 없이 보여준다 */}
+    <div className="text-sm whitespace-nowrap overflow-hidden text-ellipsis">
       {toast}
     </div>
 
@@ -6554,19 +6589,19 @@ const summary = useMemo(() => {
 
               {/* 시작/종료 날짜 */}
               <div className="flex items-center gap-2 text-sm">
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                   <CustomDatePicker
-                    className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] truncate focus:outline-none focus:ring-2 transition ${field}`}
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                   />
                 </div>
                 <span className={`text-xs ${icon}`}>~</span>
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                   <CustomDatePicker
-                    className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    className={`w-full rounded-xl pl-8 pr-2 py-1.5 text-[13px] truncate focus:outline-none focus:ring-2 transition ${field}`}
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                   />
@@ -6575,7 +6610,7 @@ const summary = useMemo(() => {
 
               {/* 차량종류 / 배차상태 드롭다운 */}
               <div className="flex gap-2 text-sm">
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <select
                     className={`w-full appearance-none rounded-xl pl-3 pr-8 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={vehicleFilter}
@@ -6597,7 +6632,7 @@ const summary = useMemo(() => {
                   <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
 
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <select
                     className={`w-full appearance-none rounded-xl pl-3 pr-8 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={assignFilter}
@@ -6630,7 +6665,7 @@ const summary = useMemo(() => {
                   </select>
                   <IconChevronDown className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <IconSearch className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                   <input autoComplete="off"
                     className={`w-full rounded-xl pl-8 pr-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
@@ -7973,7 +8008,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 [@media(max-aspect-ratio:2/5)]:!flex-none text-[0.88em] leading-relaxed">
               {cargo && (
                 <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
+                  <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> <CargoTag text={cargo} />
                 </span>
               )}
               {ton && (
@@ -8240,7 +8275,7 @@ const dt = new Date(y, m - 1, d, hh, mm);
         <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 [@media(max-aspect-ratio:2/5)]:!flex-none text-[0.8em] leading-relaxed">
           {cargo && (
             <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
-              <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {cargo}
+              <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> <CargoTag text={cargo} />
             </span>
           )}
           {ton && (
@@ -9477,17 +9512,20 @@ const handleAssignClick = () => {
         </>
       )}
       {state === "배차완료" ? (
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">차량번호</div>
+        // 분할화면처럼 가로 폭이 아주 좁아지면 3칸 그리드가 값을 다 못 담고 잘려
+        // 보이므로(예: "서울88…"), 그 경우엔 3칸을 세로로 내리되 각 줄은 라벨-값을
+        // 가로로 나란히 정렬해서 잘리지 않고 다 보이게 한다.
+        <div className="grid grid-cols-3 gap-2 mb-3 [@media(max-aspect-ratio:2/5)]:!grid-cols-1 [@media(max-aspect-ratio:2/5)]:!gap-1.5">
+          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">차량번호</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{carNo || "-"}</div>
           </div>
-          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">이름</div>
+          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">이름</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{name || "-"}</div>
           </div>
-          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">연락처</div>
+          <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">연락처</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{phone || "-"}</div>
           </div>
         </div>
