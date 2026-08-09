@@ -3717,7 +3717,10 @@ const title =
 
       {/* 🔔 토스트 알림 */}
       {toast && (
-  <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50
+  // ⚠️ z-50이던 시절엔 다른 화면 요소(하단 액션바 등)가 같은 z-50으로 뒤에 그려지는
+  // 순서상 토스트를 덮어버려 안 보이는 경우가 있었다. 다른 팝업들처럼 확실히
+  // 최상단(z-[999999])에 뜨도록 올리고, 하단 네비/버튼 위로 자리도 더 띄운다.
+  <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[999999]
                   bg-black text-white px-4 py-3 rounded-xl shadow-lg
                   flex items-center gap-3 max-w-[95vw]">
     {/* 분할화면 등 화면 폭이 좁아져도 메시지가 3줄로 꺾여 보이지 않도록
