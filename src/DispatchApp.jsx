@@ -16973,7 +16973,7 @@ function RealtimeRowBase({
   isSelected, isFading, isHighlighted, isDark, selectedEditMode,
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, formatKstDateTime, getCreatorLabel,
-  editableInput, renderAddrCell, canEdit, handleEditChange,
+  editableInput, renderAddrCell, renderCargoCell, canEdit, handleEditChange,
   dispatchData, placeRows, timeOptions, patchDispatch,
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
@@ -17132,7 +17132,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
                   </td>
 
-                  <td className={cell}>{canEdit("화물내용", r._id) ? editableInput("화물내용", r.화물내용, r._id) : (mergeViaCargoText(r.화물내용, [r.__pickupStops, r.__dropStops]) || r.화물내용 || "")}</td>
+                  <td className={cell}>{canEdit("화물내용", r._id) ? editableInput("화물내용", r.화물내용, r._id) : renderCargoCell(mergeViaCargoText(r.화물내용, [r.__pickupStops, r.__dropStops]) || r.화물내용 || "")}</td>
                   <td className={cell}>
                     {editableInput(
                       "차량종류",
@@ -19535,6 +19535,8 @@ React.useEffect(() => {
   // 주소 더보기
   const [expandedAddr, setExpandedAddr] = React.useState({});
   const [addrPopup, setAddrPopup] = React.useState(null);
+  // 화물내용 더보기 (5파트 배차현황과 동일하게 길면 잘라서 팝업으로 전체 확인)
+  const [cargoPopup, setCargoPopup] = React.useState(null);
 
   // 상차 임박 경고
   const [warningList, setWarningList] = React.useState([]);
@@ -21654,6 +21656,35 @@ const handleCloseFileUpload = async (e) => {
       </div>
     );
   };
+
+  // ------------------------
+  // 📌 화물내용 셀 (더보기) — 5글자 넘으면 잘라서 팝업으로 전체 내용 확인
+  // ------------------------
+  const renderCargoCell = (text) => {
+    const str = String(text || "");
+    if (!str) return "";
+
+    const LIMIT = 5;
+    const isLong = str.length > LIMIT;
+    const display = isLong ? str.slice(0, LIMIT) + "…" : str;
+
+    return (
+      <div className="flex items-center justify-center gap-1 min-w-0">
+        <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 90 }} title={str}>
+          {display}
+        </span>
+        {isLong && (
+          <button
+            type="button"
+            className="text-[11px] text-[#1B2B4B] underline shrink-0 hover:opacity-70"
+            onClick={() => setCargoPopup(str)}
+          >
+            더보기
+          </button>
+        )}
+      </div>
+    );
+  };
   // ------------------------
   // 📌 공유 메시지 (기존 함수)
   // ------------------------
@@ -21740,6 +21771,21 @@ const head = isDark
       </div>
       <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
         <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+      </div>
+    </div>
+  </div>
+)}
+{cargoPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setCargoPopup(null)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-white font-bold text-[15px]">화물내용 전체보기</h3>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{cargoPopup}</p>
+      </div>
+      <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+        <button onClick={() => setCargoPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
       </div>
     </div>
   </div>
@@ -22263,6 +22309,7 @@ const head = isDark
                 getCreatorLabel={getCreatorLabel}
                 editableInput={editableInput}
                 renderAddrCell={renderAddrCell}
+                renderCargoCell={renderCargoCell}
                 canEdit={canEdit}
                 handleEditChange={handleEditChange}
                 dispatchData={dispatchData}
