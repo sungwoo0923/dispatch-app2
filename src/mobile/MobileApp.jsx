@@ -4878,6 +4878,11 @@ setOpenMemo={setOpenMemo}
             setMultiSelectMode={setMultiSelectMode}
             cardVersionB={cardVersionB}
             drivers={drivers}
+            onOrderUpdate={(id, patch) => {
+              setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
+            }}
+            showToast={showToast}
+            showSuccess={showSuccess}
           />
         )}
 {page === "sales" && (
@@ -5077,6 +5082,11 @@ setOpenMemo={setOpenMemo}
     onCopyOrder={handleOrderDuplicate}
     onCopyDriver={handleOrderDuplicateWithDriver}
     onDeleteOrder={deleteSingleOrder}
+    onOrderUpdate={(id, patch) => {
+      setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
+    }}
+    showToast={showToast}
+    showSuccess={showSuccess}
   />
 )}
 
@@ -6293,6 +6303,9 @@ function MobileOrderList({
   setMultiSelectMode,
   cardVersionB,
   drivers,
+  onOrderUpdate,
+  showToast,
+  showSuccess,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
   const handleOpenAttach = (order) => {
@@ -6330,6 +6343,8 @@ function MobileOrderList({
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
   const [copyModalOrder, setCopyModalOrder] = useState(null);
+  // 전체상세 복사 후 "전달상태를 전달완료로 바꿀까요?" 확인 팝업 대상 오더
+  const [confirmDeliverOrder, setConfirmDeliverOrder] = useState(null);
   const [longPressOrder, setLongPressOrder] = useState(null);
   const [quickEditOrder, setQuickEditOrder] = useState(null);
   const [orderInfoOrder, setOrderInfoOrder] = useState(null);
@@ -6974,10 +6989,39 @@ const summary = useMemo(() => {
       <CopySelectModal
         order={copyModalOrder}
         onClose={() => setCopyModalOrder(null)}
-        onAfterFullCopy={() => setCopyModalOrder(null)}
-        onCopySuccess={() => showSuccess("기사 복사 완료")}
+        onAfterFullCopy={() => {
+          const o = copyModalOrder;
+          setCopyModalOrder(null);
+          if (o && o.업체전달상태 !== "전달완료") setConfirmDeliverOrder(o);
+        }}
+        onCopySuccess={() => showSuccess?.("기사 복사 완료")}
         cardVersionB={cardVersionB}
       />
+    )}
+
+    {/* ── 전달완료 확인 팝업 (기사복사 → 전체상세 복사 후) ── */}
+    {confirmDeliverOrder && (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
+          <div className="text-sm font-bold text-gray-900 mb-1">복사 완료</div>
+          <div className="text-sm text-gray-500 mb-4">전달상태를 <b className="text-gray-900">전달완료</b>로 변경할까요?</div>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmDeliverOrder(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
+            <button
+              onClick={async () => {
+                const o = confirmDeliverOrder;
+                setConfirmDeliverOrder(null);
+                showToast?.("전달완료 처리되었습니다");
+                if (typeof onOrderUpdate === "function") {
+                  onOrderUpdate(o.id, { 업체전달상태: "전달완료", 정보전달완료: true, 정보전달상태: "전달완료" });
+                }
+                updateDoc(doc(db, o.__col || collName, o.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" }).catch(console.error);
+              }}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold"
+            >확인</button>
+          </div>
+        </div>
+      </div>
     )}
 
     {/* ── 길게 누르기 컨텍스트 메뉴 ── */}
@@ -10350,6 +10394,27 @@ function SmartOrderParser({ clients, onApply, onClose, cardVersionB = false }) {
   const [text, setText] = useState("");
   const [result, setResult] = useState(null);
   const [parsing, setParsing] = useState(false);
+  const [autoFilledFromClipboard, setAutoFilledFromClipboard] = useState(false);
+
+  // ⭐ 클립보드 자동감지 — 창을 열자마자 클립보드 내용이 오더로 보이면(카톡에서
+  // 복사해온 텍스트 등) 붙여넣기 버튼을 따로 안 눌러도 자동으로 채워준다.
+  // 아무 텍스트나 채우면 실수로 다른 내용을 덮어쓸 수 있어, 상차/하차/톤/파레트/
+  // 운임 같은 오더스러운 키워드가 최소 2개 이상 있을 때만 자동으로 채운다.
+  useEffect(() => {
+    if (!navigator.clipboard?.readText) return;
+    let cancelled = false;
+    navigator.clipboard.readText().then(clip => {
+      if (cancelled || !clip || !clip.trim()) return;
+      const t = clip.trim();
+      const keywordHits = [/상차/, /하차/, /톤/, /파레트|파렛트|박스/, /운임|원/, /냉장|냉동|카고|윙바디/, /01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/]
+        .filter(re => re.test(t)).length;
+      if (keywordHits >= 2 && t.length <= 1000) {
+        setText(t);
+        setAutoFilledFromClipboard(true);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const normalize = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
 
@@ -10614,12 +10679,18 @@ function SmartOrderParser({ clients, onApply, onClose, cardVersionB = false }) {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4" data-fare-scroll>
+          {autoFilledFromClipboard && (
+            <div className="mb-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-700 flex items-center justify-between gap-2">
+              <span>클립보드에서 오더 내용을 자동으로 불러왔어요</span>
+              <button type="button" onClick={() => { setText(""); setResult(null); setAutoFilledFromClipboard(false); }} className="text-emerald-700/70 underline shrink-0">지우기</button>
+            </div>
+          )}
           <textarea
             className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none focus:outline-none focus:border-[var(--smart-accent)] bg-gray-50"
             rows={7}
             placeholder={"오더 내용을 그대로 붙여넣으세요\n\n예:\n1.상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n상차시간: 16시\n\n하차지: 순수본\n전라북도 익산시 왕궁면 무왕로 2182\n중량: 400KG / 1파렛트\n냉장차량"}
             value={text}
-            onChange={e => { setText(e.target.value); setResult(null); }}
+            onChange={e => { setText(e.target.value); setResult(null); setAutoFilledFromClipboard(false); }}
           />
           <button
             onClick={parse}
@@ -11309,31 +11380,97 @@ const pickDrop = (c) => {
   // ===== 음성 오더 등록 =====
   const [voiceSheet, setVoiceSheet] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceReconnecting, setVoiceReconnecting] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceParsed, setVoiceParsed] = useState(null);
+  const [voiceError, setVoiceError] = useState("");
   const voiceRecogRef = useRef(null);
+  const voiceShouldListenRef = useRef(false); // 사용자가 "중지"를 누르기 전까진 true — 기기가 자체적으로 세션을 끊어도 이 값이 true면 자동 재연결한다
+  const voiceCommittedRef = useRef(""); // 세션이 중간에 끊겨 재연결돼도 지금까지 확정된 내용은 여기 계속 누적된다
+
+  // ⚠️ 예전엔 recog.onend에서 그냥 듣기를 멈춰버렸는데, 안드로이드 크롬은 몇 초만
+  // 조용해도 continuous=true를 무시하고 세션을 스스로 끊어버리는 경우가 많다 —
+  // 이게 "말하는 중에 녹음이 끊긴다"고 느껴지던 원인. 사용자가 직접 "중지"를 누르기
+  // 전까지는(voiceShouldListenRef) onend가 와도 새 세션을 바로 이어 붙여서, 사용자
+  // 입장에서는 끊김 없이 계속 듣고 있는 것처럼 동작하게 한다.
+  const createVoiceRecognizer = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    const recog = new SR();
+    recog.lang = "ko-KR";
+    recog.interimResults = true;
+    recog.continuous = true;
+    recog.maxAlternatives = 1;
+
+    recog.onresult = (e) => {
+      let finalChunk = "";
+      let interimChunk = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalChunk += r[0].transcript;
+        else interimChunk += r[0].transcript;
+      }
+      if (finalChunk) voiceCommittedRef.current = (voiceCommittedRef.current + finalChunk);
+      setVoiceTranscript((voiceCommittedRef.current + interimChunk).trim());
+    };
+
+    recog.onerror = (e) => {
+      // "no-speech"(잠깐 조용함)와 "aborted"(우리가 의도적으로 재시작하며 발생)는
+      // 에러가 아니라 정상적인 흐름이라 무시 — onend에서 재연결을 처리한다.
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      if (e.error === "not-allowed" || e.error === "audio-capture" || e.error === "service-not-allowed") {
+        voiceShouldListenRef.current = false;
+        setVoiceListening(false);
+        setVoiceReconnecting(false);
+        setVoiceError("마이크 권한이 없어요. 브라우저/앱 설정에서 마이크 접근을 허용한 뒤 다시 시도해주세요.");
+        return;
+      }
+      setVoiceError("음성인식 중 오류가 발생했어요. 잠시 후 자동으로 다시 시도합니다.");
+    };
+
+    recog.onend = () => {
+      if (voiceShouldListenRef.current) {
+        // 사용자는 아직 "중지"를 안 눌렀는데 기기가 세션을 끊은 것 — 바로 재시작
+        setVoiceReconnecting(true);
+        try {
+          recog.start();
+          setVoiceReconnecting(false);
+        } catch {
+          setTimeout(() => {
+            if (voiceShouldListenRef.current) {
+              try { recog.start(); } catch {}
+            }
+            setVoiceReconnecting(false);
+          }, 300);
+        }
+      } else {
+        setVoiceListening(false);
+        setVoiceReconnecting(false);
+      }
+    };
+
+    return recog;
+  };
 
   const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { alert("이 기기에서 음성인식을 지원하지 않습니다."); return; }
-    const recog = new SR();
-    recog.lang = "ko-KR";
-    recog.interimResults = true;
-    recog.maxAlternatives = 1;
-    recog.onresult = (e) => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join("");
-      setVoiceTranscript(t);
-    };
-    recog.onend = () => setVoiceListening(false);
-    recog.onerror = () => setVoiceListening(false);
+    setVoiceError("");
+    voiceCommittedRef.current = "";
+    setVoiceTranscript("");
+    const recog = createVoiceRecognizer();
+    if (!recog) return;
     voiceRecogRef.current = recog;
+    voiceShouldListenRef.current = true;
     recog.start();
     setVoiceListening(true);
   };
 
   const stopVoice = () => {
+    voiceShouldListenRef.current = false;
     voiceRecogRef.current?.stop();
     setVoiceListening(false);
+    setVoiceReconnecting(false);
   };
 
   const parseVoiceOrder = (text) => {
@@ -13357,8 +13494,15 @@ const pickDrop = (c) => {
             <span className="text-[11px]">{voiceListening ? "중지" : "시작"}</span>
           </button>
           <p className="text-xs text-gray-500 text-center">
-            {voiceListening ? "듣고 있습니다... 말씀하세요" : "버튼을 눌러 음성 입력을 시작하세요"}
+            {voiceReconnecting
+              ? "다시 연결하는 중... (계속 말씀하셔도 됩니다)"
+              : voiceListening ? "듣고 있습니다... 말씀하세요" : "버튼을 눌러 음성 입력을 시작하세요"}
           </p>
+          {voiceError && (
+            <p className="text-[11px] text-orange-600 font-semibold text-center bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+              {voiceError}
+            </p>
+          )}
         </div>
 
         {/* 예시 안내 */}
@@ -17217,6 +17361,9 @@ function MobileUnassignedList({
   onCopyOrder,
   onCopyDriver,
   onDeleteOrder,
+  onOrderUpdate,
+  showToast,
+  showSuccess,
 }) {
     // ============================
   // 🔢 미배차 요약 계산
@@ -17239,6 +17386,8 @@ function MobileUnassignedList({
   const [quickEditOrder, setQuickEditOrder] = useState(null);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
   const [copyModalOrder, setCopyModalOrder] = useState(null);
+  // 전체상세 복사 후 "전달상태를 전달완료로 바꿀까요?" 확인 팝업 대상 오더
+  const [confirmDeliverOrder, setConfirmDeliverOrder] = useState(null);
   const [orderInfoOrder, setOrderInfoOrder] = useState(null);
   const longPressTimerRef = useRef(null);
   const longPressStartPos = useRef({ x: 0, y: 0 });
@@ -17636,9 +17785,39 @@ return (
       <CopySelectModal
         order={copyModalOrder}
         onClose={() => setCopyModalOrder(null)}
-        onAfterFullCopy={() => setCopyModalOrder(null)}
+        onAfterFullCopy={() => {
+          const o = copyModalOrder;
+          setCopyModalOrder(null);
+          if (o && o.업체전달상태 !== "전달완료") setConfirmDeliverOrder(o);
+        }}
+        onCopySuccess={() => showSuccess?.("기사 복사 완료")}
         cardVersionB={cardVersionB}
       />
+    )}
+
+    {/* ── 전달완료 확인 팝업 (기사복사 → 전체상세 복사 후) ── */}
+    {confirmDeliverOrder && (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
+          <div className="text-sm font-bold text-gray-900 mb-1">복사 완료</div>
+          <div className="text-sm text-gray-500 mb-4">전달상태를 <b className="text-gray-900">전달완료</b>로 변경할까요?</div>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmDeliverOrder(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
+            <button
+              onClick={async () => {
+                const o = confirmDeliverOrder;
+                setConfirmDeliverOrder(null);
+                showToast?.("전달완료 처리되었습니다");
+                if (typeof onOrderUpdate === "function") {
+                  onOrderUpdate(o.id, { 업체전달상태: "전달완료", 정보전달완료: true, 정보전달상태: "전달완료" });
+                }
+                updateDoc(doc(db, o.__col || collName, o.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" }).catch(console.error);
+              }}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold"
+            >확인</button>
+          </div>
+        </div>
+      </div>
     )}
 
     {/* ── 정보전달 확인 모달 ── */}
