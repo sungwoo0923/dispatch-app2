@@ -5,7 +5,7 @@ import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 
-const VEHICLE_TYPES = ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "11톤", "25톤", "축차", "카고", "탑차", "윙바디", "냉동차", "기타"];
+const VEHICLE_TYPES = ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "11톤", "25톤", "축차", "카고", "윙/카고", "탑차", "윙바디", "냉동차", "기타"];
 
 const DRIVER_TERMS = `제1조 (목적)
 본 약관은 S-Flow 물류 관리 플랫폼(이하 "서비스")의 기사(차주) 회원 이용과 관련하여 권리, 의무 및 책임사항을 규정합니다.

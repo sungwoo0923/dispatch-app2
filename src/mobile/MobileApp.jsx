@@ -1693,6 +1693,20 @@ const mergedCompanies = useMemo(() => {
   places.forEach(p => { const k = normalizeCompany(p.거래처명); if (k) map.set(k, p); });
   return Array.from(map.values());
 }, [clients, places]);
+// MobileOrderForm/MobileOrderDetail에 넘기는 거래처 통합 리스트 (기본거래처 clients 우선,
+// places는 겹치지 않는 것만 보충) — ★ 예전엔 각 호출부(JSX)에서 매 렌더마다 새로
+// [...clients, ...places.filter(...)]를 만들면서 그 안에서 O(n*m) filter+some을 돌렸다.
+// form은 상/하차지명·거래처명·주소 등을 한 글자 칠 때마다 setForm으로 이 컴포넌트를
+// 통째로 리렌더시키므로, 그때마다 이 무거운 배열 재계산이 같이 돌면서 타이핑이 밀리는
+// 원인이 됐다(안드로이드 저사양 기기에서 특히 체감이 컸다). clients/places가 실제로
+// 바뀔 때만 재계산되도록 메모이즈해서 타이핑 중 재계산을 없앤다.
+const formClientsList = useMemo(() => [
+  ...clients,
+  ...places.filter(p =>
+    p.거래처명 &&
+    !clients.some(c => normalizeCompany(c.거래처명) === normalizeCompany(p.거래처명))
+  )
+], [clients, places]);
 const handleRefresh = () => {
   if (isRefreshing) return;
 
@@ -2471,6 +2485,8 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     기사명: "",
     전화번호: "",
    혼적여부: "독차",
+    긴급: false,
+    운행유형: "",
     적요: "",
     전달사항: "",
     전달사항고정: false,
@@ -2954,6 +2970,8 @@ const groupedByDate = useMemo(() => {
       배차방식: form.배차방식 || "",
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
+      긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
+      운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
       적요: form.적요 || "",
       메모: form.적요 || "",
       전달사항: form.전달사항 || "",
@@ -3169,6 +3187,8 @@ const handleOrderDuplicate = (order) => {
     전화번호: "",
 
     혼적여부: order.혼적여부 || "독차",
+    긴급: order.긴급 === true,
+    운행유형: order.운행유형 || "",
     적요: "",
     전달사항: order.전달사항 || "",
     전달사항고정: order.전달사항고정 === true,
@@ -3234,6 +3254,8 @@ const handleOrderDuplicateWithDriver = (order) => {
     기사명: order.기사명 || "",
     전화번호: order.전화번호 || "",
     혼적여부: order.혼적여부 || "독차",
+    긴급: order.긴급 === true,
+    운행유형: order.운행유형 || "",
     적요: "",
     전달사항: order.전달사항 || "",
     전달사항고정: order.전달사항고정 === true,
@@ -4031,6 +4053,8 @@ const title =
     기사명: "",
     전화번호: "",
     혼적여부: "독차",
+    긴급: false,
+    운행유형: "",
     적요: "",
     _editId: null,
     _returnToDetail: false,
@@ -4897,16 +4921,7 @@ setOpenMemo={setOpenMemo}
           <MobileOrderForm
             form={form}
             setForm={setForm}
-            clients={[
-              // ★ PC의 mergedClients와 동일하게 기본거래처(clients)를 우선한다 — 반대로
-              // 하면 아직 동기화 전인 옛 하차지거래처 사본이 최신 기본거래처 데이터를
-              // 가려버리는 문제가 있다(PC에서 "롯데마트" 버그로 겪은 것과 동일한 원인).
-              ...clients,
-              ...places.filter(p =>
-                p.거래처명 &&
-                !clients.some(c => normalizeCompany(c.거래처명) === normalizeCompany(p.거래처명))
-              )
-            ]}
+            clients={formClientsList}
             basicClients={clients}
             onSave={handleSave}
             setPage={setPage}
@@ -4976,13 +4991,7 @@ setOpenMemo={setOpenMemo}
   }}
             drivers={drivers}
             orders={orders}
-            clients={[
-              ...clients,
-              ...places.filter(p =>
-                p.거래처명 &&
-                !clients.some(c => normalizeCompany(c.거래처명) === normalizeCompany(p.거래처명))
-              )
-            ]}
+            clients={formClientsList}
             basicClients={clients}
             onDuplicate={handleOrderDuplicate}
             onAssignDriver={assignDriver}
@@ -5120,6 +5129,8 @@ setOpenMemo={setOpenMemo}
               기사명: "",
               전화번호: "",
               혼적여부: "독차",
+              긴급: false,
+              운행유형: "",
               적요: "",
               _editId: null,
               _returnToDetail: false,
@@ -6637,7 +6648,7 @@ const summary = useMemo(() => {
                     <option value="">차종 전체</option>
                     <option value="라보">라보</option>
                     <option value="다마스">다마스</option>
-                    <option value="카고">카고</option>
+                    <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
                     <option value="윙바디">윙바디</option>
                     <option value="탑차">탑차</option>
                     <option value="냉장탑">냉장탑</option>
@@ -8839,6 +8850,8 @@ function MobileOrderDetail({
       산재보험료: order.산재보험료 || 0,
       차량번호: order.차량번호 || "",
       혼적여부: order.혼적여부 || "독차",
+      긴급: order.긴급 === true,
+      운행유형: order.운행유형 || "",
       적요: order.메모 || "",
       기사명: order.기사명 || "",
       전화번호: order.전화번호 || "",
@@ -9197,7 +9210,8 @@ const handleAssignClick = () => {
       청구운임: order.청구운임 || 0, 기사운임: order.기사운임 || 0,
       수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
       산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
-      혼적여부: order.혼적여부 || "독차", 적요: order.메모 || "",
+      혼적여부: order.혼적여부 || "독차", 긴급: order.긴급 === true, 운행유형: order.운행유형 || "",
+      적요: order.메모 || "",
       전달사항: order.전달사항 || "",
       전달사항고정: order.전달사항고정 === true,
       기사명: name || "", 전화번호: phone || "",
@@ -12116,7 +12130,7 @@ const pickDrop = (c) => {
             >
               <option value="">차량종류 선택</option>
               <option value="라보/다마스">라보/다마스</option>
-              <option value="카고">카고</option>
+              <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
               <option value="윙바디">윙바디</option>
               <option value="탑차">탑차</option>
               <option value="냉장탑">냉장탑</option>
@@ -12355,6 +12369,23 @@ const pickDrop = (c) => {
                 />
                 독차
               </label>
+            </div>
+          }
+        />
+        <RowLabelInput
+          label="왕복/긴급"
+          input={
+            <div className="flex items-center gap-2">
+              <button type="button"
+                onClick={() => update("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")}
+                className={`px-3 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300"}`}>
+                왕복
+              </button>
+              <button type="button"
+                onClick={() => update("긴급", !form.긴급)}
+                className={`px-3 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300"}`}>
+                긴급
+              </button>
             </div>
           }
         />
@@ -12720,6 +12751,8 @@ const pickDrop = (c) => {
                 기사명: "",
                 전화번호: "",
                 혼적여부: "독차",
+                긴급: false,
+                운행유형: "",
                 적요: "",
                 _editId: null,
                 _returnToDetail: false,
@@ -16583,7 +16616,7 @@ const runNationalFareInPopup = async () => {
                 <option value="다마스">다마스</option>
                 <option value="라보">라보</option>
                 <option value="라보/다마스">라보/다마스</option>
-                <option value="카고">카고</option>
+                <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
                 <option value="윙바디">윙바디</option>
                 <option value="냉장탑">냉장탑</option>
                 <option value="냉동탑">냉동탑</option>

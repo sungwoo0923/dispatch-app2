@@ -4,7 +4,7 @@ import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 
 const VEHICLE_TYPES = [
-  "전체","다마스","라보","라보/다마스","카고","윙바디",
+  "전체","다마스","라보","라보/다마스","카고","윙/카고","윙바디",
   "냉장탑","냉동탑","리프트","오토바이",
 ];
 
