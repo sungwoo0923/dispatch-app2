@@ -16,6 +16,7 @@ const calcRouteByServer = async (fromAddr, toAddr) => {
 const VEHICLE_TYPES = [
   "라보/다마스",
   "카고",
+  "윙/카고",
   "윙바디",
   "리프트",
   "탑차",
@@ -191,6 +192,7 @@ const handleFareLookup = () => {
     "오토바이": 30000,
     "라보/다마스": 50000,
     "카고": 70000,
+    "윙/카고": 80000,
     "윙바디": 90000,
     "탑차": 80000,
   };

@@ -66,7 +66,7 @@ function CountUp({ value, duration = 900 }) {
 /* -------------------------------------------------
    공통 상수 (차량종류, 결제/배차 방식)
 --------------------------------------------------*/
-const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
+const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
 const PAY_TYPES = ["계산서", "착불", "선불", "계좌이체"];
 
 // kg/g으로 입력해도 항상 톤 단위 문자열로 통일 (예: "100kg" → "0.1톤")
@@ -6411,7 +6411,7 @@ const filterPlaces = (q) => {
       : (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { } };
 
     const VEHICLE_TYPES = (typeof window !== "undefined" && window.RUN25_VEHICLE_TYPES) || [
-      "라보/다마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"
+      "라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"
     ];
     const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
       "계산서", "착불", "선불", "손실", "개인", "취소"
@@ -21592,7 +21592,7 @@ const handleCloseFileUpload = async (e) => {
         >
           <option value="">선택</option>
           <option value="라보/다마스">라보/다마스</option>
-          <option value="카고">카고</option>
+          <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
           <option value="윙바디">윙바디</option>
           <option value="리프트">리프트</option>
           <option value="탑차">탑차</option>
@@ -23227,7 +23227,7 @@ checkWarningStatus(c.거래처명, "거래처");
       >
         <option value="">선택</option>
         <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option>
+        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
         <option value="윙바디">윙바디</option>
         <option value="탑차">탑</option>
         <option value="냉장탑">냉장탑</option>
@@ -24853,7 +24853,7 @@ value={copyTarget?.화물수량 || ""}
     >
       <option value="">선택 없음</option>
       <option value="라보/다마스">라보/다마스</option>
-      <option value="카고">카고</option>
+      <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
       <option value="윙바디">윙바디</option>
       <option value="리프트">리프트</option>
       <option value="탑차">탑차</option>
@@ -27271,7 +27271,7 @@ setConfirmChange(null);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -31501,7 +31501,7 @@ return (
       >
         <option value="">선택없음</option>
         <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option>
+        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
         <option value="윙바디">윙바디</option>
         <option value="리프트">리프트</option>
         <option value="탑차">탑차</option>
@@ -32501,7 +32501,7 @@ return (
     >
         <option value="">선택</option>
         <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option>
+        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
         <option value="윙바디">윙바디</option>
         <option value="탑차">탑</option>
         <option value="냉장탑">냉장탑</option>
@@ -33908,7 +33908,7 @@ setCopyPlaceOptions(list);
       >
         <option value="">선택</option>
         <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option>
+        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
         <option value="윙바디">윙바디</option>
         <option value="탑차">탑</option>
         <option value="냉장탑">냉장탑</option>
@@ -35339,7 +35339,7 @@ setCopyPlaceOptions(list);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -36837,7 +36837,7 @@ function NewOrderPopup({
                 <option value="">선택 없음</option>
                 <option value="라보">라보</option>
                 <option value="다마스">다마스</option>
-                <option value="카고">카고</option>
+                <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
                 <option value="윙바디">윙바디</option>
                 <option value="리프트">리프트</option>
                 <option value="탑차">탑차</option>
@@ -41496,7 +41496,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <Field label="차량종류">
                       <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                         <option value="">선택</option>
-                        <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="냉장/냉동탑">냉장/냉동탑</option><option value="냉장/냉동윙">냉장/냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
+                        <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙/카고">윙/카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="냉장/냉동탑">냉장/냉동탑</option><option value="냉장/냉동윙">냉장/냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
                       </CustomSelect>
                     </Field>
                     <Field label="차량톤수">

@@ -1009,7 +1009,7 @@ export default function ShipperOrder({ editData, onClose }) {
                 <label className={labelCls}>차량종류</label>
                 <select className={inputCls + errCls("차량종류")} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
                   <option value="">선택</option>
-                  {["라보/다마스","카고","윙바디","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","리프트","오토바이"].map(v => <option key={v}>{v}</option>)}
+                  {["라보/다마스","카고","윙/카고","윙바디","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","리프트","오토바이"].map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
               <div>
