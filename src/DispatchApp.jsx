@@ -13096,9 +13096,18 @@ className={`
 {contactPopup && (() => {
   const _contactNorm = (s = "") => String(s || "").trim().toLowerCase();
   const nq = _contactNorm(contactSearchQ);
+  // ⚠️ 전화번호 검색은 "검색어에서 숫자만 뽑은 값"이 실제로 존재할 때만 적용한다.
+  // 안 그러면 두 가지 버그가 생긴다: (1) "박상은"처럼 숫자가 전혀 없는 검색어는
+  // 숫자만 뽑으면 빈 문자열이 되는데, "아무문자열".includes("")는 항상 true라서
+  // 전화번호 조건이 무조건 통과돼 이름 필터링 자체가 무의미해진다(전원 노출).
+  // (2) "담당자4"처럼 이름 끝에 숫자가 섞인 검색어는 숫자만 뽑으면 "4" 한 글자가
+  // 되는데, 자릿수가 너무 짧으면 전혀 관련 없는 다른 사람 전화번호에도 우연히
+  // "4"가 들어있어 엉뚱하게 같이 걸린다 — 그래서 숫자 3자리 이상일 때만
+  // 전화번호로도 검색되게 한다.
+  const nqDigits = nq.replace(/\D/g, "");
   const visible = contactPopup.contacts
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => !nq || _contactNorm(c.name || "").includes(nq) || (c.phone || "").replace(/\D/g, "").includes(nq.replace(/\D/g, "")));
+    .filter(({ c }) => !nq || _contactNorm(c.name || "").includes(nq) || (nqDigits.length >= 3 && (c.phone || "").replace(/\D/g, "").includes(nqDigits)));
   return (
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
@@ -22336,9 +22345,13 @@ const head = isDark
 )}
 {panelContactPopup4 && (() => {
   const q4 = panelContactSearch4.trim().toLowerCase();
+  // (검색어에 숫자가 없으면 "".includes("")가 항상 true라 전원 노출되고, 숫자가
+  // 1~2자리뿐이면 무관한 전화번호에도 우연히 걸리는 문제 방지 — 3자리 이상일 때만
+  // 전화번호로도 검색)
+  const q4Digits = q4.replace(/\D/g, "");
   const visible4 = panelContactPopup4.contacts
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => !q4 || (c.name || "").toLowerCase().includes(q4) || (c.phone || "").replace(/\D/g, "").includes(q4.replace(/\D/g, "")));
+    .filter(({ c }) => !q4 || (c.name || "").toLowerCase().includes(q4) || (q4Digits.length >= 3 && (c.phone || "").replace(/\D/g, "").includes(q4Digits)));
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
@@ -31475,9 +31488,13 @@ return (
 )}
 {panelContactPopup5 && (() => {
   const q5 = panelContactSearch5.trim().toLowerCase();
+  // (검색어에 숫자가 없으면 "".includes("")가 항상 true라 전원 노출되고, 숫자가
+  // 1~2자리뿐이면 무관한 전화번호에도 우연히 걸리는 문제 방지 — 3자리 이상일 때만
+  // 전화번호로도 검색)
+  const q5Digits = q5.replace(/\D/g, "");
   const visible5 = panelContactPopup5.contacts
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => !q5 || (c.name || "").toLowerCase().includes(q5) || (c.phone || "").replace(/\D/g, "").includes(q5.replace(/\D/g, "")));
+    .filter(({ c }) => !q5 || (c.name || "").toLowerCase().includes(q5) || (q5Digits.length >= 3 && (c.phone || "").replace(/\D/g, "").includes(q5Digits)));
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
