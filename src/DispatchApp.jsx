@@ -131,9 +131,9 @@ const RestToggleArrow = ({ show, expanded, onToggle }) => {
       type="button"
       onClick={(e) => { e.stopPropagation(); onToggle(); }}
       title={expanded ? "점심시간 접기" : "점심시간 보기"}
-      className="inline-flex items-center justify-center w-3.5 h-3.5 shrink-0 text-gray-400 hover:text-[#1B2B4B] transition"
+      className="inline-flex items-center justify-center w-4 h-4 shrink-0 text-[#1B2B4B] hover:text-black transition"
     >
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4.5"
         strokeLinecap="round" strokeLinejoin="round"
         style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .15s" }}>
         <polyline points="9 6 15 12 9 18" />
@@ -13094,10 +13094,11 @@ className={`
 </div>
 {/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}
 {contactPopup && (() => {
-  const nq = norm(contactSearchQ);
+  const _contactNorm = (s = "") => String(s || "").trim().toLowerCase();
+  const nq = _contactNorm(contactSearchQ);
   const visible = contactPopup.contacts
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => !nq || norm(c.name || "").includes(nq) || (c.phone || "").replace(/\D/g, "").includes(nq.replace(/\D/g, "")));
+    .filter(({ c }) => !nq || _contactNorm(c.name || "").includes(nq) || (c.phone || "").replace(/\D/g, "").includes(nq.replace(/\D/g, "")));
   return (
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
@@ -13160,15 +13161,15 @@ className={`
         {visible.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[260px]">검색 결과가 없습니다</div>
         )}
-        {visible.map(({ c, i }) => (
+        {visible.map(({ c, i }, vi) => (
           <div
             key={i}
             className={`relative rounded-xl border-2 px-4 py-3.5 transition ${
-              i === contactActive
+              vi === contactActive
                 ? "border-blue-500 bg-blue-50"
                 : "border-gray-200"
             }`}
-            onMouseEnter={() => { if (editingContactIdx === null) setContactActive(i); }}
+            onMouseEnter={() => { if (editingContactIdx === null) setContactActive(vi); }}
           >
             {editingContactIdx === i ? (
               /* ── 인라인 수정 폼 ── */
@@ -13217,7 +13218,7 @@ className={`
                       e.stopPropagation();
                       setEditContactData({ name: c.name || "", phone: c.phone || "" });
                       setEditingContactIdx(i);
-                      setContactActive(i);
+                      setContactActive(vi);
                     }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -17251,9 +17252,13 @@ function RealtimeRowBase({
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
     : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
+  // ⚠️ 여기 overflow-hidden/text-ellipsis/max-width를 다시 넣지 말 것 — renderAddrCell이
+  // 이미 글자수(14자) 기준으로 직접 자르고 "더보기" 버튼을 붙여주는데, 이 td에 CSS
+  // 말줄임까지 겹치면 "주소(14자)+더보기 버튼"의 실제 폭이 CSS max-width를 넘는
+  // 행에서는 버튼째로 잘려나가 "..."만 남는 버그가 있었다(더보기 버튼이 안 보임).
   const addrCell = isDark
-    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[160px]"
-    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[160px]";
+    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
+    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
   return (
   <tr
@@ -21997,7 +22002,7 @@ const handleCloseFileUpload = async (e) => {
 
     return (
       <div className="flex items-center justify-center gap-1 min-w-0">
-        <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 120 }} title={text}>
+        <span className="whitespace-nowrap" title={text}>
           {display}
         </span>
         {isLong && (
@@ -22085,9 +22090,13 @@ const head = isDark
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
     : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
+  // ⚠️ 여기 overflow-hidden/text-ellipsis/max-width를 다시 넣지 말 것 — renderAddrCell이
+  // 이미 글자수(14자) 기준으로 직접 자르고 "더보기" 버튼을 붙여주는데, 이 td에 CSS
+  // 말줄임까지 겹치면 "주소(14자)+더보기 버튼"의 실제 폭이 CSS max-width를 넘는
+  // 행에서는 버튼째로 잘려나가 "..."만 남는 버그가 있었다(더보기 버튼이 안 보임).
   const addrCell = isDark
-    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[160px]"
-    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[160px]";
+    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
+    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
   // ------------------------
   // 📌 화면 렌더링
@@ -22361,10 +22370,10 @@ const head = isDark
         {visible4.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
-        {visible4.map(({ c, i }) => (
+        {visible4.map(({ c, i }, vi) => (
           <div key={i}
-            className={`rounded-lg border-2 px-2.5 py-2 cursor-pointer transition min-w-0 ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
-            onMouseEnter={() => setPanelContactActive4(i)}
+            className={`rounded-lg border-2 px-2.5 py-2 cursor-pointer transition min-w-0 ${vi === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            onMouseEnter={() => setPanelContactActive4(vi)}
             onClick={() => {
               const key = panelContactPopup4.type === "pickup" ? "상차" : "하차";
               panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
@@ -31500,10 +31509,10 @@ return (
         {visible5.length === 0 && (
           <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
-        {visible5.map(({ c, i }) => (
+        {visible5.map(({ c, i }, vi) => (
           <div key={i}
-            className={`rounded-lg border-2 px-2.5 py-2 cursor-pointer transition min-w-0 ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
-            onMouseEnter={() => setPanelContactActive5(i)}
+            className={`rounded-lg border-2 px-2.5 py-2 cursor-pointer transition min-w-0 ${vi === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            onMouseEnter={() => setPanelContactActive5(vi)}
             onClick={() => {
               const key = panelContactPopup5.type === "pickup" ? "상차" : "하차";
               panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
