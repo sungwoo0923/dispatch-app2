@@ -120,12 +120,6 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 }
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
-// 휴게 컬럼 헤더 — 이제 이 컬럼 자체에는 버튼이 없다(펼치기/접기는 상/하차지명
-// 옆의 화살표로 옮겼다). 펼쳐진 상태에서만 "휴게" 글자를 보여주는 단순 라벨.
-const RestColumnHeader = ({ expanded }) => (
-  expanded ? <span className="text-white/90">휴게</span> : null
-);
-
 // 상/하차지명 옆에 붙는 휴게(점심시간) 펼치기/접기 화살표.
 // 그 상/하차지에 등록된 점심시간이 있을 때만 나타나고, 없으면 아예 렌더링하지
 // 않는다 — 즉 점심시간이 하나도 등록 안 된 업체들만 있는 목록이면 화살표 자체가
@@ -233,10 +227,10 @@ function FareCertModal({ row, companyName, onClose }) {
     w.document.close();
   };
 
-  const CertRow = ({ label, value, bold }) => (
-    <div className="flex border-b border-gray-100 py-1.5">
-      <div className="w-[92px] shrink-0 text-[11.5px] font-bold text-gray-500">{label}</div>
-      <div className={`flex-1 text-[12.5px] break-words ${bold ? "font-extrabold text-[#1B2B4B]" : "text-gray-800"}`}>{value || "-"}</div>
+  const CertRow = ({ label, value, bold, big }) => (
+    <div className="flex border-b border-gray-200 py-2">
+      <div className="w-[100px] shrink-0 text-[13px] font-bold text-gray-600">{label}</div>
+      <div className={`flex-1 break-words ${big ? "text-[17px]" : "text-[14px]"} ${bold ? "font-extrabold text-[#1B2B4B]" : "font-semibold text-gray-900"}`}>{value || "-"}</div>
     </div>
   );
 
@@ -261,17 +255,17 @@ function FareCertModal({ row, companyName, onClose }) {
           <div style={{ transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform .15s" }}>
             <div ref={captureRef} className="bg-white mx-auto p-8" style={{ width: "560px" }}>
               <div className="text-center border-b-2 border-[#1B2B4B] pb-4 mb-5">
-                <div className="text-[20px] font-extrabold text-[#1B2B4B] tracking-[6px]">운 임 확 인 서</div>
-                <div className="text-[11px] text-gray-400 mt-1.5">문서번호 {docNo} · 발급일시 {issuedAt}</div>
+                <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">운 임 확 인 서</div>
+                <div className="text-[12px] font-semibold text-gray-500 mt-1.5">문서번호 {docNo} · 발급일시 {issuedAt}</div>
               </div>
 
-              <div className="text-[12px] text-gray-700 leading-relaxed mb-5 bg-gray-50 rounded-lg px-4 py-3">
-                본 확인서는 <b className="text-[#1B2B4B]">{companyName || "운송사"}</b>가 아래 기사에게 본 운송 건을 배차하였고,
+              <div className="text-[13.5px] font-medium text-gray-800 leading-relaxed mb-5 bg-gray-50 rounded-lg px-4 py-3">
+                본 확인서는 <b className="text-[#1B2B4B] font-extrabold">{companyName || "운송사"}</b>가 아래 기사에게 본 운송 건을 배차하였고,
                 해당 기사가 이 운송을 수행하였음을 확인하며, 아래 명시된 운임을 지급함을 증명합니다.
               </div>
 
               <div className="mb-4">
-                <div className="text-[11.5px] font-extrabold text-[#1B2B4B] mb-1">■ 배차 정보</div>
+                <div className="text-[13px] font-extrabold text-[#1B2B4B] mb-1.5">■ 배차 정보</div>
                 <CertRow label="운송사명" value={companyName} bold />
                 <CertRow label="상차일시" value={`${r.상차일 || "-"} ${r.상차시간 || "즉시"}`} />
                 <CertRow label="상차지" value={`${r.상차지명 || "-"} (${fareCertShortAddr(r.상차지주소)})`} />
@@ -282,19 +276,19 @@ function FareCertModal({ row, companyName, onClose }) {
               </div>
 
               <div className="mb-4">
-                <div className="text-[11.5px] font-extrabold text-[#1B2B4B] mb-1">■ 기사 정보</div>
+                <div className="text-[13px] font-extrabold text-[#1B2B4B] mb-1.5">■ 기사 정보</div>
                 <CertRow label="기사명" value={r.이름} />
                 <CertRow label="연락처" value={fareCertPhone(r.전화번호)} />
                 <CertRow label="차량번호" value={r.차량번호} bold />
               </div>
 
               <div className="mb-2">
-                <div className="text-[11.5px] font-extrabold text-[#1B2B4B] mb-1">■ 운임 정보</div>
+                <div className="text-[13px] font-extrabold text-[#1B2B4B] mb-1.5">■ 운임 정보</div>
                 <CertRow label="지급방식" value={r.지급방식} />
-                <CertRow label="기사운임" value={`${기사운임.toLocaleString()} 원`} bold />
+                <CertRow label="기사운임" value={`${기사운임.toLocaleString()} 원`} bold big />
               </div>
 
-              <div className="mt-6 pt-4 border-t border-dashed border-gray-300 text-[10.5px] text-gray-400 text-center leading-relaxed">
+              <div className="mt-6 pt-4 border-t border-dashed border-gray-300 text-[11.5px] font-semibold text-gray-500 text-center leading-relaxed">
                 본 문서는 배차관리 프로그램에 등록된 배차 정보를 근거로 자동 생성되었습니다.
               </div>
             </div>
@@ -17381,9 +17375,11 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </div>
 </td>
 
-                  <td className={`${cell} ${restExpanded ? "" : "!px-1 !w-6"}`}>
-                    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} expanded={restExpanded} />
-                  </td>
+                  {restExpanded && (
+                    <td className={cell}>
+                      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} expanded={restExpanded} />
+                    </td>
+                  )}
 
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
@@ -17404,9 +17400,11 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </div>
 </td>
 
-                  <td className={`${cell} ${restExpanded ? "" : "!px-1 !w-6"}`}>
-                    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} expanded={restExpanded} />
-                  </td>
+                  {restExpanded && (
+                    <td className={cell}>
+                      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} expanded={restExpanded} />
+                    </td>
+                  )}
 
                   <td className={addrCell}>
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
@@ -18465,6 +18463,7 @@ const checkWarningStatus = (name, type) => {
   const [panelContactPopup4, setPanelContactPopup4] = React.useState(null);
   const [panelContactActive4, setPanelContactActive4] = React.useState(0);
   const panelContactListRef4 = React.useRef(null);
+  const panelContactSearchInputRef4 = React.useRef(null); // 팝업 열리면 포커스가 카드 그리드(div)에 가 있어도, 타이핑 시작하면 검색창으로 넘겨준다
   React.useEffect(() => {
     const list = panelContactListRef4.current;
     if (!list) return;
@@ -19729,7 +19728,11 @@ React.useEffect(() => {
   React.useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("realtimeEdit") || "{}");
 
-    if (saved.selectedEditMode) setSelectedEditMode(saved.selectedEditMode);
+    // ⚠️ selectedEditMode(구 "선택수정" 인라인 편집 모드)는 더 이상 UI에서 켤 방법이
+    // 없다(해당 버튼/저장 로직이 이미 제거됨) — 그런데도 예전 버전에서 localStorage에
+    // true로 저장된 값이 남아있으면 새로고침할 때마다 계속 복원되어, 그 안에 들어있던
+    // 행(들)만 영구히 "수정 모드" 셀(예: 하차지주소가 더보기 없이 원문 그대로 보이는
+    // input)로 렌더링되는 버그가 있었다 — 이 값은 아예 복원하지 않는다.
     if (saved.selected) setSelected(saved.selected);
     if (saved.edited) setEdited(saved.edited);
   }, []);
@@ -22338,6 +22341,7 @@ const head = isDark
       else if (e.key === "ArrowLeft") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 5, 0)); }
       else if (e.key === "Enter") { e.preventDefault(); const c = visible4[panelContactActive4]?.c; if (c) { const key = panelContactPopup4.type === "pickup" ? "상차" : "하차"; panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup4(null); }
       else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup4(null); }
+      else if (e.key.length === 1 || e.key === "Backspace") { panelContactSearchInputRef4.current?.focus(); }
     }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
@@ -22346,6 +22350,7 @@ const head = isDark
       </div>
       <div className="px-5 pt-4">
         <input autoComplete="off"
+          ref={panelContactSearchInputRef4}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
           placeholder="담당자 이름 또는 전화번호 검색"
           value={panelContactSearch4}
@@ -22557,8 +22562,8 @@ const head = isDark
                 "전달사항",
                "첨부",
                 "전달상태",
-              ].map((h) => (
-                <th key={h} className={h === "상차휴게" || h === "하차휴게" ? `${head} !px-1 ${restExpanded ? "" : "!w-6"}` : head}>
+              ].filter((h) => restExpanded || (h !== "상차휴게" && h !== "하차휴게")).map((h) => (
+                <th key={h} className={head}>
                   {h === "선택" ? (
                     <input autoComplete="off" type="checkbox"
                       title="전체선택/전체해제"
@@ -22572,7 +22577,7 @@ const head = isDark
                       }}
                     />
                   ) : h === "상차휴게" || h === "하차휴게"
-                    ? <RestColumnHeader expanded={restExpanded} />
+                    ? "휴게"
                     : h}
                 </th>
               ))}
@@ -22582,7 +22587,7 @@ const head = isDark
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={29} className="py-16 text-center text-[13px] text-gray-400">
+                <td colSpan={restExpanded ? 29 : 27} className="py-16 text-center text-[13px] text-gray-400">
                   조회된 결과가 없습니다.
                 </td>
               </tr>
@@ -29092,6 +29097,7 @@ React.useEffect(() => {
 const [panelContactPopup5, setPanelContactPopup5] = React.useState(null);
 const [panelContactActive5, setPanelContactActive5] = React.useState(0);
 const panelContactListRef5 = React.useRef(null);
+const panelContactSearchInputRef5 = React.useRef(null); // 팝업 열리면 포커스가 카드 그리드(div)에 가 있어도, 타이핑 시작하면 검색창으로 넘겨준다
 React.useEffect(() => {
   const list = panelContactListRef5.current;
   if (!list) return;
@@ -31474,6 +31480,7 @@ return (
       else if (e.key === "ArrowLeft") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 5, 0)); }
       else if (e.key === "Enter") { e.preventDefault(); const c = visible5[panelContactActive5]?.c; if (c) { const key = panelContactPopup5.type === "pickup" ? "상차" : "하차"; panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup5(null); }
       else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup5(null); }
+      else if (e.key.length === 1 || e.key === "Backspace") { panelContactSearchInputRef5.current?.focus(); }
     }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[94vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
@@ -31482,6 +31489,7 @@ return (
       </div>
       <div className="px-5 pt-4">
         <input autoComplete="off"
+          ref={panelContactSearchInputRef5}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
           placeholder="담당자 이름 또는 전화번호 검색"
           value={panelContactSearch5}
@@ -31746,8 +31754,8 @@ return (
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
-              ].map((h) => (
-                <th key={h} className={`px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0 ${(h === "상차휴게" || h === "하차휴게") ? `!px-1 ${restExpanded ? "" : "!w-6"}` : ""}`}>
+              ].filter((h) => restExpanded || (h !== "상차휴게" && h !== "하차휴게")).map((h) => (
+                <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
                   {h === "선택" ? (
                     <input autoComplete="off"
                       type="checkbox"
@@ -31755,7 +31763,7 @@ return (
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
                   ) : h === "상차휴게" || h === "하차휴게" ? (
-                    <RestColumnHeader expanded={restExpanded} />
+                    "휴게"
                   ) : h}
                 </th>
               ))}
@@ -31765,7 +31773,7 @@ return (
           <tbody>
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={31} className="py-16 text-center text-[13px] text-gray-400">
+                <td colSpan={restExpanded ? 31 : 29} className="py-16 text-center text-[13px] text-gray-400">
                   조회된 결과가 없습니다.
                 </td>
               </tr>
@@ -31863,10 +31871,10 @@ return (
   "거래처명", "상차지명", "상차휴게", "상차지주소",
   "하차지명", "하차휴게", "하차지주소",
   "화물내용", "차량종류", "차량톤수",
-].map((key) => (
+].filter((key) => restExpanded || (key !== "상차휴게" && key !== "하차휴게")).map((key) => (
   <td
     key={`${id}-${key}`}
-    className={`px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap ${(key === "상차휴게" || key === "하차휴게") ? `!px-1 ${restExpanded ? "" : "!w-6"}` : ""}`}
+    className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap"
   >
 
     {/* 휴게(점심시간) — 상/하차지에 점심시간이 등록된 경우만 표시 */}
