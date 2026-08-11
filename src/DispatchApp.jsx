@@ -31,7 +31,6 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
-import { Utensils } from "lucide-react";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -71,9 +70,15 @@ const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑"
 const PAY_TYPES = ["계산서", "착불", "선불", "계좌이체"];
 
 /* -------------------------------------------------
-   점심시간 (거래처/상하차지 등록용) — 실시간배차현황/배차현황에 새 컬럼을
-   추가하지 않고, 상/하차지명 옆 작은 표시 + 시간 겹침 경고로만 보여준다.
+   휴게(점심시간) 컬럼 — 실시간배차현황/배차현황 상차지명·하차지명 옆에 붙는
+   접었다 폈다 할 수 있는 컬럼. 항상 접힌 채로 시작하고(프로그램을 새로 열 때),
+   같은 세션 안에서 메뉴를 옮겼다 와도 마지막에 펼쳐둔 상태는 유지된다 —
+   그래서 React state가 아니라 모듈 스코프 변수에 들고 있는다: 메뉴 전환으로
+   RealtimeStatus/DispatchStatus가 언마운트/리마운트돼도 이 변수는 그대로
+   살아있고, 새로고침/재접속(모듈이 새로 로드)하면 자동으로 false로 리셋된다.
 --------------------------------------------------*/
+let _restColumnExpandedShared = false;
+
 // "오전/오후 N시(30분)" 또는 이미 "HH:mm" 형태인 문자열을 24시간 "HH:mm"으로 변환.
 // 파싱할 수 없으면 빈 문자열을 돌려준다.
 function lunchTimeToHHMM(t) {
@@ -115,27 +120,39 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 }
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
-// 점심시간이 등록된 상/하차지명 옆에 붙는 작은 표시 — 알록달록한 이모지 대신
-// 프로그램 전체에서 쓰는 회색 단색 아이콘(lucide) + 마우스 오버 툴팁으로 보여준다.
-const LunchBadge = ({ start, end }) => {
-  if (!start && !end) return null;
-  const label = start && end ? `점심시간 ${start} ~ ${end}` : `점심시간 ${start || end}`;
-  return (
-    <span title={label} className="inline-flex items-center justify-center text-gray-400 shrink-0">
-      <Utensils size={11} strokeWidth={2.25} />
-    </span>
-  );
-};
+// 휴게 컬럼 헤더 — 접기/펼치기 토글 버튼. 펼쳐진 상태에서만 "휴게" 글자가 보이고,
+// 접힌 상태에서는 화살표만 남아 폭을 최소화한다(다른 컬럼이 이미 많아서 튀지 않게).
+const RestColumnHeader = ({ expanded, onToggle }) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    title={expanded ? "휴게 컬럼 접기" : "휴게 컬럼 펼치기 (상/하차지 점심시간)"}
+    className="inline-flex items-center gap-1 text-white/90 hover:text-white transition"
+  >
+    {expanded && <span>휴게</span>}
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .15s" }}>
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
+  </button>
+);
 
-// 상/하차시간이 그 거래처의 점심시간대와 겹칠 때만 시간 텍스트를 경고 스타일로 감싼다.
-const LunchTimeWarning = ({ children, overlap, start, end }) => {
-  if (!overlap) return <>{children}</>;
+// 휴게 컬럼 셀 — 그 상/하차지에 점심시간이 등록되어 있을 때만 내용이 있다.
+// 접힌 상태에서는 상/하차시간과 겹칠 때만 빨간 점으로 표시(핵심 경고는 접어도 안 사라짐).
+// 펼친 상태에서는 시간대 전체를 보여주고, 겹치면 빨간 글씨로 강조한다.
+const RestCell = ({ lunchInfo, orderTime, expanded }) => {
+  if (!lunchInfo) return null;
+  const overlap = isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end);
+  const title = `점심시간 ${lunchInfo.start} ~ ${lunchInfo.end}${overlap ? " · 이 시간과 겹칩니다" : ""}`;
+  if (!expanded) {
+    return overlap ? (
+      <span title={title} className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />
+    ) : null;
+  }
   return (
-    <span
-      title={`점심시간(${start} ~ ${end})과 겹칩니다`}
-      className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-bold border border-orange-200"
-    >
-      {children}
+    <span title={title} className={`text-[12px] whitespace-nowrap ${overlap ? "text-red-600 font-extrabold" : "text-gray-500"}`}>
+      {lunchInfo.start}~{lunchInfo.end}
     </span>
   );
 };
@@ -1530,6 +1547,8 @@ const patchDispatch = async (_id, patch) => {
     patch.배차상태 = "배차중";
     patch.상태 = "배차중";
     patch.업체전달상태 = "미전달";
+    // 배차가 취소되어 다시 배차중으로 돌아가면 "배차한시간"도 미확정 상태로 되돌린다.
+    patch.배차확정일시 = null;
   } else {
     const basePlate = patch.차량번호 || prev?.차량번호;
     if (basePlate) {
@@ -1541,6 +1560,16 @@ const patchDispatch = async (_id, patch) => {
         patch.이름 = driver.이름;
         patch.전화번호 = driver.전화번호;
       }
+    }
+  }
+
+  // ⭐ "배차한시간" — 배차중 → 배차완료로 처음 넘어가는 그 순간의 시각만 기록한다
+  // (등록일 hover 툴팁에서 사용). 이미 배차완료 상태였던 오더를 다른 정보만 고쳐
+  // 저장할 때는 덮어쓰지 않는다 — 최초로 배차가 확정된 시각을 유지해야 하므로.
+  {
+    const nextStatus = patch.배차상태 !== undefined ? patch.배차상태 : prev?.배차상태;
+    if (nextStatus === "배차완료" && prev?.배차상태 !== "배차완료") {
+      patch.배차확정일시 = serverTimestamp();
     }
   }
 
@@ -16564,8 +16593,11 @@ function _fmtKst(v) {
   const ms = _msFromVal(v);
   return ms ? new Date(ms).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "-";
 }
-function _creatorLabel(r) {
-  return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
+function _creatorLabel(r, userNameMap) {
+  const raw = r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "";
+  if (!raw) return "-";
+  const resolved = userNameMap?.get(raw) || userNameMap?.get(String(raw).trim().toLowerCase());
+  return resolved || raw;
 }
 
 // ===== 신규 기사 등록 모달 컴포넌트 =====
@@ -17051,9 +17083,9 @@ function RealtimeRowBase({
   r, idx,
   isSelected, isFading, isHighlighted, isDark, selectedEditMode,
   editedForRow,
-  toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, formatKstDateTime, getCreatorLabel,
+  toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, getDispatchConfirmedMs, formatKstDateTime, getCreatorLabel,
   editableInput, renderAddrCell, renderCargoCell, canEdit, handleEditChange,
-  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName,
+  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName, restExpanded,
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
@@ -17154,6 +17186,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
     tooltipRows={<>
       <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
       <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
+      <div>배차한시간: <span className="text-purple-300">{r.배차확정일시 ? formatKstDateTime(getDispatchConfirmedMs(r)) : "-"}</span></div>
       <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
     </>}
   />
@@ -17161,29 +17194,22 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
                   <td className={cell}>
-  {(() => {
-    const _li = lunchByName.get(_lunchNameKey(r.상차지명));
-    const _content = r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : "즉시";
-    const _overlap = !!_li && isLunchTimeOverlap(r.상차시간, _li.start, _li.end);
-    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
-  })()}
+  {r.상차시간
+    ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분)
+    : "즉시"}
 </td>
 
                   <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
                  <td className={cell}>
-  {(() => {
-    const _li = lunchByName.get(_lunchNameKey(r.하차지명));
-    const _content = r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : "즉시";
-    const _overlap = !!_li && isLunchTimeOverlap(r.하차시간, _li.start, _li.end);
-    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
-  })()}
+  {r.하차시간
+    ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분)
+    : "즉시"}
 </td>
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.상차지명}</span>
-    {(() => { const _li = lunchByName.get(_lunchNameKey(r.상차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
@@ -17196,6 +17222,10 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </div>
 </td>
 
+                  <td className={`${cell} ${restExpanded ? "" : "!px-1 !w-6"}`}>
+                    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} expanded={restExpanded} />
+                  </td>
+
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
@@ -17203,7 +17233,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.하차지명}</span>
-    {(() => { const _li = lunchByName.get(_lunchNameKey(r.하차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -17214,6 +17243,10 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
   </div>
 </td>
+
+                  <td className={`${cell} ${restExpanded ? "" : "!px-1 !w-6"}`}>
+                    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} expanded={restExpanded} />
+                  </td>
 
                   <td className={addrCell}>
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
@@ -17476,7 +17509,8 @@ function realtimeRowPropsEqual(prev, next) {
     prev.editedForRow === next.editedForRow &&
     prev.driverConfirmOpen === next.driverConfirmOpen &&
     prev.memoAlert === next.memoAlert &&
-    prev.blackAlert === next.blackAlert
+    prev.blackAlert === next.blackAlert &&
+    prev.restExpanded === next.restExpanded
   );
 }
 
@@ -17817,6 +17851,32 @@ const mergedClients = React.useMemo(() => {
 
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
+// 휴게 컬럼 접기/펼치기 — 항상 접힌 채로 시작하고, 메뉴를 옮겼다 와도(모듈이
+// 새로 로드되지 않는 한) 마지막 상태가 유지되도록 모듈 스코프 변수와 동기화한다.
+const [restExpanded, setRestExpanded] = React.useState(_restColumnExpandedShared);
+const toggleRestExpanded = React.useCallback(() => {
+  setRestExpanded(p => { const next = !p; _restColumnExpandedShared = next; return next; });
+}, []);
+
+// 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
+// users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
+const [userNameMap, setUserNameMap] = React.useState(new Map());
+React.useEffect(() => {
+  let cancelled = false;
+  getDocs(collection(db, "users")).then(snap => {
+    if (cancelled) return;
+    const map = new Map();
+    snap.docs.forEach(d => {
+      const data = d.data() || {};
+      const name = (data.name || "").trim();
+      if (!name) return;
+      map.set(d.id, name);
+      if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
+    });
+    setUserNameMap(map);
+  }).catch(() => {});
+  return () => { cancelled = true; };
+}, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
@@ -18912,17 +18972,24 @@ const getUpdatedMs = (r) => {
   );
 };
 
-// ✅ 등록자 이름/식별자 후보 통합 (있는 것부터 표시)
-const getCreatorLabel = (r) => {
-  return (
+// ✅ 배차한시간 — 배차중 → 배차완료로 최초 확정된 시각(patchDispatch에서 기록)
+const getDispatchConfirmedMs = (r) => toMs(r?.배차확정일시);
+
+// ✅ 등록자 이름/식별자 후보 통합 (있는 것부터 표시) — 오더에 실명이 안 찍혀있고
+// 이메일/계정아이디만 저장돼 있는 경우(과거 오더, 또는 실명이 아직 반영 안 된
+// 등록 경로), userNameMap(uid/이메일 → users/{uid}.name)으로 실명을 다시 찾아준다.
+const getCreatorLabel = (r, userNameMap) => {
+  const raw =
     r?.등록자명 ||
     r?.createdByName ||
     r?.등록자 ||
     r?.createdByEmail ||
     r?.createdBy ||
     r?.createdByUid ||
-    "-"
-  );
+    "";
+  if (!raw) return "-";
+  const resolved = userNameMap?.get(raw) || userNameMap?.get(String(raw).trim().toLowerCase());
+  return resolved || raw;
 };
 
 // ✅ 상태순서 고정 + 배차완료→updatedAt 최신순, 배차중→최근활동(updatedAt or createdAt) 최신순
@@ -19187,6 +19254,41 @@ const [editStopType, setEditStopType] = React.useState("pickup");
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+// 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
+// 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
+const [copyPanelStyle, setCopyPanelStyle] = React.useState(() => {
+  try { return localStorage.getItem("copyPanelStyle") === "B" ? "B" : "A"; } catch { return "A"; }
+});
+const toggleCopyPanelStyle = () => {
+  setCopyPanelStyle(prev => {
+    const next = prev === "B" ? "A" : "B";
+    try { localStorage.setItem("copyPanelStyle", next); } catch {}
+    return next;
+  });
+};
+// B스타일(중앙 팝업) 드래그 위치 — 패널을 새로 열 때마다 화면 중앙으로 리셋된다.
+const [copyPanelDrag, setCopyPanelDrag] = React.useState({ x: 0, y: 0 });
+const copyPanelDragRef = React.useRef({ dragging: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+React.useEffect(() => { if (copyPanelOpen) setCopyPanelDrag({ x: 0, y: 0 }); }, [copyPanelOpen]);
+const handleCopyPanelDragStart = (e) => {
+  if (copyPanelStyle !== "B") return;
+  if (e.target.closest("button, input, textarea, select, a")) return; // 버튼/입력창 클릭은 드래그로 취급하지 않음
+  copyPanelDragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, origX: copyPanelDrag.x, origY: copyPanelDrag.y };
+  const onMove = (ev) => {
+    if (!copyPanelDragRef.current.dragging) return;
+    setCopyPanelDrag({
+      x: copyPanelDragRef.current.origX + (ev.clientX - copyPanelDragRef.current.startX),
+      y: copyPanelDragRef.current.origY + (ev.clientY - copyPanelDragRef.current.startY),
+    });
+  };
+  const onUp = () => {
+    copyPanelDragRef.current.dragging = false;
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+};
 const [copyDriverPick, setCopyDriverPick] = React.useState(null); // 오더복사수정패널 기사정보: 동일 차량번호 기사 여러 명일 때 선택 팝업
 const [clientApplyPopup, setClientApplyPopup] = React.useState(null);
 const [copyClientOptions, setCopyClientOptions] = useState([]);
@@ -22263,46 +22365,6 @@ const head = isDark
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크{selected.length>1?` (${selected.length})`:""}</button>
     <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
 
-    <button onClick={()=>{
-  if(isViewer)return showAlert("조회전용 권한으로 수정할 수 없습니다.");
-  if(selected.length!==1)return showAlert("수정할 항목은 1개만 선택해야 합니다.");
-  const row=rows.find(r=>r._id===selected[0]);
-  if(!row)return;
-  const latest = dispatchData.find(d => d._id === row._id);
-  const raw=String(latest?.화물내용||row.화물내용||"");
-
-  // ✅ suffix 기반 분리만 수행 (base만 파싱 — 추가항목 포함된 경우 오염 방지)
-  const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
-  let cargoNum = "", cargoType = "";
-  const rawBase17 = raw.split("+")[0];
-  for (const s of KNOWN_SUFFIXES) {
-    if (rawBase17.endsWith(s)) {
-      cargoNum = rawBase17.slice(0, -s.length).trim();
-      cargoType = s;
-      break;
-    }
-  }
-  // ✅ suffix 매칭 안 되면 → 원본 base를 화물수량에 보존
-  if (!cargoType) {
-    cargoNum = rawBase17;
-    cargoType = "";
-  }
-
-  const ton=row.차량톤수||"";
-  const tonValue=ton.match(/[\d.]+/)?.[0]||"";
-  const tonType=ton.includes("kg")?"kg":ton.includes("톤")?"톤":"";
-  setEditTarget({
-    ...row,
-    화물내용: raw,        // ✅ 원본 보존
-    화물수량: cargoNum,   // ✅ "케이스" → "케이스" (기존: "")
-    화물타입: cargoType,  // ✅ "" (기존과 동일)
-    톤수값:tonValue,
-    톤수타입:tonType,
-    수수료: toInt(row.청구운임) - toInt(row.기사운임),
-  });
-  setEditPopupOpen(true);
-}} className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택수정</button>
-
     <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택삭제</button>
     <button onClick={()=>setSelected([])} className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택초기화</button>
     <button onClick={()=>{
@@ -22343,8 +22405,10 @@ const head = isDark
                 "하차시간",
                 "거래처명",
                 "상차지명",
+                "상차휴게",
                 "상차지주소",
                 "하차지명",
+                "하차휴게",
                 "하차지주소",
                 "화물내용",
                 "차량종류",
@@ -22364,8 +22428,10 @@ const head = isDark
                "첨부",
                 "전달상태",
               ].map((h) => (
-                <th key={h} className={head}>
-                  {h}
+                <th key={h} className={h === "상차휴게" || h === "하차휴게" ? `${head} !px-1 ${restExpanded ? "" : "!w-6"}` : head}>
+                  {h === "상차휴게" || h === "하차휴게"
+                    ? <RestColumnHeader expanded={restExpanded} onToggle={toggleRestExpanded} />
+                    : h}
                 </th>
               ))}
             </tr>
@@ -22395,8 +22461,9 @@ const head = isDark
                 formatPhone={formatPhone}
                 getCreatedMs={getCreatedMs}
                 getUpdatedMs={getUpdatedMs}
+                getDispatchConfirmedMs={getDispatchConfirmedMs}
                 formatKstDateTime={formatKstDateTime}
-                getCreatorLabel={getCreatorLabel}
+                getCreatorLabel={(r) => getCreatorLabel(r, userNameMap)}
                 editableInput={editableInput}
                 renderAddrCell={renderAddrCell}
                 renderCargoCell={renderCargoCell}
@@ -22405,6 +22472,7 @@ const head = isDark
                 dispatchData={dispatchData}
                 placeRows={placeRows}
                 lunchByName={lunchByName}
+                restExpanded={restExpanded}
                 timeOptions={timeOptions}
                 patchDispatch={patchDispatch}
                 setRows={setRows}
@@ -22525,17 +22593,35 @@ const head = isDark
       onClick={() => setCopyPanelOpen(false)}
     />
 
-    <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
+    <div
+      className={copyPanelStyle === "B"
+        ? "absolute rounded-2xl bg-gray-50 shadow-2xl overflow-y-auto"
+        : "absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto"}
+      style={copyPanelStyle === "B" ? {
+        top: "50%", left: "50%", width: "min(1100px, 92vw)", maxHeight: "88vh",
+        transform: `translate(-50%, -50%) translate(${copyPanelDrag.x}px, ${copyPanelDrag.y}px)`,
+      } : undefined}
+    >
 
       <div className="p-10 space-y-10 text-[14px]">
 
-        {/* HEADER */}
-<div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+        {/* HEADER — B스타일에서는 이 영역을 드래그 손잡이로 사용 */}
+<div
+  className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm"
+  onMouseDown={copyPanelStyle === "B" ? handleCopyPanelDragStart : undefined}
+  style={copyPanelStyle === "B" ? { cursor: "grab" } : undefined}
+>
   <div>
     <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
     <p className="text-[13px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
+    {/* A/B 스타일 전환 */}
+    <button type="button" onClick={toggleCopyPanelStyle}
+      className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1B2B4B]/10 hover:bg-[#1B2B4B]/20 text-[#1B2B4B] text-[13px] font-bold transition"
+      title="패널 스타일 전환 (A: 우측고정 / B: 중앙이동)">
+      {copyPanelStyle}
+    </button>
     {/* 운임조회 */}
     <button
       onClick={handleCopyFareSearch}
@@ -26075,7 +26161,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             오더정보
           </button>
-          {/* 수정 */}
+          {/* 수정 — 오더복사수정패널을 연다 (선택한 오더 수정 팝업은 폐지) */}
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
@@ -26087,12 +26173,11 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               const rawBase21 = raw.split("+")[0];
               for (const s of KNOWN_SUFFIXES) { if (rawBase21.endsWith(s)) { cargoNum = rawBase21.slice(0, -s.length).trim(); cargoType = s; break; } }
               if (!cargoType) { cargoNum = rawBase21; cargoType = ""; }
-              const ton = r.차량톤수 || "";
+              const ton = latest.차량톤수 || "";
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
-              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType, 수수료: (Number(r.청구운임) || 0) - (Number(r.기사운임) || 0) });
-              setSelected(prev => prev.includes(r._id) ? prev : [...prev, r._id]);
-              setEditPopupOpen(true);
+              setCopyTarget({ ...latest, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setCopyPanelOpen(true);
               setContextMenu(null);
             }}
           >
@@ -27812,6 +27897,32 @@ const mergedClients = React.useMemo(() => {
 
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
+// 휴게 컬럼 접기/펼치기 — 항상 접힌 채로 시작하고, 메뉴를 옮겼다 와도(모듈이
+// 새로 로드되지 않는 한) 마지막 상태가 유지되도록 모듈 스코프 변수와 동기화한다.
+const [restExpanded, setRestExpanded] = React.useState(_restColumnExpandedShared);
+const toggleRestExpanded = React.useCallback(() => {
+  setRestExpanded(p => { const next = !p; _restColumnExpandedShared = next; return next; });
+}, []);
+
+// 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
+// users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
+const [userNameMap, setUserNameMap] = React.useState(new Map());
+React.useEffect(() => {
+  let cancelled = false;
+  getDocs(collection(db, "users")).then(snap => {
+    if (cancelled) return;
+    const map = new Map();
+    snap.docs.forEach(d => {
+      const data = d.data() || {};
+      const name = (data.name || "").trim();
+      if (!name) return;
+      map.set(d.id, name);
+      if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
+    });
+    setUserNameMap(map);
+  }).catch(() => {});
+  return () => { cancelled = true; };
+}, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
@@ -28754,6 +28865,41 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+// 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
+// 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
+const [copyPanelStyle, setCopyPanelStyle] = React.useState(() => {
+  try { return localStorage.getItem("copyPanelStyle") === "B" ? "B" : "A"; } catch { return "A"; }
+});
+const toggleCopyPanelStyle = () => {
+  setCopyPanelStyle(prev => {
+    const next = prev === "B" ? "A" : "B";
+    try { localStorage.setItem("copyPanelStyle", next); } catch {}
+    return next;
+  });
+};
+// B스타일(중앙 팝업) 드래그 위치 — 패널을 새로 열 때마다 화면 중앙으로 리셋된다.
+const [copyPanelDrag, setCopyPanelDrag] = React.useState({ x: 0, y: 0 });
+const copyPanelDragRef = React.useRef({ dragging: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+React.useEffect(() => { if (copyPanelOpen) setCopyPanelDrag({ x: 0, y: 0 }); }, [copyPanelOpen]);
+const handleCopyPanelDragStart = (e) => {
+  if (copyPanelStyle !== "B") return;
+  if (e.target.closest("button, input, textarea, select, a")) return; // 버튼/입력창 클릭은 드래그로 취급하지 않음
+  copyPanelDragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, origX: copyPanelDrag.x, origY: copyPanelDrag.y };
+  const onMove = (ev) => {
+    if (!copyPanelDragRef.current.dragging) return;
+    setCopyPanelDrag({
+      x: copyPanelDragRef.current.origX + (ev.clientX - copyPanelDragRef.current.startX),
+      y: copyPanelDragRef.current.origY + (ev.clientY - copyPanelDragRef.current.startY),
+    });
+  };
+  const onUp = () => {
+    copyPanelDragRef.current.dragging = false;
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+};
 const [copyDriverPick, setCopyDriverPick] = React.useState(null); // 오더복사수정패널 기사정보: 동일 차량번호 기사 여러 명일 때 선택 팝업
 const [copyClientOptions, setCopyClientOptions] = React.useState([]);
 const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
@@ -31415,7 +31561,6 @@ return (
   setBulkUploadConfirm5({ phones, body: msg });
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크{selected.size>1?` (${selected.size})`:""}</button>
           <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input autoComplete="off" type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
-          <button className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}>선택초기화</button>
           <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}>엑셀다운</button>
@@ -31457,18 +31602,20 @@ return (
             <tr>
               {[
                 "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-                "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
+                "거래처명", "상차지명", "상차휴게", "상차지주소", "하차지명", "하차휴게", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
               ].map((h) => (
-                <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
+                <th key={h} className={`px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0 ${(h === "상차휴게" || h === "하차휴게") ? `!px-1 ${restExpanded ? "" : "!w-6"}` : ""}`}>
                   {h === "선택" ? (
                     <input autoComplete="off"
                       type="checkbox"
                       onChange={() => toggleAll(filtered)}
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
+                  ) : h === "상차휴게" || h === "하차휴게" ? (
+                    <RestColumnHeader expanded={restExpanded} onToggle={toggleRestExpanded} />
                   ) : h}
                 </th>
               ))}
@@ -31478,7 +31625,7 @@ return (
           <tbody>
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={29} className="py-16 text-center text-[13px] text-gray-400">
+                <td colSpan={31} className="py-16 text-center text-[13px] text-gray-400">
                   조회된 결과가 없습니다.
                 </td>
               </tr>
@@ -31564,7 +31711,8 @@ return (
     tooltipRows={<>
       <div>등록시간: <span className="text-yellow-300">{_fmtKst(row.createdAt || row.등록일시 || row.등록시간 || (row.등록일 && `${row.등록일}T00:00:00`))}</span></div>
       <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
-      <div>등록자: <span className="text-blue-300">{_creatorLabel(row)}</span></div>
+      <div>배차한시간: <span className="text-purple-300">{row.배차확정일시 ? _fmtKst(row.배차확정일시) : "-"}</span></div>
+      <div>등록자: <span className="text-blue-300">{_creatorLabel(row, userNameMap)}</span></div>
     </>}
   />
 </td>
@@ -31572,17 +31720,24 @@ return (
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
 {[
   "상차일", "상차시간", "하차일", "하차시간",
-  "거래처명", "상차지명", "상차지주소",
-  "하차지명", "하차지주소",
+  "거래처명", "상차지명", "상차휴게", "상차지주소",
+  "하차지명", "하차휴게", "하차지주소",
   "화물내용", "차량종류", "차량톤수",
 ].map((key) => (
   <td
     key={`${id}-${key}`}
-    className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap"
+    className={`px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap ${(key === "상차휴게" || key === "하차휴게") ? `!px-1 ${restExpanded ? "" : "!w-6"}` : ""}`}
   >
 
-    {/* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */}
-    {key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
+    {/* 휴게(점심시간) — 상/하차지에 점심시간이 등록된 경우만 표시 */}
+    {key === "상차휴게" ? (
+      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} expanded={restExpanded} />
+
+    ) : key === "하차휴게" ? (
+      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} expanded={restExpanded} />
+
+    ) : /* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */
+    key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
       row.차량종류 || "-"
 
     ) : key === "차량종류" ? (
@@ -31626,7 +31781,6 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <span>{row.상차지명}</span>
-    {(() => { const _li = lunchByName.get(_lunchNameKey(row.상차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -31640,7 +31794,6 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <span>{row.하차지명}</span>
-    {(() => { const _li = lunchByName.get(_lunchNameKey(row.하차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
@@ -31651,20 +31804,18 @@ return (
   </div>
 
 ) : key === "상차시간" ? (
-  (() => {
-    const _li = lunchByName.get(_lunchNameKey(row.상차지명));
-    const _content = row.상차시간 ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분) : "즉시";
-    const _overlap = !!_li && isLunchTimeOverlap(row.상차시간, _li.start, _li.end);
-    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
-  })()
+  <span>
+    {row.상차시간
+      ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분)
+      : "즉시"}
+  </span>
 
 ) : key === "하차시간" ? (
-  (() => {
-    const _li = lunchByName.get(_lunchNameKey(row.하차지명));
-    const _content = row.하차시간 ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분) : "즉시";
-    const _overlap = !!_li && isLunchTimeOverlap(row.하차시간, _li.start, _li.end);
-    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
-  })()
+  <span>
+    {row.하차시간
+      ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분)
+      : "즉시"}
+  </span>
 
 ) : key === "화물내용" ? (() => {
   // 중복 필드 참조로 인한 중복 합산 방지: 실시간배차현황과 동일하게 dedup 처리
@@ -33238,17 +33389,35 @@ return (
       onClick={() => setCopyPanelOpen(false)}
     />
 
-    <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
+    <div
+      className={copyPanelStyle === "B"
+        ? "absolute rounded-2xl bg-gray-50 shadow-2xl overflow-y-auto"
+        : "absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto"}
+      style={copyPanelStyle === "B" ? {
+        top: "50%", left: "50%", width: "min(1100px, 92vw)", maxHeight: "88vh",
+        transform: `translate(-50%, -50%) translate(${copyPanelDrag.x}px, ${copyPanelDrag.y}px)`,
+      } : undefined}
+    >
 
       <div className="p-10 space-y-10 text-[14px]">
 
-        {/* HEADER */}
-<div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+        {/* HEADER — B스타일에서는 이 영역을 드래그 손잡이로 사용 */}
+<div
+  className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm"
+  onMouseDown={copyPanelStyle === "B" ? handleCopyPanelDragStart : undefined}
+  style={copyPanelStyle === "B" ? { cursor: "grab" } : undefined}
+>
   <div>
     <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
     <p className="text-[13px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
+    {/* A/B 스타일 전환 */}
+    <button type="button" onClick={toggleCopyPanelStyle}
+      className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1B2B4B]/10 hover:bg-[#1B2B4B]/20 text-[#1B2B4B] text-[13px] font-bold transition"
+      title="패널 스타일 전환 (A: 우측고정 / B: 중앙이동)">
+      {copyPanelStyle}
+    </button>
     <button
     onClick={handleCopyFareSearch}
     className="px-4 py-2 rounded-lg text-[13px] font-bold transition
@@ -35929,6 +36098,7 @@ setCopyPlaceOptions(list);
           </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
+              // 오더복사수정패널을 연다 (선택한 오더 수정 팝업은 폐지)
               const r = contextMenuDS.row;
               const raw = String(r.화물내용 || "");
               const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
@@ -35939,9 +36109,8 @@ setCopyPlaceOptions(list);
               const ton = r.차량톤수 || "";
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
-              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType, 수수료: (Number(r.청구운임) || 0) - (Number(r.기사운임) || 0) });
-              setSelected(prev => new Set([...prev, getId(r)]));
-              setEditPopupOpen(true);
+              setCopyTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setCopyPanelOpen(true);
               setContextMenuDS(null);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -47881,15 +48050,17 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     showAlert(`${ok}건 복구 완료 (양쪽 담당자 목록을 합쳐서 반영, 이후 자동으로 서로 동기화됩니다)`);
   };
 
-React.useEffect(() => {
-    setRows(prev => {
-      const prevMap = new Map(prev.map(r => [r.id || r.거래처명, r]));
-      return (clients || []).map(c => {
-        const key = c.id || c.거래처명;
-        // ★ 로컬에 있으면 로컬 편집값 우선 보존
-        return prevMap.has(key) ? prevMap.get(key) : { ...c };
-      });
-    });
+// ⚠️ 예전엔 "로컬에 이미 있는 행이면 로컬값을 우선 보존"하는 병합 로직이었는데,
+  // 그 판단 기준이 "같은 id/거래처명이 로컬에 존재하는가"였다 — 즉 편집 중인 행이
+  // 아니라 이미 한 번이라도 화면에 그려진 행이면 전부 여기 해당돼서, Firestore에서
+  // 확정된 최신 값(예: 방금 저장한 점심시간)이 나중에 다시 내려와도 그 행은 영원히
+  // 예전 로컬 스냅샷에 묶여 절대 갱신되지 않는 버그였다(다른 메뉴로 갔다가 돌아와
+  // 컴포넌트가 리마운트될 때 그 시점의 clients가 아직 서버 확정 전이면 그 오래된
+  // 값이 그대로 굳어버림). rows는 clients를 그대로 비추는 용도일 뿐 별도로 보존해야
+  // 할 미저장 편집 상태가 없으므로(수정 팝업은 별개의 editClientModal state를 씀),
+  // 그냥 항상 최신 clients로 덮어써서 서버 데이터가 확실히 반영되게 한다.
+  React.useEffect(() => {
+    setRows((clients || []).map(c => ({ ...c })));
   }, [clients]);
 
   const filtered = React.useMemo(() => {
