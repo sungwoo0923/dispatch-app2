@@ -31,6 +31,7 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
+import { Utensils } from "lucide-react";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -68,6 +69,76 @@ function CountUp({ value, duration = 900 }) {
 --------------------------------------------------*/
 const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
 const PAY_TYPES = ["계산서", "착불", "선불", "계좌이체"];
+
+/* -------------------------------------------------
+   점심시간 (거래처/상하차지 등록용) — 실시간배차현황/배차현황에 새 컬럼을
+   추가하지 않고, 상/하차지명 옆 작은 표시 + 시간 겹침 경고로만 보여준다.
+--------------------------------------------------*/
+// "오전/오후 N시(30분)" 또는 이미 "HH:mm" 형태인 문자열을 24시간 "HH:mm"으로 변환.
+// 파싱할 수 없으면 빈 문자열을 돌려준다.
+function lunchTimeToHHMM(t) {
+  if (!t) return "";
+  let s = String(t).trim().replace("시 ", ":").replace("시", ":").replace("분", "");
+  if (/:\s*$/.test(s)) s += "00";
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s.padStart(5, "0");
+  const m = s.match(/(오전|오후)\s*(\d{1,2}):?(\d{2})?/);
+  if (!m) return "";
+  let [, ampm, hh, mm] = m;
+  mm = mm ?? "00";
+  hh = parseInt(hh, 10);
+  if (ampm === "오후" && hh < 12) hh += 12;
+  if (ampm === "오전" && hh === 12) hh = 0;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+// 상/하차시간이 등록된 점심시간대(점심시작~점심종료, 종료 미포함)와 겹치는지 확인
+function isLunchTimeOverlap(orderTime, lunchStart, lunchEnd) {
+  const t = lunchTimeToHHMM(orderTime);
+  const s = lunchTimeToHHMM(lunchStart);
+  const e = lunchTimeToHHMM(lunchEnd);
+  if (!t || !s || !e) return false;
+  return t >= s && t < e;
+}
+// 이름(거래처명/업체명) → { start, end } 조회용 맵을 만든다.
+// clients(기본거래처)를 먼저 넣어 우선시키고, 하차지거래처는 겹치지 않는 이름만 보충한다.
+function buildLunchByName(clientsArr = [], placeRowsArr = []) {
+  const map = new Map();
+  const put = (name, start, end) => {
+    if (!name) return;
+    if (!start && !end) return;
+    const key = String(name).toLowerCase().replace(/\s+/g, "");
+    if (!key || map.has(key)) return;
+    map.set(key, { start: start || "", end: end || "" });
+  };
+  (clientsArr || []).forEach(c => put(c.거래처명 || c.업체명, c.점심시작시간, c.점심종료시간));
+  (placeRowsArr || []).forEach(p => put(p.업체명 || p.거래처명, p.점심시작시간, p.점심종료시간));
+  return map;
+}
+const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
+
+// 점심시간이 등록된 상/하차지명 옆에 붙는 작은 표시 — 알록달록한 이모지 대신
+// 프로그램 전체에서 쓰는 회색 단색 아이콘(lucide) + 마우스 오버 툴팁으로 보여준다.
+const LunchBadge = ({ start, end }) => {
+  if (!start && !end) return null;
+  const label = start && end ? `점심시간 ${start} ~ ${end}` : `점심시간 ${start || end}`;
+  return (
+    <span title={label} className="inline-flex items-center justify-center text-gray-400 shrink-0">
+      <Utensils size={11} strokeWidth={2.25} />
+    </span>
+  );
+};
+
+// 상/하차시간이 그 거래처의 점심시간대와 겹칠 때만 시간 텍스트를 경고 스타일로 감싼다.
+const LunchTimeWarning = ({ children, overlap, start, end }) => {
+  if (!overlap) return <>{children}</>;
+  return (
+    <span
+      title={`점심시간(${start} ~ ${end})과 겹칩니다`}
+      className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-bold border border-orange-200"
+    >
+      {children}
+    </span>
+  );
+};
 
 // kg/g으로 입력해도 항상 톤 단위 문자열로 통일 (예: "100kg" → "0.1톤")
 const toTonUnit = (v = "") => {
@@ -1851,6 +1922,8 @@ const markEditRequestSeen = async (order) => {
           if (client.오더메모 !== undefined) syncFields.오더메모 = client.오더메모;
           if (client.팝업표시 !== undefined) syncFields.팝업표시 = client.팝업표시;
           if (client.기사전달주의사항 !== undefined) syncFields.기사전달주의사항 = client.기사전달주의사항;
+          if (client.점심시작시간 !== undefined) syncFields.점심시작시간 = client.점심시작시간;
+          if (client.점심종료시간 !== undefined) syncFields.점심종료시간 = client.점심종료시간;
           if (Object.keys(syncFields).length) {
             await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
           }
@@ -2019,6 +2092,10 @@ const upsertPlace = async (place) => {
       // 기사전달주의사항: 이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때
       // 자동으로 함께 붙는 문구 — 오더메모와 동일한 저장/동기화 방식을 따른다.
       기사전달주의사항: place.기사전달주의사항 !== undefined ? place.기사전달주의사항 : (existingData?.기사전달주의사항 || ""),
+      // 점심시간: 실시간배차현황/배차현황에서 상/하차지명 옆 표시 + 상/하차시간 겹침
+      // 경고에 쓰인다 — 오더메모와 동일한 저장/동기화 방식을 따른다.
+      점심시작시간: place.점심시작시간 !== undefined ? place.점심시작시간 : (existingData?.점심시작시간 || ""),
+      점심종료시간: place.점심종료시간 !== undefined ? place.점심종료시간 : (existingData?.점심종료시간 || ""),
       // 메모/등급 안내 팝업 노출 여부 — 기본값은 켜짐(true). 거래처관리에서 끈 경우에만 false로 저장된다.
       팝업표시: place.팝업표시 !== undefined ? place.팝업표시 : (existingData?.팝업표시 !== undefined ? existingData.팝업표시 : true),
       isActive: place.isActive !== false,
@@ -2044,6 +2121,8 @@ const upsertPlace = async (place) => {
           메모: data.메모,
           오더메모: data.오더메모,
           기사전달주의사항: data.기사전달주의사항,
+          점심시작시간: data.점심시작시간,
+          점심종료시간: data.점심종료시간,
           팝업표시: data.팝업표시,
         }, { merge: true }).catch(() => {});
       }
@@ -16974,7 +17053,7 @@ function RealtimeRowBase({
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, formatKstDateTime, getCreatorLabel,
   editableInput, renderAddrCell, renderCargoCell, canEdit, handleEditChange,
-  dispatchData, placeRows, timeOptions, patchDispatch,
+  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName,
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
@@ -17082,22 +17161,29 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
                   <td className={cell}>
-  {r.상차시간
-    ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분)
-    : "즉시"}
+  {(() => {
+    const _li = lunchByName.get(_lunchNameKey(r.상차지명));
+    const _content = r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : "즉시";
+    const _overlap = !!_li && isLunchTimeOverlap(r.상차시간, _li.start, _li.end);
+    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
+  })()}
 </td>
 
                   <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
                  <td className={cell}>
-  {r.하차시간
-    ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분)
-    : "즉시"}
+  {(() => {
+    const _li = lunchByName.get(_lunchNameKey(r.하차지명));
+    const _content = r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : "즉시";
+    const _overlap = !!_li && isLunchTimeOverlap(r.하차시간, _li.start, _li.end);
+    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
+  })()}
 </td>
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.상차지명}</span>
+    {(() => { const _li = lunchByName.get(_lunchNameKey(r.상차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
@@ -17117,6 +17203,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.하차지명}</span>
+    {(() => { const _li = lunchByName.get(_lunchNameKey(r.하차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -17727,6 +17814,9 @@ const mergedClients = React.useMemo(() => {
   });
   return Array.from(map.values());
 }, [placeRows, clients]);
+
+// 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
+const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
@@ -22314,6 +22404,7 @@ const head = isDark
                 handleEditChange={handleEditChange}
                 dispatchData={dispatchData}
                 placeRows={placeRows}
+                lunchByName={lunchByName}
                 timeOptions={timeOptions}
                 patchDispatch={patchDispatch}
                 setRows={setRows}
@@ -27719,6 +27810,9 @@ const mergedClients = React.useMemo(() => {
   return Array.from(map.values());
 }, [placeRows, clients]);
 
+// 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
+const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
+
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
 // 기존 거래처와 주소가 다르면 그냥 덮어쓰지 않고 "새 주소로 업데이트 / 기존 주소
@@ -31532,6 +31626,7 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <span>{row.상차지명}</span>
+    {(() => { const _li = lunchByName.get(_lunchNameKey(row.상차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -31545,6 +31640,7 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <span>{row.하차지명}</span>
+    {(() => { const _li = lunchByName.get(_lunchNameKey(row.하차지명)); return _li ? <LunchBadge start={_li.start} end={_li.end} /> : null; })()}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
@@ -31555,18 +31651,20 @@ return (
   </div>
 
 ) : key === "상차시간" ? (
-  <span>
-    {row.상차시간
-      ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분)
-      : "즉시"}
-  </span>
+  (() => {
+    const _li = lunchByName.get(_lunchNameKey(row.상차지명));
+    const _content = row.상차시간 ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분) : "즉시";
+    const _overlap = !!_li && isLunchTimeOverlap(row.상차시간, _li.start, _li.end);
+    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
+  })()
 
 ) : key === "하차시간" ? (
-  <span>
-    {row.하차시간
-      ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분)
-      : "즉시"}
-  </span>
+  (() => {
+    const _li = lunchByName.get(_lunchNameKey(row.하차지명));
+    const _content = row.하차시간 ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분) : "즉시";
+    const _overlap = !!_li && isLunchTimeOverlap(row.하차시간, _li.start, _li.end);
+    return <LunchTimeWarning overlap={_overlap} start={_li?.start} end={_li?.end}>{_content}</LunchTimeWarning>;
+  })()
 
 ) : key === "화물내용" ? (() => {
   // 중복 필드 참조로 인한 중복 합산 방지: 실시간배차현황과 동일하게 dedup 처리
@@ -48843,6 +48941,26 @@ React.useEffect(() => {
                       value={editClientModal.기사전달주의사항 || ""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 기사전달주의사항: e.target.value }))} />
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">점심시간</label>
+                    <div className="text-[11px] text-gray-400 mb-1">실시간배차현황/배차현황에서 상/하차지명 옆에 표시되고, 상/하차시간이 이 시간대와 겹치면 경고로 알려줍니다.</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <TimeAmPmPicker
+                        value={editClientModal.점심시작시간 || ""}
+                        onChange={(v) => setEditClientModal(p => ({ ...p, 점심시작시간: v }))}
+                      />
+                      <span className="text-[12px] text-gray-400">~</span>
+                      <TimeAmPmPicker
+                        value={editClientModal.점심종료시간 || ""}
+                        onChange={(v) => setEditClientModal(p => ({ ...p, 점심종료시간: v }))}
+                      />
+                      {(editClientModal.점심시작시간 || editClientModal.점심종료시간) && (
+                        <button type="button"
+                          onClick={() => setEditClientModal(p => ({ ...p, 점심시작시간: "", 점심종료시간: "" }))}
+                          className="text-[11px] text-gray-400 hover:text-gray-600 underline">지우기</button>
+                      )}
+                    </div>
+                  </div>
                   {(editClientModal.오더메모?.trim() || (editClientModal.등급 && editClientModal.등급 !== "일반")) && (
                     <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                       <div>
@@ -49110,6 +49228,26 @@ React.useEffect(() => {
                   placeholder="예: 안전화 착용 필수"
                   value={editPlaceModal.기사전달주의사항||""}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 기사전달주의사항: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">점심시간</label>
+                <div className="text-[11px] text-gray-400 mb-1">실시간배차현황/배차현황에서 상/하차지명 옆에 표시되고, 상/하차시간이 이 시간대와 겹치면 경고로 알려줍니다.</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <TimeAmPmPicker
+                    value={editPlaceModal.점심시작시간 || ""}
+                    onChange={(v) => setEditPlaceModal(p => ({ ...p, 점심시작시간: v }))}
+                  />
+                  <span className="text-[12px] text-gray-400">~</span>
+                  <TimeAmPmPicker
+                    value={editPlaceModal.점심종료시간 || ""}
+                    onChange={(v) => setEditPlaceModal(p => ({ ...p, 점심종료시간: v }))}
+                  />
+                  {(editPlaceModal.점심시작시간 || editPlaceModal.점심종료시간) && (
+                    <button type="button"
+                      onClick={() => setEditPlaceModal(p => ({ ...p, 점심시작시간: "", 점심종료시간: "" }))}
+                      className="text-[11px] text-gray-400 hover:text-gray-600 underline">지우기</button>
+                  )}
+                </div>
               </div>
               {(editPlaceModal.오더메모?.trim() || (editPlaceModal.등급 && editPlaceModal.등급 !== "일반")) && (
                 <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
