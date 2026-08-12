@@ -9651,6 +9651,25 @@ setSmartDriverMatched(results.slice(0, 8));
 
 // 스마트 검색 결과 선택
 const selectSmartDriver = (d) => {
+  // ⚠️ 드롭다운 추천 항목을 고르는 이 경로는 예전엔 검사 없이 무조건 DB에 저장된
+  // 기존 번호로 덮어썼다 — 그래서 사용자가 "차량번호는 같은데 번호가 바뀐 기사"의
+  // 새 번호까지 검색창에 입력해놓고 드롭다운 추천(옛날 번호로 뜬 항목)을 클릭/엔터로
+  // 고르면, 방금 입력한 새 번호가 조용히 옛날 번호로 되돌아가는 버그가 있었다.
+  // applySmartDriverInput(엔터/포커스아웃 경로)에는 이미 있는 "⚠️ 기사 정보 확인"
+  // 충돌 팝업을 이 경로에도 동일하게 연결해, 번호가 다르면 무조건 사용자가 직접
+  // 셋 중 하나(기존 정보 사용/덮어쓰기/신규 등록)를 고르게 한다.
+  const { phone: typedPhone } = parseDriverText(smartDriverQuery);
+  if (typedPhone && normD(d.전화번호) !== normD(typedPhone)) {
+    setSmartDriverQuery("");
+    setSmartDriverMatched([]);
+    setSmartDriverActiveIdx(-1);
+    setDriverConflictPopup({
+      mode: "phone_diff",
+      existing: d,
+      input: { plate: d.차량번호, name: d.이름, phone: typedPhone },
+    });
+    return;
+  }
   const grade = d?.등급 || d?.grade || "";
   if (grade === "블랙") setBlackAlert(d);
   else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
@@ -20430,6 +20449,16 @@ setSmartList4(results.slice(0,8));
 };
 // 스마트검색 드롭다운 항목 선택 공통 처리 (마우스 클릭 / 방향키+엔터 공용)
 const selectSmart4Driver = (d, setTarget) => {
+  // ⚠️ 드롭다운 추천 항목을 고르는 이 경로는 예전엔 검사 없이 무조건 DB에 저장된
+  // 기존 번호로 덮어썼다 — applySmart4(엔터/포커스아웃 경로)에 있는 "⚠️ 기사 정보
+  // 확인" 충돌 팝업을 이 경로에도 동일하게 연결해, 검색창에 입력해둔 번호가 DB
+  // 번호와 다르면 조용히 덮어쓰지 않고 사용자가 직접 선택하게 한다.
+  const { phone: typedPhone } = parseDriverText4(smartQ4);
+  if (typedPhone && nd4(d.전화번호) !== nd4(typedPhone)) {
+    setSmartQ4(""); setSmartList4([]); setSmart4ActiveIdx(-1);
+    setSmart4ConflictPopup({ existing: d, input: { plate: d.차량번호, name: d.이름, phone: typedPhone }, setTarget });
+    return;
+  }
   const gr = d?.등급 || d?.grade || "";
   if (gr === "블랙") setBlackAlert(d);
   else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
@@ -29544,6 +29573,16 @@ setSmartList5(results.slice(0,8));
 };
 // 스마트검색 드롭다운 항목 선택 공통 처리 (마우스 클릭 / 방향키+엔터 공용)
 const selectSmart5Driver = (d, setTarget) => {
+  // ⚠️ 드롭다운 추천 항목을 고르는 이 경로는 예전엔 검사 없이 무조건 DB에 저장된
+  // 기존 번호로 덮어썼다 — applySmart5(엔터/포커스아웃 경로)에 있는 "⚠️ 기사 정보
+  // 확인" 충돌 팝업을 이 경로에도 동일하게 연결해, 검색창에 입력해둔 번호가 DB
+  // 번호와 다르면 조용히 덮어쓰지 않고 사용자가 직접 선택하게 한다.
+  const { phone: typedPhone } = parseDriverText5(smartQ5);
+  if (typedPhone && nd5(d.전화번호) !== nd5(typedPhone)) {
+    setSmartQ5(""); setSmartList5([]); setSmart5ActiveIdx(-1);
+    setSmart5ConflictPopup({ existing: d, input: { plate: d.차량번호, name: d.이름, phone: typedPhone }, setTarget });
+    return;
+  }
   const gr = d?.등급 || d?.grade || "";
   if (gr === "블랙") setBlackAlert(d);
   else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
