@@ -43,6 +43,11 @@ export default function CafeOrderDetail({ order, profile, onClose, onEdit, notif
 
   // 신청중 상태 카운트다운 — 1,2,3...처럼 경과 초가 올라가는 형태로 보여준다.
   // 10초(APPLY_CANCEL_WINDOW_MS)가 지나면 자동으로 배차완료로 확정된다.
+  //
+  // 화면 표시(setElapsed)는 300ms마다 갱신하되, 서버에 실제로 확정을 요청하는
+  // finalizeCafeApplyIfDue는 절대 매 tick(300ms)마다 쏘지 않는다 — 서버가 일시적으로
+  // 응답하지 못하는 상황(요청량 초과 등)에서 실패할 때마다 즉시 재시도하면 오히려
+  // 요청 폭주를 유발해 문제를 더 키운다. 지수 백오프(2s→4s→8s→최대 15s)로만 재시도한다.
   useEffect(() => {
     if (order.status !== "applying" || !order.applyRequestedAt?.toMillis) {
       setElapsed(null);
@@ -50,10 +55,16 @@ export default function CafeOrderDetail({ order, profile, onClose, onEdit, notif
     }
     const requestedMs = order.applyRequestedAt.toMillis();
     const totalSec = Math.round(APPLY_CANCEL_WINDOW_MS / 1000);
+    let nextFinalizeAt = requestedMs + APPLY_CANCEL_WINDOW_MS;
+    let backoffMs = 2000;
+
     const tick = () => {
-      const passedSec = Math.floor((Date.now() - requestedMs) / 1000) + 1;
+      const now = Date.now();
+      const passedSec = Math.floor((now - requestedMs) / 1000) + 1;
       setElapsed(Math.min(totalSec, Math.max(1, passedSec)));
-      if (Date.now() - requestedMs >= APPLY_CANCEL_WINDOW_MS) {
+      if (now >= nextFinalizeAt) {
+        nextFinalizeAt = now + backoffMs;
+        backoffMs = Math.min(backoffMs * 2, 15000);
         finalizeCafeApplyIfDue(order.id).catch(() => {});
       }
     };
