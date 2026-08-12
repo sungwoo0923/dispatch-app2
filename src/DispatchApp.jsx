@@ -17280,6 +17280,10 @@ function RealtimeRowBase({
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
     : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
+  // 오더목록에서 특히 중요한 값(상/하차일시·화물내용·차량종류·톤수)을 운임확인서(FareCertModal)의
+  // 강조 스타일과 동일하게 굵고 네이비색으로 표시해 다른 칸과 한눈에 구분되도록 한다.
+  const emph = isDark ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
+
   // ⚠️ 여기 overflow-hidden/text-ellipsis/max-width를 다시 넣지 말 것 — renderAddrCell이
   // 이미 글자수(14자) 기준으로 직접 자르고 "더보기" 버튼을 붙여주는데, 이 td에 CSS
   // 말줄임까지 겹치면 "주소(14자)+더보기 버튼"의 실제 폭이 CSS max-width를 넘는
@@ -17379,16 +17383,20 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
                   <td className={cell}>
-  {r.상차시간
-    ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분)
-    : "즉시"}
+  <span className={emph}>
+    {r.상차시간
+      ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분)
+      : "즉시"}
+  </span>
 </td>
 
                   <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
                  <td className={cell}>
-  {r.하차시간
-    ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분)
-    : "즉시"}
+  <span className={emph}>
+    {r.하차시간
+      ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분)
+      : "즉시"}
+  </span>
 </td>
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
@@ -17451,7 +17459,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                       r._id
                     )}
                   </td>
-                  <td className={cell}>{canEdit("차량톤수", r._id) ? editableInput("차량톤수", r.차량톤수, r._id) : (mergeViaTonnage(r.차량톤수, [r.__pickupStops, r.__dropStops]) || r.차량톤수 || "")}</td>
+                  <td className={cell}>{canEdit("차량톤수", r._id) ? editableInput("차량톤수", r.차량톤수, r._id) : <span className={emph}>{mergeViaTonnage(r.차량톤수, [r.__pickupStops, r.__dropStops]) || r.차량톤수 || ""}</span>}</td>
                   <td className={`${cell} text-center`}>
                     {r.혼적 ? "Y" : ""}
                   </td>
@@ -21896,17 +21904,22 @@ const handleCloseFileUpload = async (e) => {
     }));
   };
 
+  // 오더목록에서 중요한 값(상/하차일·화물내용·차량종류·톤수)은 운임확인서(FareCertModal)의
+  // 강조 스타일(font-extrabold + 네이비색)과 동일하게 표시해 다른 칸과 구분되도록 한다.
+  const emphKeys = ["상차일", "하차일", "화물내용", "차량종류", "차량톤수"];
+  const emphCls = isDark ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
+
   const editableInput = (key, val, rowId) => {
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
     //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
-    if (isShipperFieldLocked(key, rowId)) return key === "상차일" ? <span className="font-bold">{val}</span> : val;
+    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={emphCls}>{val}</span> : val;
 
     // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
     if (
       !canEdit(key, rowId) &&
       !["차량종류", "지급방식", "배차방식"].includes(key)
     ) {
-      return key === "상차일" ? <span className="font-bold">{val}</span> : val;
+      return emphKeys.includes(key) ? <span className={emphCls}>{val}</span> : val;
     }
 
     if (key === "상차일" || key === "하차일") {
@@ -22069,7 +22082,7 @@ const handleCloseFileUpload = async (e) => {
 
     return (
       <div className="flex items-center justify-center gap-1 min-w-0">
-        <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 90 }} title={str}>
+        <span className={`whitespace-nowrap overflow-hidden text-ellipsis ${emphCls}`} style={{ maxWidth: 90 }} title={str}>
           {display}
         </span>
         {isLong && (
@@ -31951,11 +31964,11 @@ return (
 
     ) : /* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */
     key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
-      row.차량종류 || "-"
+      <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
       <CustomSelect
-        className="border rounded px-1 py-0.5 w-full text-center"
+        className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]"
         value={row.차량종류 || ""}
         onChange={(e) =>
           handleImmediateSelectChange(row, "차량종류", e.target.value)
@@ -32019,14 +32032,14 @@ return (
   </div>
 
 ) : key === "상차시간" ? (
-  <span>
+  <span className="font-extrabold text-[#1B2B4B]">
     {row.상차시간
       ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분)
       : "즉시"}
   </span>
 
 ) : key === "하차시간" ? (
-  <span>
+  <span className="font-extrabold text-[#1B2B4B]">
     {row.하차시간
       ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분)
       : "즉시"}
@@ -32048,7 +32061,7 @@ return (
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
   const text = mergeViaCargoText(row.화물내용, [pickupStops, dropStops]) || row.화물내용 || "";
   // ⭐ 화물내용이 길면 칸이 커지는 대신 7글자로 자르고 "더보기"로 팝업 확인
-  return <AddressCell text={text} max={7} />;
+  return <AddressCell text={text} max={7} valueClassName="font-extrabold text-[#1B2B4B]" />;
 })()
 : key === "차량톤수" ? (() => {
   const parseDedup = (fields) => {
@@ -32063,9 +32076,9 @@ return (
   };
   const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
-  return mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || "";
-})() : key === "상차일" ? (
-  <span className="font-bold">{row.상차일 || ""}</span>
+  return <span className="font-extrabold text-[#1B2B4B]">{mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || ""}</span>;
+})() : key === "상차일" || key === "하차일" ? (
+  <span className="font-extrabold text-[#1B2B4B]">{row[key] || ""}</span>
 ) : (
   row[key]
 )}
@@ -36913,7 +36926,7 @@ setCopyPlaceOptions(list);
 }
 
 /* ---------------------- 주소 더보기 ---------------------- */
-function AddressCell({ text = "", max = 5 }) {
+function AddressCell({ text = "", max = 5, valueClassName = "" }) {
   const [open, setOpen] = React.useState(false);
   const clean = String(text || "");
   const isLong = clean.length > max;
@@ -36923,7 +36936,7 @@ function AddressCell({ text = "", max = 5 }) {
 
   return (
     <div className="relative inline-block">
-      <span>{short}</span>
+      <span className={valueClassName}>{short}</span>
       {isLong && (
         <button onClick={() => setOpen(true)} className="text-[11px] text-[#1B2B4B] ml-1 underline hover:opacity-70">
           더보기
