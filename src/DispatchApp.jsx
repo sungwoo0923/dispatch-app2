@@ -6317,6 +6317,11 @@ React.useEffect(() => {
   }
 }, [vehicleActive, showVehicleDropdown]);
 const [pickupActive, setPickupActive] = React.useState(0);
+// ⭐ Tab을 눌렀을 때 "사용자가 방향키로 실제로 골랐는지"를 구분하기 위한 플래그.
+// 이게 없으면 예를 들어 이미 등록된 "후레쉬2공장"과 비슷한 신규 거래처 "후레쉬2"를
+// 입력하는 중에도 필터링된 드롭다운 맨 위 항목(후레쉬2공장)이 그냥 Tab만 눌러도
+// 강제로 선택돼버려서 신규 입력이 불가능해지는 문제가 있었다.
+const pickupNavTouchedRef = React.useRef(false);
 const pickupDropdownListRef = React.useRef(null);
 React.useEffect(() => {
   const list = pickupDropdownListRef.current;
@@ -6334,6 +6339,9 @@ React.useEffect(() => {
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 const [placeOptions, setPlaceOptions] = React.useState([]);
 const [placeActive, setPlaceActive] = React.useState(0);
+// ⭐ pickupNavTouchedRef와 동일한 이유 — 하차지명도 신규 업체명이 기존 등록된
+// 비슷한 이름의 드롭다운 옵션에 가려 Tab만 눌러도 강제로 바뀌지 않도록 한다.
+const dropNavTouchedRef = React.useRef(false);
 const placeDropdownListRef = React.useRef(null);
 React.useEffect(() => {
   const list = placeDropdownListRef.current;
@@ -8548,6 +8556,10 @@ const doSave = async (shareToCafe = false) => {
   if (isSaving) return;
   setIsSaving(true);
 
+  // ⚠️ 아래 저장 로직 전체를 try/catch로 감싼다 — 예전엔 여기서 네트워크 오류 등
+  // 예외가 하나라도 발생하면 setIsSaving(false)에 도달하지 못해 "배차등록하기"
+  // 버튼이 "저장 중..."에서 영원히 멈춰버렸다(사용자에게는 딜레이/먹통처럼 보임).
+  try {
     // ⛔ 기사 중복 배차 방지
   const dup = checkDuplicateDispatch(form, dispatchData);
   if (dup) {
@@ -8755,6 +8767,11 @@ if (_carNo && _name) {
     upsertDriver({ 차량번호: _carNo, 이름: _name, 전화번호: _tel }).catch(() => {});
   }
 }
+  } catch (err) {
+    console.error("오더 저장 실패:", err);
+    setIsSaving(false);
+    showAlert("저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n" + (err?.message || ""));
+  }
 };
 const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
@@ -10572,6 +10589,7 @@ const similar = placeList.filter(p => {
         setPickupOptions(filterPlaces(v));
         setShowPickupDropdown(true);
         setPickupActive(0);
+        pickupNavTouchedRef.current = false; // 새로 입력하면 이전 방향키 선택 흔적을 지운다
       }}
       onKeyDown={(e) => {
         const list = pickupOptions;
@@ -10585,16 +10603,24 @@ const similar = placeList.filter(p => {
           applyPlaceToForm(p, "pickup", "pickup-manager");
           setShowPickupDropdown(false);
           setPickupOptions([]);
+          pickupNavTouchedRef.current = false;
         } else if (e.key === "ArrowDown") {
+          pickupNavTouchedRef.current = true;
           setPickupActive((i) => Math.min(i + 1, list.length - 1));
         } else if (e.key === "ArrowUp") {
+          pickupNavTouchedRef.current = true;
           setPickupActive((i) => Math.max(i - 1, 0));
         } else if (e.key === "Escape") {
           setShowPickupDropdown(false);
           setPickupOptions([]);
         } else if (e.key === "Tab") {
           const p = list[pickupActive];
-          if (p) {
+          // ⭐ 방향키로 직접 고른 항목이거나, 입력한 텍스트가 그 항목 이름과
+          // 정확히 일치할 때만 자동 적용한다. 그 외(신규 업체명을 타이핑 중인데
+          // 비슷한 기존 업체가 드롭다운 맨 위에 걸려있는 경우)에는 그냥 목록만
+          // 닫고 사용자가 입력한 텍스트를 그대로 두어 다음 칸으로 넘어가게 한다.
+          const exactMatch = p && normalizeKey(p.업체명) === normalizeKey(e.target.value);
+          if (p && (pickupNavTouchedRef.current || exactMatch)) {
             // finalFocusId를 같은 입력창(pickup-place-input)으로 주면, 담당자가
             // 여러 명이라 팝업이 뜨는 경우 선택을 마친 뒤 포커스가 이 필드로
             // 되돌아오는데, 아직 지우지 않은 pickupOptions가 남아있는 상태에서
@@ -10603,7 +10629,10 @@ const similar = placeList.filter(p => {
             applyPlaceToForm(p, "pickup", "pickup-manager");
             setShowPickupDropdown(false);
             setPickupOptions([]);
+          } else {
+            setShowPickupDropdown(false);
           }
+          pickupNavTouchedRef.current = false;
         }
       }}
       onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
@@ -10738,6 +10767,7 @@ className={`
       setPlaceOptions(filterPlaces(v))
       setShowPlaceDropdown(true)
       setPlaceActive(0)
+      dropNavTouchedRef.current = false; // 새로 입력하면 이전 방향키 선택 흔적을 지운다
     }}
     onKeyDown={(e) => {
       const list = placeOptions
@@ -10753,16 +10783,24 @@ className={`
         applyPlaceToForm(p, "drop", "drop-manager");
         setShowPlaceDropdown(false);
         setPlaceOptions([]);
+        dropNavTouchedRef.current = false;
       } else if (e.key === "ArrowDown") {
+        dropNavTouchedRef.current = true;
         setPlaceActive((i) => Math.min(i + 1, list.length - 1))
       } else if (e.key === "ArrowUp") {
+        dropNavTouchedRef.current = true;
         setPlaceActive((i) => Math.max(i - 1, 0))
       } else if (e.key === "Escape") {
         setShowPlaceDropdown(false);
         setPlaceOptions([]);
       } else if (e.key === "Tab") {
         const p = list[placeActive]
-        if (p) {
+        // ⭐ 방향키로 직접 고른 항목이거나, 입력한 텍스트가 그 항목 이름과 정확히
+        // 일치할 때만 자동 적용한다. 그 외(신규 업체명을 타이핑 중인데 비슷한 기존
+        // 업체가 드롭다운 맨 위에 걸려있는 경우)에는 목록만 닫고 입력한 텍스트를
+        // 그대로 두어 다음 칸으로 넘어가게 한다.
+        const exactMatch = p && normalizeKey(p.업체명) === normalizeKey(e.target.value);
+        if (p && (dropNavTouchedRef.current || exactMatch)) {
           // finalFocusId가 같은 입력창(drop-place-input)이면, 담당자가 여러 명이라
           // 팝업이 뜬 뒤 선택을 마치고 포커스가 이 필드로 되돌아왔을 때 placeOptions가
           // 아직 남아있어 Tab을 다시 누르면 이 분기가 재실행되어 팝업이 계속
@@ -10770,7 +10808,10 @@ className={`
           applyPlaceToForm(p, "drop", "drop-manager");
           setShowPlaceDropdown(false);
           setPlaceOptions([]);
+        } else {
+          setShowPlaceDropdown(false);
         }
+        dropNavTouchedRef.current = false;
       }
     }}
     onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
@@ -17280,9 +17321,12 @@ function RealtimeRowBase({
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
     : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
-  // 오더목록에서 특히 중요한 값(상/하차일시·화물내용·차량종류·톤수)을 운임확인서(FareCertModal)의
-  // 강조 스타일과 동일하게 굵고 네이비색으로 표시해 다른 칸과 한눈에 구분되도록 한다.
-  const emph = isDark ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
+  // 오더목록에서 특히 중요한 값(상/하차일시·화물내용·차량종류·톤수)은 굵은 네이비 텍스트만으로는
+  // 옆 칸 텍스트(다크 그레이)와 눈에 띄게 구분되지 않아, 옅은 배경 칩(badge)까지 함께 씌워
+  // "딱 봐도" 다른 칸과 구분되게 한다.
+  const emph = isDark
+    ? "inline-block px-1.5 py-0.5 rounded-md bg-blue-900/40 font-extrabold text-blue-200"
+    : "inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]";
 
   // ⚠️ 여기 overflow-hidden/text-ellipsis/max-width를 다시 넣지 말 것 — renderAddrCell이
   // 이미 글자수(14자) 기준으로 직접 자르고 "더보기" 버튼을 붙여주는데, 이 td에 CSS
@@ -21910,7 +21954,9 @@ const handleCloseFileUpload = async (e) => {
   //    여기서 참조하면 TDZ(ReferenceError: Cannot access 'isDark' before initialization)가
   //    발생한다 — 반드시 prop인 darkMode를 직접 사용할 것.
   const emphKeys = ["상차일", "하차일", "화물내용", "차량종류", "차량톤수"];
-  const emphCls = darkMode ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
+  const emphCls = darkMode
+    ? "inline-block px-1.5 py-0.5 rounded-md bg-blue-900/40 font-extrabold text-blue-200"
+    : "inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]";
 
   const editableInput = (key, val, rowId) => {
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
@@ -31967,11 +32013,11 @@ return (
 
     ) : /* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */
     key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
-      <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
+      <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
       <CustomSelect
-        className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]"
+        className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B] bg-[#E7EDFA]"
         value={row.차량종류 || ""}
         onChange={(e) =>
           handleImmediateSelectChange(row, "차량종류", e.target.value)
@@ -32035,14 +32081,14 @@ return (
   </div>
 
 ) : key === "상차시간" ? (
-  <span className="font-extrabold text-[#1B2B4B]">
+  <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">
     {row.상차시간
       ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분)
       : "즉시"}
   </span>
 
 ) : key === "하차시간" ? (
-  <span className="font-extrabold text-[#1B2B4B]">
+  <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">
     {row.하차시간
       ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분)
       : "즉시"}
@@ -32064,7 +32110,7 @@ return (
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
   const text = mergeViaCargoText(row.화물내용, [pickupStops, dropStops]) || row.화물내용 || "";
   // ⭐ 화물내용이 길면 칸이 커지는 대신 7글자로 자르고 "더보기"로 팝업 확인
-  return <AddressCell text={text} max={7} valueClassName="font-extrabold text-[#1B2B4B]" />;
+  return <AddressCell text={text} max={7} valueClassName="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]" />;
 })()
 : key === "차량톤수" ? (() => {
   const parseDedup = (fields) => {
@@ -32079,9 +32125,9 @@ return (
   };
   const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
-  return <span className="font-extrabold text-[#1B2B4B]">{mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || ""}</span>;
+  return <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">{mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || ""}</span>;
 })() : key === "상차일" || key === "하차일" ? (
-  <span className="font-extrabold text-[#1B2B4B]">{row[key] || ""}</span>
+  <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">{row[key] || ""}</span>
 ) : (
   row[key]
 )}
