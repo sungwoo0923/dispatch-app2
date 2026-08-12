@@ -6154,17 +6154,37 @@ function formatPhone(raw) {
  }
 const today = todayKST();
 
-// 📌 당일 상차 데이터만 필터링
-const todayRows = (dispatchData || []).filter(
-  r => String(r.상차일 || "").slice(0, 10) === today
-);
+// 📌 당일 상차 데이터만 필터링 + 📊 KPI 계산 (모두 당일 ONLY)
+// ⚠️ 예전엔 이 블록의 filter() 8개가 전부 useMemo 없이 컴포넌트 본문에 그대로
+// 있었다 — 이 DispatchManagement는 배차등록 폼(form)과 같은 컴포넌트라 글자 하나
+// 입력할 때마다 전체 렌더가 다시 도는데, 그때마다 회사 전체 누적 오더(수천~수만 건)를
+// 8번씩 훑고 있어서 타이핑이 버벅였다. dispatchData가 실제로 바뀔 때만 한 번,
+// 단일 순회로 전부 계산하도록 useMemo로 묶는다.
+const {
+  todayRows, total, done, doing, pending, delayed,
+  driverCount, newClients, newPlaces,
+} = React.useMemo(() => {
+  const rows = (dispatchData || []).filter(
+    r => String(r.상차일 || "").slice(0, 10) === today
+  );
+  let done = 0, doing = 0, pending = 0, delayed = 0, newClients = 0, newPlaces = 0;
+  const driverSet = new Set();
+  for (const r of rows) {
+    if (r.배차상태 === "배차완료") done++;
+    else if (r.배차상태 === "배차중") doing++;
+    else if (r.배차상태 === "지연") delayed++;
+    if (!r.차량번호?.trim()) pending++;
+    if (r.거래처명?.trim()) newClients++;
+    if (r.하차지명?.trim()) newPlaces++;
+    const nm = r.이름?.trim();
+    if (nm) driverSet.add(nm);
+  }
+  return {
+    todayRows: rows, total: rows.length, done, doing, pending, delayed,
+    driverCount: driverSet.size, newClients, newPlaces,
+  };
+}, [dispatchData, today]);
 
-// 📊 KPI 계산: 모두 당일 ONLY
-const total = todayRows.length;
-const done = todayRows.filter(r => r.배차상태 === "배차완료").length;
-const doing = todayRows.filter(r => r.배차상태 === "배차중").length;
-const pending = todayRows.filter(r => !r.차량번호?.trim()).length;
-const delayed = todayRows.filter(r => r.배차상태 === "지연").length;
 // 🔹 시간대별 요청건수 트렌드 데이터 생성
 const trendData = React.useMemo(() => {
   const hourly = {};
@@ -6187,16 +6207,14 @@ const trendData = React.useMemo(() => {
 // 진행률
 const rate = total > 0 ? Math.round((done / total) * 100) : 0;
 
-// 당일 기사 수: 배차된 기사 (중복 제거)
-const driverCount = new Set(
-  todayRows
-    .map(r => r.이름?.trim())
-    .filter(Boolean)
-).size;
-
-// 신규 거래처/하차지 (값 존재 여부 기준)
-const newClients = todayRows.filter(r => r.거래처명?.trim()).length;
-const newPlaces = todayRows.filter(r => r.하차지명?.trim()).length;
+// "상태 3개" 카드(배차중/미배차/긴급)에서 쓰는 리스트 — 클릭 시 팝업에 보여줄 실제
+// 행 목록이라 개수(doing/pending)와 별개로 필요하다. 예전엔 이 중 "긴급" 리스트가
+// 같은 렌더 안에서 동일 조건으로 3번(개수/펄스여부/리스트) 따로 필터링됐다.
+const { doingList, pendingList, urgentList } = React.useMemo(() => ({
+  doingList: todayRows.filter(r => r.배차상태 === "배차중"),
+  pendingList: todayRows.filter(r => !r.차량번호?.trim()),
+  urgentList: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료"),
+}), [todayRows]);
 
 // 🚚 유통 데이터
 const money = (text) => {
@@ -13065,9 +13083,9 @@ className={`
       {/* 상태 3개 */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: "배차중", val: doing, dot: "bg-[#1B2B4B]", pulse: doing > 0, list: todayRows.filter(r => r.배차상태 === "배차중") },
-          { label: "미배차", val: pending, dot: "bg-gray-400", pulse: false, list: todayRows.filter(r => !r.차량번호?.trim()) },
-          { label: "긴급", val: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length, dot: "bg-red-500", pulse: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length > 0, list: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료") },
+          { label: "배차중", val: doing, dot: "bg-[#1B2B4B]", pulse: doing > 0, list: doingList },
+          { label: "미배차", val: pending, dot: "bg-gray-400", pulse: false, list: pendingList },
+          { label: "긴급", val: urgentList.length, dot: "bg-red-500", pulse: urgentList.length > 0, list: urgentList },
         ].map(({ label, val, dot, pulse, list }) => (
           <button key={label} type="button"
             onClick={() => setStatusPopup({ title: `${label} 리스트`, list })}
@@ -37561,22 +37579,29 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
   };
 
   // 배차 데이터에서 월별 집계
-  const dispatchRows = Array.isArray(dispatchData)
-    ? dispatchData.filter((r) => (r.배차상태 || "") === "배차완료")
-    : [];
-  const fixedMapped = (fixedRows || []).map((r) => ({
-    상차일: r.날짜,
-    청구운임: toInt(r.청구운임),
-    기사운임: toInt(r.기사운임),
-    배차방식: r.배차방식 || "",
-    차량종류: r.차량종류 || "",
-    배차상태: "배차완료",
-    지급방식: r.지급방식 || "",
-    실수수료: toInt(r.실수수료 != null ? r.실수수료 : (Number(r.수수료||0) - Number(r.선결제||0))),
-    거래처명: r.거래처명 || "",
-    __isFixed: true,
-  }));
-  const allRows = [...dispatchRows.map((r) => ({ ...r, 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임) })), ...fixedMapped];
+  // ⚠️ 예전엔 dispatchRows/fixedMapped/allRows가 useMemo 없이 렌더마다 새 배열로
+  // 다시 만들어져서, 아래 getAutoMonth의 useMemo([allRows, year])가 매번 "새
+  // 참조"를 보고 매번 다시 계산하는 무의미한 메모가 됐었다(updateCell로 셀 하나만
+  // 고쳐도 dispatchData 전체를 다시 filter/map). dispatchData/fixedRows가 실제로
+  // 바뀔 때만 다시 계산하도록 묶는다.
+  const allRows = React.useMemo(() => {
+    const dispatchRows = Array.isArray(dispatchData)
+      ? dispatchData.filter((r) => (r.배차상태 || "") === "배차완료")
+      : [];
+    const fixedMapped = (fixedRows || []).map((r) => ({
+      상차일: r.날짜,
+      청구운임: toInt(r.청구운임),
+      기사운임: toInt(r.기사운임),
+      배차방식: r.배차방식 || "",
+      차량종류: r.차량종류 || "",
+      배차상태: "배차완료",
+      지급방식: r.지급방식 || "",
+      실수수료: toInt(r.실수수료 != null ? r.실수수료 : (Number(r.수수료||0) - Number(r.선결제||0))),
+      거래처명: r.거래처명 || "",
+      __isFixed: true,
+    }));
+    return [...dispatchRows.map((r) => ({ ...r, 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임) })), ...fixedMapped];
+  }, [dispatchData, fixedRows]);
 
   const getAutoMonth = React.useMemo(() => {
     const result = {};
