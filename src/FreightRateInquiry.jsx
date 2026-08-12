@@ -176,22 +176,27 @@ const CITIES = {
 };
 
 // ─── 차량 종류 ─────────────────────────────────────────────────────────────
+// ⭐ perKm(km당 단가) 재보정 — 인천~부산(약 433km) 기준 참고 운임표와 비교했을 때
+//    기존 단가가 특히 대형/장거리 구간에서 시세보다 낮게 잡혀 있었다. base(기본료)는
+//    그대로 두고, "433km 지점에서 참고 운임표의 금액과 정확히 맞도록" perKm만
+//    역산해 다시 계산했다 (다른 거리대에서는 근사치이며, 참고 데이터 지점이 하나뿐이라
+//    완벽한 보정은 아니다 — 추가로 다른 거리대 참고값을 주시면 더 정교하게 다듬을 수 있다).
 const VEHICLE_TYPES = [
-  {id:"bike",   name:"오토바이",      base:5000,   perKm:130,  min:10000,  L100km:4,  smallOnly:true},
-  {id:"damas",  name:"라보/다마스",   base:12000,  perKm:200,  min:18000,  L100km:8,  smallOnly:true},
-  {id:"1ton",   name:"1톤",          base:60000,  perKm:240,  min:60000,  L100km:12},
-  {id:"1.4ton", name:"1.4톤",        base:66000,  perKm:270,  min:67000,  L100km:14},
-  {id:"2.5ton", name:"2.5톤",        base:67000,  perKm:405,  min:85000,  L100km:18},
-  {id:"3.5ton", name:"3.5톤",        base:79000,  perKm:490,  min:95000,  L100km:22},
-  {id:"3.5tonW",name:"3.5톤(광폭)",  base:86000,  perKm:540,  min:105000, L100km:24},
-  {id:"5ton",   name:"5톤",          base:76000,  perKm:740,  min:100000, L100km:27},
-  {id:"5tonP",  name:"5톤+",         base:84000,  perKm:810,  min:110000, L100km:29},
-  {id:"5tonAx", name:"5톤+축",       base:87000,  perKm:850,  min:115000, L100km:30},
-  {id:"11ton",  name:"11톤",         base:103000, perKm:1120, min:165000, L100km:35},
-  {id:"18ton",  name:"18톤",         base:142000, perKm:1580, min:230000, L100km:38},
-  {id:"25ton",  name:"25톤",         base:174000, perKm:1960, min:290000, L100km:42},
-  {id:"trailer",name:"추레라",       base:200000, perKm:2260, min:335000, L100km:45},
-  {id:"lowbed", name:"로베드",       base:220000, perKm:2490, min:370000, L100km:47},
+  {id:"bike",   name:"오토바이",      base:5000,   perKm:434,  min:10000,  L100km:4,  smallOnly:true},
+  {id:"damas",  name:"라보/다마스",   base:12000,  perKm:478,  min:18000,  L100km:8,  smallOnly:true},
+  {id:"1ton",   name:"1톤",          base:60000,  perKm:453,  min:60000,  L100km:12},
+  {id:"1.4ton", name:"1.4톤",        base:66000,  perKm:497,  min:67000,  L100km:14},
+  {id:"2.5ton", name:"2.5톤",        base:67000,  perKm:730,  min:85000,  L100km:18},
+  {id:"3.5ton", name:"3.5톤",        base:79000,  perKm:725,  min:95000,  L100km:22},
+  {id:"3.5tonW",name:"3.5톤(광폭)",  base:86000,  perKm:732,  min:105000, L100km:24},
+  {id:"5ton",   name:"5톤",          base:76000,  perKm:947,  min:100000, L100km:27},
+  {id:"5tonP",  name:"5톤+",         base:84000,  perKm:961,  min:110000, L100km:29},
+  {id:"5tonAx", name:"5톤+축",       base:87000,  perKm:1037, min:115000, L100km:30},
+  {id:"11ton",  name:"11톤",         base:103000, perKm:1102, min:165000, L100km:35},
+  {id:"18ton",  name:"18톤",         base:142000, perKm:1282, min:230000, L100km:38},
+  {id:"25ton",  name:"25톤",         base:174000, perKm:1286, min:290000, L100km:42},
+  {id:"trailer",name:"추레라",       base:200000, perKm:1400, min:335000, L100km:45},
+  {id:"lowbed", name:"로베드",       base:220000, perKm:2030, min:370000, L100km:47},
 ];
 
 const CARGO_TYPES = [
@@ -307,6 +312,19 @@ function haversine(la1,lo1,la2,lo2){
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
+// 거리 구간별 평균 주행속도로 예상 소요시간을 추정한다.
+// 예전엔 거리와 무관하게 항상 시속 80km로 계산해서, 짧은 구간(시내/골목 위주,
+// 신호·정차가 많아 실제로는 훨씬 느림)에서 실제보다 훨씬 빠르게 나왔었다.
+// 장거리(고속도로 비중이 큰 구간)일수록 평균속도가 올라가는 걸 반영한다.
+function estimateMinutes(km){
+  let avgSpeed;
+  if (km <= 15) avgSpeed = 32;        // 시내 위주 — 신호/정차 많음
+  else if (km <= 50) avgSpeed = 48;   // 시내+국도 혼합
+  else if (km <= 150) avgSpeed = 68;  // 국도+고속도로 혼합
+  else avgSpeed = 85;                 // 고속도로 위주 장거리
+  return Math.round(km / avgSpeed * 60);
+}
+
 function calcRate(fromC,toC,vtId,ctId){
   const [la1,lo1]=fromC, [la2,lo2]=toC;
   const roadDist=Math.round(haversine(la1,lo1,la2,lo2)*1.25);
@@ -318,7 +336,7 @@ function calcRate(fromC,toC,vtId,ctId){
   const minFare=Math.round(avg*0.83/5000)*5000;
   const maxFare=Math.round(avg*1.17/5000)*5000;
   const fuelCost=Math.round(vt.L100km/100*roadDist*1650);
-  const mins=Math.round(roadDist/80*60);
+  const mins=estimateMinutes(roadDist);
   return{distance:roadDist,min:minFare,max:maxFare,avg,fuelCost,mins};
 }
 
@@ -343,7 +361,7 @@ function calcMixedRate(fromC,toC,ctId,weightKg,cbm){
   const avg=Math.round(withSurcharge/1000)*1000;
   const minFare=Math.round(avg*0.85/1000)*1000;
   const maxFare=Math.round(avg*1.15/1000)*1000;
-  const mins=Math.round(roadDist/80*60);
+  const mins=estimateMinutes(roadDist);
   return{distance:roadDist,min:minFare,max:maxFare,avg,mins,effWeight,units,tier:tier.label,per100kg:tier.per100kg};
 }
 
@@ -496,7 +514,7 @@ function NationalFareTab() {
         const units=Math.max(1,Math.ceil(effWeight/100));
         const raw=tier.base+tier.per100kg*(units-1);
         const avg=Math.round(raw*(1+(ct.surcharge||0))/1000)*1000;
-        base={mode:"혼적",distance:viaRoadDist,min:Math.round(avg*0.85/1000)*1000,max:Math.round(avg*1.15/1000)*1000,avg,mins:Math.round(viaRoadDist/80*60),effWeight,units,tier:tier.label,per100kg:tier.per100kg};
+        base={mode:"혼적",distance:viaRoadDist,min:Math.round(avg*0.85/1000)*1000,max:Math.round(avg*1.15/1000)*1000,avg,mins:estimateMinutes(viaRoadDist),effWeight,units,tier:tier.label,per100kg:tier.per100kg};
       }else{
         base={mode:"혼적",...calcMixedRate([fromC.la,fromC.lo],[toC.la,toC.lo],cargoType,wkg,cbm)};
       }
@@ -507,7 +525,7 @@ function NationalFareTab() {
         const bFare=vt.base+vt.perKm*viaRoadDist;
         const surchargedBase=Math.max(vt.min,bFare)*(1+(ct.surcharge||0));
         const avg=Math.round(surchargedBase/5000)*5000;
-        base={mode:"독차",distance:viaRoadDist,min:Math.round(avg*0.83/5000)*5000,max:Math.round(avg*1.17/5000)*5000,avg,fuelCost:Math.round(vt.L100km/100*viaRoadDist*1650),mins:Math.round(viaRoadDist/80*60)};
+        base={mode:"독차",distance:viaRoadDist,min:Math.round(avg*0.83/5000)*5000,max:Math.round(avg*1.17/5000)*5000,avg,fuelCost:Math.round(vt.L100km/100*viaRoadDist*1650),mins:estimateMinutes(viaRoadDist)};
       }else{
         base={mode:"독차",...calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType)};
       }

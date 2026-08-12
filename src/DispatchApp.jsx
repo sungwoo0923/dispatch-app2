@@ -17321,12 +17321,9 @@ function RealtimeRowBase({
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
     : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
-  // 오더목록에서 특히 중요한 값(상/하차일시·화물내용·차량종류·톤수)은 굵은 네이비 텍스트만으로는
-  // 옆 칸 텍스트(다크 그레이)와 눈에 띄게 구분되지 않아, 옅은 배경 칩(badge)까지 함께 씌워
-  // "딱 봐도" 다른 칸과 구분되게 한다.
-  const emph = isDark
-    ? "inline-block px-1.5 py-0.5 rounded-md bg-blue-900/40 font-extrabold text-blue-200"
-    : "inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]";
+  // 오더목록에서 특히 중요한 값(상/하차일시·화물내용·차량종류·톤수)은 다른 칸(font-medium)보다
+  // 뚜렷하게 굵은 글씨로만 표시한다 — 배경색은 넣지 않는다(요청에 따라 배경 칩 제거).
+  const emph = isDark ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
 
   // ⚠️ 여기 overflow-hidden/text-ellipsis/max-width를 다시 넣지 말 것 — renderAddrCell이
   // 이미 글자수(14자) 기준으로 직접 자르고 "더보기" 버튼을 붙여주는데, 이 td에 CSS
@@ -21954,9 +21951,7 @@ const handleCloseFileUpload = async (e) => {
   //    여기서 참조하면 TDZ(ReferenceError: Cannot access 'isDark' before initialization)가
   //    발생한다 — 반드시 prop인 darkMode를 직접 사용할 것.
   const emphKeys = ["상차일", "하차일", "화물내용", "차량종류", "차량톤수"];
-  const emphCls = darkMode
-    ? "inline-block px-1.5 py-0.5 rounded-md bg-blue-900/40 font-extrabold text-blue-200"
-    : "inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]";
+  const emphCls = darkMode ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
 
   const editableInput = (key, val, rowId) => {
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
@@ -32013,11 +32008,11 @@ return (
 
     ) : /* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */
     key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
-      <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
+      <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
       <CustomSelect
-        className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B] bg-[#E7EDFA]"
+        className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]"
         value={row.차량종류 || ""}
         onChange={(e) =>
           handleImmediateSelectChange(row, "차량종류", e.target.value)
@@ -32081,14 +32076,14 @@ return (
   </div>
 
 ) : key === "상차시간" ? (
-  <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">
+  <span className="font-extrabold text-[#1B2B4B]">
     {row.상차시간
       ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분)
       : "즉시"}
   </span>
 
 ) : key === "하차시간" ? (
-  <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">
+  <span className="font-extrabold text-[#1B2B4B]">
     {row.하차시간
       ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분)
       : "즉시"}
@@ -32110,7 +32105,7 @@ return (
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
   const text = mergeViaCargoText(row.화물내용, [pickupStops, dropStops]) || row.화물내용 || "";
   // ⭐ 화물내용이 길면 칸이 커지는 대신 7글자로 자르고 "더보기"로 팝업 확인
-  return <AddressCell text={text} max={7} valueClassName="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]" />;
+  return <AddressCell text={text} max={7} valueClassName="font-extrabold text-[#1B2B4B]" />;
 })()
 : key === "차량톤수" ? (() => {
   const parseDedup = (fields) => {
@@ -32125,9 +32120,9 @@ return (
   };
   const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
-  return <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">{mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || ""}</span>;
+  return <span className="font-extrabold text-[#1B2B4B]">{mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || ""}</span>;
 })() : key === "상차일" || key === "하차일" ? (
-  <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#E7EDFA] font-extrabold text-[#1B2B4B]">{row[key] || ""}</span>
+  <span className="font-extrabold text-[#1B2B4B]">{row[key] || ""}</span>
 ) : (
   row[key]
 )}
