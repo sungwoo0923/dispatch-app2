@@ -21906,8 +21906,11 @@ const handleCloseFileUpload = async (e) => {
 
   // 오더목록에서 중요한 값(상/하차일·화물내용·차량종류·톤수)은 운임확인서(FareCertModal)의
   // 강조 스타일(font-extrabold + 네이비색)과 동일하게 표시해 다른 칸과 구분되도록 한다.
+  // ⚠️ 아래쪽에 별도로 선언된 const isDark(= darkMode)는 이 시점에 아직 초기화 전이라
+  //    여기서 참조하면 TDZ(ReferenceError: Cannot access 'isDark' before initialization)가
+  //    발생한다 — 반드시 prop인 darkMode를 직접 사용할 것.
   const emphKeys = ["상차일", "하차일", "화물내용", "차량종류", "차량톤수"];
-  const emphCls = isDark ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
+  const emphCls = darkMode ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
 
   const editableInput = (key, val, rowId) => {
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
