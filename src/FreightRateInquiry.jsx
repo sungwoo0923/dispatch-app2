@@ -40,13 +40,16 @@ const PROVINCE_LABEL_POS = {
   제주: [118, 611],
 };
 
+// ⭐ 채도 낮은 파스텔 블루/라벤더 톤으로 통일 — 이전엔 지역마다 색이 완전히 달라
+// (핑크/노랑/초록 등) "색동" 느낌이 강했는데, 타 사이트 지도들처럼 전체가 하나의
+// 톤으로 은은하게 이어지는 느낌으로 바꿨다.
 const PROVINCE_COLORS = {
-  서울: "#a8c4dc", 인천: "#98b4d0", 경기: "#b4a0d8",
-  강원: "#98bcd8", 충북: "#eeacc0", 충남: "#94b4e4",
-  세종: "#a4d49c", 대전: "#94c88c", 경북: "#eec49c",
-  대구: "#eca4a4", 전북: "#eee09e", 광주: "#9cd494",
-  전남: "#c8e490", 경남: "#eebca8", 울산: "#8cb4d0",
-  부산: "#84acc8", 제주: "#9cd4a0",
+  서울: "#c7d6ec", 인천: "#c2d1e8", 경기: "#cdd4ec",
+  강원: "#c8d9ea", 충북: "#d6d0e6", 충남: "#c3d6ea",
+  세종: "#cddbe6", 대전: "#c9dbe2", 경북: "#d7d1e4",
+  대구: "#d5cee2", 전북: "#d2dce4", 광주: "#cee0d6",
+  전남: "#cee2d8", 경남: "#d3d8e8", 울산: "#c0d3e6",
+  부산: "#bccfe4", 제주: "#cfe3d4",
 };
 
 const PROVINCE_COORDS = {
@@ -225,12 +228,26 @@ const SURCHARGE_MANUAL = {
   trailer:35000, lowbed:40000,
 };
 
+// ⭐ 타 사이트 기준 반영: 1~1.4톤 1.5만원 / 2.5~3.5톤(광폭 포함) 5만원 /
+// 5톤~5톤+축 10만원 / 11~25톤 15만원
 const SURCHARGE_LIFTGATE = {
-  bike:0, damas:0, "1ton":8000, "1.4ton":10000,
-  "2.5ton":12000, "3.5ton":15000, "3.5tonW":15000,
-  "5ton":18000, "5tonP":20000, "5tonAx":20000,
-  "11ton":25000, "18ton":28000, "25ton":30000,
+  bike:0, damas:0, "1ton":15000, "1.4ton":15000,
+  "2.5ton":50000, "3.5ton":50000, "3.5tonW":50000,
+  "5ton":100000, "5tonP":100000, "5tonAx":100000,
+  "11ton":150000, "18ton":150000, "25ton":150000,
   trailer:0, lowbed:0,
+};
+
+// ⭐ 냉장/냉동 화물 선택 시 차종별 추가 요금(정액) — 타 사이트 기준 반영:
+// 1~1.4톤 3.5만원 / 2.5톤~3.5톤(광폭 포함) 8만원 / 5톤~25톤 10만원.
+// 오토바이/다마스/라보는 냉장 선택 시 자동으로 1톤 이상으로 전환되므로 대상 아님.
+// 추레라/로베드는 참고 기준에 없어 25톤과 동일한 10만원을 적용한다.
+const SURCHARGE_REFRIGERATED = {
+  bike:0, damas:0, "1ton":35000, "1.4ton":35000,
+  "2.5ton":80000, "3.5ton":80000, "3.5tonW":80000,
+  "5ton":100000, "5tonP":100000, "5tonAx":100000,
+  "11ton":100000, "18ton":100000, "25ton":100000,
+  trailer:100000, lowbed:100000,
 };
 
 const SURCHARGE_VIA = {
@@ -251,18 +268,51 @@ const _provFromAddr = (addr) => {
   return null;
 };
 
+// ⭐ CITIES(위의 시/군/구 좌표 DB)를 "구/군/시 이름 → 소속 광역시도" 색인으로
+// 미리 펼쳐둔다. TMAP의 주소/POI 검색은 "광산구"처럼 구 이름만 입력하면
+// 엉뚱한 동명이인 지역(예: 경기 광주시)이나 상호명을 먼저 던져줄 때가 있어서,
+// 이미 정확한 좌표를 알고 있는 행정구역명은 TMAP 검색 결과보다 항상 우선한다.
+const _cityNameIndex = (() => {
+  const idx = [];
+  for (const [prov, list] of Object.entries(CITIES)) {
+    for (const c of list) idx.push({ prov, n: c.n, la: c.la, lo: c.lo });
+  }
+  return idx;
+})();
+
+// 입력한 키워드와 일치/근접하는 시군구를 정확도 순(완전일치 → 접두 일치 → 부분일치)으로 찾는다.
+function findCityMatches(keyword) {
+  const kw = String(keyword || "").trim();
+  if (!kw) return [];
+  const exact = _cityNameIndex.filter(c => c.n === kw);
+  if (exact.length) return exact;
+  const starts = _cityNameIndex.filter(c => c.n.startsWith(kw));
+  if (starts.length) return starts;
+  if (kw.length >= 2) return _cityNameIndex.filter(c => c.n.includes(kw));
+  return [];
+}
+
 const searchTmapPOI = async (keyword, setter) => {
   if (!keyword || keyword.trim().length < 2) { setter([]); return; }
   try {
     const kw = keyword.trim();
     const headers = { Accept: "application/json" };
+
+    const seen = new Set();
+    const results = [];
+
+    // 0. 시/군/구 이름 정확매칭 — TMAP 검색보다 항상 우선 (좌표가 이미 검증된 값이라 오매칭이 없음)
+    for (const c of findCityMatches(kw)) {
+      const full = `${c.prov} ${c.n}`;
+      if (seen.has(full)) continue;
+      seen.add(full);
+      results.push({ name: full, prov: c.prov, addr: full, full, la: c.la, lo: c.lo });
+    }
+
     const [saData, poiData] = await Promise.all([
       fetch(`https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(kw)}&countPerPage=20&appKey=${TMAP_KEY}`, { headers }).then(r => r.json()).catch(() => null),
       fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(kw)}&count=15&appKey=${TMAP_KEY}`, { headers }).then(r => r.json()).catch(() => null),
     ]);
-
-    const seen = new Set();
-    const results = [];
 
     // 1. searchAddress 결과 (주소 레벨)
     const saRaw = saData?.searchAddressInfo?.addressInfo;
@@ -330,8 +380,12 @@ function calcRate(fromC,toC,vtId,ctId){
   const roadDist=Math.round(haversine(la1,lo1,la2,lo2)*1.25);
   const vt=VEHICLE_TYPES.find(v=>v.id===vtId)||VEHICLE_TYPES[1];
   const ct=CARGO_TYPES.find(c=>c.id===ctId)||CARGO_TYPES[0];
+  // ⭐ 냉장/냉동은 이제 비율(%)이 아니라 차종별 정액(SURCHARGE_REFRIGERATED)으로
+  // 계산한다 — 여기서는 위험물(%) 할증만 적용하고, 냉장 정액은 호출부(result useMemo)에서
+  // 수작업비/리프트비와 동일한 방식으로 더한다.
+  const pctSurcharge=ctId==="냉장"?0:(ct.surcharge||0);
   const base=vt.base+vt.perKm*roadDist;
-  const surchargedBase=Math.max(vt.min,base)*(1+(ct.surcharge||0));
+  const surchargedBase=Math.max(vt.min,base)*(1+pctSurcharge);
   const avg=Math.round(surchargedBase/5000)*5000;
   const minFare=Math.round(avg*0.83/5000)*5000;
   const maxFare=Math.round(avg*1.17/5000)*5000;
@@ -494,6 +548,14 @@ function NationalFareTab() {
   },[]);
   useEffect(()=>{if(cargoType==="냉장"&&(vehicle==="bike"||vehicle==="damas"))setVehicle("1ton");},[cargoType]);
 
+  // ⭐ 화물 유형을 바꿀 때(일반→냉장/냉동 등) 운임이 얼마나 바뀌었는지 화면 중앙에
+  // 잠깐 띄워준다. cargoType이 바뀌기 "직전" 운임을 prevCargoAvgRef에 계속 저장해두고,
+  // cargoType이 바뀐 시점에 새로 계산된 result.avg와 비교해 차액을 보여준다.
+  const [cargoToast,setCargoToast]=useState(null); // { delta:number } | null
+  const prevCargoAvgRef=useRef(null);
+  const prevCargoTypeRef=useRef(cargoType);
+  const cargoToastTimerRef=useRef(null);
+
   const result=useMemo(()=>{
     if(!fromC||!toC)return null;
     const activeVias=vias.filter(v=>v.coord);
@@ -522,8 +584,11 @@ function NationalFareTab() {
       if(viaRoadDist){
         const vt=VEHICLE_TYPES.find(v=>v.id===vehicle)||VEHICLE_TYPES[1];
         const ct=CARGO_TYPES.find(c=>c.id===cargoType)||CARGO_TYPES[0];
+        // ⭐ 냉장/냉동은 비율(%)이 아니라 차종별 정액으로 계산 — calcRate와 동일하게
+        // 여기서도 위험물(%)만 적용하고, 냉장 정액은 아래 공통 스택에서 더한다.
+        const pctSurcharge=cargoType==="냉장"?0:(ct.surcharge||0);
         const bFare=vt.base+vt.perKm*viaRoadDist;
-        const surchargedBase=Math.max(vt.min,bFare)*(1+(ct.surcharge||0));
+        const surchargedBase=Math.max(vt.min,bFare)*(1+pctSurcharge);
         const avg=Math.round(surchargedBase/5000)*5000;
         base={mode:"독차",distance:viaRoadDist,min:Math.round(avg*0.83/5000)*5000,max:Math.round(avg*1.17/5000)*5000,avg,fuelCost:Math.round(vt.L100km/100*viaRoadDist*1650),mins:estimateMinutes(viaRoadDist)};
       }else{
@@ -534,9 +599,29 @@ function NationalFareTab() {
     const wMul=weatherSurcharge?1.15:1;
     const mfee=(manualWork&&freightMode==="독차")?(SURCHARGE_MANUAL[vehicle]||0):0;
     const liftFee=(liftgate&&freightMode==="독차")?(SURCHARGE_LIFTGATE[vehicle]||0):0;
+    const refrigFee=(cargoType==="냉장"&&freightMode==="독차")?(SURCHARGE_REFRIGERATED[vehicle]||0):0;
     const viaFee=freightMode==="독차"?activeVias.length*(SURCHARGE_VIA[vehicle]||20000):activeVias.length*20000;
-    return{...base,min:Math.round((base.min*mul*wMul+mfee+liftFee+viaFee)/1000)*1000,max:Math.round((base.max*mul*wMul+mfee+liftFee+viaFee)/1000)*1000,avg:Math.round((base.avg*mul*wMul+mfee+liftFee+viaFee)/1000)*1000,manualFee:mfee,liftFee,viaFee,isRound:roundTrip,isWeather:weatherSurcharge,viaCount:activeVias.length};
+    return{...base,min:Math.round((base.min*mul*wMul+mfee+liftFee+refrigFee+viaFee)/1000)*1000,max:Math.round((base.max*mul*wMul+mfee+liftFee+refrigFee+viaFee)/1000)*1000,avg:Math.round((base.avg*mul*wMul+mfee+liftFee+refrigFee+viaFee)/1000)*1000,manualFee:mfee,liftFee,refrigFee,viaFee,isRound:roundTrip,isWeather:weatherSurcharge,viaCount:activeVias.length};
   },[fromC,toC,vehicle,cargoType,freightMode,mixWeightKg,mixCbm,manualWork,roundTrip,weatherSurcharge,liftgate,vias]);
+
+  // ⚠️ 순서 중요: cargoType이 바뀐 걸 감지해 토스트를 띄우는 effect가, "최신 avg를
+  // 기억해두는" effect보다 먼저 선언되어 있어야 한다. 같은 렌더에서 두 effect가
+  // 모두 실행될 때 React는 선언 순서대로 실행하므로, 토스트 effect가 먼저 실행돼
+  // prevCargoAvgRef에 아직 남아있는 "바뀌기 전" 값을 읽은 뒤에 값이 갱신된다.
+  useEffect(()=>{
+    if(prevCargoTypeRef.current===cargoType) return;
+    prevCargoTypeRef.current=cargoType;
+    const before=prevCargoAvgRef.current;
+    if(before!=null && result?.avg!=null && result.avg!==before){
+      setCargoToast({delta:result.avg-before});
+      if(cargoToastTimerRef.current) clearTimeout(cargoToastTimerRef.current);
+      cargoToastTimerRef.current=setTimeout(()=>setCargoToast(null),2000);
+    }
+  },[cargoType]);
+  useEffect(()=>{
+    prevCargoAvgRef.current=result?.avg ?? null;
+  },[result]);
+  useEffect(()=>()=>{if(cargoToastTimerRef.current) clearTimeout(cargoToastTimerRef.current);},[]);
 
   const refData=useMemo(()=>{
     if(!fromP||!toP||!dispatchData.length||step!=="result")return null;
@@ -691,10 +776,26 @@ function NationalFareTab() {
   const vehicles=VEHICLE_TYPES.filter(v=>!(v.smallOnly&&cargoType==="냉장"));
 
   return(
-    <div className="flex gap-5 min-h-0" style={{height:"calc(100vh - 220px)",minHeight:560}}>
+    // ⚠️ 예전엔 이 바깥 컨테이너를 height: calc(100vh - 220px) 고정 높이로 잡고
+    // 왼쪽 패널만 overflow-y-auto로 내부 스크롤시켰다 — 이 화면이 앱 헤더 아래
+    // <main> 안에 얼마나 내려와서 배치되는지에 따라 100vh 기준 계산이 어긋나서,
+    // 맨 위(독차/혼적 토글)가 가려지거나 맨 아래(조회 결과)가 스크롤 안 되고
+    // 잘려 보이는 문제가 있었다. 내부 스크롤을 없애고 페이지 자체 스크롤 하나로
+    // 통일해 이런 종류의 "잘려서 안 보임" 문제 자체가 생기지 않게 한다. 오른쪽
+    // 지도만 sticky로 고정해 왼쪽 폼이 길어져도 화면에서 눈에 계속 보이게 한다.
+    <div className="flex gap-5 items-start">
+
+      {/* 화물 유형 변경 시 운임 차액을 화면 중앙에 잠깐 보여주는 토스트 */}
+      {cargoToast&&(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center pointer-events-none">
+          <div className="bg-[#1B2B4B] text-white font-extrabold text-[16px] px-6 py-3.5 rounded-2xl shadow-2xl">
+            {cargoToast.delta>0?"+":"-"}{fmtMoney(Math.abs(cargoToast.delta))}
+          </div>
+        </div>
+      )}
 
       {/* ── 왼쪽 패널 ── */}
-      <div className="flex-[4] flex flex-col gap-4 overflow-y-auto pr-1 min-w-0">
+      <div className="flex-[4] flex flex-col gap-4 min-w-0">
 
         {/* 독차/혼적 토글 */}
         <div className="flex rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -866,12 +967,21 @@ function NationalFareTab() {
         <div>
           <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">화물 유형</p>
           <div className="flex gap-2">
-            {CARGO_TYPES.map(ct=>(
-              <button key={ct.id} onClick={()=>setCargoType(ct.id)}
-                className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold border-2 transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
-                {ct.name}
-              </button>
-            ))}
+            {CARGO_TYPES.map(ct=>{
+              // 냉장/냉동은 차종별 정액(독차 기준), 위험물은 비율 할증 — 버튼에 미리 얼마가
+              // 붙는지 보여줘서 유형을 바꾸기 전에도 대략 감을 잡을 수 있게 한다.
+              const sub = ct.id==="냉장"
+                ? (freightMode==="독차" && SURCHARGE_REFRIGERATED[vehicle] > 0
+                    ? `+${Number((SURCHARGE_REFRIGERATED[vehicle]/10000).toFixed(1))}만원` : null)
+                : (ct.surcharge ? `+${Math.round(ct.surcharge*100)}%` : null);
+              return (
+                <button key={ct.id} onClick={()=>setCargoType(ct.id)}
+                  className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold border-2 transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
+                  {ct.name}
+                  {sub && <span className={`block text-[10px] font-semibold mt-0.5 ${cargoType===ct.id?"text-white/70":"text-gray-400"}`}>{sub}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -908,6 +1018,7 @@ function NationalFareTab() {
                 {result.isRound&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">왕복</span>}
                 {result.manualFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">수작업</span>}
                 {result.liftFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">리프트</span>}
+                {result.refrigFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">냉장/냉동</span>}
                 {result.isWeather&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">기상악화+15%</span>}
                 {result.viaCount>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">경유{result.viaCount}</span>}
                 <span className="text-[10px] text-white/40 font-semibold ml-auto">{result.mode==="독차"?VEHICLE_TYPES.find(v=>v.id===vehicle)?.name:""} {fromP}→{toP}</span>
@@ -935,6 +1046,7 @@ function NationalFareTab() {
                     :[{l:"적재단위",v:`${result.units}개`},{l:"구간",v:result.tier}]),
                   ...(result.manualFee>0?[{l:"수작업비",v:`${result.manualFee.toLocaleString()}원`}]:[]),
                   ...(result.liftFee>0?[{l:"리프트",v:`${result.liftFee.toLocaleString()}원`}]:[]),
+                  ...(result.refrigFee>0?[{l:"냉장/냉동",v:`+${result.refrigFee.toLocaleString()}원`}]:[]),
                   ...(result.isWeather?[{l:"기상악화",v:"+15%"}]:[]),
                   ...(result.isRound?[{l:"왕복적용",v:"×1.8"}]:[]),
                   ...(result.viaCount>0?[{l:"경유지",v:`${result.viaCount}곳 (+${Number((result.viaFee/10000).toFixed(0))}만원)`}]:[]),
@@ -1035,7 +1147,8 @@ function NationalFareTab() {
       </div>
 
       {/* ── 오른쪽 지도 ── */}
-      <div className="flex-[6] min-w-0 rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
+      <div className="flex-[6] min-w-0 rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white sticky"
+        style={{top:16,height:"calc(100vh - 250px)",minHeight:560}}>
         <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-3 shrink-0">
           {step!=="result"&&(
             <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold ${step==="from"?"bg-[#1B2B4B] text-white":step==="via"?"bg-green-600 text-white":"bg-orange-400 text-white"}`}>
@@ -1056,16 +1169,16 @@ function NationalFareTab() {
           <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
             <defs>
               <linearGradient id="nfLight" x1="15%" y1="5%" x2="85%" y2="95%">
-                <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
-                <stop offset="50%" stopColor="white" stopOpacity="0.04"/>
-                <stop offset="100%" stopColor="#0a1428" stopOpacity="0.18"/>
+                <stop offset="0%" stopColor="white" stopOpacity="0.25"/>
+                <stop offset="50%" stopColor="white" stopOpacity="0.02"/>
+                <stop offset="100%" stopColor="#0a1428" stopOpacity="0.05"/>
               </linearGradient>
               <radialGradient id="nfGlow" cx="38%" cy="30%" r="65%">
                 <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
                 <stop offset="100%" stopColor="white" stopOpacity="0"/>
               </radialGradient>
               <filter id="nfShad" x="-4%" y="-4%" width="108%" height="108%">
-                <feDropShadow dx="0.5" dy="1.5" stdDeviation="1.5" floodColor="#4a6080" floodOpacity="0.20"/>
+                <feDropShadow dx="0.3" dy="0.8" stdDeviation="0.8" floodColor="#4a6080" floodOpacity="0.08"/>
               </filter>
               <filter id="nfHov" x="-8%" y="-8%" width="116%" height="116%">
                 <feDropShadow dx="1" dy="3" stdDeviation="3" floodColor="#1B2B4B" floodOpacity="0.32"/>
