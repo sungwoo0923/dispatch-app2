@@ -7,3 +7,13 @@
 body {
   font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
 }
+
+/* 새 신청/알림 뱃지가 눈에 띄게 깜빡이도록 — tailwind의 animate-pulse(서서히 흐려짐)보다
+   또렷하게 켜졌다 꺼지는 느낌을 준다. */
+@keyframes cafe-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.animate-cafe-blink {
+  animation: cafe-blink 1s step-start infinite;
+}

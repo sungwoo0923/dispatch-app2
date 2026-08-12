@@ -4,12 +4,8 @@
 // cafeOrders 컬렉션을 공유한다. 설정값은 본체의 src/firebase.js와 동일하다.
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import {
-  initializeFirestore,
-  getFirestore,
-  persistentLocalCache,
-  persistentSingleTabManager,
-} from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
@@ -25,16 +21,14 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-// IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백 (본체와 동일한 방식)
-function createDb() {
-  try {
-    return initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager({ forceOwnership: false }),
-      }),
-    });
-  } catch {
-    return getFirestore(app);
-  }
-}
-export const db = createDb();
+// 예전에는 IndexedDB 영구 캐시(persistentLocalCache + 멀티탭 tabManager)를 썼는데,
+// 이 사이트는 여러 미리보기 배포/여러 탭에서 동시에 열리는 경우가 많고, 멀티탭
+// 소유권 조정 과정에서 탭마다 BatchGetDocuments가 반복 발생해 Firestore 무료
+// 요금제(Spark) 일일 읽기 한도를 예상보다 훨씬 빨리 소진시키는 원인이 됐다
+// ("Quota exceeded" 팝업 + 콘솔의 resource-exhausted 429 반복이 그 증상이다).
+// 실시간 게시판이라 오프라인 캐시가 꼭 필요하지도 않으므로, 기본 메모리 캐시로
+// 되돌려 불필요한 읽기를 줄인다. 그래도 반복적으로 quota 문제가 발생한다면
+// Firebase 콘솔에서 Firestore 사용량을 확인하고 Blaze(종량제) 요금제로 전환이
+// 필요할 수 있다 — 이건 코드가 아니라 프로젝트 설정(과금) 문제라 여기서 고칠 수 없다.
+export const db = getFirestore(app);
+export const storage = getStorage(app);

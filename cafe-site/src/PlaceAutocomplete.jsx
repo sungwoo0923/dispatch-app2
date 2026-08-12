@@ -4,7 +4,34 @@
 // 함부로 열람하면 안 되는 데이터라 의도적으로 공유하지 않는다), 대신 배차마당에
 // 그동안 올라온 모든 오더의 상/하차지 이름+주소를 모아 "자주 쓰는 장소" 검색
 // 풀로 쓴다 — 같은 노선을 반복 등록할 때 클릭 한 번으로 채울 수 있다.
+// 실제 도로명주소는 Daum(카카오) 우편번호 서비스 팝업으로 검색해 정확한 주소를
+// 바로 채워넣을 수 있다(API 키 없이 쓸 수 있는 공식 무료 스크립트).
 import React from "react";
+
+let daumPostcodeLoading = null;
+function loadDaumPostcodeScript() {
+  if (window.daum?.Postcode) return Promise.resolve();
+  if (daumPostcodeLoading) return daumPostcodeLoading;
+  daumPostcodeLoading = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return daumPostcodeLoading;
+}
+
+function openAddressSearch(onPick) {
+  loadDaumPostcodeScript().then(() => {
+    new window.daum.Postcode({
+      oncomplete: (data) => {
+        const addr = data.roadAddress || data.jibunAddress || data.address;
+        onPick(addr);
+      },
+    }).open();
+  }).catch(() => alert("주소 검색 서비스를 불러오지 못했습니다. 잠시 후 다시 시도해주세요."));
+}
 
 export default function PlaceAutocomplete({
   nameValue, addrValue, onChangeName, onChangeAddr, places, namePlaceholder, addrPlaceholder,
@@ -54,20 +81,27 @@ export default function PlaceAutocomplete({
             else if (e.key === "Escape") setOpen(false);
           }}
         />
-        <input
-          className={field}
-          value={addrValue}
-          placeholder={addrPlaceholder}
-          onFocus={() => setOpen(true)}
-          onChange={e => { onChangeAddr(e.target.value); setOpen(true); setActiveIdx(0); }}
-          onKeyDown={e => {
-            if (!open || options.length === 0) return;
-            if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, options.length - 1)); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); }
-            else if (e.key === "Enter") { e.preventDefault(); pick(options[activeIdx]); }
-            else if (e.key === "Escape") setOpen(false);
-          }}
-        />
+        <div className="relative">
+          <input
+            className={`${field} pr-[70px]`}
+            value={addrValue}
+            placeholder={addrPlaceholder}
+            onFocus={() => setOpen(true)}
+            onChange={e => { onChangeAddr(e.target.value); setOpen(true); setActiveIdx(0); }}
+            onKeyDown={e => {
+              if (!open || options.length === 0) return;
+              if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, options.length - 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); }
+              else if (e.key === "Enter") { e.preventDefault(); pick(options[activeIdx]); }
+              else if (e.key === "Escape") setOpen(false);
+            }}
+          />
+          <button type="button"
+            onClick={() => openAddressSearch((addr) => { onChangeAddr(addr); setOpen(false); })}
+            className="absolute right-1 top-1/2 -translate-y-1/2 text-[11px] font-bold text-[#1B2B4B] border border-gray-200 rounded-md px-2 py-1.5 hover:bg-gray-50 transition">
+            주소검색
+          </button>
+        </div>
       </div>
       {open && options.length > 0 && (
         <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-auto">

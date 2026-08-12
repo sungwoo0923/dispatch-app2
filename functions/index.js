@@ -169,3 +169,28 @@ export const cleanupOldAttachments = functions.pubsub
 
     console.log(`🗑️ 6개월 경과 첨부파일 자동삭제 완료: ${deleted}건`);
   });
+
+/* ==============================
+   💬 배차마당(cafeOrders) 1:1 대화 3개월 경과 자동삭제
+   — 매일 실행되며, cafeOrders/{orderId}/chat 서브컬렉션의 메시지 중
+   생성(createdAt) 후 3개월이 지난 메시지를 삭제한다.
+============================== */
+export const cleanupOldCafeChats = functions.pubsub
+  .schedule("every 24 hours")
+  .onRun(async () => {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+
+    const snap = await db
+      .collectionGroup("chat")
+      .where("createdAt", "<", cutoff)
+      .get();
+
+    let deleted = 0;
+    for (const docSnap of snap.docs) {
+      await docSnap.ref.delete();
+      deleted++;
+    }
+
+    console.log(`💬 3개월 경과 배차마당 대화 자동삭제 완료: ${deleted}건`);
+  });

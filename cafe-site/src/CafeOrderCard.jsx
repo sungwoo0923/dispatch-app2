@@ -10,11 +10,14 @@ const STATUS_META = {
   cancelled: { label: "취소됨",   cls: "border-gray-200 text-gray-300" },
 };
 
-export default function CafeOrderCard({ order, onClick }) {
+export default function CafeOrderCard({ order, onClick, showUnread }) {
   const meta = STATUS_META[order.status] || STATUS_META.open;
   return (
     <div onClick={onClick}
-      className="bg-white border border-gray-200 rounded-xl px-5 py-4 hover:border-[#1B2B4B]/40 hover:shadow-sm transition cursor-pointer">
+      className="bg-white border border-gray-200 rounded-xl px-5 py-4 hover:border-[#1B2B4B]/40 hover:shadow-sm transition cursor-pointer relative">
+      {showUnread && order.posterUnread && (
+        <span className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-red-500 border-2 border-white animate-cafe-blink" />
+      )}
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded border shrink-0 ${meta.cls}`}>{meta.label}</span>

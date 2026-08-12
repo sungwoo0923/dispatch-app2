@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { auth } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { Link, useNavigate } from "react-router-dom";
+import CafeBrand from "./CafeBrand";
 
 export default function CafeLogin() {
   const [email, setEmail] = useState("");
@@ -44,11 +45,7 @@ export default function CafeLogin() {
     <div className="min-h-screen bg-[#f4f6fa] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-[400px]">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-[#1B2B4B] flex items-center justify-center text-white font-black text-[15px]">배</div>
-            <span className="text-[19px] font-black text-[#1B2B4B] tracking-tight">배차마당</span>
-          </div>
-          <p className="text-[13px] text-gray-400">화물 배차 정보 공유 커뮤니티</p>
+          <CafeBrand size="lg" center />
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-7 space-y-3"

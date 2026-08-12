@@ -5,6 +5,14 @@ rules_version = '2';
 //    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    // 배차마당 정산(인수증/명세서) 업로드 — 해당 오더의 게시자/신청자만 올리고 볼 수
+    // 있다. cafeApi.js의 uploadSettlementFile()이 이 경로로 업로드한다.
+    match /cafeOrders/{orderId}/settlement/{fileName} {
+      allow read, write: if request.auth != null &&
+        (request.auth.uid == firestore.get(/databases/(default)/documents/cafeOrders/$(orderId)).data.posterUid ||
+         request.auth.uid == firestore.get(/databases/(default)/documents/cafeOrders/$(orderId)).data.applicantUid);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

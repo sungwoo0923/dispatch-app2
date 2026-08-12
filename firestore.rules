@@ -87,8 +87,42 @@ service cloud.firestore {
     // 읽을 수 있게 제한한다.
     // ────────────────────────────────────────────────────────────
     match /cafeOrders/{orderId} {
+      function isPoster() { return request.auth.uid == resource.data.posterUid; }
+      function isCurrentApplicant() { return resource.data.applicantUid != null && request.auth.uid == resource.data.applicantUid; }
+      // 배차신청: open -> applying, 신청자 본인 정보만 채워 넣는 전환.
+      function isApplyTransition() {
+        return resource.data.status == "open" && request.resource.data.status == "applying" &&
+          request.resource.data.applicantUid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['status','applicantUid','applicantName','applicantNickname','applicantPhone','applicantVehicleNumber','applyRequestedAt','posterUnread','updatedAt']);
+      }
+      // 10초 이내 신청취소: applying -> open, 신청자 본인만.
+      function isCancelApplyTransition() {
+        return resource.data.status == "applying" && request.resource.data.status == "open" &&
+          request.auth.uid == resource.data.applicantUid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['status','applicantUid','applicantName','applicantNickname','applicantPhone','applicantVehicleNumber','applyRequestedAt','updatedAt']);
+      }
+      // 10초 경과 자동확정: applying -> confirmed. 신청 당사자가 탭을 닫아버린 경우까지
+      // 대비해, 이 오더를 보고 있는 아무 로그인 사용자나(당사자가 아니어도) 지나가면서
+      // 확정을 시도할 수 있게 열어둔다 — cafeApi.js의 기존 설계와 동일.
+      function isFinalizeTransition() {
+        return resource.data.status == "applying" && request.resource.data.status == "confirmed" &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','confirmedAt','updatedAt']);
+      }
+      // 배차취소(배정 해제): confirmed -> open, 게시자만.
+      function isAssignmentCancelTransition() {
+        return resource.data.status == "confirmed" && request.resource.data.status == "open" && isPoster() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['status','applicantUid','applicantName','applicantNickname','applicantPhone','applicantVehicleNumber','applyRequestedAt','confirmedAt','updatedAt']);
+      }
+
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.posterUid == request.auth.uid;
+      allow delete: if isSignedIn() && isPoster();
+      allow update: if isSignedIn() && (
+        isPoster() || isApplyTransition() || isCancelApplyTransition() || isFinalizeTransition() || isAssignmentCancelTransition()
+      );
 
       match /contact/{docId} {
         allow read: if isSignedIn() &&
@@ -97,6 +131,40 @@ service cloud.firestore {
            request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.applicantUid);
         allow write: if isSignedIn();
       }
+
+      // 1:1 대화 — 게시자/신청자 당사자만 읽고 쓸 수 있다. 3개월 지난 메시지 실제 삭제는
+      // functions/cafeCleanup.js의 예약 작업(Admin SDK, 규칙 영향 없음)이 처리한다.
+      match /chat/{msgId} {
+        allow read, create: if isSignedIn() &&
+          (request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.posterUid ||
+           request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.applicantUid);
+        allow update, delete: if false;
+      }
+
+      // 정산(인수증/명세서 업로드 기록, 정산완료 처리) — 당사자만.
+      match /settlement/{docId} {
+        allow read, write: if isSignedIn() &&
+          (request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.posterUid ||
+           request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.applicantUid);
+      }
+    }
+
+    // 알림 — 본인 알림만 읽고, 본인 것만 읽음처리(update) 가능. 생성은 신청/취소 등
+    // 이벤트를 발생시킨 로그인 사용자 누구나(상대방에게 알림을 남겨야 하므로) 가능하다.
+    match /cafeNotifications/{id} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // 사업자등록번호 → 회사명 조회용 공개 디렉터리 — 가입폼(로그인 전)에서도 조회할 수
+    // 있어야 하므로 단건 조회(get)만 공개하고, 목록 열람(list)과 쓰기는 막는다(가입 시
+    // 로그인된 계정으로만 생성/갱신).
+    match /bizDirectory/{bizNo} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isSignedIn();
     }
 
     // ────────────────────────────────────────────────────────────
