@@ -544,8 +544,12 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   // 조회해 결과를 보여주기 위한 상태 (전국운임 탭의 nfFrom/nfTo/nfResult 등을 그대로 재사용)
   const [showNoResultPopup, setShowNoResultPopup] = useState(false);
 
-  // 표준운임 경유지 포함 토글
+  // 표준운임 경유지 포함 토글 — 검색어가 경유지명에도 매치될지 여부
   const [includeVia, setIncludeVia] = useState(false);
+  // ⭐ 경유지가 있는 오더(다구간 배차) 자체를 조회 결과/평균운임 계산에 포함할지 여부.
+  // 경유지가 있는 오더는 청구운임에 추가 구간 요금이 섞여있어, 순수 "상차지→하차지"
+  // 단일구간 시세만 보고 싶을 때는 꺼서 제외할 수 있게 한다. 기본값은 켜짐(기존 동작 유지).
+  const [includeViaOrders, setIncludeViaOrders] = useState(true);
 
   // 전국운임 상태
   const [nfFrom, setNfFrom] = useState("");
@@ -784,6 +788,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (client !== "전체" && client !== "") {
       list = list.filter(r => clean(r.거래처명) === clean(client));
     }
+    // ⭐ 경유지 있는 오더(다구간 배차) 제외 — 청구운임에 경유 구간 요금이 섞여있어
+    // 순수 "상차지→하차지" 단일구간 시세만 보고 싶을 때 끌 수 있다.
+    if (!includeViaOrders) {
+      list = list.filter(r => getPickupVias(r).length === 0 && getDropVias(r).length === 0);
+    }
     return list;
   };
 
@@ -1006,9 +1015,13 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
             )}
 
-            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit">
+            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none w-fit">
               <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
               <span className="text-[12px] font-semibold text-gray-600">경유지명도 검색에 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="경유지가 있는 오더는 청구운임에 경유 구간 요금까지 섞여있어, 순수 상차지→하차지 단일구간 시세만 보려면 꺼주세요.">
+              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeViaOrders} onChange={() => setIncludeViaOrders(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">경유지 있는 오더도 결과·평균에 포함</span>
             </label>
 
             <div className="space-y-4 mb-5">

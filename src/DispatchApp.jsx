@@ -6154,17 +6154,37 @@ function formatPhone(raw) {
  }
 const today = todayKST();
 
-// 📌 당일 상차 데이터만 필터링
-const todayRows = (dispatchData || []).filter(
-  r => String(r.상차일 || "").slice(0, 10) === today
-);
+// 📌 당일 상차 데이터만 필터링 + 📊 KPI 계산 (모두 당일 ONLY)
+// ⚠️ 예전엔 이 블록의 filter() 8개가 전부 useMemo 없이 컴포넌트 본문에 그대로
+// 있었다 — 이 DispatchManagement는 배차등록 폼(form)과 같은 컴포넌트라 글자 하나
+// 입력할 때마다 전체 렌더가 다시 도는데, 그때마다 회사 전체 누적 오더(수천~수만 건)를
+// 8번씩 훑고 있어서 타이핑이 버벅였다. dispatchData가 실제로 바뀔 때만 한 번,
+// 단일 순회로 전부 계산하도록 useMemo로 묶는다.
+const {
+  todayRows, total, done, doing, pending, delayed,
+  driverCount, newClients, newPlaces,
+} = React.useMemo(() => {
+  const rows = (dispatchData || []).filter(
+    r => String(r.상차일 || "").slice(0, 10) === today
+  );
+  let done = 0, doing = 0, pending = 0, delayed = 0, newClients = 0, newPlaces = 0;
+  const driverSet = new Set();
+  for (const r of rows) {
+    if (r.배차상태 === "배차완료") done++;
+    else if (r.배차상태 === "배차중") doing++;
+    else if (r.배차상태 === "지연") delayed++;
+    if (!r.차량번호?.trim()) pending++;
+    if (r.거래처명?.trim()) newClients++;
+    if (r.하차지명?.trim()) newPlaces++;
+    const nm = r.이름?.trim();
+    if (nm) driverSet.add(nm);
+  }
+  return {
+    todayRows: rows, total: rows.length, done, doing, pending, delayed,
+    driverCount: driverSet.size, newClients, newPlaces,
+  };
+}, [dispatchData, today]);
 
-// 📊 KPI 계산: 모두 당일 ONLY
-const total = todayRows.length;
-const done = todayRows.filter(r => r.배차상태 === "배차완료").length;
-const doing = todayRows.filter(r => r.배차상태 === "배차중").length;
-const pending = todayRows.filter(r => !r.차량번호?.trim()).length;
-const delayed = todayRows.filter(r => r.배차상태 === "지연").length;
 // 🔹 시간대별 요청건수 트렌드 데이터 생성
 const trendData = React.useMemo(() => {
   const hourly = {};
@@ -6187,16 +6207,14 @@ const trendData = React.useMemo(() => {
 // 진행률
 const rate = total > 0 ? Math.round((done / total) * 100) : 0;
 
-// 당일 기사 수: 배차된 기사 (중복 제거)
-const driverCount = new Set(
-  todayRows
-    .map(r => r.이름?.trim())
-    .filter(Boolean)
-).size;
-
-// 신규 거래처/하차지 (값 존재 여부 기준)
-const newClients = todayRows.filter(r => r.거래처명?.trim()).length;
-const newPlaces = todayRows.filter(r => r.하차지명?.trim()).length;
+// "상태 3개" 카드(배차중/미배차/긴급)에서 쓰는 리스트 — 클릭 시 팝업에 보여줄 실제
+// 행 목록이라 개수(doing/pending)와 별개로 필요하다. 예전엔 이 중 "긴급" 리스트가
+// 같은 렌더 안에서 동일 조건으로 3번(개수/펄스여부/리스트) 따로 필터링됐다.
+const { doingList, pendingList, urgentList } = React.useMemo(() => ({
+  doingList: todayRows.filter(r => r.배차상태 === "배차중"),
+  pendingList: todayRows.filter(r => !r.차량번호?.trim()),
+  urgentList: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료"),
+}), [todayRows]);
 
 // 🚚 유통 데이터
 const money = (text) => {
@@ -6317,6 +6335,11 @@ React.useEffect(() => {
   }
 }, [vehicleActive, showVehicleDropdown]);
 const [pickupActive, setPickupActive] = React.useState(0);
+// ⭐ Tab을 눌렀을 때 "사용자가 방향키로 실제로 골랐는지"를 구분하기 위한 플래그.
+// 이게 없으면 예를 들어 이미 등록된 "후레쉬2공장"과 비슷한 신규 거래처 "후레쉬2"를
+// 입력하는 중에도 필터링된 드롭다운 맨 위 항목(후레쉬2공장)이 그냥 Tab만 눌러도
+// 강제로 선택돼버려서 신규 입력이 불가능해지는 문제가 있었다.
+const pickupNavTouchedRef = React.useRef(false);
 const pickupDropdownListRef = React.useRef(null);
 React.useEffect(() => {
   const list = pickupDropdownListRef.current;
@@ -6334,6 +6357,9 @@ React.useEffect(() => {
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 const [placeOptions, setPlaceOptions] = React.useState([]);
 const [placeActive, setPlaceActive] = React.useState(0);
+// ⭐ pickupNavTouchedRef와 동일한 이유 — 하차지명도 신규 업체명이 기존 등록된
+// 비슷한 이름의 드롭다운 옵션에 가려 Tab만 눌러도 강제로 바뀌지 않도록 한다.
+const dropNavTouchedRef = React.useRef(false);
 const placeDropdownListRef = React.useRef(null);
 React.useEffect(() => {
   const list = placeDropdownListRef.current;
@@ -8548,6 +8574,10 @@ const doSave = async (shareToCafe = false) => {
   if (isSaving) return;
   setIsSaving(true);
 
+  // ⚠️ 아래 저장 로직 전체를 try/catch로 감싼다 — 예전엔 여기서 네트워크 오류 등
+  // 예외가 하나라도 발생하면 setIsSaving(false)에 도달하지 못해 "배차등록하기"
+  // 버튼이 "저장 중..."에서 영원히 멈춰버렸다(사용자에게는 딜레이/먹통처럼 보임).
+  try {
     // ⛔ 기사 중복 배차 방지
   const dup = checkDuplicateDispatch(form, dispatchData);
   if (dup) {
@@ -8755,6 +8785,11 @@ if (_carNo && _name) {
     upsertDriver({ 차량번호: _carNo, 이름: _name, 전화번호: _tel }).catch(() => {});
   }
 }
+  } catch (err) {
+    console.error("오더 저장 실패:", err);
+    setIsSaving(false);
+    showAlert("저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n" + (err?.message || ""));
+  }
 };
 const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
@@ -10572,6 +10607,7 @@ const similar = placeList.filter(p => {
         setPickupOptions(filterPlaces(v));
         setShowPickupDropdown(true);
         setPickupActive(0);
+        pickupNavTouchedRef.current = false; // 새로 입력하면 이전 방향키 선택 흔적을 지운다
       }}
       onKeyDown={(e) => {
         const list = pickupOptions;
@@ -10585,16 +10621,24 @@ const similar = placeList.filter(p => {
           applyPlaceToForm(p, "pickup", "pickup-manager");
           setShowPickupDropdown(false);
           setPickupOptions([]);
+          pickupNavTouchedRef.current = false;
         } else if (e.key === "ArrowDown") {
+          pickupNavTouchedRef.current = true;
           setPickupActive((i) => Math.min(i + 1, list.length - 1));
         } else if (e.key === "ArrowUp") {
+          pickupNavTouchedRef.current = true;
           setPickupActive((i) => Math.max(i - 1, 0));
         } else if (e.key === "Escape") {
           setShowPickupDropdown(false);
           setPickupOptions([]);
         } else if (e.key === "Tab") {
           const p = list[pickupActive];
-          if (p) {
+          // ⭐ 방향키로 직접 고른 항목이거나, 입력한 텍스트가 그 항목 이름과
+          // 정확히 일치할 때만 자동 적용한다. 그 외(신규 업체명을 타이핑 중인데
+          // 비슷한 기존 업체가 드롭다운 맨 위에 걸려있는 경우)에는 그냥 목록만
+          // 닫고 사용자가 입력한 텍스트를 그대로 두어 다음 칸으로 넘어가게 한다.
+          const exactMatch = p && normalizeKey(p.업체명) === normalizeKey(e.target.value);
+          if (p && (pickupNavTouchedRef.current || exactMatch)) {
             // finalFocusId를 같은 입력창(pickup-place-input)으로 주면, 담당자가
             // 여러 명이라 팝업이 뜨는 경우 선택을 마친 뒤 포커스가 이 필드로
             // 되돌아오는데, 아직 지우지 않은 pickupOptions가 남아있는 상태에서
@@ -10603,7 +10647,10 @@ const similar = placeList.filter(p => {
             applyPlaceToForm(p, "pickup", "pickup-manager");
             setShowPickupDropdown(false);
             setPickupOptions([]);
+          } else {
+            setShowPickupDropdown(false);
           }
+          pickupNavTouchedRef.current = false;
         }
       }}
       onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
@@ -10738,6 +10785,7 @@ className={`
       setPlaceOptions(filterPlaces(v))
       setShowPlaceDropdown(true)
       setPlaceActive(0)
+      dropNavTouchedRef.current = false; // 새로 입력하면 이전 방향키 선택 흔적을 지운다
     }}
     onKeyDown={(e) => {
       const list = placeOptions
@@ -10753,16 +10801,24 @@ className={`
         applyPlaceToForm(p, "drop", "drop-manager");
         setShowPlaceDropdown(false);
         setPlaceOptions([]);
+        dropNavTouchedRef.current = false;
       } else if (e.key === "ArrowDown") {
+        dropNavTouchedRef.current = true;
         setPlaceActive((i) => Math.min(i + 1, list.length - 1))
       } else if (e.key === "ArrowUp") {
+        dropNavTouchedRef.current = true;
         setPlaceActive((i) => Math.max(i - 1, 0))
       } else if (e.key === "Escape") {
         setShowPlaceDropdown(false);
         setPlaceOptions([]);
       } else if (e.key === "Tab") {
         const p = list[placeActive]
-        if (p) {
+        // ⭐ 방향키로 직접 고른 항목이거나, 입력한 텍스트가 그 항목 이름과 정확히
+        // 일치할 때만 자동 적용한다. 그 외(신규 업체명을 타이핑 중인데 비슷한 기존
+        // 업체가 드롭다운 맨 위에 걸려있는 경우)에는 목록만 닫고 입력한 텍스트를
+        // 그대로 두어 다음 칸으로 넘어가게 한다.
+        const exactMatch = p && normalizeKey(p.업체명) === normalizeKey(e.target.value);
+        if (p && (dropNavTouchedRef.current || exactMatch)) {
           // finalFocusId가 같은 입력창(drop-place-input)이면, 담당자가 여러 명이라
           // 팝업이 뜬 뒤 선택을 마치고 포커스가 이 필드로 되돌아왔을 때 placeOptions가
           // 아직 남아있어 Tab을 다시 누르면 이 분기가 재실행되어 팝업이 계속
@@ -10770,7 +10826,10 @@ className={`
           applyPlaceToForm(p, "drop", "drop-manager");
           setShowPlaceDropdown(false);
           setPlaceOptions([]);
+        } else {
+          setShowPlaceDropdown(false);
         }
+        dropNavTouchedRef.current = false;
       }
     }}
     onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
@@ -13024,9 +13083,9 @@ className={`
       {/* 상태 3개 */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: "배차중", val: doing, dot: "bg-[#1B2B4B]", pulse: doing > 0, list: todayRows.filter(r => r.배차상태 === "배차중") },
-          { label: "미배차", val: pending, dot: "bg-gray-400", pulse: false, list: todayRows.filter(r => !r.차량번호?.trim()) },
-          { label: "긴급", val: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length, dot: "bg-red-500", pulse: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length > 0, list: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료") },
+          { label: "배차중", val: doing, dot: "bg-[#1B2B4B]", pulse: doing > 0, list: doingList },
+          { label: "미배차", val: pending, dot: "bg-gray-400", pulse: false, list: pendingList },
+          { label: "긴급", val: urgentList.length, dot: "bg-red-500", pulse: urgentList.length > 0, list: urgentList },
         ].map(({ label, val, dot, pulse, list }) => (
           <button key={label} type="button"
             onClick={() => setStatusPopup({ title: `${label} 리스트`, list })}
@@ -17280,8 +17339,8 @@ function RealtimeRowBase({
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
     : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
-  // 오더목록에서 특히 중요한 값(상/하차일시·화물내용·차량종류·톤수)을 운임확인서(FareCertModal)의
-  // 강조 스타일과 동일하게 굵고 네이비색으로 표시해 다른 칸과 한눈에 구분되도록 한다.
+  // 오더목록에서 특히 중요한 값(상/하차일시·화물내용·차량종류·톤수)은 다른 칸(font-medium)보다
+  // 뚜렷하게 굵은 글씨로만 표시한다 — 배경색은 넣지 않는다(요청에 따라 배경 칩 제거).
   const emph = isDark ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
 
   // ⚠️ 여기 overflow-hidden/text-ellipsis/max-width를 다시 넣지 말 것 — renderAddrCell이
@@ -37520,22 +37579,29 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
   };
 
   // 배차 데이터에서 월별 집계
-  const dispatchRows = Array.isArray(dispatchData)
-    ? dispatchData.filter((r) => (r.배차상태 || "") === "배차완료")
-    : [];
-  const fixedMapped = (fixedRows || []).map((r) => ({
-    상차일: r.날짜,
-    청구운임: toInt(r.청구운임),
-    기사운임: toInt(r.기사운임),
-    배차방식: r.배차방식 || "",
-    차량종류: r.차량종류 || "",
-    배차상태: "배차완료",
-    지급방식: r.지급방식 || "",
-    실수수료: toInt(r.실수수료 != null ? r.실수수료 : (Number(r.수수료||0) - Number(r.선결제||0))),
-    거래처명: r.거래처명 || "",
-    __isFixed: true,
-  }));
-  const allRows = [...dispatchRows.map((r) => ({ ...r, 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임) })), ...fixedMapped];
+  // ⚠️ 예전엔 dispatchRows/fixedMapped/allRows가 useMemo 없이 렌더마다 새 배열로
+  // 다시 만들어져서, 아래 getAutoMonth의 useMemo([allRows, year])가 매번 "새
+  // 참조"를 보고 매번 다시 계산하는 무의미한 메모가 됐었다(updateCell로 셀 하나만
+  // 고쳐도 dispatchData 전체를 다시 filter/map). dispatchData/fixedRows가 실제로
+  // 바뀔 때만 다시 계산하도록 묶는다.
+  const allRows = React.useMemo(() => {
+    const dispatchRows = Array.isArray(dispatchData)
+      ? dispatchData.filter((r) => (r.배차상태 || "") === "배차완료")
+      : [];
+    const fixedMapped = (fixedRows || []).map((r) => ({
+      상차일: r.날짜,
+      청구운임: toInt(r.청구운임),
+      기사운임: toInt(r.기사운임),
+      배차방식: r.배차방식 || "",
+      차량종류: r.차량종류 || "",
+      배차상태: "배차완료",
+      지급방식: r.지급방식 || "",
+      실수수료: toInt(r.실수수료 != null ? r.실수수료 : (Number(r.수수료||0) - Number(r.선결제||0))),
+      거래처명: r.거래처명 || "",
+      __isFixed: true,
+    }));
+    return [...dispatchRows.map((r) => ({ ...r, 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임) })), ...fixedMapped];
+  }, [dispatchData, fixedRows]);
 
   const getAutoMonth = React.useMemo(() => {
     const result = {};
