@@ -17461,7 +17461,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
-    <span>{r.상차지명}</span>
+    <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
     <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(r.상차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
@@ -17487,7 +17487,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
-    <span>{r.하차지명}</span>
+    <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
     <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(r.하차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
 
 {r.__dropStops?.length > 0 && (
@@ -32068,7 +32068,7 @@ return (
 
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
-    <span>{row.상차지명}</span>
+    <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
     <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(row.상차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
@@ -32082,7 +32082,7 @@ return (
 
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
-    <span>{row.하차지명}</span>
+    <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
     <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(row.하차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -36988,7 +36988,7 @@ setCopyPlaceOptions(list);
 }
 
 /* ---------------------- 주소 더보기 ---------------------- */
-function AddressCell({ text = "", max = 5, valueClassName = "" }) {
+function AddressCell({ text = "", max = 5, valueClassName = "", popupTitle = "주소 전체보기" }) {
   const [open, setOpen] = React.useState(false);
   const clean = String(text || "");
   const isLong = clean.length > max;
@@ -37014,7 +37014,7 @@ function AddressCell({ text = "", max = 5, valueClassName = "" }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-[#1B2B4B] px-6 py-4">
-              <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
+              <h3 className="text-white font-bold text-[15px]">{popupTitle}</h3>
             </div>
             <div className="px-6 py-5">
               <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{clean}</p>
