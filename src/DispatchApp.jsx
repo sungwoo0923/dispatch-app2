@@ -720,6 +720,7 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
   });
   const [bulkValues, setBulkValues] = React.useState({});
   const [saving, setSaving] = React.useState(false);
+  const [saveProgress, setSaveProgress] = React.useState({ done: 0, total: 0 });
 
   if (!rows || rows.length === 0) return null;
 
@@ -735,22 +736,32 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
     });
   };
 
+  // 저장을 하나씩 순서대로 반영하면(개별 patchDispatch마다 Firestore 스냅샷이
+  // 그때그때 오며) 뒤에 있는 표가 한 줄씩 딱딱 끊기며 바뀌는 게 보여 지저분했다.
+  // 화면 중앙에 진행 상황(몇 건 중 몇 건 완료)을 보여주는 로딩 오버레이로 가려,
+  // 저장이 끝난 뒤 한 번에 자연스럽게 결과가 보이도록 한다.
   const handleSave = async () => {
+    const jobs = rows.map(r => {
+      const id = r._id || r.id;
+      const patch = {};
+      let changed = false;
+      for (const f of BULK_EDIT_FIELDS) {
+        const newVal = edited[id]?.[f.key] ?? "";
+        const oldVal = r[f.key] ?? "";
+        if (String(newVal) !== String(oldVal)) { patch[f.key] = newVal; changed = true; }
+      }
+      return changed ? { id, col: r.__col, patch } : null;
+    }).filter(Boolean);
+
+    if (jobs.length === 0) { onClose(); return; }
+
+    setSaveProgress({ done: 0, total: jobs.length });
     setSaving(true);
     try {
-      const jobs = rows.map(r => {
-        const id = r._id || r.id;
-        const patch = {};
-        let changed = false;
-        for (const f of BULK_EDIT_FIELDS) {
-          const newVal = edited[id]?.[f.key] ?? "";
-          const oldVal = r[f.key] ?? "";
-          if (String(newVal) !== String(oldVal)) { patch[f.key] = newVal; changed = true; }
-        }
-        if (!changed) return null;
-        return patchDispatch(id, { ...patch, __col: r.__col });
-      }).filter(Boolean);
-      await Promise.all(jobs);
+      await Promise.all(jobs.map(async (job) => {
+        await patchDispatch(job.id, { ...job.patch, __col: job.col });
+        setSaveProgress(p => ({ ...p, done: p.done + 1 }));
+      }));
       onClose();
     } catch (e) {
       window.alert("저장 중 오류가 발생했습니다.\n" + (e?.message || ""));
@@ -761,6 +772,21 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+      {saving && (
+        <div className="fixed inset-0 z-[9999999] bg-black/60 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 flex flex-col items-center gap-4 w-[300px]">
+            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+            <div className="text-[14px] font-extrabold text-gray-800">저장 중입니다...</div>
+            <div className="text-[13px] font-bold text-gray-600">{saveProgress.done} / {saveProgress.total}건 완료</div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#1B2B4B] transition-all duration-200"
+                style={{ width: `${saveProgress.total ? Math.round((saveProgress.done / saveProgress.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
           <h3 className="text-white font-bold text-[15px]">선택 오더 일괄수정 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
