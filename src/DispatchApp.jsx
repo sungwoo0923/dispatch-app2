@@ -111,54 +111,27 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 }
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
-// 상/하차지명 옆에 붙는 휴게(점심시간) 경고 점.
-// 같은 업체가 여러 건 있을 때 시간 텍스트가 행마다 중복되어 표가 복잡해 보이던
-// 문제로, 텍스트는 표 위 "업체별 휴게시간" 요약 바(renderLunchSummary)에서 한 번만
-// 보여주고, 표 안에서는 그 상/하차 시간이 점심시간과 실제로 겹칠 때만 조용히
-// 빨간 점으로 경고한다. 겹치지 않으면 아예 렌더링하지 않는다.
+// 상/하차지명 옆에 붙는 휴게(점심시간) 표시 — 그 상/하차지에 등록된 점심시간이
+// 있을 때만 작은 시계 아이콘 하나가 조용히 나타나고, 평소엔 텍스트 없이 아이콘뿐이라
+// 표가 복잡해지지 않는다. 필요할 때(마우스를 올렸을 때)만 정확한 시간대가 툴팁으로
+// 뜬다. 그 오더의 상/하차 시간이 점심시간과 실제로 겹치면 아이콘이 빨간색으로 바뀌어
+// 툴팁을 열지 않아도 한눈에 경고를 알아볼 수 있다.
 const RestCell = ({ lunchInfo, orderTime }) => {
   if (!lunchInfo) return null;
-  if (!isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end)) return null;
+  const overlap = isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end);
   return (
-    <span
-      title={`점심시간 ${lunchInfo.start} ~ ${lunchInfo.end} · 이 시간과 겹칩니다`}
-      className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+    <HoverInfoTrigger
+      className={`inline-flex items-center justify-center w-4 h-4 shrink-0 cursor-default ${overlap ? "text-red-500" : "text-gray-400"}`}
+      label={
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <polyline points="12 7 12 12 15 14" />
+        </svg>
+      }
+      tooltipRows={<div>점심시간 {lunchInfo.start}~{lunchInfo.end}{overlap ? " · 이 시간과 겹칩니다" : ""}</div>}
     />
   );
 };
-
-// 표 위에 붙는 "업체별 휴게시간" 요약 바. 화면에 표시된 오더들의 상/하차지 중
-// 점심시간이 등록된 업체를 이름 기준으로 중복 없이 한 번씩만 모아서 보여준다 —
-// 같은 업체 오더가 여러 건이어도 시간 텍스트가 행마다 반복되지 않게 하기 위함.
-function useLunchSummary(rows, lunchByName) {
-  return React.useMemo(() => {
-    const seen = new Map();
-    for (const r of rows || []) {
-      for (const nm of [r.상차지명, r.하차지명]) {
-        const key = _lunchNameKey(nm);
-        if (!key || seen.has(key)) continue;
-        const info = lunchByName.get(key);
-        if (info && (info.start || info.end)) seen.set(key, { name: String(nm).trim(), ...info });
-      }
-    }
-    return Array.from(seen.values());
-  }, [rows, lunchByName]);
-}
-function LunchSummaryBar({ items, isDark }) {
-  if (!items.length) return null;
-  return (
-    <div className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2 mb-2 rounded-lg border text-[12px] ${
-      isDark ? "bg-amber-900/20 border-amber-800/40" : "bg-amber-50 border-amber-200"
-    }`}>
-      <span className={`font-bold shrink-0 ${isDark ? "text-amber-300" : "text-amber-700"}`}>🍚 업체별 휴게시간</span>
-      {items.map((it) => (
-        <span key={it.name} className={isDark ? "text-amber-200" : "text-amber-800"}>
-          <span className="font-semibold">{it.name}</span> {it.start}~{it.end}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 /* -------------------------------------------------
    운임정보(운임확인서) 미리보기 팝업 — 실시간배차현황/배차현황 우클릭 메뉴의
@@ -20891,8 +20864,6 @@ if (sortKey) {
       return withStops;
     });
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
-  // 표에 보이는 오더들의 상/하차지 중 점심시간이 등록된 업체를 중복 없이 모은 요약(휴게 바)
-  const lunchSummary = useLunchSummary(filtered, lunchByName);
   // =========================
   // 📊 상태 요약 (추가 위치)
   // =========================
@@ -22634,7 +22605,6 @@ const head = isDark
 
       {/* 테이블 */}
       <div>
-      <LunchSummaryBar items={lunchSummary} isDark={isDark} />
       <div ref={rtTableWrapRef} className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
@@ -31085,8 +31055,6 @@ const filtered = React.useMemo(() => {
   filterErrorIds,
   filterConditions,
 ]);
-// 표에 보이는 오더들의 상/하차지 중 점심시간이 등록된 업체를 중복 없이 모은 요약(휴게 바)
-const lunchSummary = useLunchSummary(filtered, lunchByName);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
   const pageRows = React.useMemo(() => {
@@ -31856,7 +31824,6 @@ return (
 
       {/* ---------------- 테이블 ---------------- */}
       <div>
-      <LunchSummaryBar items={lunchSummary} isDark={false} />
       <div ref={dsTableWrapRef} className="rounded-xl shadow border border-gray-200 overflow-x-auto">
 
   <table className="w-full min-w-max table-auto">
