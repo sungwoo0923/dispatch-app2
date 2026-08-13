@@ -31,6 +31,7 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
+import { Clock } from "lucide-react";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -112,22 +113,22 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
 // 상/하차지명 옆에 붙는 휴게(점심시간) 표시 — 그 상/하차지에 등록된 점심시간이
-// 있을 때만 작은 시계 아이콘 하나가 조용히 나타나고, 평소엔 텍스트 없이 아이콘뿐이라
-// 표가 복잡해지지 않는다. 필요할 때(마우스를 올렸을 때)만 정확한 시간대가 툴팁으로
-// 뜬다. 그 오더의 상/하차 시간이 점심시간과 실제로 겹치면 아이콘이 빨간색으로 바뀌어
-// 툴팁을 열지 않아도 한눈에 경고를 알아볼 수 있다.
-const RestCell = ({ lunchInfo, orderTime }) => {
+// 있을 때만 작은 검은색 시계 아이콘이 조용히 나타난다(모바일 쉬운모드와 동일하게
+// 알록달록한 색 이모지 대신 단색 라인 아이콘 사용). 평소엔 텍스트 없이 아이콘뿐이라
+// 표가 복잡해지지 않고, 필요할 때(마우스를 올렸을 때)만 정확한 시간대가 툴팁으로
+// 뜬다. 같은 업체(상/하차지명)가 여러 건 있을 때 행마다 아이콘이 반복돼 지저분해
+// 보이지 않도록, 그 업체가 화면에 처음 등장하는 행에서만 아이콘을 보여준다(isFirst).
+// 다만 그 오더의 상/하차 시간이 점심시간과 실제로 겹치는 경우엔 몇 번째 행이든
+// 무조건 아이콘을 빨간색으로 띄워 경고한다 — 이건 업체 단위가 아니라 그 오더
+// 하나하나에 해당하는 정보라 중복이어도 숨기면 안 된다.
+const RestCell = ({ lunchInfo, orderTime, isFirst }) => {
   if (!lunchInfo) return null;
   const overlap = isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end);
+  if (!overlap && !isFirst) return null;
   return (
     <HoverInfoTrigger
-      className={`inline-flex items-center justify-center w-4 h-4 shrink-0 cursor-default ${overlap ? "text-red-500" : "text-gray-400"}`}
-      label={
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <polyline points="12 7 12 12 15 14" />
-        </svg>
-      }
+      className={`inline-flex items-center justify-center w-4 h-4 shrink-0 cursor-default ${overlap ? "text-red-500" : "text-black"}`}
+      label={<Clock width={12} height={12} strokeWidth={2.25} />}
       tooltipRows={<div>점심시간 {lunchInfo.start}~{lunchInfo.end}{overlap ? " · 이 시간과 겹칩니다" : ""}</div>}
     />
   );
@@ -17297,7 +17298,7 @@ function RealtimeRowBase({
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, getDispatchConfirmedMs, formatKstDateTime, getCreatorLabel,
   editableInput, renderAddrCell, renderCargoCell, canEdit, handleEditChange,
-  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName,
+  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName, isFirstPickupLunch, isFirstDropLunch,
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
@@ -17434,7 +17435,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} isFirst={isFirstPickupLunch} />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
@@ -17454,7 +17455,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} isFirst={isFirstDropLunch} />
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -17727,7 +17728,9 @@ function realtimeRowPropsEqual(prev, next) {
     prev.editedForRow === next.editedForRow &&
     prev.driverConfirmOpen === next.driverConfirmOpen &&
     prev.memoAlert === next.memoAlert &&
-    prev.blackAlert === next.blackAlert
+    prev.blackAlert === next.blackAlert &&
+    prev.isFirstPickupLunch === next.isFirstPickupLunch &&
+    prev.isFirstDropLunch === next.isFirstDropLunch
   );
 }
 
@@ -20864,6 +20867,20 @@ if (sortKey) {
       return withStops;
     });
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
+  // 화면에 보이는 순서상 그 상/하차지명이 처음 등장하는 행의 _id만 모아둔다 —
+  // 같은 업체가 여러 건이어도 휴게(점심시간) 아이콘이 첫 행에만 뜨게 하기 위함
+  // (RestCell의 isFirst prop으로 전달, 겹침 경고는 이 dedup과 무관하게 항상 표시).
+  const lunchFirstIds = React.useMemo(() => {
+    const pickup = new Set(), drop = new Set();
+    const seenP = new Set(), seenD = new Set();
+    for (const r of filtered) {
+      const pk = _lunchNameKey(r.상차지명);
+      if (pk && lunchByName.get(pk) && !seenP.has(pk)) { seenP.add(pk); pickup.add(r._id); }
+      const dk = _lunchNameKey(r.하차지명);
+      if (dk && lunchByName.get(dk) && !seenD.has(dk)) { seenD.add(dk); drop.add(r._id); }
+    }
+    return { pickup, drop };
+  }, [filtered, lunchByName]);
   // =========================
   // 📊 상태 요약 (추가 위치)
   // =========================
@@ -22694,6 +22711,8 @@ const head = isDark
                 dispatchData={dispatchData}
                 placeRows={placeRows}
                 lunchByName={lunchByName}
+                isFirstPickupLunch={lunchFirstIds.pickup.has(r._id)}
+                isFirstDropLunch={lunchFirstIds.drop.has(r._id)}
                 timeOptions={timeOptions}
                 patchDispatch={patchDispatch}
                 setRows={setRows}
@@ -31063,6 +31082,22 @@ const filtered = React.useMemo(() => {
     return filtered.slice(start, end);
   }, [filtered, page]);
 
+  // 화면(현재 페이지)에 보이는 순서상 그 상/하차지명이 처음 등장하는 행의 id만
+  // 모아둔다 — 같은 업체가 여러 건이어도 휴게(점심시간) 아이콘이 첫 행에만 뜨게
+  // 하기 위함(RestCell의 isFirst prop으로 전달, 겹침 경고는 이 dedup과 무관하게 항상 표시).
+  const lunchFirstIds = React.useMemo(() => {
+    const pickup = new Set(), drop = new Set();
+    const seenP = new Set(), seenD = new Set();
+    for (const r of pageRows) {
+      const id = getId(r);
+      const pk = _lunchNameKey(r.상차지명);
+      if (pk && lunchByName.get(pk) && !seenP.has(pk)) { seenP.add(pk); pickup.add(id); }
+      const dk = _lunchNameKey(r.하차지명);
+      if (dk && lunchByName.get(dk) && !seenD.has(dk)) { seenD.add(dk); drop.add(id); }
+    }
+    return { pickup, drop };
+  }, [pageRows, lunchByName]);
+
   const statusSummary = React.useMemo(() => {
     let 미배차 = 0;
     let 완료 = 0;
@@ -32001,7 +32036,7 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} isFirst={lunchFirstIds.pickup.has(id)} />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -32015,7 +32050,7 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} isFirst={lunchFirstIds.drop.has(id)} />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
