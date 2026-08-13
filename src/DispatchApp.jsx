@@ -721,6 +721,9 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
   const [bulkValues, setBulkValues] = React.useState({});
   const [saving, setSaving] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState({ done: 0, total: 0 });
+  const [doneCount, setDoneCount] = React.useState(null); // 저장 완료 후 "n건 수정 완료" 배너에 쓸 건수
+  const closeTimerRef = React.useRef(null);
+  React.useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); }, []);
 
   if (!rows || rows.length === 0) return null;
 
@@ -762,11 +765,14 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
         await patchDispatch(job.id, { ...job.patch, __col: job.col });
         setSaveProgress(p => ({ ...p, done: p.done + 1 }));
       }));
-      onClose();
-    } catch (e) {
-      window.alert("저장 중 오류가 발생했습니다.\n" + (e?.message || ""));
-    } finally {
       setSaving(false);
+      // 로딩 오버레이가 사라지자마자 곧바로 "n건 수정이 완료되었습니다" 배너를
+      // 잠깐 띄운 뒤, 2초 후에 팝업을 닫는다.
+      setDoneCount(jobs.length);
+      closeTimerRef.current = setTimeout(onClose, 2000);
+    } catch (e) {
+      setSaving(false);
+      window.alert("저장 중 오류가 발생했습니다.\n" + (e?.message || ""));
     }
   };
 
@@ -784,6 +790,13 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
                 style={{ width: `${saveProgress.total ? Math.round((saveProgress.done / saveProgress.total) * 100) : 0}%` }}
               />
             </div>
+          </div>
+        </div>
+      )}
+      {doneCount != null && (
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center pointer-events-none">
+          <div className="bg-black text-white font-extrabold text-[16px] px-6 py-3.5 rounded-2xl shadow-2xl">
+            {doneCount}건 수정이 완료되었습니다.
           </div>
         </div>
       )}
