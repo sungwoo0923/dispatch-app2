@@ -282,6 +282,240 @@ function FareCertModal({ row, companyName, onClose }) {
   );
 }
 
+// 상차일(YYYY-MM-DD) → "8/13 (목)" 형식으로. 파싱 불가하면 원문 그대로.
+function _scheduleDateLabel(d) {
+  if (!d) return "날짜 미정";
+  const dt = new Date(`${d}T00:00:00`);
+  if (isNaN(dt.getTime())) return d;
+  const WD = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${dt.getMonth() + 1}/${dt.getDate()} (${WD[dt.getDay()]})`;
+}
+
+/* -------------------------------------------------
+   스케줄표 — 실시간배차현황/배차현황에서 여러 건을 선택 후 우클릭 →
+   "스케줄표"로 열어, 어느 기사가 어느 날짜에 이 노선(들)을 운행하는지
+   날짜별/기사별로 한눈에 정리해 보여준다. 프로그램 밖에서도(업체 전달용
+   등) 확인할 수 있도록 이미지/PDF 저장·인쇄·확대축소를 지원한다.
+   알록달록한 배색 없이 프로그램 기본 톤(네이비/그레이)만 쓰고, 글자는
+   또렷하게 굵은 글씨 위주로 구성한다.
+--------------------------------------------------*/
+function ScheduleChartModal({ rows, companyName, onClose }) {
+  const [groupBy, setGroupBy] = React.useState("date"); // "date" | "driver"
+  const [zoom, setZoom] = React.useState(1);
+  const captureRef = React.useRef(null);
+
+  const dateGroups = React.useMemo(() => {
+    const map = new Map();
+    for (const r of rows || []) {
+      const key = r.상차일 || "";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(r);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, list]) => ({
+        date,
+        list: [...list].sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""))),
+      }));
+  }, [rows]);
+
+  const driverGroups = React.useMemo(() => {
+    const map = new Map();
+    for (const r of rows || []) {
+      const key = `${r.이름 || "기사 미배정"}|${r.차량번호 || ""}`;
+      if (!map.has(key)) map.set(key, { name: r.이름 || "기사 미배정", phone: r.전화번호 || "", car: r.차량번호 || "", list: [] });
+      map.get(key).list.push(r);
+    }
+    return Array.from(map.values())
+      .map(g => ({
+        ...g,
+        list: [...g.list].sort((a, b) =>
+          String(a.상차일 || "").localeCompare(String(b.상차일 || "")) ||
+          String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""))
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
+
+  const dateRangeLabel = React.useMemo(() => {
+    const dates = [...new Set((rows || []).map(r => r.상차일).filter(Boolean))].sort();
+    if (!dates.length) return "";
+    return dates.length === 1 ? _scheduleDateLabel(dates[0]) : `${_scheduleDateLabel(dates[0])} ~ ${_scheduleDateLabel(dates[dates.length - 1])}`;
+  }, [rows]);
+
+  if (!rows || rows.length === 0) return null;
+
+  const captureCanvas = () => captureRef.current
+    ? html2canvas(captureRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true })
+    : null;
+
+  const saveImage = async () => {
+    const canvas = await captureCanvas();
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.download = `스케줄표_${dateRangeLabel || "선택오더"}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+  const savePdf = async () => {
+    const canvas = await captureCanvas();
+    if (!canvas) return;
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfWidth = 210;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, imgHeight);
+    pdf.save(`스케줄표_${dateRangeLabel || "선택오더"}.pdf`);
+  };
+  const handlePrint = async () => {
+    const canvas = await captureCanvas();
+    if (!canvas) return;
+    const imgData = canvas.toDataURL("image/png");
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><title>스케줄표</title><style>
+      @page { size: A4; margin: 10mm; }
+      body { margin:0; display:flex; justify-content:center; background:#fff; }
+      img { width:100%; max-width:190mm; }
+    </style></head><body><img src="${imgData}" onload="window.print()" /></body></html>`);
+    w.document.close();
+  };
+
+  const thCls = "border border-gray-200 px-2 py-1.5 font-bold text-gray-600 bg-gray-100 whitespace-nowrap";
+  const tdCls = "border border-gray-200 px-2 py-1.5 text-gray-800";
+
+  return (
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* 헤더 툴바 */}
+        <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
+          <h3 className="text-white font-bold text-[15px]">스케줄표 미리보기 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}
+              className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">−</button>
+            <span className="text-white/80 text-[12px] w-10 text-center">{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
+              className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">+</button>
+            <button type="button" onClick={onClose} className="ml-2 text-white/70 hover:text-white text-lg leading-none">✕</button>
+          </div>
+        </div>
+
+        {/* 정리 기준 토글 */}
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50 shrink-0">
+          <span className="text-[12px] font-bold text-gray-500">정리 기준</span>
+          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+            <button type="button" onClick={() => setGroupBy("date")}
+              className={`px-3 py-1 text-[12px] font-bold transition ${groupBy === "date" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+              날짜별
+            </button>
+            <button type="button" onClick={() => setGroupBy("driver")}
+              className={`px-3 py-1 text-[12px] font-bold transition border-l border-gray-300 ${groupBy === "driver" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+              기사별
+            </button>
+          </div>
+        </div>
+
+        {/* 본문 (확대/축소 미리보기) */}
+        <div className="flex-1 overflow-auto bg-gray-100 p-6">
+          <div style={{ transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform .15s" }}>
+            <div ref={captureRef} className="bg-white mx-auto p-8" style={{ width: "760px" }}>
+              <div className="text-center border-b-2 border-[#1B2B4B] pb-4 mb-5">
+                <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">배 차 스 케 줄 표</div>
+                <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
+                  {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {rows.length}건
+                </div>
+              </div>
+
+              {groupBy === "date" ? (
+                <div className="space-y-5">
+                  {dateGroups.map((g) => (
+                    <div key={g.date}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="px-3 py-1 rounded-md bg-[#1B2B4B] text-white text-[13px] font-extrabold">{_scheduleDateLabel(g.date)}</div>
+                        <div className="text-[11px] font-bold text-gray-400">{g.list.length}건</div>
+                      </div>
+                      <table className="w-full text-[12px] border border-gray-200 border-collapse">
+                        <thead>
+                          <tr>
+                            <th className={`${thCls} w-[68px]`}>상차시간</th>
+                            <th className={thCls}>노선 (상차지 → 하차지)</th>
+                            <th className={`${thCls} w-[84px]`}>기사명</th>
+                            <th className={`${thCls} w-[104px]`}>연락처</th>
+                            <th className={`${thCls} w-[92px]`}>차량번호</th>
+                            <th className={`${thCls} w-[92px]`}>차종/톤수</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.list.map((r, i) => (
+                            <tr key={r._id || r.id || i}>
+                              <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
+                              <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                              <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.이름 || "-"}</td>
+                              <td className={`${tdCls} text-center`}>{r.전화번호 || "-"}</td>
+                              <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.차량번호 || "-"}</td>
+                              <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {driverGroups.map((g) => (
+                    <div key={`${g.name}|${g.car}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="px-3 py-1 rounded-md bg-[#1B2B4B] text-white text-[13px] font-extrabold">{g.name}</div>
+                        <div className="text-[11px] font-bold text-gray-500">{g.car}{g.phone ? ` · ${g.phone}` : ""}</div>
+                        <div className="text-[11px] font-bold text-gray-400 ml-auto">{g.list.length}건</div>
+                      </div>
+                      <table className="w-full text-[12px] border border-gray-200 border-collapse">
+                        <thead>
+                          <tr>
+                            <th className={`${thCls} w-[104px]`}>상차일</th>
+                            <th className={`${thCls} w-[68px]`}>상차시간</th>
+                            <th className={thCls}>노선 (상차지 → 하차지)</th>
+                            <th className={`${thCls} w-[92px]`}>차종/톤수</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.list.map((r, i) => (
+                            <tr key={r._id || r.id || i}>
+                              <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>{_scheduleDateLabel(r.상차일)}</td>
+                              <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
+                              <td className={`${tdCls} font-bold text-gray-900`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                              <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-6 pt-4 border-t border-dashed border-gray-300 text-[11px] font-semibold text-gray-400 text-center">
+                본 스케줄표는 배차관리 프로그램에서 선택한 오더를 기준으로 자동 생성되었습니다.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 하단 액션 */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
+          <button type="button" onClick={saveImage}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">이미지저장</button>
+          <button type="button" onClick={savePdf}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">PDF저장</button>
+          <button type="button" onClick={handlePrint}
+            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition">인쇄</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // kg/g으로 입력해도 항상 톤 단위 문자열로 통일 (예: "100kg" → "0.1톤")
 const toTonUnit = (v = "") => {
   const str = String(v ?? "").trim();
@@ -19268,6 +19502,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   // 우클릭 컨텍스트 메뉴
   const [contextMenu, setContextMenu] = React.useState(null); // { x, y, row }
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
+  const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
 
   React.useEffect(() => {
     const close = () => setContextMenu(null);
@@ -22820,6 +23055,9 @@ const head = isDark
 })()}
 {fareCertRow && (
   <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
+)}
+{scheduleChartRows && (
+  <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
 )}
 {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
@@ -26496,6 +26734,20 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
             최적매칭
+          </button>
+          {/* 스케줄표 — 선택한(없으면 우클릭한 1건) 오더들을 날짜별/기사별로 정리해
+              미리보기하고, 이미지/PDF저장·인쇄까지 할 수 있는 팝업을 연다. */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenu.row;
+              const targets = selected.length > 0 ? rows.filter(x => selected.includes(x._id)) : [r];
+              setScheduleChartRows(targets);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            스케줄표{selected.length > 1 ? ` (${selected.length}건)` : ""}
           </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
@@ -31162,6 +31414,7 @@ const save = {
   // 우클릭 컨텍스트 메뉴 (배차현황)
   const [contextMenuDS, setContextMenuDS] = React.useState(null);
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
+  const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
   React.useEffect(() => {
     const close = () => setContextMenuDS(null);
     const onKey = (e) => {
@@ -33633,6 +33886,9 @@ return (
       })()}
       {fareCertRow && (
         <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
+      )}
+      {scheduleChartRows && (
+        <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
       )}
       {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
@@ -36437,6 +36693,18 @@ setCopyPlaceOptions(list);
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
             최적매칭
+          </button>
+          {/* 스케줄표 — 선택한(없으면 우클릭한 1건) 오더들을 날짜별/기사별로 정리해
+              미리보기하고, 이미지/PDF저장·인쇄까지 할 수 있는 팝업을 연다. */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenuDS.row;
+              const targets = selected.size > 0 ? filtered.filter(x => selected.has(getId(x))) : [r];
+              setScheduleChartRows(targets);
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            스케줄표{selected.size > 1 ? ` (${selected.size}건)` : ""}
           </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
