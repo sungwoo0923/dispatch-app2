@@ -69,15 +69,6 @@ function CountUp({ value, duration = 900 }) {
 const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
 const PAY_TYPES = ["계산서", "착불", "선불", "계좌이체"];
 
-/* -------------------------------------------------
-   휴게(점심시간) 컬럼 — 실시간배차현황/배차현황 상차지명·하차지명 옆에 붙는
-   접었다 폈다 할 수 있는 컬럼. 항상 접힌 채로 시작하고(프로그램을 새로 열 때),
-   같은 세션 안에서 메뉴를 옮겼다 와도 마지막에 펼쳐둔 상태는 유지된다 —
-   그래서 React state가 아니라 모듈 스코프 변수에 들고 있는다: 메뉴 전환으로
-   RealtimeStatus/DispatchStatus가 언마운트/리마운트돼도 이 변수는 그대로
-   살아있고, 새로고침/재접속(모듈이 새로 로드)하면 자동으로 false로 리셋된다.
---------------------------------------------------*/
-let _restColumnExpandedShared = false;
 
 // "오전/오후 N시(30분)" 또는 이미 "HH:mm" 형태인 문자열을 24시간 "HH:mm"으로 변환.
 // 파싱할 수 없으면 빈 문자열을 돌려준다.
@@ -120,46 +111,54 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 }
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
-// 상/하차지명 옆에 붙는 휴게(점심시간) 펼치기/접기 화살표.
-// 그 상/하차지에 등록된 점심시간이 있을 때만 나타나고, 없으면 아예 렌더링하지
-// 않는다 — 즉 점심시간이 하나도 등록 안 된 업체들만 있는 목록이면 화살표 자체가
-// 없으니 눌러도 반응이 없는 것과 동일한 효과를 낸다.
-const RestToggleArrow = ({ show, expanded, onToggle }) => {
-  if (!show) return null;
+// 상/하차지명 옆에 붙는 휴게(점심시간) 경고 점.
+// 같은 업체가 여러 건 있을 때 시간 텍스트가 행마다 중복되어 표가 복잡해 보이던
+// 문제로, 텍스트는 표 위 "업체별 휴게시간" 요약 바(renderLunchSummary)에서 한 번만
+// 보여주고, 표 안에서는 그 상/하차 시간이 점심시간과 실제로 겹칠 때만 조용히
+// 빨간 점으로 경고한다. 겹치지 않으면 아예 렌더링하지 않는다.
+const RestCell = ({ lunchInfo, orderTime }) => {
+  if (!lunchInfo) return null;
+  if (!isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end)) return null;
   return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); onToggle(); }}
-      title={expanded ? "점심시간 접기" : "점심시간 보기"}
-      className="inline-flex items-center justify-center w-4 h-4 shrink-0 text-[#1B2B4B] hover:text-black transition"
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4.5"
-        strokeLinecap="round" strokeLinejoin="round"
-        style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .15s" }}>
-        <polyline points="9 6 15 12 9 18" />
-      </svg>
-    </button>
+    <span
+      title={`점심시간 ${lunchInfo.start} ~ ${lunchInfo.end} · 이 시간과 겹칩니다`}
+      className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+    />
   );
 };
 
-// 휴게 컬럼 셀 — 그 상/하차지에 점심시간이 등록되어 있을 때만 내용이 있다.
-// 접힌 상태에서는 상/하차시간과 겹칠 때만 빨간 점으로 표시(핵심 경고는 접어도 안 사라짐).
-// 펼친 상태에서는 시간대 전체를 보여주고, 겹치면 빨간 글씨로 강조한다.
-const RestCell = ({ lunchInfo, orderTime, expanded }) => {
-  if (!lunchInfo) return null;
-  const overlap = isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end);
-  const title = `점심시간 ${lunchInfo.start} ~ ${lunchInfo.end}${overlap ? " · 이 시간과 겹칩니다" : ""}`;
-  if (!expanded) {
-    return overlap ? (
-      <span title={title} className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />
-    ) : null;
-  }
+// 표 위에 붙는 "업체별 휴게시간" 요약 바. 화면에 표시된 오더들의 상/하차지 중
+// 점심시간이 등록된 업체를 이름 기준으로 중복 없이 한 번씩만 모아서 보여준다 —
+// 같은 업체 오더가 여러 건이어도 시간 텍스트가 행마다 반복되지 않게 하기 위함.
+function useLunchSummary(rows, lunchByName) {
+  return React.useMemo(() => {
+    const seen = new Map();
+    for (const r of rows || []) {
+      for (const nm of [r.상차지명, r.하차지명]) {
+        const key = _lunchNameKey(nm);
+        if (!key || seen.has(key)) continue;
+        const info = lunchByName.get(key);
+        if (info && (info.start || info.end)) seen.set(key, { name: String(nm).trim(), ...info });
+      }
+    }
+    return Array.from(seen.values());
+  }, [rows, lunchByName]);
+}
+function LunchSummaryBar({ items, isDark }) {
+  if (!items.length) return null;
   return (
-    <span title={title} className={`text-[12px] whitespace-nowrap ${overlap ? "text-red-600 font-extrabold" : "text-gray-500"}`}>
-      {lunchInfo.start}~{lunchInfo.end}
-    </span>
+    <div className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2 mb-2 rounded-lg border text-[12px] ${
+      isDark ? "bg-amber-900/20 border-amber-800/40" : "bg-amber-50 border-amber-200"
+    }`}>
+      <span className={`font-bold shrink-0 ${isDark ? "text-amber-300" : "text-amber-700"}`}>🍚 업체별 휴게시간</span>
+      {items.map((it) => (
+        <span key={it.name} className={isDark ? "text-amber-200" : "text-amber-800"}>
+          <span className="font-semibold">{it.name}</span> {it.start}~{it.end}
+        </span>
+      ))}
+    </div>
   );
-};
+}
 
 /* -------------------------------------------------
    운임정보(운임확인서) 미리보기 팝업 — 실시간배차현황/배차현황 우클릭 메뉴의
@@ -17325,7 +17324,7 @@ function RealtimeRowBase({
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, getDispatchConfirmedMs, formatKstDateTime, getCreatorLabel,
   editableInput, renderAddrCell, renderCargoCell, canEdit, handleEditChange,
-  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName, restExpanded, toggleRestExpanded,
+  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName,
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
@@ -17462,7 +17461,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(r.상차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
@@ -17475,12 +17474,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </div>
 </td>
 
-                  {restExpanded && (
-                    <td className={cell}>
-                      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} expanded={restExpanded} />
-                    </td>
-                  )}
-
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
@@ -17488,7 +17481,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(r.하차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} />
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -17499,12 +17492,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
   </div>
 </td>
-
-                  {restExpanded && (
-                    <td className={cell}>
-                      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} expanded={restExpanded} />
-                    </td>
-                  )}
 
                   <td className={addrCell}>
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
@@ -17767,8 +17754,7 @@ function realtimeRowPropsEqual(prev, next) {
     prev.editedForRow === next.editedForRow &&
     prev.driverConfirmOpen === next.driverConfirmOpen &&
     prev.memoAlert === next.memoAlert &&
-    prev.blackAlert === next.blackAlert &&
-    prev.restExpanded === next.restExpanded
+    prev.blackAlert === next.blackAlert
   );
 }
 
@@ -18109,12 +18095,6 @@ const mergedClients = React.useMemo(() => {
 
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
-// 휴게 컬럼 접기/펼치기 — 항상 접힌 채로 시작하고, 메뉴를 옮겼다 와도(모듈이
-// 새로 로드되지 않는 한) 마지막 상태가 유지되도록 모듈 스코프 변수와 동기화한다.
-const [restExpanded, setRestExpanded] = React.useState(_restColumnExpandedShared);
-const toggleRestExpanded = React.useCallback(() => {
-  setRestExpanded(p => { const next = !p; _restColumnExpandedShared = next; return next; });
-}, []);
 
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
@@ -20911,6 +20891,8 @@ if (sortKey) {
       return withStops;
     });
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
+  // 표에 보이는 오더들의 상/하차지 중 점심시간이 등록된 업체를 중복 없이 모은 요약(휴게 바)
+  const lunchSummary = useLunchSummary(filtered, lunchByName);
   // =========================
   // 📊 상태 요약 (추가 위치)
   // =========================
@@ -22652,6 +22634,7 @@ const head = isDark
 
       {/* 테이블 */}
       <div>
+      <LunchSummaryBar items={lunchSummary} isDark={isDark} />
       <div ref={rtTableWrapRef} className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
@@ -22666,10 +22649,8 @@ const head = isDark
                 "하차시간",
                 "거래처명",
                 "상차지명",
-                "상차휴게",
                 "상차지주소",
                 "하차지명",
-                "하차휴게",
                 "하차지주소",
                 "화물내용",
                 "차량종류",
@@ -22688,7 +22669,7 @@ const head = isDark
                 "전달사항",
                "첨부",
                 "전달상태",
-              ].filter((h) => restExpanded || (h !== "상차휴게" && h !== "하차휴게")).map((h) => (
+              ].map((h) => (
                 <th key={h} className={head}>
                   {h === "선택" ? (
                     <input autoComplete="off" type="checkbox"
@@ -22702,9 +22683,7 @@ const head = isDark
                           : Array.from(new Set([...prev, ...filteredIds])));
                       }}
                     />
-                  ) : h === "상차휴게" || h === "하차휴게"
-                    ? "휴게"
-                    : h}
+                  ) : h}
                 </th>
               ))}
             </tr>
@@ -22713,7 +22692,7 @@ const head = isDark
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={restExpanded ? 29 : 27} className="py-16 text-center text-[13px] text-gray-400">
+                <td colSpan={27} className="py-16 text-center text-[13px] text-gray-400">
                   조회된 결과가 없습니다.
                 </td>
               </tr>
@@ -22745,8 +22724,6 @@ const head = isDark
                 dispatchData={dispatchData}
                 placeRows={placeRows}
                 lunchByName={lunchByName}
-                restExpanded={restExpanded}
-                toggleRestExpanded={toggleRestExpanded}
                 timeOptions={timeOptions}
                 patchDispatch={patchDispatch}
                 setRows={setRows}
@@ -28167,12 +28144,6 @@ const mergedClients = React.useMemo(() => {
 
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
-// 휴게 컬럼 접기/펼치기 — 항상 접힌 채로 시작하고, 메뉴를 옮겼다 와도(모듈이
-// 새로 로드되지 않는 한) 마지막 상태가 유지되도록 모듈 스코프 변수와 동기화한다.
-const [restExpanded, setRestExpanded] = React.useState(_restColumnExpandedShared);
-const toggleRestExpanded = React.useCallback(() => {
-  setRestExpanded(p => { const next = !p; _restColumnExpandedShared = next; return next; });
-}, []);
 
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
@@ -31114,6 +31085,8 @@ const filtered = React.useMemo(() => {
   filterErrorIds,
   filterConditions,
 ]);
+// 표에 보이는 오더들의 상/하차지 중 점심시간이 등록된 업체를 중복 없이 모은 요약(휴게 바)
+const lunchSummary = useLunchSummary(filtered, lunchByName);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
   const pageRows = React.useMemo(() => {
@@ -31883,6 +31856,7 @@ return (
 
       {/* ---------------- 테이블 ---------------- */}
       <div>
+      <LunchSummaryBar items={lunchSummary} isDark={false} />
       <div ref={dsTableWrapRef} className="rounded-xl shadow border border-gray-200 overflow-x-auto">
 
   <table className="w-full min-w-max table-auto">
@@ -31890,11 +31864,11 @@ return (
             <tr>
               {[
                 "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-                "거래처명", "상차지명", "상차휴게", "상차지주소", "하차지명", "하차휴게", "하차지주소",
+                "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
-              ].filter((h) => restExpanded || (h !== "상차휴게" && h !== "하차휴게")).map((h) => (
+              ].map((h) => (
                 <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
                   {h === "선택" ? (
                     <input autoComplete="off"
@@ -31902,8 +31876,6 @@ return (
                       onChange={() => toggleAll(filtered)}
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
-                  ) : h === "상차휴게" || h === "하차휴게" ? (
-                    "휴게"
                   ) : h}
                 </th>
               ))}
@@ -31913,7 +31885,7 @@ return (
           <tbody>
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={restExpanded ? 31 : 29} className="py-16 text-center text-[13px] text-gray-400">
+                <td colSpan={29} className="py-16 text-center text-[13px] text-gray-400">
                   조회된 결과가 없습니다.
                 </td>
               </tr>
@@ -32008,24 +31980,17 @@ return (
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
 {[
   "상차일", "상차시간", "하차일", "하차시간",
-  "거래처명", "상차지명", "상차휴게", "상차지주소",
-  "하차지명", "하차휴게", "하차지주소",
+  "거래처명", "상차지명", "상차지주소",
+  "하차지명", "하차지주소",
   "화물내용", "차량종류", "차량톤수",
-].filter((key) => restExpanded || (key !== "상차휴게" && key !== "하차휴게")).map((key) => (
+].map((key) => (
   <td
     key={`${id}-${key}`}
     className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap"
   >
 
-    {/* 휴게(점심시간) — 상/하차지에 점심시간이 등록된 경우만 표시 */}
-    {key === "상차휴게" ? (
-      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} expanded={restExpanded} />
-
-    ) : key === "하차휴게" ? (
-      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} expanded={restExpanded} />
-
-    ) : /* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */
-    key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
+    {/* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */}
+    {key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
       <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
@@ -32069,7 +32034,7 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(row.상차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -32083,7 +32048,7 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(row.하차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
