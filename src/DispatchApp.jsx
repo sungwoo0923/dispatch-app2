@@ -299,10 +299,24 @@ function _scheduleDateLabel(d) {
    알록달록한 배색 없이 프로그램 기본 톤(네이비/그레이)만 쓰고, 글자는
    또렷하게 굵은 글씨 위주로 구성한다.
 --------------------------------------------------*/
+// 스케줄표 안에서 상세정보(기사용) 카드로 보여줄 때 쓰는 담당자 한 줄 표시.
+// 이름/번호 중 있는 것만 붙이고, 번호는 항상 하이픈을 채워서 보여준다.
+function _scheduleContactLine(name, phone) {
+  const n = String(name || "").trim();
+  const p = String(phone || "").trim();
+  if (!n && !p) return "";
+  return `${n || "담당자"}${p ? ` (${formatPhone(p)})` : ""}`;
+}
+
 function ScheduleChartModal({ rows, companyName, onClose }) {
   const [groupBy, setGroupBy] = React.useState("date"); // "date" | "driver"
+  const [showFareCharge, setShowFareCharge] = React.useState(false); // 청구운임 포함
+  const [showFareDriver, setShowFareDriver] = React.useState(false); // 기사운임 포함
+  const [showDetail, setShowDetail] = React.useState(false); // 상세정보(기사용) 포함
   const [zoom, setZoom] = React.useState(1);
+  const [sendingKey, setSendingKey] = React.useState(null); // 현재 이미지 전송 처리중인 기사 key
   const captureRef = React.useRef(null);
+  const driverRefs = React.useRef({});
 
   const dateGroups = React.useMemo(() => {
     const map = new Map();
@@ -345,12 +359,12 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
 
   if (!rows || rows.length === 0) return null;
 
-  const captureCanvas = () => captureRef.current
-    ? html2canvas(captureRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true })
+  const captureCanvas = (node) => node
+    ? html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true })
     : null;
 
   const saveImage = async () => {
-    const canvas = await captureCanvas();
+    const canvas = await captureCanvas(captureRef.current);
     if (!canvas) return;
     const link = document.createElement("a");
     link.download = `스케줄표_${dateRangeLabel || "선택오더"}.png`;
@@ -358,7 +372,7 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
     link.click();
   };
   const savePdf = async () => {
-    const canvas = await captureCanvas();
+    const canvas = await captureCanvas(captureRef.current);
     if (!canvas) return;
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
@@ -368,7 +382,7 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
     pdf.save(`스케줄표_${dateRangeLabel || "선택오더"}.pdf`);
   };
   const handlePrint = async () => {
-    const canvas = await captureCanvas();
+    const canvas = await captureCanvas(captureRef.current);
     if (!canvas) return;
     const imgData = canvas.toDataURL("image/png");
     const w = window.open("", "_blank");
@@ -381,8 +395,106 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
     w.document.close();
   };
 
+  // 기사별 카드 하나만 이미지로 캡처해서, 가능하면 OS 공유시트(문자/카카오톡 등에
+  // 이미지 그대로 첨부 가능)로 바로 전달하고, 지원 안 되는 환경(대부분의 PC 브라우저)
+  // 에서는 이미지부터 저장한 뒤 그 기사 번호로 문자 앱을 열어(본문에 안내문구) 사용자가
+  // 갤러리에서 이미지를 직접 첨부해 보내도록 안내한다 — 웹에서 문자 앱에 파일을
+  // 프로그램적으로 첨부하는 표준 방법이 없기 때문의 현실적인 절충.
+  const sendDriverImage = async (g) => {
+    const key = `${g.name}|${g.car}`;
+    const node = driverRefs.current[key];
+    if (!node) return;
+    setSendingKey(key);
+    try {
+      const canvas = await captureCanvas(node);
+      if (!canvas) return;
+      await new Promise((resolve) => {
+        canvas.toBlob(async (blob) => {
+          if (!blob) { resolve(); return; }
+          const fileName = `스케줄표_${g.name}.png`;
+          const file = new File([blob], fileName, { type: "image/png" });
+          const digits = String(g.phone || "").replace(/[^\d]/g, "");
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], title: "배차 스케줄표", text: `${g.name} 기사님 배차 스케줄표입니다.` });
+              resolve();
+              return;
+            } catch (err) {
+              // 사용자가 공유시트를 취소한 경우는 조용히 종료, 그 외 실패만 폴백으로 진행
+              if (err?.name === "AbortError") { resolve(); return; }
+            }
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.download = fileName;
+          link.href = url;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+          if (digits) {
+            window.location.href = `sms:${digits}?body=${encodeURIComponent(`[${g.name} 기사님] 배차 스케줄표 이미지가 저장되었습니다. 갤러리에서 첨부해 보내주세요.`)}`;
+          }
+          resolve();
+        }, "image/png");
+      });
+    } finally {
+      setSendingKey(null);
+    }
+  };
+
   const thCls = "border border-gray-200 px-2 py-1.5 font-bold text-gray-600 bg-gray-100 whitespace-nowrap";
   const tdCls = "border border-gray-200 px-2 py-1.5 text-gray-800";
+  const showFare = showFareCharge || showFareDriver;
+
+  // 상세정보(기사용) 카드 — 표 대신 오더 1건을 카드로 펼쳐서, 기사가 실제로 알아야 하는
+  // 정보(상/하차지 주소·담당자, 화물내용/톤수, 전달사항, 원하면 운임까지)를 한 번에 보여준다.
+  const DetailCard = ({ r }) => {
+    const pickupContact = _scheduleContactLine(r.상차지담당자, r.상차지담당자번호);
+    const dropContact = _scheduleContactLine(r.하차지담당자, r.하차지담당자번호);
+    return (
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="bg-gray-100 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+          <span className="text-[12px] font-extrabold text-[#1B2B4B]">{_scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}</span>
+          <span className="text-[11px] font-bold text-gray-600 ml-auto">{r.차량종류 || "-"} / {r.차량톤수 || "-"}</span>
+        </div>
+        <div className="px-3 py-2.5 text-[12px] space-y-1.5">
+          <div className="flex gap-2">
+            <span className="w-11 shrink-0 font-bold text-gray-600">상차</span>
+            <div className="min-w-0">
+              <div className="font-extrabold text-gray-900">{r.상차지명 || "-"}</div>
+              {r.상차지주소 && <div className="text-gray-700 break-words">{r.상차지주소}</div>}
+              {pickupContact && <div className="text-gray-700">담당자 {pickupContact}</div>}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <span className="w-11 shrink-0 font-bold text-gray-600">하차</span>
+            <div className="min-w-0">
+              <div className="font-extrabold text-gray-900">{r.하차지명 || "-"}</div>
+              {r.하차지주소 && <div className="text-gray-700 break-words">{r.하차지주소}</div>}
+              {dropContact && <div className="text-gray-700">담당자 {dropContact}</div>}
+            </div>
+          </div>
+          {r.화물내용 && (
+            <div className="flex gap-2">
+              <span className="w-11 shrink-0 font-bold text-gray-600">화물</span>
+              <span className="text-gray-900 font-semibold">{r.화물내용}</span>
+            </div>
+          )}
+          {r.전달사항 && (
+            <div className="flex gap-2">
+              <span className="w-11 shrink-0 font-bold text-gray-600">전달</span>
+              <span className="text-gray-900 whitespace-pre-wrap break-words">{r.전달사항}</span>
+            </div>
+          )}
+          {showFare && (
+            <div className="flex gap-4 pt-1.5 mt-0.5 border-t border-gray-100">
+              {showFareCharge && <span className="text-gray-800 font-bold">청구운임 {fmtWon(r.청구운임)}</span>}
+              {showFareDriver && <span className="text-gray-800 font-bold">기사운임 {fmtWon(r.기사운임)}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
@@ -400,18 +512,35 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
           </div>
         </div>
 
-        {/* 정리 기준 토글 */}
-        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50 shrink-0">
-          <span className="text-[12px] font-bold text-gray-500">정리 기준</span>
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-            <button type="button" onClick={() => setGroupBy("date")}
-              className={`px-3 py-1 text-[12px] font-bold transition ${groupBy === "date" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
-              날짜별
-            </button>
-            <button type="button" onClick={() => setGroupBy("driver")}
-              className={`px-3 py-1 text-[12px] font-bold transition border-l border-gray-300 ${groupBy === "driver" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
-              기사별
-            </button>
+        {/* 정리 기준 + 표시 항목 */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-bold text-gray-500">정리 기준</span>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              <button type="button" onClick={() => setGroupBy("date")}
+                className={`px-3 py-1 text-[12px] font-bold transition ${groupBy === "date" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+                날짜별
+              </button>
+              <button type="button" onClick={() => setGroupBy("driver")}
+                className={`px-3 py-1 text-[12px] font-bold transition border-l border-gray-300 ${groupBy === "driver" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+                기사별
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[12px] font-bold text-gray-500">표시 항목</span>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showFareCharge} onChange={() => setShowFareCharge(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">청구운임 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showFareDriver} onChange={() => setShowFareDriver(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">기사운임 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showDetail} onChange={() => setShowDetail(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">상세정보 포함 (기사용)</span>
+            </label>
           </div>
         </div>
 
@@ -434,67 +563,105 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
                         <div className="px-3 py-1 rounded-md bg-[#1B2B4B] text-white text-[13px] font-extrabold">{_scheduleDateLabel(g.date)}</div>
                         <div className="text-[11px] font-bold text-gray-500">{g.list.length}건</div>
                       </div>
-                      <table className="w-full text-[12px] border border-gray-200 border-collapse">
-                        <thead>
-                          <tr>
-                            <th className={`${thCls} w-[68px]`}>상차시간</th>
-                            <th className={thCls}>노선 (상차지 → 하차지)</th>
-                            <th className={`${thCls} w-[84px]`}>기사명</th>
-                            <th className={`${thCls} w-[104px]`}>연락처</th>
-                            <th className={`${thCls} w-[92px]`}>차량번호</th>
-                            <th className={`${thCls} w-[92px]`}>차종/톤수</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {g.list.map((r, i) => (
-                            <tr key={r._id || r.id || i}>
-                              <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
-                              <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
-                              <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.이름 || "-"}</td>
-                              <td className={`${tdCls} text-center`}>{r.전화번호 || "-"}</td>
-                              <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.차량번호 || "-"}</td>
-                              <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                      {showDetail ? (
+                        <div className="space-y-2">
+                          {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
+                        </div>
+                      ) : (
+                        <table className="w-full text-[12px] border border-gray-200 border-collapse">
+                          <thead>
+                            <tr>
+                              <th className={`${thCls} w-[68px]`}>상차시간</th>
+                              <th className={thCls}>노선 (상차지 → 하차지)</th>
+                              <th className={`${thCls} w-[84px]`}>기사명</th>
+                              <th className={`${thCls} w-[104px]`}>연락처</th>
+                              <th className={`${thCls} w-[92px]`}>차량번호</th>
+                              <th className={`${thCls} w-[92px]`}>차종/톤수</th>
+                              {showFareCharge && <th className={`${thCls} w-[90px]`}>청구운임</th>}
+                              {showFareDriver && <th className={`${thCls} w-[90px]`}>기사운임</th>}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {g.list.map((r, i) => (
+                              <tr key={r._id || r.id || i}>
+                                <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
+                                <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                                <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.이름 || "-"}</td>
+                                <td className={`${tdCls} text-center`}>{formatPhone(r.전화번호) || "-"}</td>
+                                <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.차량번호 || "-"}</td>
+                                <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                                {showFareCharge && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.청구운임)}</td>}
+                                {showFareDriver && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.기사운임)}</td>}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {driverGroups.map((g) => (
-                    <div key={`${g.name}|${g.car}`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="px-3 py-1 rounded-md bg-[#1B2B4B] text-white text-[13px] font-extrabold">{g.name}</div>
-                        <div className="text-[11px] font-bold text-gray-500">{g.car}{g.phone ? ` · ${g.phone}` : ""}</div>
-                        <div className="text-[11px] font-bold text-gray-500 ml-auto">{g.list.length}건</div>
+                  {driverGroups.map((g) => {
+                    const key = `${g.name}|${g.car}`;
+                    return (
+                      <div key={key} ref={(el) => { driverRefs.current[key] = el; }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="px-3 py-1 rounded-md bg-[#1B2B4B] text-white text-[13px] font-extrabold">{g.name}</div>
+                          <div className="text-[11px] font-bold text-gray-500">{g.car}{g.phone ? ` · ${formatPhone(g.phone)}` : ""}</div>
+                          <div className="text-[11px] font-bold text-gray-500">{g.list.length}건</div>
+                          {/* 캡처(html2canvas) 이미지에는 포함되지 않도록 인쇄 미리보기 밖 버튼처럼
+                              보이게 두되, data-html2canvas-ignore로 실제 캡처에서도 제외한다. */}
+                          <button
+                            type="button"
+                            data-html2canvas-ignore="true"
+                            disabled={!g.phone || sendingKey === key}
+                            onClick={() => sendDriverImage(g)}
+                            title={g.phone ? `${g.name} 기사님에게 이 스케줄표 이미지 전송` : "등록된 연락처가 없습니다"}
+                            className="ml-auto px-2.5 py-1 rounded-md bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {sendingKey === key ? "전송 중..." : "이 기사에게 이미지 전송"}
+                          </button>
+                        </div>
+                        {showDetail ? (
+                          <div className="space-y-2">
+                            {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
+                          </div>
+                        ) : (
+                          <table className="w-full text-[12px] border border-gray-200 border-collapse">
+                            <thead>
+                              <tr>
+                                <th className={`${thCls} w-[104px]`}>상차일</th>
+                                <th className={`${thCls} w-[68px]`}>상차시간</th>
+                                <th className={thCls}>노선 (상차지 → 하차지)</th>
+                                <th className={`${thCls} w-[92px]`}>차종/톤수</th>
+                                {showFareCharge && <th className={`${thCls} w-[90px]`}>청구운임</th>}
+                                {showFareDriver && <th className={`${thCls} w-[90px]`}>기사운임</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.list.map((r, i) => (
+                                <tr key={r._id || r.id || i}>
+                                  <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>{_scheduleDateLabel(r.상차일)}</td>
+                                  <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
+                                  <td className={`${tdCls} font-bold text-gray-900`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                                  <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                                  {showFareCharge && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.청구운임)}</td>}
+                                  {showFareDriver && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.기사운임)}</td>}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
                       </div>
-                      <table className="w-full text-[12px] border border-gray-200 border-collapse">
-                        <thead>
-                          <tr>
-                            <th className={`${thCls} w-[104px]`}>상차일</th>
-                            <th className={`${thCls} w-[68px]`}>상차시간</th>
-                            <th className={thCls}>노선 (상차지 → 하차지)</th>
-                            <th className={`${thCls} w-[92px]`}>차종/톤수</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {g.list.map((r, i) => (
-                            <tr key={r._id || r.id || i}>
-                              <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>{_scheduleDateLabel(r.상차일)}</td>
-                              <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
-                              <td className={`${tdCls} font-bold text-gray-900`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
-                              <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
+              {showFareCharge && (
+                <div className="mt-4 text-[11px] font-bold text-gray-500 text-right">※ 상기 청구운임은 부가세 별도 금액입니다.</div>
+              )}
               <div className="mt-6 pt-4 border-t border-dashed border-gray-300 text-[11px] font-semibold text-gray-500 text-center">
                 본 스케줄표는 배차관리 프로그램에서 선택한 오더를 기준으로 자동 생성되었습니다.
               </div>
