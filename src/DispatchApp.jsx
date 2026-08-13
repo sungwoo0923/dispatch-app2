@@ -699,6 +699,15 @@ const BULK_EDIT_FIELDS = [
   { key: "메모", label: "메모", type: "text" },
   { key: "전달사항", label: "전달사항", type: "text" },
 ];
+// ⚠️ 이 컴포넌트를 BulkEditModal 안에 정의하면(리렌더마다 새 함수 = 새 컴포넌트
+// 타입) 한 글자만 입력해도 input이 통째로 언마운트/재마운트되며 포커스가 빠지는
+// 버그가 생긴다 — 반드시 모듈 스코프에 고정해서 매 렌더마다 같은 컴포넌트로
+// 취급되게 한다.
+const MoneyInput = ({ value, onChange }) => (
+  <input autoComplete="off" className="w-full border border-gray-300 rounded px-1.5 py-1 text-[12px] text-right font-semibold"
+    value={value ? Number(String(value).replace(/[^\d]/g, "")).toLocaleString() : ""}
+    onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" />
+);
 function BulkEditModal({ rows, patchDispatch, onClose }) {
   const [edited, setEdited] = React.useState(() => {
     const init = {};
@@ -749,12 +758,6 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
       setSaving(false);
     }
   };
-
-  const MoneyInput = ({ value, onChange }) => (
-    <input autoComplete="off" className="w-full border border-gray-300 rounded px-1.5 py-1 text-[12px] text-right font-semibold"
-      value={value ? Number(String(value).replace(/[^\d]/g, "")).toLocaleString() : ""}
-      onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" />
-  );
 
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
