@@ -38,7 +38,7 @@ function KpiCard({ title, value, unit = "", color = "blue" }) {
       <div className="text-[12px] font-semibold text-gray-500 mb-1">{title}</div>
       <div className="text-[22px] font-bold text-gray-900">
         {typeof value === "number" ? value.toLocaleString() : value}
-        {unit && <span className="text-[14px] font-semibold text-gray-400 ml-1">{unit}</span>}
+        {unit && <span className="text-[14px] font-semibold text-gray-500 ml-1">{unit}</span>}
       </div>
     </div>
   );
@@ -610,7 +610,7 @@ React.useEffect(() => {
             {banner.status === "approved" ? "승" : banner.status === "rejected" ? "반" : banner.status === "hold" ? "보" : "결"}
           </div>
           <span className="text-[13px] font-semibold text-gray-800 flex-1">{banner.msg}</span>
-          <button onClick={dismissBanner} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+          <button onClick={dismissBanner} className="text-gray-500 hover:text-gray-700 text-lg leading-none">✕</button>
         </div>
         );
       })()}
@@ -651,7 +651,7 @@ React.useEffect(() => {
             </ResponsiveContainer>
             <div className="mt-2 pt-2 border-t border-gray-100 flex items-end justify-between">
               <div>
-                <div className="text-[11px] text-gray-400 font-medium">Total Revenue</div>
+                <div className="text-[11px] text-gray-500 font-medium">Total Revenue</div>
                 <div className="text-[16px] font-bold text-gray-900">{yearRevenue.toLocaleString()}원</div>
               </div>
               <div className={`text-[13px] font-semibold ${delta >= 0 ? "text-blue-600" : "text-red-500"}`}>
@@ -669,7 +669,7 @@ React.useEffect(() => {
               <div key={i}>
                 <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-tight">
                   <CountUp value={item.value} />
-                  <span className="text-[12px] font-semibold text-gray-400 ml-1">{item.unit}</span>
+                  <span className="text-[12px] font-semibold text-gray-500 ml-1">{item.unit}</span>
                 </div>
                 <div className="text-[11px] font-medium text-gray-500">{item.label}</div>
               </div>
@@ -689,7 +689,7 @@ React.useEffect(() => {
             <h3 className="text-[14px] font-bold text-white pb-2.5">{`미배차 현황 (${allPendingOrders.length}건)`}</h3>
           </div>
           {allPendingOrders.length === 0 ? (
-            <div className="flex items-center justify-center h-[300px] text-[13px] text-gray-400">미배차 오더가 없습니다</div>
+            <div className="flex items-center justify-center h-[300px] text-[13px] text-gray-500">미배차 오더가 없습니다</div>
           ) : (
             <div className="relative" style={{ minHeight: 300 }}>
               {/* column headers — 위 제목 영역과 같은 네이비, 바로 이어붙임 */}
@@ -761,14 +761,14 @@ React.useEffect(() => {
         {/* Top5 거래처 */}
         <SectionCard title="Top 5 거래처">
           {topClients.length === 0 ? (
-            <div className="text-[13px] text-gray-400 text-center py-8">데이터 없음</div>
+            <div className="text-[13px] text-gray-500 text-center py-8">데이터 없음</div>
           ) : (
             <div className="space-y-3 py-1">
               {topClients.map((c, i) => {
                 const max = topClients[0]?.value || 1;
                 return (
                   <div key={c.name} className="flex items-center gap-3">
-                    <span className="text-[12px] font-bold text-gray-300 w-4 shrink-0">{i + 1}</span>
+                    <span className="text-[12px] font-bold text-gray-400 w-4 shrink-0">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[13px] font-semibold text-gray-700 truncate">{c.name}</span>
@@ -784,8 +784,8 @@ React.useEffect(() => {
             </div>
           )}
           <div className="flex justify-between mt-3 pt-2 border-t border-gray-100">
-            <span className="text-[11px] text-gray-400">1위: <b className="text-[#1B2B4B]">{top10Summary.topName}</b></span>
-            <span className="text-[11px] text-gray-400">합계: <b className="text-[#1B2B4B]">{(top10Summary.total / 1000000).toFixed(1)}M</b></span>
+            <span className="text-[11px] text-gray-500">1위: <b className="text-[#1B2B4B]">{top10Summary.topName}</b></span>
+            <span className="text-[11px] text-gray-500">합계: <b className="text-[#1B2B4B]">{(top10Summary.total / 1000000).toFixed(1)}M</b></span>
           </div>
         </SectionCard>
       </div>
@@ -811,7 +811,7 @@ React.useEffect(() => {
                     className={`relative px-5 py-3.5 text-[13px] font-semibold transition border-b-2 ${
                       isActive
                         ? "text-[#1B2B4B] border-[#1B2B4B]"
-                        : "text-gray-400 border-transparent hover:text-gray-600"
+                        : "text-gray-500 border-transparent hover:text-gray-600"
                     }`}
                   >
                     {key}
@@ -842,7 +842,7 @@ React.useEffect(() => {
           {/* 공지사항 탭 */}
           {boardTab === "공지사항" && (
             notices.length === 0 ? (
-              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 공지가 없습니다</div>
+              <div className="text-[13px] text-gray-500 py-6 text-center">등록된 공지가 없습니다</div>
             ) : (
               <>
                 <BoardTable
@@ -855,9 +855,9 @@ React.useEffect(() => {
                   ]}
                   rows={pagedNotices.map((n, idx) => (
                     <tr key={n.id} onClick={() => setSelectedNotice(n)} className="cursor-pointer hover:bg-blue-50/50 transition">
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{(noticePage - 1) * NOTICE_PAGE_SIZE + idx + 1}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{(noticePage - 1) * NOTICE_PAGE_SIZE + idx + 1}</td>
                       <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{n.date?.replaceAll("-", ".")}</td>
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(n.createdAt)}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{formatCreatedAtTime(n.createdAt)}</td>
                       <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{n.author}</td>
                       <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800">
                         {n.audience === "shipper" && (
@@ -887,7 +887,7 @@ React.useEffect(() => {
           )}
           {boardTab === "휴가/외근" && (
             filteredSchedules.length === 0 ? (
-              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 일정이 없습니다</div>
+              <div className="text-[13px] text-gray-500 py-6 text-center">등록된 일정이 없습니다</div>
             ) : (
               <>
                 <BoardTable
@@ -910,11 +910,11 @@ React.useEffect(() => {
                     const dateLabel = startDate ? `${fmt(startDate)} ${s.type || ""}` : "-";
                     return (
                     <tr key={s.id} onClick={() => setSelectedSchedule(s)} className="cursor-pointer hover:bg-blue-50/50 transition">
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{(schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx + 1}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{(schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx + 1}</td>
                       <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">
                         {s.createdAt?.toDate ? s.createdAt.toDate().toISOString().slice(0, 10).replaceAll("-", ".") : "-"}
                       </td>
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(s.createdAt)}</td>
+                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{formatCreatedAtTime(s.createdAt)}</td>
                       <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{s.name || "-"}</td>
                       <td className="px-3 py-2.5 text-center text-[12px]">
                         <span className="text-[12px] font-semibold text-gray-700">{s.type || s.title}</span>
@@ -948,7 +948,7 @@ React.useEffect(() => {
           {/* 인수인계 탭 */}
           {boardTab === "인수인계" && (
             handovers.length === 0 ? (
-              <div className="text-[13px] text-gray-400 py-6 text-center">등록된 인수인계가 없습니다</div>
+              <div className="text-[13px] text-gray-500 py-6 text-center">등록된 인수인계가 없습니다</div>
             ) : (
               <>
                 <table className="w-full text-[13px]">
@@ -984,10 +984,10 @@ React.useEffect(() => {
                             {(isReceiver || isAuthor) && (
                               <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r ${receiverRead ? "bg-emerald-400" : "bg-red-400"}`} />
                             )}
-                            <span className="text-[12px] text-gray-400">{(handoverPage - 1) * HANDOVER_PAGE_SIZE + idx + 1}</span>
+                            <span className="text-[12px] text-gray-500">{(handoverPage - 1) * HANDOVER_PAGE_SIZE + idx + 1}</span>
                           </td>
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{dateStr}</td>
-                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-400">{formatCreatedAtTime(h.createdAt)}</td>
+                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{formatCreatedAtTime(h.createdAt)}</td>
                           <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{h.author}</td>
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{h.receiver || "-"}</td>
                           <td className="px-3 py-2.5 text-[13px] text-gray-800 whitespace-nowrap">{(() => {
@@ -1055,10 +1055,10 @@ React.useEffect(() => {
       {selectedNotice && !noticeOpen && (
         <Modal title="공지사항 상세" onClose={() => setSelectedNotice(null)}>
           <div className="space-y-3 text-[14px]">
-            <div><div className="text-[13px] text-gray-400 mb-0.5">제목</div><div className="font-semibold">{selectedNotice.title}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedNotice.author}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
-            <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
+            <div><div className="text-[13px] text-gray-500 mb-0.5">제목</div><div className="font-semibold">{selectedNotice.title}</div></div>
+            <div><div className="text-[13px] text-gray-500 mb-0.5">작성자</div><div>{selectedNotice.author}</div></div>
+            <div><div className="text-[13px] text-gray-500 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
+            <div><div className="text-[13px] text-gray-500 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
           </div>
           {(!isViewer) && (() => {
             const isSA = role === "superadmin" || role === "totalMaster";
@@ -1079,7 +1079,7 @@ React.useEffect(() => {
           <div className="space-y-3">
             {role === "totalMaster" && (
               <div>
-                <div className="text-[11px] text-gray-400 mb-1">작성자</div>
+                <div className="text-[11px] text-gray-500 mb-1">작성자</div>
                 <select className={formInput} value={scheduleForm.authorName} onChange={e => setScheduleForm({ ...scheduleForm, authorName: e.target.value })}>
                   <option value="">선택</option>
                   {users.map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
@@ -1355,10 +1355,10 @@ React.useEffect(() => {
           ) : (
             <>
               <div className="space-y-3 text-[14px]">
-                <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div className="font-semibold">{selectedHandover.author}</div></div>
-                <div><div className="text-[13px] text-gray-400 mb-0.5">받는 사람</div><div>{selectedHandover.receiver}</div></div>
-                <div><div className="text-[13px] text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
-                <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
+                <div><div className="text-[13px] text-gray-500 mb-0.5">작성자</div><div className="font-semibold">{selectedHandover.author}</div></div>
+                <div><div className="text-[13px] text-gray-500 mb-0.5">받는 사람</div><div>{selectedHandover.receiver}</div></div>
+                <div><div className="text-[13px] text-gray-500 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
+                <div><div className="text-[13px] text-gray-500 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
               </div>
               {!isViewer && (() => {
                 const isSA = role === "superadmin" || role === "totalMaster";
@@ -1442,7 +1442,7 @@ React.useEffect(() => {
                     style={{ background: cfg.accent }}>
                     {cfg.label}
                   </span>
-                  <span className="text-[11px] text-gray-400">· 클릭하여 확인</span>
+                  <span className="text-[11px] text-gray-500">· 클릭하여 확인</span>
                 </div>
               </div>
 

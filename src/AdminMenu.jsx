@@ -656,7 +656,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#1B2B4B]">관리자 메뉴</h1>
-          <p className="text-[13px] text-gray-400 mt-0.5">사용자 계정 권한 및 승인 관리</p>
+          <p className="text-[13px] text-gray-500 mt-0.5">사용자 계정 권한 및 승인 관리</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-[#1B2B4B]/10 rounded-xl px-4 py-2 text-center">
@@ -765,7 +765,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               <div className="w-[330px] flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col" style={{ maxHeight: 720 }}>
                 <div className="p-3 border-b border-gray-100 space-y-2">
                   <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
-                    <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <svg className="ml-3 w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                     <input value={search} onChange={e => setSearch(e.target.value)}
                       placeholder="이메일 · 이름 · 회사명 검색"
                       className="flex-1 px-2 py-2 text-[13px] outline-none" />
@@ -781,11 +781,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       <option key={r} value={r}>{roleLabels[r] || r}</option>
                     ))}
                   </select>
-                  <div className="text-[11px] text-gray-400">{filtered.length}명 표시 중</div>
+                  <div className="text-[11px] text-gray-500">{filtered.length}명 표시 중</div>
                 </div>
                 <div className="overflow-y-auto flex-1">
                   {filtered.length === 0 ? (
-                    <div className="py-16 text-center text-[12px] text-gray-300">검색 결과가 없습니다</div>
+                    <div className="py-16 text-center text-[12px] text-gray-400">검색 결과가 없습니다</div>
                   ) : filtered.map(u => {
                     const isMe = me?.uid === u.id;
                     const resigned = u.employmentStatus === "퇴사";
@@ -796,7 +796,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           <div className="text-[13px] font-semibold text-gray-800 truncate">{u.name || u.email}</div>
                           <DotBadge active={u.approved && !resigned} activeLabel={resigned ? "퇴사" : "승인"} inactiveLabel={resigned ? "퇴사" : "대기"} />
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5 truncate">{u.email}</div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 truncate">{u.email}</div>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 font-semibold">{u.team || "미배정"}</span>
                           <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold">{roleLabels[u.role || "user"] || u.role}</span>
@@ -811,7 +811,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               {/* 우측 상세 패널 */}
               <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm min-w-0">
                 {!manageUser ? (
-                  <div className="h-full flex items-center justify-center text-[13px] text-gray-300 py-24">왼쪽에서 회원을 선택하세요</div>
+                  <div className="h-full flex items-center justify-center text-[13px] text-gray-400 py-24">왼쪽에서 회원을 선택하세요</div>
                 ) : (() => {
                   const u = manageUser;
                   const canManage = isTotalMaster || (u.companyName || "돌캐") === effectiveCompany;
@@ -825,7 +825,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             {u.email === TOTAL_MASTER_EMAIL && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">총마스터</span>}
                             {resigned && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-500 border border-red-200 font-semibold">퇴사 ({u.resignedAt || "-"})</span>}
                           </div>
-                          <p className="text-[12px] text-gray-400 mt-0.5">{u.email}</p>
+                          <p className="text-[12px] text-gray-500 mt-0.5">{u.email}</p>
                         </div>
                         {canManage && !editMode && (
                           <div className="flex items-center gap-2">
@@ -834,7 +834,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               {resigned ? "복직 처리" : "퇴사 처리"}
                             </button>
                             {me?.uid !== u.id && (
-                              <button onClick={() => removeUser(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-400 hover:bg-gray-50 transition">계정 삭제</button>
+                              <button onClick={() => removeUser(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50 transition">계정 삭제</button>
                             )}
                           </div>
                         )}
@@ -852,7 +852,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               ["회사명", u.companyName || "-"],
                             ].map(([label, value], i) => (
                               <div key={label} className={`flex items-center px-4 py-3 ${i % 2 === 0 ? "border-r border-gray-100" : ""} ${i < 4 ? "border-b border-gray-50" : ""}`}>
-                                <span className="text-[12px] text-gray-400 w-16 shrink-0">{label}</span>
+                                <span className="text-[12px] text-gray-500 w-16 shrink-0">{label}</span>
                                 <span className="text-[13px] font-medium text-gray-800">{value}</span>
                               </div>
                             ))}
@@ -867,12 +867,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           <div className="mt-5">
                             <div className="text-[12.5px] font-bold text-gray-600 border-l-4 border-[#1B2B4B] pl-2 mb-2">인사발령 이력</div>
                             {(u.personnelHistory || []).length === 0 ? (
-                              <div className="text-[12px] text-gray-300 px-1">등록된 발령 이력이 없습니다</div>
+                              <div className="text-[12px] text-gray-400 px-1">등록된 발령 이력이 없습니다</div>
                             ) : (
                               <div className="border border-gray-100 rounded-xl divide-y divide-gray-50">
                                 {[...(u.personnelHistory || [])].reverse().map((h, i) => (
                                   <div key={i} className="flex items-center gap-3 px-4 py-2 text-[12.5px]">
-                                    <span className="text-gray-400 w-24 shrink-0">{h.date}</span>
+                                    <span className="text-gray-500 w-24 shrink-0">{h.date}</span>
                                     <span className="font-semibold text-gray-600 w-16 shrink-0">{h.type}</span>
                                     <span className="text-gray-700">{h.detail}</span>
                                   </div>
@@ -967,12 +967,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     </div>
                   )}
                   <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white min-w-[200px] max-w-[280px] focus-within:border-[#1B2B4B] transition">
-                    <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <svg className="ml-3 w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                     <input value={linkedSearch} onChange={e => setLinkedSearch(e.target.value)}
                       placeholder="회사명·이름 검색"
                       className="flex-1 px-2 py-2 text-[13px] outline-none" />
                   </div>
-                  <div className="ml-auto text-[13px] text-gray-400">{filteredLinked.length}건</div>
+                  <div className="ml-auto text-[13px] text-gray-500">{filteredLinked.length}건</div>
                 </div>
               </div>
 
@@ -998,7 +998,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <tbody className="divide-y divide-gray-100">
                     {filteredLinked.length === 0 ? (
                       <tr>
-                        <td colSpan={isTotalMaster ? 9 : 7} className="py-16 text-center text-[13px] text-gray-400">
+                        <td colSpan={isTotalMaster ? 9 : 7} className="py-16 text-center text-[13px] text-gray-500">
                           {isTotalMaster ? "2차 승인 대기 중인 화주사가 없습니다" : "연동된 화주사 신청이 없습니다"}
                         </td>
                       </tr>
@@ -1167,7 +1167,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {adminTab === "inquiries" && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               {myLinkedInquiries.length === 0 ? (
-                <div className="text-[13px] text-gray-400 text-center py-16">연동된 화주사의 문의가 없습니다.</div>
+                <div className="text-[13px] text-gray-500 text-center py-16">연동된 화주사의 문의가 없습니다.</div>
               ) : (
                 <table className="w-full text-[13px]">
                   <thead>
@@ -1185,7 +1185,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <td className="px-4 py-3 text-gray-600">{q.__authorCompany}</td>
                         <td className="px-4 py-3 font-semibold text-gray-800">{q.title}</td>
                         <td className="px-4 py-3 text-gray-500">{q.name}</td>
-                        <td className="px-4 py-3 text-center text-gray-400">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
+                        <td className="px-4 py-3 text-center text-gray-500">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${q.status === "답변완료" ? "bg-emerald-100 text-emerald-700" : "bg-amber-50 text-amber-600"}`}>
                             {q.status || "접수중"}
@@ -1220,7 +1220,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 </select>
               </div>
               {filteredLogs.length === 0 ? (
-                <div className="text-[13px] text-gray-400 text-center py-16">접속 이력이 없습니다.</div>
+                <div className="text-[13px] text-gray-500 text-center py-16">접속 이력이 없습니다.</div>
               ) : (
                 <>
                 <table className="w-full text-[13px]">
@@ -1246,7 +1246,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <td className="px-2 py-2.5 text-center text-gray-700 truncate max-w-[100px]">{l.name || "-"}</td>
                         <td className="px-2 py-2.5 text-center text-gray-500 truncate max-w-[160px]">{l.email || "-"}</td>
                         <td className="px-2 py-2.5 text-center text-gray-500">{roleLabels[l.role] || l.role || "-"}</td>
-                        <td className="px-2 py-2.5 text-center text-gray-400 whitespace-nowrap">
+                        <td className="px-2 py-2.5 text-center text-gray-500 whitespace-nowrap">
                           {l.at?.seconds ? new Date(l.at.seconds * 1000).toLocaleString("ko-KR") : "-"}
                         </td>
                       </tr>
@@ -1281,7 +1281,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {adminTab === "landingInquiries" && isTotalMaster && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               {landingInquiries.length === 0 ? (
-                <div className="text-[13px] text-gray-400 text-center py-16">홈페이지로 들어온 도입 문의가 없습니다.</div>
+                <div className="text-[13px] text-gray-500 text-center py-16">홈페이지로 들어온 도입 문의가 없습니다.</div>
               ) : (
                 <table className="w-full text-[13px]">
                   <thead>
@@ -1299,7 +1299,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <td className="px-4 py-3 font-semibold text-gray-800">{q.companyName}</td>
                         <td className="px-4 py-3 text-gray-600">{q.name}</td>
                         <td className="px-4 py-3 text-gray-600">{q.phone}</td>
-                        <td className="px-4 py-3 text-center text-gray-400">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
+                        <td className="px-4 py-3 text-center text-gray-500">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                             q.status === "완료" ? "bg-emerald-100 text-emerald-700"
@@ -1377,7 +1377,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   ["신청일", fmtDate(managingLinkedApp.createdAt)],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-start px-4 py-3 border-b border-gray-50 last:border-b-0 odd:bg-gray-50/50">
-                    <span className="text-[12px] text-gray-400 w-28 shrink-0">{label}</span>
+                    <span className="text-[12px] text-gray-500 w-28 shrink-0">{label}</span>
                     <span className="text-[13px] font-medium text-gray-800">{value}</span>
                   </div>
                 ))}
@@ -1393,13 +1393,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     ["대표자", managingLinkedApp.linkedTransportCompany.representative || "-"],
                   ].map(([label, value]) => (
                     <div key={label} className="flex items-start px-4 py-3 border-b border-gray-50 last:border-b-0 odd:bg-gray-50/50">
-                      <span className="text-[12px] text-gray-400 w-28 shrink-0">{label}</span>
+                      <span className="text-[12px] text-gray-500 w-28 shrink-0">{label}</span>
                       <span className="text-[13px] font-medium text-gray-800">{value}</span>
                     </div>
                   ))}
                   {managingLinkedApp.transportApprovalStatus === "approved" && (
                     <div className="flex items-start px-4 py-3 border-t border-gray-50 odd:bg-gray-50/50">
-                      <span className="text-[12px] text-gray-400 w-28 shrink-0">1차 승인자</span>
+                      <span className="text-[12px] text-gray-500 w-28 shrink-0">1차 승인자</span>
                       <span className="text-[13px] font-medium text-gray-800">{managingLinkedApp.transportApprovedBy || "-"}</span>
                     </div>
                   )}
@@ -1426,7 +1426,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         />
                         <div>
                           <div className="text-[13px] font-semibold text-gray-800">{label}</div>
-                          <div className="text-[10px] text-gray-400">{desc}</div>
+                          <div className="text-[10px] text-gray-500">{desc}</div>
                         </div>
                       </label>
                     ))}
@@ -1547,9 +1547,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
                 <div className="font-bold text-[15px] text-[#1B2B4B]">{selectedInquiry.title}</div>
-                <div className="text-[12px] text-gray-400 mt-0.5">{selectedInquiry.__authorCompany} · {selectedInquiry.name}</div>
+                <div className="text-[12px] text-gray-500 mt-0.5">{selectedInquiry.__authorCompany} · {selectedInquiry.name}</div>
               </div>
-              <button onClick={() => { setSelectedInquiry(null); setInquiryReplyText(""); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+              <button onClick={() => { setSelectedInquiry(null); setInquiryReplyText(""); }} className="text-gray-500 hover:text-gray-600 text-xl leading-none">×</button>
             </div>
             <div className="px-6 py-4 space-y-4">
               <div>
@@ -1585,12 +1585,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
                 <div className="font-bold text-[15px] text-[#1B2B4B]">{selectedLandingInquiry.companyName}</div>
-                <div className="text-[12px] text-gray-400 mt-0.5">
+                <div className="text-[12px] text-gray-500 mt-0.5">
                   {selectedLandingInquiry.name} · {selectedLandingInquiry.phone}
                   {selectedLandingInquiry.createdAt?.seconds && ` · ${new Date(selectedLandingInquiry.createdAt.seconds * 1000).toLocaleString("ko-KR")}`}
                 </div>
               </div>
-              <button onClick={() => setSelectedLandingInquiry(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+              <button onClick={() => setSelectedLandingInquiry(null)} className="text-gray-500 hover:text-gray-600 text-xl leading-none">×</button>
             </div>
             <div className="px-6 py-4 space-y-4">
               {selectedLandingInquiry.email && (

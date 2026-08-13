@@ -815,7 +815,7 @@ function NationalFareTab() {
             <div ref={fromRef} className="relative border-b border-gray-100">
               <div className={`flex items-center gap-3 px-4 py-3 ${step==="from"||cityStep==="from"?"bg-blue-50/50":""}`}>
                 <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
-                <span className="text-[11px] font-bold text-gray-400 w-10 shrink-0">상차지</span>
+                <span className="text-[11px] font-bold text-gray-500 w-10 shrink-0">상차지</span>
                 {fromC&&!cityStep?(
                   <span className="font-extrabold text-[13px] text-[#1B2B4B] truncate flex-1">{fromP} {fromC.n}</span>
                 ):(
@@ -828,7 +828,7 @@ function NationalFareTab() {
                   />
                 )}
                 {(fromC||fromSearch)&&(
-                  <button className="text-gray-300 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setFromP(null);setFromC(null);setFromSearch("");setFromResults([]);setStep("from");}}>×</button>
+                  <button className="text-gray-400 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setFromP(null);setFromC(null);setFromSearch("");setFromResults([]);setStep("from");}}>×</button>
                 )}
               </div>
               {fromResults.length>0&&(
@@ -837,7 +837,7 @@ function NationalFareTab() {
                     <button key={i} onClick={()=>selectFrom(r)}
                       className="w-full px-4 py-2.5 text-left hover:bg-blue-50 transition border-b border-gray-50 last:border-0">
                       <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
-                      <div className="text-[11px] text-gray-400">{r.full}</div>
+                      <div className="text-[11px] text-gray-500">{r.full}</div>
                     </button>
                   ))}
                 </div>
@@ -848,7 +848,7 @@ function NationalFareTab() {
               <div key={i} className="relative border-t border-gray-100">
                 <div className="flex items-center gap-3 px-4 py-3">
                   <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0"/>
-                  <span className="text-[11px] font-bold text-gray-400 w-10 shrink-0">경유{i+1}</span>
+                  <span className="text-[11px] font-bold text-gray-500 w-10 shrink-0">경유{i+1}</span>
                   {via.coord?(
                     <span className="font-semibold text-[13px] text-[#1B2B4B] truncate flex-1">{via.search}</span>
                   ):(
@@ -860,7 +860,7 @@ function NationalFareTab() {
                       autoFocus
                     />
                   )}
-                  <button className="text-gray-300 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();removeVia(i);}}>×</button>
+                  <button className="text-gray-400 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();removeVia(i);}}>×</button>
                 </div>
                 {(viaResults[i]||[]).length>0&&(
                   <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-[60] overflow-hidden mt-1">
@@ -868,7 +868,7 @@ function NationalFareTab() {
                       <button key={j} onClick={()=>selectVia(i,r)}
                         className="w-full px-4 py-2.5 text-left hover:bg-gray-50 transition border-b border-gray-50 last:border-0">
                         <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
-                        <div className="text-[11px] text-gray-400">{r.full}</div>
+                        <div className="text-[11px] text-gray-500">{r.full}</div>
                       </button>
                     ))}
                   </div>
@@ -879,7 +879,7 @@ function NationalFareTab() {
             <div ref={toRef} className="relative border-t border-gray-100">
               <div className={`flex items-center gap-3 px-4 py-3 ${step==="to"||cityStep==="to"?"bg-orange-50/50":""}`}>
                 <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
-                <span className="text-[11px] font-bold text-gray-400 w-10 shrink-0">하차지</span>
+                <span className="text-[11px] font-bold text-gray-500 w-10 shrink-0">하차지</span>
                 {toC&&!cityStep?(
                   <span className="font-extrabold text-[13px] text-[#1B2B4B] truncate flex-1">{toP} {toC.n}</span>
                 ):(
@@ -893,7 +893,7 @@ function NationalFareTab() {
                   />
                 )}
                 {(toC||toSearch)&&(
-                  <button className="text-gray-300 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setToSearch("");setToResults([]);setStep("to");}}>×</button>
+                  <button className="text-gray-400 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setToSearch("");setToResults([]);setStep("to");}}>×</button>
                 )}
               </div>
               {toResults.length>0&&(
@@ -902,7 +902,7 @@ function NationalFareTab() {
                     <button key={i} onClick={()=>selectTo(r)}
                       className="w-full px-4 py-2.5 text-left hover:bg-orange-50 transition border-b border-gray-50 last:border-0">
                       <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
-                      <div className="text-[11px] text-gray-400">{r.full}</div>
+                      <div className="text-[11px] text-gray-500">{r.full}</div>
                     </button>
                   ))}
                 </div>
@@ -913,7 +913,7 @@ function NationalFareTab() {
             {vias.length<3&&(
               <button onClick={addVia} className="text-[11px] font-semibold text-[#1B2B4B]/70 hover:text-[#1B2B4B] border border-dashed border-[#1B2B4B]/30 hover:border-[#1B2B4B]/60 rounded-lg px-2.5 py-1 transition">+ 경유 추가</button>
             )}
-            {(fromP||toP||vias.length>0)&&<button onClick={reset} className="text-[11px] text-gray-400 hover:text-red-500 transition">초기화</button>}
+            {(fromP||toP||vias.length>0)&&<button onClick={reset} className="text-[11px] text-gray-500 hover:text-red-500 transition">초기화</button>}
           </div>
         </div>
 
@@ -934,7 +934,7 @@ function NationalFareTab() {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1.5">차량 선택이 어렵다면 상단 차량제원 탭을 참고하세요.</p>
+            <p className="text-[11px] text-gray-500 mt-1.5">차량 선택이 어렵다면 상단 차량제원 탭을 참고하세요.</p>
           </div>
         )}
 
@@ -944,20 +944,20 @@ function NationalFareTab() {
             <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">화물 중량 / 부피</p>
             <div className="flex gap-3 bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex-1">
-                <label className="block text-[11px] font-bold text-gray-400 mb-1.5">중량 (kg)</label>
+                <label className="block text-[11px] font-bold text-gray-500 mb-1.5">중량 (kg)</label>
                 <input type="number" min="0" placeholder="예: 500" value={mixWeightKg}
                   onChange={e=>{setMixWeightKg(e.target.value);if(e.target.value)setMixCbm("");}}
                   className="w-full px-3 py-2.5 border-2 border-gray-100 rounded-xl text-[13px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B]"/>
               </div>
-              <div className="flex items-end pb-2.5 text-gray-300 text-[12px]">또는</div>
+              <div className="flex items-end pb-2.5 text-gray-400 text-[12px]">또는</div>
               <div className="flex-1">
-                <label className="block text-[11px] font-bold text-gray-400 mb-1.5">CBM (㎥)</label>
+                <label className="block text-[11px] font-bold text-gray-500 mb-1.5">CBM (㎥)</label>
                 <input type="number" min="0" step="0.1" placeholder="예: 2.5" value={mixCbm}
                   onChange={e=>{setMixCbm(e.target.value);if(e.target.value)setMixWeightKg("");}}
                   className="w-full px-3 py-2.5 border-2 border-gray-100 rounded-xl text-[13px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B]"/>
               </div>
             </div>
-            <div className="mt-2 text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+            <div className="mt-2 text-[11px] text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
               혼적 요율: 100km 이하 기본 28,000원+100kg당 3,500원 · 300km+ 기본 78,000원+100kg당 12,000원
             </div>
           </div>
@@ -978,7 +978,7 @@ function NationalFareTab() {
                 <button key={ct.id} onClick={()=>setCargoType(ct.id)}
                   className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold border-2 transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
                   {ct.name}
-                  {sub && <span className={`block text-[10px] font-semibold mt-0.5 ${cargoType===ct.id?"text-white/70":"text-gray-400"}`}>{sub}</span>}
+                  {sub && <span className={`block text-[10px] font-semibold mt-0.5 ${cargoType===ct.id?"text-white/70":"text-gray-500"}`}>{sub}</span>}
                 </button>
               );
             })}
@@ -999,7 +999,7 @@ function NationalFareTab() {
                 <button key={opt.id} onClick={opt.set}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
                   {opt.label}
-                  {opt.sub&&<span className={`text-[11px] font-semibold ${opt.active?"text-white/70":"text-gray-400"}`}>{opt.sub}</span>}
+                  {opt.sub&&<span className={`text-[11px] font-semibold ${opt.active?"text-white/70":"text-gray-500"}`}>{opt.sub}</span>}
                 </button>
               ))}
             </div>
@@ -1098,7 +1098,7 @@ function NationalFareTab() {
                 {cityStep==="from"?"출":"하"}
               </div>
               <span className="text-[14px] font-extrabold text-[#1B2B4B]">{cityStep==="from"?fromP:toP}</span>
-              <button className="ml-auto text-[11px] text-gray-400 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1"
+              <button className="ml-auto text-[11px] text-gray-500 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1"
                 onClick={()=>{setCityStep(null);if(cityStep==="from")setFromP(null);else setToP(null);}}>← 재선택</button>
             </div>
             <div className="grid grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto">
@@ -1119,12 +1119,12 @@ function NationalFareTab() {
                 {subCityStep==="from"?"출":"하"}
               </div>
               <span className="text-[14px] font-extrabold text-[#1B2B4B]">{subCity?.n}</span>
-              <span className="text-[11px] text-gray-400 ml-1">세부 지역</span>
-              <button className="ml-auto text-[11px] text-gray-400 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1"
+              <span className="text-[11px] text-gray-500 ml-1">세부 지역</span>
+              <button className="ml-auto text-[11px] text-gray-500 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1"
                 onClick={()=>{setSubCityStep(null);setSubCity(null);setSubDistricts([]);setCityStep(subCityStep==="from"?"from":"to");}}>← 재선택</button>
             </div>
             {subDistrictLoading?(
-              <div className="text-center py-4 text-[12px] text-gray-400">읍/면/동 로딩 중...</div>
+              <div className="text-center py-4 text-[12px] text-gray-500">읍/면/동 로딩 중...</div>
             ):(
               <div className="grid grid-cols-3 gap-1.5 max-h-[240px] overflow-y-auto">
                 <button onClick={onSelectWholeCity}
@@ -1138,7 +1138,7 @@ function NationalFareTab() {
                   </button>
                 ))}
                 {!subDistrictLoading&&subDistricts.length===0&&(
-                  <div className="col-span-3 text-center text-[11px] text-gray-400 py-2">세부 지역 정보 없음</div>
+                  <div className="col-span-3 text-center text-[11px] text-gray-500 py-2">세부 지역 정보 없음</div>
                 )}
               </div>
             )}
@@ -1159,11 +1159,11 @@ function NationalFareTab() {
           {step==="result"&&fromP&&toP&&(
             <div className="flex items-center gap-2 text-[13px]">
               <span className="font-extrabold text-blue-600">{fromP} {fromC?.n}</span>
-              <span className="text-gray-300">→</span>
+              <span className="text-gray-400">→</span>
               <span className="font-extrabold text-orange-500">{toP} {toC?.n}</span>
             </div>
           )}
-          {(fromP||toP)&&<button onClick={reset} className="ml-auto text-[11px] text-gray-400 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1">초기화</button>}
+          {(fromP||toP)&&<button onClick={reset} className="ml-auto text-[11px] text-gray-500 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1">초기화</button>}
         </div>
         <div className="flex-1 min-h-0">
           <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
@@ -1252,7 +1252,7 @@ function NationalFareTab() {
         <div className="px-4 py-2 border-t border-gray-100 flex items-center gap-4 shrink-0">
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"/><span className="text-[11px] font-semibold text-gray-500">출발지</span></div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"/><span className="text-[11px] font-semibold text-gray-500">도착지</span></div>
-          <span className="ml-auto text-[10px] text-gray-300">지역 클릭 또는 직접 입력 → 운임 확인</span>
+          <span className="ml-auto text-[10px] text-gray-400">지역 클릭 또는 직접 입력 → 운임 확인</span>
         </div>
       </div>
     </div>
@@ -1295,7 +1295,7 @@ export default function FreightRateInquiry(){
       <div className="flex items-center gap-1 mb-5 border-b border-gray-200">
         {["전국운임조회","자사운임표","차량제원"].map(tab=>(
           <button key={tab} onClick={()=>setActiveTab(tab)}
-            className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-400 hover:text-gray-600"}`}>
+            className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-500 hover:text-gray-600"}`}>
             {tab}
           </button>
         ))}

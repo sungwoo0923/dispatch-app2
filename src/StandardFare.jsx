@@ -355,7 +355,7 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition"
+        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-400 transition"
         placeholder={placeholder}
         value={query}
         onChange={handleChange}
@@ -408,7 +408,7 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition"
         placeholder={placeholder}
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
@@ -457,7 +457,7 @@ function ClientSearch({ value, onChange, clients }) {
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
+        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition"
         placeholder="거래처 검색..."
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value === "" ? "전체" : e.target.value); setOpen(true); setActiveIdx(0); }}
@@ -473,7 +473,7 @@ function ClientSearch({ value, onChange, clients }) {
       />
       {open && filtered.length > 0 && (
         <div ref={listRef} className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-          <div className="px-3 py-2 text-[12px] font-medium cursor-pointer hover:bg-gray-50 text-gray-400" onMouseDown={() => { setQuery(""); onChange("전체"); setOpen(false); }}>전체</div>
+          <div className="px-3 py-2 text-[12px] font-medium cursor-pointer hover:bg-gray-50 text-gray-500" onMouseDown={() => { setQuery(""); onChange("전체"); setOpen(false); }}>전체</div>
           {filtered.map((c, i) => (
             <div key={c} className={`px-3 py-2 text-[13px] font-medium cursor-pointer transition ${i === activeIdx ? "bg-blue-50 text-blue-700" : "hover:bg-gray-50 text-gray-700"}`} onMouseDown={() => select(c)}>{c}</div>
           ))}
@@ -487,7 +487,7 @@ function FareLevelBadge({ level }) {
   if (level === "NORMAL") return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700">표준</span>;
   if (level === "TIGHT")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-700">▲ 상승</span>;
   if (level === "SPIKE")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700">프리미엄</span>;
-  return <span className="px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-400">-</span>;
+  return <span className="px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500">-</span>;
 }
 
 // 차종별 운임 (1800-5017 79km 데이터 기준, 일반 카고)
@@ -918,7 +918,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike };
   }, [result]);
 
-  const inputCls = "w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition";
+  const inputCls = "w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition";
   const labelCls = "block text-[12px] font-bold text-gray-900 mb-1";
   const cat = VEHICLE_CATEGORIES[nfVehicleCategory];
 
@@ -945,7 +945,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition ${
                 activeTab === tab.key
                   ? "border-[#1B2B4B] text-[#1B2B4B]"
-                  : "border-transparent text-gray-400 hover:text-gray-600"
+                  : "border-transparent text-gray-500 hover:text-gray-600"
               }`}
             >
               {tab.label}
@@ -1061,14 +1061,14 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 <button onClick={search} className="flex-1 px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
                 <button onClick={reset} className="flex-1 px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
               </div>
-              <div className="text-[12px] text-gray-400">Enter 키로도 조회</div>
+              <div className="text-[12px] text-gray-500">Enter 키로도 조회</div>
             </div>
           </div>
 
           {/* ───────── 오른쪽: 결과 패널 ───────── */}
           <div className="space-y-3 min-w-0">
             {!searched && (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-400">
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-500">
                 <div className="text-[14px] font-semibold mb-1">왼쪽에서 조건을 입력하고 조회하세요</div>
                 <div className="text-[12px]">노선·거래처·차량 조건에 맞는 운임 히스토리를 보여드립니다</div>
               </div>
@@ -1106,7 +1106,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                     </thead>
                     <tbody>
                       {result.length === 0 ? (
-                        <tr><td colSpan={16} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                        <tr><td colSpan={16} className="py-16 text-center text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                       ) : (
                         result.map((r, i) => {
                           // 경유지 정보 조합 — search()의 getPickupVias/getDropVias와 동일한
@@ -1127,7 +1127,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                             <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                               <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
                               <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                                {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-300">-</span>}
+                                {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-400">-</span>}
                               </td>
                               <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
                               <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
@@ -1136,7 +1136,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                               <td className="px-3 py-2.5 text-[13px] text-center max-w-[120px] truncate" title={waypointText}>
                                 {waypointText ? (
                                   <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-semibold">{waypointText}</span>
-                                ) : <span className="text-gray-300">-</span>}
+                                ) : <span className="text-gray-400">-</span>}
                               </td>
                               <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedCargo || r.화물내용}</td>
                               <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
@@ -1202,7 +1202,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                         <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">경유지 {i + 1}</div>
                         <button type="button"
                           onClick={() => setNfVias(prev => prev.filter((_,j) => j !== i))}
-                          className="text-gray-400 hover:text-gray-700 text-base font-bold w-5 h-5 flex items-center justify-center">
+                          className="text-gray-500 hover:text-gray-700 text-base font-bold w-5 h-5 flex items-center justify-center">
                           ×
                         </button>
                       </div>
@@ -1315,7 +1315,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                         const fare = calcFare(nfResult.km, ft, cat.multiplier);
                         return (
                           <td key={ft.label} className="px-3 py-5 text-center text-[16px] font-bold text-gray-800 border-r border-gray-100 last:border-r-0">
-                            {fare ? fare.toLocaleString() : <span className="text-[13px] text-gray-400 font-normal">별도협의</span>}
+                            {fare ? fare.toLocaleString() : <span className="text-[13px] text-gray-500 font-normal">별도협의</span>}
                           </td>
                         );
                       })}
@@ -1325,11 +1325,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
 
               <div className="px-5 pb-4 space-y-1">
-                <div className="text-[11px] text-gray-400 flex items-start gap-1.5">
+                <div className="text-[11px] text-gray-500 flex items-start gap-1.5">
                   <span className="shrink-0 mt-0.5">●</span>
                   예상단가로 실제 운임은 수작업·상하차 조건·계절·수급 상황에 따라 변동될 수 있습니다.
                 </div>
-                <div className="text-[11px] text-gray-400 flex items-start gap-1.5">
+                <div className="text-[11px] text-gray-500 flex items-start gap-1.5">
                   <span className="shrink-0 mt-0.5">●</span>
                   T-Map 도로거리 기준으로 산정되며, 실제 경로에 따라 차이가 있을 수 있습니다.
                 </div>
@@ -1338,7 +1338,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
           )}
 
           {!nfResult && !nfLoading && (
-            <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-400">
+            <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-500">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="mb-4 opacity-25">
                 <rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
               </svg>
@@ -1412,7 +1412,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                             const fare = calcFare(nfResult.km, ft, cat.multiplier);
                             return (
                               <td key={ft.label} className="px-2 py-3 text-center text-[13px] font-bold text-gray-800 border-r border-gray-100 last:border-r-0">
-                                {fare ? fare.toLocaleString() : <span className="text-[11px] text-gray-400 font-normal">별도협의</span>}
+                                {fare ? fare.toLocaleString() : <span className="text-[11px] text-gray-500 font-normal">별도협의</span>}
                               </td>
                             );
                           })}
@@ -1420,7 +1420,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                       </tbody>
                     </table>
                   </div>
-                  <div className="px-4 py-2 text-[10px] text-gray-400">T-Map 도로거리 기준 참고 시세이며, 실제 운임과 차이가 있을 수 있습니다.</div>
+                  <div className="px-4 py-2 text-[10px] text-gray-500">T-Map 도로거리 기준 참고 시세이며, 실제 운임과 차이가 있을 수 있습니다.</div>
                 </div>
               )}
             </div>

@@ -31,6 +31,7 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
+import { Clock } from "lucide-react";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -69,15 +70,6 @@ function CountUp({ value, duration = 900 }) {
 const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
 const PAY_TYPES = ["계산서", "착불", "선불", "계좌이체"];
 
-/* -------------------------------------------------
-   휴게(점심시간) 컬럼 — 실시간배차현황/배차현황 상차지명·하차지명 옆에 붙는
-   접었다 폈다 할 수 있는 컬럼. 항상 접힌 채로 시작하고(프로그램을 새로 열 때),
-   같은 세션 안에서 메뉴를 옮겼다 와도 마지막에 펼쳐둔 상태는 유지된다 —
-   그래서 React state가 아니라 모듈 스코프 변수에 들고 있는다: 메뉴 전환으로
-   RealtimeStatus/DispatchStatus가 언마운트/리마운트돼도 이 변수는 그대로
-   살아있고, 새로고침/재접속(모듈이 새로 로드)하면 자동으로 false로 리셋된다.
---------------------------------------------------*/
-let _restColumnExpandedShared = false;
 
 // "오전/오후 N시(30분)" 또는 이미 "HH:mm" 형태인 문자열을 24시간 "HH:mm"으로 변환.
 // 파싱할 수 없으면 빈 문자열을 돌려준다.
@@ -120,44 +112,25 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 }
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
-// 상/하차지명 옆에 붙는 휴게(점심시간) 펼치기/접기 화살표.
-// 그 상/하차지에 등록된 점심시간이 있을 때만 나타나고, 없으면 아예 렌더링하지
-// 않는다 — 즉 점심시간이 하나도 등록 안 된 업체들만 있는 목록이면 화살표 자체가
-// 없으니 눌러도 반응이 없는 것과 동일한 효과를 낸다.
-const RestToggleArrow = ({ show, expanded, onToggle }) => {
-  if (!show) return null;
-  return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); onToggle(); }}
-      title={expanded ? "점심시간 접기" : "점심시간 보기"}
-      className="inline-flex items-center justify-center w-4 h-4 shrink-0 text-[#1B2B4B] hover:text-black transition"
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4.5"
-        strokeLinecap="round" strokeLinejoin="round"
-        style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .15s" }}>
-        <polyline points="9 6 15 12 9 18" />
-      </svg>
-    </button>
-  );
-};
-
-// 휴게 컬럼 셀 — 그 상/하차지에 점심시간이 등록되어 있을 때만 내용이 있다.
-// 접힌 상태에서는 상/하차시간과 겹칠 때만 빨간 점으로 표시(핵심 경고는 접어도 안 사라짐).
-// 펼친 상태에서는 시간대 전체를 보여주고, 겹치면 빨간 글씨로 강조한다.
-const RestCell = ({ lunchInfo, orderTime, expanded }) => {
+// 상/하차지명 옆에 붙는 휴게(점심시간) 표시 — 그 상/하차지에 등록된 점심시간이
+// 있을 때만 작은 검은색 시계 아이콘이 조용히 나타난다(모바일 쉬운모드와 동일하게
+// 알록달록한 색 이모지 대신 단색 라인 아이콘 사용). 평소엔 텍스트 없이 아이콘뿐이라
+// 표가 복잡해지지 않고, 필요할 때(마우스를 올렸을 때)만 정확한 시간대가 툴팁으로
+// 뜬다. 같은 업체(상/하차지명)가 여러 건 있을 때 행마다 아이콘이 반복돼 지저분해
+// 보이지 않도록, 그 업체가 화면에 처음 등장하는 행에서만 아이콘을 보여준다(isFirst).
+// 다만 그 오더의 상/하차 시간이 점심시간과 실제로 겹치는 경우엔 몇 번째 행이든
+// 무조건 아이콘을 빨간색으로 띄워 경고한다 — 이건 업체 단위가 아니라 그 오더
+// 하나하나에 해당하는 정보라 중복이어도 숨기면 안 된다.
+const RestCell = ({ lunchInfo, orderTime, isFirst }) => {
   if (!lunchInfo) return null;
   const overlap = isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end);
-  const title = `점심시간 ${lunchInfo.start} ~ ${lunchInfo.end}${overlap ? " · 이 시간과 겹칩니다" : ""}`;
-  if (!expanded) {
-    return overlap ? (
-      <span title={title} className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />
-    ) : null;
-  }
+  if (!overlap && !isFirst) return null;
   return (
-    <span title={title} className={`text-[12px] whitespace-nowrap ${overlap ? "text-red-600 font-extrabold" : "text-gray-500"}`}>
-      {lunchInfo.start}~{lunchInfo.end}
-    </span>
+    <HoverInfoTrigger
+      className={`inline-flex items-center justify-center w-4 h-4 shrink-0 cursor-default ${overlap ? "text-red-500" : "text-black"}`}
+      label={<Clock width={12} height={12} strokeWidth={2.25} />}
+      tooltipRows={<div>점심시간 {lunchInfo.start}~{lunchInfo.end}{overlap ? " · 이 시간과 겹칩니다" : ""}</div>}
+    />
   );
 };
 
@@ -303,6 +276,603 @@ function FareCertModal({ row, companyName, onClose }) {
             className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">PDF저장</button>
           <button type="button" onClick={handlePrint}
             className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition">인쇄</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 상차일(YYYY-MM-DD) → "8/13 (목)" 형식으로. 파싱 불가하면 원문 그대로.
+function _scheduleDateLabel(d) {
+  if (!d) return "날짜 미정";
+  const dt = new Date(`${d}T00:00:00`);
+  if (isNaN(dt.getTime())) return d;
+  const WD = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${dt.getMonth() + 1}/${dt.getDate()} (${WD[dt.getDay()]})`;
+}
+
+/* -------------------------------------------------
+   스케줄표 — 실시간배차현황/배차현황에서 여러 건을 선택 후 우클릭 →
+   "스케줄표"로 열어, 어느 기사가 어느 날짜에 이 노선(들)을 운행하는지
+   날짜별/기사별로 한눈에 정리해 보여준다. 프로그램 밖에서도(업체 전달용
+   등) 확인할 수 있도록 이미지/PDF 저장·인쇄·확대축소를 지원한다.
+   알록달록한 배색 없이 프로그램 기본 톤(네이비/그레이)만 쓰고, 글자는
+   또렷하게 굵은 글씨 위주로 구성한다.
+--------------------------------------------------*/
+// 스케줄표 안에서 상세정보(기사용) 카드로 보여줄 때 쓰는 담당자 한 줄 표시.
+// 이름/번호 중 있는 것만 붙이고, 번호는 항상 하이픈을 채워서 보여준다.
+function _scheduleContactLine(name, phone) {
+  const n = String(name || "").trim();
+  const p = String(phone || "").trim();
+  if (!n && !p) return "";
+  return `${n || "담당자"}${p ? ` (${formatPhone(p)})` : ""}`;
+}
+
+function ScheduleChartModal({ rows, companyName, onClose }) {
+  const [groupBy, setGroupBy] = React.useState("date"); // "date" | "driver"
+  const [showFareCharge, setShowFareCharge] = React.useState(false); // 청구운임 포함
+  const [showFareDriver, setShowFareDriver] = React.useState(false); // 기사운임 포함
+  const [showDetail, setShowDetail] = React.useState(false); // 상세정보(기사용) 포함
+  const [zoom, setZoom] = React.useState(1);
+  const [sendingKey, setSendingKey] = React.useState(null); // 현재 이미지 전송 처리중인 기사 key
+  const captureRef = React.useRef(null);
+  const driverRefs = React.useRef({});
+
+  const dateGroups = React.useMemo(() => {
+    const map = new Map();
+    for (const r of rows || []) {
+      const key = r.상차일 || "";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(r);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, list]) => ({
+        date,
+        list: [...list].sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""))),
+      }));
+  }, [rows]);
+
+  const driverGroups = React.useMemo(() => {
+    const map = new Map();
+    for (const r of rows || []) {
+      const key = `${r.이름 || "기사 미배정"}|${r.차량번호 || ""}`;
+      if (!map.has(key)) map.set(key, { name: r.이름 || "기사 미배정", phone: r.전화번호 || "", car: r.차량번호 || "", list: [] });
+      map.get(key).list.push(r);
+    }
+    return Array.from(map.values())
+      .map(g => ({
+        ...g,
+        list: [...g.list].sort((a, b) =>
+          String(a.상차일 || "").localeCompare(String(b.상차일 || "")) ||
+          String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""))
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
+
+  const dateRangeLabel = React.useMemo(() => {
+    const dates = [...new Set((rows || []).map(r => r.상차일).filter(Boolean))].sort();
+    if (!dates.length) return "";
+    return dates.length === 1 ? _scheduleDateLabel(dates[0]) : `${_scheduleDateLabel(dates[0])} ~ ${_scheduleDateLabel(dates[dates.length - 1])}`;
+  }, [rows]);
+
+  if (!rows || rows.length === 0) return null;
+
+  const captureCanvas = (node) => node
+    ? html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true })
+    : null;
+
+  const saveImage = async () => {
+    const canvas = await captureCanvas(captureRef.current);
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.download = `스케줄표_${dateRangeLabel || "선택오더"}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+  const savePdf = async () => {
+    const canvas = await captureCanvas(captureRef.current);
+    if (!canvas) return;
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfWidth = 210;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, imgHeight);
+    pdf.save(`스케줄표_${dateRangeLabel || "선택오더"}.pdf`);
+  };
+  const handlePrint = async () => {
+    const canvas = await captureCanvas(captureRef.current);
+    if (!canvas) return;
+    const imgData = canvas.toDataURL("image/png");
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><title>스케줄표</title><style>
+      @page { size: A4; margin: 10mm; }
+      body { margin:0; display:flex; justify-content:center; background:#fff; }
+      img { width:100%; max-width:190mm; }
+    </style></head><body><img src="${imgData}" onload="window.print()" /></body></html>`);
+    w.document.close();
+  };
+
+  // 기사별 카드 하나만 이미지로 캡처해서, 가능하면 OS 공유시트(문자/카카오톡 등에
+  // 이미지 그대로 첨부 가능)로 바로 전달하고, 지원 안 되는 환경(대부분의 PC 브라우저)
+  // 에서는 이미지부터 저장한 뒤 그 기사 번호로 문자 앱을 열어(본문에 안내문구) 사용자가
+  // 갤러리에서 이미지를 직접 첨부해 보내도록 안내한다 — 웹에서 문자 앱에 파일을
+  // 프로그램적으로 첨부하는 표준 방법이 없기 때문의 현실적인 절충.
+  const sendDriverImage = async (g) => {
+    const key = `${g.name}|${g.car}`;
+    const node = driverRefs.current[key];
+    if (!node) return;
+    setSendingKey(key);
+    try {
+      const canvas = await captureCanvas(node);
+      if (!canvas) return;
+      await new Promise((resolve) => {
+        canvas.toBlob(async (blob) => {
+          if (!blob) { resolve(); return; }
+          const fileName = `스케줄표_${g.name}.png`;
+          const file = new File([blob], fileName, { type: "image/png" });
+          const digits = String(g.phone || "").replace(/[^\d]/g, "");
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], title: "배차 스케줄표", text: `${g.name} 기사님 배차 스케줄표입니다.` });
+              resolve();
+              return;
+            } catch (err) {
+              // 사용자가 공유시트를 취소한 경우는 조용히 종료, 그 외 실패만 폴백으로 진행
+              if (err?.name === "AbortError") { resolve(); return; }
+            }
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.download = fileName;
+          link.href = url;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+          if (digits) {
+            window.location.href = `sms:${digits}?body=${encodeURIComponent(`[${g.name} 기사님] 배차 스케줄표 이미지가 저장되었습니다. 갤러리에서 첨부해 보내주세요.`)}`;
+          }
+          resolve();
+        }, "image/png");
+      });
+    } finally {
+      setSendingKey(null);
+    }
+  };
+
+  const thCls = "border border-gray-200 px-2 py-1.5 font-bold text-gray-600 bg-gray-100 whitespace-nowrap";
+  const tdCls = "border border-gray-200 px-2 py-1.5 text-gray-800";
+  const showFare = showFareCharge || showFareDriver;
+
+  // 상세정보(기사용) 카드 — 표 대신 오더 1건을 카드로 펼쳐서, 기사가 실제로 알아야 하는
+  // 정보(상/하차지 주소·담당자, 화물내용/톤수, 전달사항, 원하면 운임까지)를 한 번에 보여준다.
+  const DetailCard = ({ r }) => {
+    const pickupContact = _scheduleContactLine(r.상차지담당자, r.상차지담당자번호);
+    const dropContact = _scheduleContactLine(r.하차지담당자, r.하차지담당자번호);
+    return (
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="bg-gray-100 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+          <span className="text-[12px] font-extrabold text-[#1B2B4B]">{_scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}</span>
+          <span className="text-[11px] font-bold text-gray-600 ml-auto">{r.차량종류 || "-"} / {r.차량톤수 || "-"}</span>
+        </div>
+        <div className="px-3 py-2.5 text-[12px] space-y-1.5">
+          <div className="flex gap-2">
+            <span className="w-11 shrink-0 font-bold text-gray-600">상차</span>
+            <div className="min-w-0">
+              <div className="font-extrabold text-gray-900">{r.상차지명 || "-"}</div>
+              {r.상차지주소 && <div className="text-gray-700 break-words">{r.상차지주소}</div>}
+              {pickupContact && <div className="text-gray-700">담당자 {pickupContact}</div>}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <span className="w-11 shrink-0 font-bold text-gray-600">하차</span>
+            <div className="min-w-0">
+              <div className="font-extrabold text-gray-900">{r.하차지명 || "-"}</div>
+              {r.하차지주소 && <div className="text-gray-700 break-words">{r.하차지주소}</div>}
+              {dropContact && <div className="text-gray-700">담당자 {dropContact}</div>}
+            </div>
+          </div>
+          {r.화물내용 && (
+            <div className="flex gap-2">
+              <span className="w-11 shrink-0 font-bold text-gray-600">화물</span>
+              <span className="text-gray-900 font-semibold">{r.화물내용}</span>
+            </div>
+          )}
+          {r.전달사항 && (
+            <div className="flex gap-2">
+              <span className="w-11 shrink-0 font-bold text-gray-600">전달</span>
+              <span className="text-gray-900 whitespace-pre-wrap break-words">{r.전달사항}</span>
+            </div>
+          )}
+          {showFare && (
+            <div className="flex gap-4 pt-1.5 mt-0.5 border-t border-gray-100">
+              {showFareCharge && <span className="text-gray-800 font-bold">청구운임 {fmtWon(r.청구운임)}</span>}
+              {showFareDriver && <span className="text-gray-800 font-bold">기사운임 {fmtWon(r.기사운임)}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* 헤더 툴바 */}
+        <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
+          <h3 className="text-white font-bold text-[15px]">스케줄표 미리보기 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}
+              className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">−</button>
+            <span className="text-white/80 text-[12px] w-10 text-center">{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
+              className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">+</button>
+            <button type="button" onClick={onClose} className="ml-2 text-white/70 hover:text-white text-lg leading-none">✕</button>
+          </div>
+        </div>
+
+        {/* 정리 기준 + 표시 항목 */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-bold text-gray-500">정리 기준</span>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              <button type="button" onClick={() => setGroupBy("date")}
+                className={`px-3 py-1 text-[12px] font-bold transition ${groupBy === "date" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+                날짜별
+              </button>
+              <button type="button" onClick={() => setGroupBy("driver")}
+                className={`px-3 py-1 text-[12px] font-bold transition border-l border-gray-300 ${groupBy === "driver" ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+                기사별
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[12px] font-bold text-gray-500">표시 항목</span>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showFareCharge} onChange={() => setShowFareCharge(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">청구운임 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showFareDriver} onChange={() => setShowFareDriver(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">기사운임 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showDetail} onChange={() => setShowDetail(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">상세정보 포함 (기사용)</span>
+            </label>
+          </div>
+        </div>
+
+        {/* 본문 (확대/축소 미리보기) */}
+        <div className="flex-1 overflow-auto bg-gray-100 p-6">
+          <div style={{ transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform .15s" }}>
+            <div ref={captureRef} className="bg-white mx-auto p-8" style={{ width: "760px" }}>
+              <div className="text-center border-b-2 border-[#1B2B4B] pb-4 mb-5">
+                <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">배 차 스 케 줄 표</div>
+                <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
+                  {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {rows.length}건
+                </div>
+              </div>
+
+              {groupBy === "date" ? (
+                <div className="space-y-5">
+                  {dateGroups.map((g) => (
+                    <div key={g.date}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="px-3 py-1 rounded-md bg-[#1B2B4B] text-white text-[13px] font-extrabold">{_scheduleDateLabel(g.date)}</div>
+                        <div className="text-[11px] font-bold text-gray-500">{g.list.length}건</div>
+                      </div>
+                      {showDetail ? (
+                        <div className="space-y-2">
+                          {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
+                        </div>
+                      ) : (
+                        <table className="w-full text-[12px] border border-gray-200 border-collapse">
+                          <thead>
+                            <tr>
+                              <th className={`${thCls} w-[68px]`}>상차시간</th>
+                              <th className={thCls}>노선 (상차지 → 하차지)</th>
+                              <th className={`${thCls} w-[84px]`}>기사명</th>
+                              <th className={`${thCls} w-[104px]`}>연락처</th>
+                              <th className={`${thCls} w-[92px]`}>차량번호</th>
+                              <th className={`${thCls} w-[92px]`}>차종/톤수</th>
+                              {showFareCharge && <th className={`${thCls} w-[90px]`}>청구운임</th>}
+                              {showFareDriver && <th className={`${thCls} w-[90px]`}>기사운임</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.list.map((r, i) => (
+                              <tr key={r._id || r.id || i}>
+                                <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
+                                <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                                <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.이름 || "-"}</td>
+                                <td className={`${tdCls} text-center`}>{formatPhone(r.전화번호) || "-"}</td>
+                                <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.차량번호 || "-"}</td>
+                                <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                                {showFareCharge && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.청구운임)}</td>}
+                                {showFareDriver && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.기사운임)}</td>}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {driverGroups.map((g) => {
+                    const key = `${g.name}|${g.car}`;
+                    return (
+                      <div key={key} ref={(el) => { driverRefs.current[key] = el; }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="px-3 py-1 rounded-md bg-[#1B2B4B] text-white text-[13px] font-extrabold">{g.name}</div>
+                          <div className="text-[11px] font-bold text-gray-500">{g.car}{g.phone ? ` · ${formatPhone(g.phone)}` : ""}</div>
+                          <div className="text-[11px] font-bold text-gray-500">{g.list.length}건</div>
+                          {/* 캡처(html2canvas) 이미지에는 포함되지 않도록 인쇄 미리보기 밖 버튼처럼
+                              보이게 두되, data-html2canvas-ignore로 실제 캡처에서도 제외한다. */}
+                          <button
+                            type="button"
+                            data-html2canvas-ignore="true"
+                            disabled={!g.phone || sendingKey === key}
+                            onClick={() => sendDriverImage(g)}
+                            title={g.phone ? `${g.name} 기사님에게 이 스케줄표 이미지 전송` : "등록된 연락처가 없습니다"}
+                            className="ml-auto px-2.5 py-1 rounded-md bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {sendingKey === key ? "전송 중..." : "이 기사에게 이미지 전송"}
+                          </button>
+                        </div>
+                        {showDetail ? (
+                          <div className="space-y-2">
+                            {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
+                          </div>
+                        ) : (
+                          <table className="w-full text-[12px] border border-gray-200 border-collapse">
+                            <thead>
+                              <tr>
+                                <th className={`${thCls} w-[104px]`}>상차일</th>
+                                <th className={`${thCls} w-[68px]`}>상차시간</th>
+                                <th className={thCls}>노선 (상차지 → 하차지)</th>
+                                <th className={`${thCls} w-[92px]`}>차종/톤수</th>
+                                {showFareCharge && <th className={`${thCls} w-[90px]`}>청구운임</th>}
+                                {showFareDriver && <th className={`${thCls} w-[90px]`}>기사운임</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.list.map((r, i) => (
+                                <tr key={r._id || r.id || i}>
+                                  <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>{_scheduleDateLabel(r.상차일)}</td>
+                                  <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
+                                  <td className={`${tdCls} font-bold text-gray-900`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                                  <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                                  {showFareCharge && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.청구운임)}</td>}
+                                  {showFareDriver && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.기사운임)}</td>}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {showFareCharge && (
+                <div className="mt-4 text-[11px] font-bold text-gray-500 text-right">※ 상기 청구운임은 부가세 별도 금액입니다.</div>
+              )}
+              <div className="mt-6 pt-4 border-t border-dashed border-gray-300 text-[11px] font-semibold text-gray-500 text-center">
+                본 스케줄표는 배차관리 프로그램에서 선택한 오더를 기준으로 자동 생성되었습니다.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 하단 액션 */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
+          <button type="button" onClick={saveImage}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">이미지저장</button>
+          <button type="button" onClick={savePdf}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">PDF저장</button>
+          <button type="button" onClick={handlePrint}
+            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition">인쇄</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------
+   일괄수정 — 실시간배차현황/배차현황에서 2건 이상 선택 후 우클릭 → "일괄수정"으로
+   연다. 선택한 오더들을 한 화면에 표로 늘어놓고, 각 필드마다 맨 위 "일괄입력" 칸에
+   값을 채워 "전체적용"을 누르면 선택한 오더 전부에 같은 값이 들어간다 — 오더들이
+   완전히 같은 값으로 바뀌어야 할 때 쓴다. 그 아래 각 행의 칸은 따로따로 수정할 수
+   있어서, 오더마다 다른 값을 넣어야 하는 "개별수정"도 같은 화면에서 한 번에
+   처리하고 저장할 수 있다.
+--------------------------------------------------*/
+const BULK_EDIT_FIELDS = [
+  { key: "청구운임", label: "청구운임", type: "money" },
+  { key: "기사운임", label: "기사운임", type: "money" },
+  { key: "지급방식", label: "지급방식", type: "select", options: ["계산서", "착불", "선불", "계좌이체"] },
+  { key: "배차방식", label: "배차방식", type: "select", options: ["24시", "인성", "직접배차", "24시(외부업체)"] },
+  { key: "메모", label: "메모", type: "text" },
+  { key: "전달사항", label: "전달사항", type: "text" },
+];
+// ⚠️ 이 컴포넌트를 BulkEditModal 안에 정의하면(리렌더마다 새 함수 = 새 컴포넌트
+// 타입) 한 글자만 입력해도 input이 통째로 언마운트/재마운트되며 포커스가 빠지는
+// 버그가 생긴다 — 반드시 모듈 스코프에 고정해서 매 렌더마다 같은 컴포넌트로
+// 취급되게 한다.
+const MoneyInput = ({ value, onChange }) => (
+  <input autoComplete="off" className="w-full border border-gray-300 rounded px-1.5 py-1 text-[12px] text-right font-semibold"
+    value={value ? Number(String(value).replace(/[^\d]/g, "")).toLocaleString() : ""}
+    onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" />
+);
+function BulkEditModal({ rows, patchDispatch, onClose }) {
+  const [edited, setEdited] = React.useState(() => {
+    const init = {};
+    for (const r of rows) {
+      const id = r._id || r.id;
+      init[id] = {};
+      for (const f of BULK_EDIT_FIELDS) init[id][f.key] = r[f.key] ?? "";
+    }
+    return init;
+  });
+  const [bulkValues, setBulkValues] = React.useState({});
+  const [saving, setSaving] = React.useState(false);
+  const [saveProgress, setSaveProgress] = React.useState({ done: 0, total: 0 });
+  const [doneCount, setDoneCount] = React.useState(null); // 저장 완료 후 "n건 수정 완료" 배너에 쓸 건수
+  const closeTimerRef = React.useRef(null);
+  React.useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); }, []);
+
+  if (!rows || rows.length === 0) return null;
+
+  const setCell = (id, key, value) => {
+    setEdited(prev => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
+  };
+  const applyBulk = (key) => {
+    const v = bulkValues[key] ?? "";
+    setEdited(prev => {
+      const next = { ...prev };
+      for (const r of rows) { const id = r._id || r.id; next[id] = { ...next[id], [key]: v }; }
+      return next;
+    });
+  };
+
+  // 저장을 하나씩 순서대로 반영하면(개별 patchDispatch마다 Firestore 스냅샷이
+  // 그때그때 오며) 뒤에 있는 표가 한 줄씩 딱딱 끊기며 바뀌는 게 보여 지저분했다.
+  // 화면 중앙에 진행 상황(몇 건 중 몇 건 완료)을 보여주는 로딩 오버레이로 가려,
+  // 저장이 끝난 뒤 한 번에 자연스럽게 결과가 보이도록 한다.
+  const handleSave = async () => {
+    const jobs = rows.map(r => {
+      const id = r._id || r.id;
+      const patch = {};
+      let changed = false;
+      for (const f of BULK_EDIT_FIELDS) {
+        const newVal = edited[id]?.[f.key] ?? "";
+        const oldVal = r[f.key] ?? "";
+        if (String(newVal) !== String(oldVal)) { patch[f.key] = newVal; changed = true; }
+      }
+      return changed ? { id, col: r.__col, patch } : null;
+    }).filter(Boolean);
+
+    if (jobs.length === 0) { onClose(); return; }
+
+    setSaveProgress({ done: 0, total: jobs.length });
+    setSaving(true);
+    try {
+      await Promise.all(jobs.map(async (job) => {
+        await patchDispatch(job.id, { ...job.patch, __col: job.col });
+        setSaveProgress(p => ({ ...p, done: p.done + 1 }));
+      }));
+      setSaving(false);
+      // 로딩 오버레이가 사라지자마자 곧바로 "n건 수정이 완료되었습니다" 배너를
+      // 잠깐 띄운 뒤, 2초 후에 팝업을 닫는다.
+      setDoneCount(jobs.length);
+      closeTimerRef.current = setTimeout(onClose, 2000);
+    } catch (e) {
+      setSaving(false);
+      window.alert("저장 중 오류가 발생했습니다.\n" + (e?.message || ""));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+      {saving && (
+        <div className="fixed inset-0 z-[9999999] bg-black/60 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 flex flex-col items-center gap-4 w-[300px]">
+            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+            <div className="text-[14px] font-extrabold text-gray-800">저장 중입니다...</div>
+            <div className="text-[13px] font-bold text-gray-600">{saveProgress.done} / {saveProgress.total}건 완료</div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#1B2B4B] transition-all duration-200"
+                style={{ width: `${saveProgress.total ? Math.round((saveProgress.done / saveProgress.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {doneCount != null && (
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center pointer-events-none">
+          <div className="bg-black text-white font-extrabold text-[16px] px-6 py-3.5 rounded-2xl shadow-2xl">
+            {doneCount}건 수정이 완료되었습니다.
+          </div>
+        </div>
+      )}
+      <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
+          <h3 className="text-white font-bold text-[15px]">선택 오더 일괄수정 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+        </div>
+        <div className="px-5 py-2.5 border-b border-gray-100 bg-amber-50 text-[12px] font-semibold text-amber-700">
+          맨 윗줄(일괄입력)에 값을 넣고 "전체적용"을 누르면 아래 선택한 오더 전체에 같은 값이 채워집니다. 각 오더 칸은 따로 다시 고칠 수 있어요.
+        </div>
+        <div className="flex-1 overflow-auto p-5">
+          <table className="w-full text-[12px] border-collapse">
+            <thead>
+              <tr>
+                <th className="border border-gray-200 bg-gray-100 px-2.5 py-2 font-bold text-gray-600 text-left w-[230px]">오더</th>
+                {BULK_EDIT_FIELDS.map(f => (
+                  <th key={f.key} className="border border-gray-200 bg-gray-100 px-2 py-2 font-bold text-gray-600 min-w-[130px]">{f.label}</th>
+                ))}
+              </tr>
+              <tr>
+                <td className="border border-gray-200 px-2.5 py-1.5 text-[11px] font-extrabold text-gray-500 bg-gray-50">일괄입력</td>
+                {BULK_EDIT_FIELDS.map(f => (
+                  <td key={f.key} className="border border-gray-200 px-2 py-1.5 bg-gray-50">
+                    <div className="flex gap-1">
+                      {f.type === "select" ? (
+                        <select className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
+                          <option value="">-</option>
+                          {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      ) : f.type === "money" ? (
+                        <MoneyInput value={bulkValues[f.key]} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
+                      ) : (
+                        <input autoComplete="off" className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))} />
+                      )}
+                      <button type="button" onClick={() => applyBulk(f.key)} className="px-1.5 py-1 rounded bg-[#1B2B4B] text-white text-[10px] font-bold shrink-0 hover:opacity-90 transition">전체적용</button>
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const id = r._id || r.id;
+                return (
+                  <tr key={id}>
+                    <td className="border border-gray-200 px-2.5 py-1.5 align-top">
+                      <div className="font-bold text-[#1B2B4B]">{r.상차일 || "-"} {r.상차시간 || "즉시"}</div>
+                      <div className="text-gray-600 text-[11px]">{r.상차지명 || "-"} → {r.하차지명 || "-"}</div>
+                      <div className="text-gray-500 text-[11px]">{r.이름 || "기사 미배정"}{r.차량번호 ? ` · ${r.차량번호}` : ""}</div>
+                    </td>
+                    {BULK_EDIT_FIELDS.map((f) => (
+                      <td key={f.key} className="border border-gray-200 px-2 py-1.5">
+                        {f.type === "select" ? (
+                          <select className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
+                            <option value="">-</option>
+                            {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : f.type === "money" ? (
+                          <MoneyInput value={edited[id]?.[f.key]} onChange={(v) => setCell(id, f.key, v)} />
+                        ) : (
+                          <input autoComplete="off" className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)} />
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+          <button type="button" disabled={saving} onClick={handleSave} className="px-5 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition disabled:opacity-50">
+            {saving ? "저장 중..." : `${rows.length}건 저장`}
+          </button>
         </div>
       </div>
     </div>
@@ -888,7 +1458,7 @@ function ContactListEditor({ contacts, onChange }) {
   return (
     <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
       {list.length === 0 && (
-        <div className="px-3 py-3 text-[12px] text-gray-400 text-center">등록된 담당자가 없습니다</div>
+        <div className="px-3 py-3 text-[12px] text-gray-500 text-center">등록된 담당자가 없습니다</div>
       )}
       {list.map((c, i) => (
         <div key={i} className="px-3 py-2">
@@ -993,7 +1563,7 @@ function OrderMemoModal({ type, name, memo, popupShow, notice, onCancel, onSave 
           />
           <div>
             <div className="text-[13px] font-semibold text-gray-700 mb-1.5">기사전달주의사항</div>
-            <div className="text-[11px] text-gray-400 mb-1.5">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다</div>
+            <div className="text-[11px] text-gray-500 mb-1.5">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다</div>
             <textarea
               rows={4}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
@@ -1005,7 +1575,7 @@ function OrderMemoModal({ type, name, memo, popupShow, notice, onCancel, onSave 
           <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
             <div>
               <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
-              <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
             </div>
             <button type="button"
               onClick={() => setLocalShow(v => !v)}
@@ -2686,13 +3256,13 @@ function OrderInfoModal({ row, onClose }) {
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
   const Row = ({ label, value }) => (
     <div className="flex gap-2 text-[13px]">
-      <span className="text-gray-400 w-[72px] shrink-0">{label}</span>
-      <span className="text-gray-800">{value || "-"}</span>
+      <span className="text-gray-600 font-semibold w-[72px] shrink-0">{label}</span>
+      <span className="text-gray-900 font-semibold break-words">{value || "-"}</span>
     </div>
   );
   const Section = ({ title, children }) => (
     <div>
-      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">{title}</div>
+      <div className="text-[11px] font-extrabold text-gray-600 uppercase tracking-wider mb-1.5">{title}</div>
       <div className="bg-gray-50 border border-gray-100 rounded-lg px-4 py-3 space-y-1.5">{children}</div>
     </div>
   );
@@ -2702,7 +3272,7 @@ function OrderInfoModal({ row, onClose }) {
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
           <div>
             <h3 className="text-white font-bold text-[15px]">오더정보</h3>
-            <p className="text-white/50 text-[12px] mt-0.5">{row.상차일 || ""} {row.거래처명 ? `· ${row.거래처명}` : ""}</p>
+            <p className="text-white/75 font-semibold text-[12px] mt-0.5">{row.상차일 || ""} {row.거래처명 ? `· ${row.거래처명}` : ""}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
         </div>
@@ -2748,9 +3318,9 @@ function OrderInfoModal({ row, onClose }) {
           {row.상차지주소 && row.하차지주소 && (
             <Section title="이동 정보">
               {routeInfo === "loading" ? (
-                <div className="text-[13px] text-gray-400">거리·시간 조회 중...</div>
+                <div className="text-[13px] text-gray-500">거리·시간 조회 중...</div>
               ) : routeInfo === "error" || !routeInfo ? (
-                <div className="text-[13px] text-gray-400">거리·시간 정보를 가져올 수 없습니다</div>
+                <div className="text-[13px] text-gray-500">거리·시간 정보를 가져올 수 없습니다</div>
               ) : (
                 <>
                   <Row label="예상거리" value={`${routeInfo.distanceKm.toFixed(1)} km`} />
@@ -3605,8 +4175,8 @@ function SentMailLogItem({ log, onDelete }) {
           <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-[#7a2020] text-white"}`}>
             {log.status === "success" ? "성공" : "실패"}
           </span>
-          <span className="text-[10px] text-gray-400 font-semibold px-1.5 py-0.5 bg-gray-100 rounded">{log.type || ""}</span>
-          <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
+          <span className="text-[10px] text-gray-500 font-semibold px-1.5 py-0.5 bg-gray-100 rounded">{log.type || ""}</span>
+          <span className="text-[11px] text-gray-500">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
         </div>
         <div className="flex items-center gap-2">
           {log.body && (
@@ -3614,13 +4184,13 @@ function SentMailLogItem({ log, onDelete }) {
               {expanded ? "접기" : "내용 보기"}
             </button>
           )}
-          <button onClick={onDelete} className="text-gray-300 hover:text-red-400 transition text-[11px]">삭제</button>
+          <button onClick={onDelete} className="text-gray-400 hover:text-red-400 transition text-[11px]">삭제</button>
         </div>
       </div>
       <div className="mt-1 text-gray-600">수신: {log.to}</div>
       <div className="text-gray-500 font-semibold text-[12px]">{log.subject}</div>
       {log.attachmentNames?.length > 0 && (
-        <div className="text-[11px] text-gray-400 mt-0.5">첨부: {log.attachmentNames.join(", ")}</div>
+        <div className="text-[11px] text-gray-500 mt-0.5">첨부: {log.attachmentNames.join(", ")}</div>
       )}
       {expanded && log.body && (
         <div className="mt-2 text-gray-600 whitespace-pre-wrap bg-white border border-gray-100 rounded p-2 text-[11px] max-h-[200px] overflow-y-auto">
@@ -4827,11 +5397,11 @@ return (
                   </div>
                   <div>
                     <div className="text-[15px] font-bold text-[#1B2B4B]">매출관리</div>
-                    <div className="text-[11px] text-gray-400">비밀번호를 입력하세요</div>
+                    <div className="text-[11px] text-gray-500">비밀번호를 입력하세요</div>
                   </div>
                 </div>
                 {!revenuePasswordLoaded ? (
-                  <div className="text-center py-4 text-gray-400 text-[13px]">로딩 중...</div>
+                  <div className="text-center py-4 text-gray-500 text-[13px]">로딩 중...</div>
                 ) : !revenuePassword ? (
                   <div>
                     <div className="text-[13px] text-gray-500 text-center mb-4">비밀번호가 설정되지 않았습니다.<br/>관리자가 회사관리에서 비밀번호를 설정해 주세요.</div>
@@ -4996,7 +5566,7 @@ return (
                   ["메모", homeClickedOrder.메모],
                 ].map(([label, value]) => value ? (
                   <div key={label} className="flex items-start border-b border-gray-50 pb-2">
-                    <span className="w-24 text-[12px] font-semibold text-gray-400 shrink-0">{label}</span>
+                    <span className="w-24 text-[12px] font-semibold text-gray-500 shrink-0">{label}</span>
                     <span className="text-[13px] text-gray-800 font-medium">{value}</span>
                   </div>
                 ) : null)}
@@ -5060,7 +5630,7 @@ return (
                 : (userCompany || localStorage.getItem("userCompany") || "");
               return co ? (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-                  <p className="text-[11px] font-semibold text-gray-400 mb-0.5">소속 회사</p>
+                  <p className="text-[11px] font-semibold text-gray-500 mb-0.5">소속 회사</p>
                   <p className="text-[15px] font-bold text-[#1B2B4B]">{co}</p>
                 </div>
               ) : null;
@@ -5077,12 +5647,12 @@ return (
             {/* 명함 이미지 */}
             <div>
               <p className="text-[12px] font-semibold text-gray-500 mb-2">명함 이미지</p>
-              <p className="text-[11px] text-gray-400 mb-2">이메일 발송 시 하단에 첨부되는 명함 이미지입니다.</p>
+              <p className="text-[11px] text-gray-500 mb-2">이메일 발송 시 하단에 첨부되는 명함 이미지입니다.</p>
               {cardImage && (
                 <img src={cardImage} alt="명함" className="w-full rounded-xl mb-2 border border-gray-200 object-contain max-h-28 bg-gray-50" />
               )}
               <div className="flex gap-2">
-                <label className={`flex-1 text-center py-2 rounded-lg border text-[13px] cursor-pointer font-semibold transition ${cardImageUploading ? "bg-gray-100 text-gray-400 border-gray-200" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
+                <label className={`flex-1 text-center py-2 rounded-lg border text-[13px] cursor-pointer font-semibold transition ${cardImageUploading ? "bg-gray-100 text-gray-500 border-gray-200" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
                   {cardImageUploading ? "업로드 중..." : "이미지 선택"}
                   <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
                     onChange={(e) => {
@@ -5145,8 +5715,8 @@ return (
                   { label: "총 수익", value: myStats.totalProfit.toLocaleString(), unit: "원" },
                 ].map(({ label, value, unit }) => (
                   <div key={label} className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5">
-                    <p className="text-[11px] text-gray-400 font-medium">{label}</p>
-                    <p className="text-[14px] font-bold text-[#1B2B4B] mt-0.5">{value}<span className="text-[11px] font-normal text-gray-400 ml-0.5">{unit}</span></p>
+                    <p className="text-[11px] text-gray-500 font-medium">{label}</p>
+                    <p className="text-[14px] font-bold text-[#1B2B4B] mt-0.5">{value}<span className="text-[11px] font-normal text-gray-500 ml-0.5">{unit}</span></p>
                   </div>
                 ))}
               </div>
@@ -5223,7 +5793,7 @@ return (
                 <div key={i} className="text-[14px] text-gray-800 leading-relaxed pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
                   <span className="font-bold">{d.label}</span>
                   <div className="mt-1 text-[13px] text-gray-500">
-                    {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-300">→</span>{" "}
+                    {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-400">→</span>{" "}
                     <span className="font-semibold text-emerald-700">{String(d.after ?? "없음") || "없음"}</span>
                   </div>
                 </div>
@@ -5278,7 +5848,7 @@ return (
               </div>
             </div>
           ) : (
-            <div className="mb-4 text-[12px] text-gray-400">추가된 항목이 없습니다.</div>
+            <div className="mb-4 text-[12px] text-gray-500">추가된 항목이 없습니다.</div>
           );
         })()}
         <div className="text-[12px] font-semibold text-gray-500 mb-2">새 항목 추가</div>
@@ -5445,10 +6015,10 @@ React.useEffect(() => {
 
 // 🔹 로딩 / 에러 UI
 if (loading) {
-  return <div className="h-10 flex items-center px-5 text-sm text-gray-400">유가 불러오는 중...</div>;
+  return <div className="h-10 flex items-center px-5 text-sm text-gray-500">유가 불러오는 중...</div>;
 }
 if (!prices.length || !items.length) {
-  return <div className="h-10 flex items-center px-5 text-sm text-gray-400">유가 정보 없음</div>;
+  return <div className="h-10 flex items-center px-5 text-sm text-gray-500">유가 정보 없음</div>;
 }
 
 return (
@@ -9523,7 +10093,7 @@ const toggleOrderCardStyle = () => {
 // 입력창 (A: 카드형 / B: 밑줄형 — 오더복사수정패널과 동일한 밑줄 스타일)
 const inputCls = orderCardStyle === "B"
   ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition"
-  : "w-full px-3 py-2 text-sm rounded-lg border border-gray-200 shadow-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-400 transition";
+  : "w-full px-3 py-2 text-sm rounded-lg border border-gray-200 shadow-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-500 transition";
 
 // 라벨 (카카오T 스타일) — min-h + flex로 아이콘 버튼이 붙은 라벨과 일반
 // 텍스트 라벨의 높이를 통일해, 같은 grid row의 옆 칸 입력창끼리 높이가
@@ -9534,7 +10104,7 @@ const labelCls =
 // 메모/전달사항 textarea (A: 카드형 / B: 밑줄형)
 const textareaCls = orderCardStyle === "B"
   ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition"
-  : "w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.12),0_4px_12px_rgba(27,43,75,0.08)] placeholder:text-gray-400 transition-all";
+  : "w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.12),0_4px_12px_rgba(27,43,75,0.08)] placeholder:text-gray-500 transition-all";
     const reqStar = <span className="text-red-500">*</span>;
     const AutoBadge = ({ show }) => null;
 function FuelPriceWidget({ apiKey }) {
@@ -9560,7 +10130,7 @@ React.useEffect(() => {
       <h3 className="font-bold text-gray-800 text-sm mb-2">⛽ 오늘 유가 (전국 평균)</h3>
 
       {prices.length === 0 && (
-        <div className="text-gray-400 text-xs">불러오는 중...</div>
+        <div className="text-gray-500 text-xs">불러오는 중...</div>
       )}
 
       <div className="space-y-1 text-sm">
@@ -10083,7 +10653,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
       className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition ${
         rateSheetMatches.length > 0
           ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
-          : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+          : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
       }`}
       title={rateSheetMatches.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
     >
@@ -10280,7 +10850,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
         <div className="absolute -top-[9px] left-4 w-4 h-4 bg-white border-l-2 border-t-2 border-[#1B2B4B] rotate-45" />
         <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
           <span className="text-[13px] font-bold text-[#1B2B4B]">하차일 확인</span>
-          <button type="button" onClick={() => setCopyDateHint(null)} className="text-gray-400 hover:text-gray-600 text-base w-6 h-6 flex items-center justify-center">×</button>
+          <button type="button" onClick={() => setCopyDateHint(null)} className="text-gray-500 hover:text-gray-600 text-base w-6 h-6 flex items-center justify-center">×</button>
         </div>
         <div className="px-4 pb-4">
           <p className="text-[12px] text-gray-600 mb-3 leading-relaxed">
@@ -11311,23 +11881,23 @@ className={`
         {/* 추천 수치 */}
         <div className="grid grid-cols-2 gap-2.5 mb-1">
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-400 mb-1">차량 / 톤수</div>
+            <div className="text-[11px] font-bold text-gray-500 mb-1">차량 / 톤수</div>
             <div className="text-[14px] font-bold text-gray-900">{aiRecommend.vehicle} / {form.차량톤수 || "미입력"}</div>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-400 mb-1">표본 건수</div>
+            <div className="text-[11px] font-bold text-gray-500 mb-1">표본 건수</div>
             <div className="text-[14px] font-bold text-gray-900">{aiRecommend.sampleCount}건</div>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-400 mb-1">추천 청구운임</div>
+            <div className="text-[11px] font-bold text-gray-500 mb-1">추천 청구운임</div>
             <div className="text-[14px] font-bold text-[#1B2B4B]">{aiRecommend.fareMin.toLocaleString()} ~ {aiRecommend.fareMax.toLocaleString()}원</div>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-400 mb-1">평균 기사운임</div>
+            <div className="text-[11px] font-bold text-gray-500 mb-1">평균 기사운임</div>
             <div className="text-[14px] font-bold text-gray-900">{aiRecommend.driverAvg.toLocaleString()}원</div>
           </div>
           <div className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3 flex items-center justify-between">
-            <div className="text-[11px] font-bold text-gray-400">예상 마진율</div>
+            <div className="text-[11px] font-bold text-gray-500">예상 마진율</div>
             <div className={`text-[15px] font-extrabold ${
               aiRecommend.marginPercent >= 15 ? "text-emerald-600" : aiRecommend.marginPercent >= 5 ? "text-orange-500" : "text-red-500"
             }`}>{aiRecommend.marginPercent}%</div>
@@ -11797,7 +12367,7 @@ className={`
         <div className="text-right">
           <button
             type="button"
-            className="text-[11px] font-semibold text-gray-400 hover:text-red-500 transition"
+            className="text-[11px] font-semibold text-gray-500 hover:text-red-500 transition"
             onClick={() => setStopDeleteIdx(idx)}
           >
             삭제
@@ -11922,7 +12492,7 @@ className={`
         shadow-[0_0_0_1px_rgba(27,43,75,0.08),0_2px_8px_rgba(27,43,75,0.06)]
         focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B]
         focus:shadow-[0_0_0_1px_rgba(27,43,75,0.15),0_4px_12px_rgba(27,43,75,0.1)]
-        placeholder:text-gray-400
+        placeholder:text-gray-500
         transition-all
       "
       rows={2}
@@ -12232,7 +12802,7 @@ className={`
         <h2 className="text-lg font-bold">차량 제원표</h2>
         <button
           onClick={() => setVehicleSpecOpen(false)}
-          className="text-gray-400 hover:text-black text-lg"
+          className="text-gray-500 hover:text-black text-lg"
         >
           ✕
         </button>
@@ -12242,7 +12812,7 @@ className={`
       <div className="mb-8">
         <div className="flex justify-between items-center mb-2">
           <h3 className="font-semibold text-sm">퀵 차량 제원표</h3>
-          <span className="text-xs text-gray-400">*1100 × 1100 파렛트 규격 기준</span>
+          <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
         </div>
 
         <table className="w-full text-sm border border-gray-300">
@@ -12291,7 +12861,7 @@ className={`
       <div>
         <div className="flex justify-between items-center mb-2">
           <h3 className="font-semibold text-sm">카고 차량 제원표</h3>
-          <span className="text-xs text-gray-400">*1100 × 1100 파렛트 규격 기준</span>
+          <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
         </div>
 
         <table className="w-full text-sm border border-gray-300">
@@ -12325,7 +12895,7 @@ className={`
 <div className="mt-8">
   <div className="flex justify-between items-center mb-2">
     <h3 className="font-semibold text-sm">윙바디 차량 제원표</h3>
-    <span className="text-xs text-gray-400">*1100 × 1100 파렛트 규격 기준</span>
+    <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
   </div>
 
   <table className="w-full text-sm border border-gray-300">
@@ -12470,7 +13040,7 @@ className={`
           className="bg-white border border-gray-100 rounded-lg p-2 text-center hover:shadow-sm transition">
           <div className={`w-1.5 h-1.5 rounded-full ${dot} ${pulse ? "animate-pulse" : ""} mx-auto mb-1`} />
           <div className="text-[18px] font-black text-[#1B2B4B] leading-none">{val}</div>
-          <div className="text-[10px] text-gray-400 font-semibold mt-0.5">{label}</div>
+          <div className="text-[10px] text-gray-500 font-semibold mt-0.5">{label}</div>
         </button>
       ))}
     </div>
@@ -12485,9 +13055,9 @@ className={`
       ].map(({ label, val, unit }) => (
         <div key={label} className="bg-white border border-gray-100 rounded-lg py-2 px-2 text-center">
           <div className="text-[16px] font-extrabold text-[#1B2B4B] leading-none">
-            {val}<span className="text-[9px] font-semibold text-gray-300 ml-0.5">{unit}</span>
+            {val}<span className="text-[9px] font-semibold text-gray-400 ml-0.5">{unit}</span>
           </div>
-          <div className="text-[10px] text-gray-400 font-semibold mt-0.5">{label}</div>
+          <div className="text-[10px] text-gray-500 font-semibold mt-0.5">{label}</div>
         </div>
       ))}
     </div>
@@ -12505,7 +13075,7 @@ className={`
         <div key={label} className="px-3 py-1.5 flex justify-between items-center border-b border-gray-50 last:border-0">
           <span className="text-[10px] text-gray-500 font-medium">{label}</span>
           <span className="text-[12px] font-bold text-[#1B2B4B] tabular-nums">
-            {val.toLocaleString()}<span className="text-gray-300 font-normal text-[9px] ml-0.5">원</span>
+            {val.toLocaleString()}<span className="text-gray-400 font-normal text-[9px] ml-0.5">원</span>
           </span>
         </div>
       ))}
@@ -12519,7 +13089,7 @@ className={`
     <div className="bg-white border border-gray-100 rounded-lg overflow-hidden flex-1 flex flex-col">
       <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between shrink-0">
         <span className="text-[11px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
-        <span className="text-[9px] text-gray-300 font-medium">오늘 오더</span>
+        <span className="text-[9px] text-gray-400 font-medium">오늘 오더</span>
       </div>
       <div className="px-3 py-2 flex-1 flex flex-col justify-center">
         {(() => {
@@ -12527,12 +13097,12 @@ className={`
           todayRows.forEach(r => { const name = r.거래처명?.trim(); if (name) counts[name] = (counts[name] || 0) + 1; });
           const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
           const max = sorted[0]?.[1] || 1;
-          if (sorted.length === 0) return <div className="text-center py-2 text-[11px] text-gray-300">오늘 오더 없음</div>;
+          if (sorted.length === 0) return <div className="text-center py-2 text-[11px] text-gray-400">오늘 오더 없음</div>;
           return (
             <div className="space-y-1.5">
               {sorted.map(([name, count], i) => (
                 <div key={name} className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-bold text-gray-300 w-2.5 shrink-0">{i + 1}</span>
+                  <span className="text-[9px] font-bold text-gray-400 w-2.5 shrink-0">{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <span className="text-[10px] font-semibold text-gray-700 truncate max-w-[120px]">{name}</span>
@@ -12584,7 +13154,7 @@ className={`
               <div className="overflow-y-auto flex-1 p-6 space-y-5">
                 {/* 상차지 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">상차지</div>
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">상차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     {[["시도","startWide"],["시군구","startSgg"],["읍면동","startDong"],["상세주소","startDetail"],
                       ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
@@ -12608,7 +13178,7 @@ className={`
 
                 {/* 하차지 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">하차지</div>
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">하차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     {[["시도","endWide"],["시군구","endSgg"],["읍면동","endDong"],["상세주소","endDetail"],
                       ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
@@ -12632,7 +13202,7 @@ className={`
 
                 {/* 화물/차량 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">화물 / 차량</div>
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화물 / 차량</div>
                   <div className="grid grid-cols-4 gap-3">
                     {[["차량톤수","cargoTon"],["차량종류","truckType"],["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
@@ -12647,7 +13217,7 @@ className={`
 
                 {/* 운임 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">운임</div>
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">운임</div>
                   <div className="grid grid-cols-4 gap-3">
                     {[["청구운임","fare"],["기사운임","fee"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
@@ -12679,7 +13249,7 @@ className={`
 
                 {/* 화주 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">화주 정보</div>
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화주 정보</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">화주유형</span>
@@ -12703,7 +13273,7 @@ className={`
 
                 {/* 기타 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">기타</div>
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">기타</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">24시콜 아이디 (ddID)</span>
@@ -12872,7 +13442,7 @@ className={`
                   </button>
                 </div>
                 {copyQ && (
-                  <p className="text-[12px] text-gray-400 mt-2 font-semibold">
+                  <p className="text-[12px] text-gray-500 mt-2 font-semibold">
                     {copyList.length > 0
                       ? copyShowMore
                         ? `전체 ${copyList.length}건 표시 중 · 더블클릭하면 바로 복사됩니다`
@@ -12902,7 +13472,7 @@ className={`
                   <tbody>
                     {copyList.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="text-center py-16 text-[13px] font-semibold text-gray-400">
+                        <td colSpan={9} className="text-center py-16 text-[13px] font-semibold text-gray-500">
                           {copyQ ? "검색 결과가 없습니다." : "검색어를 입력하면 오더 목록이 표시됩니다."}
                         </td>
                       </tr>
@@ -13031,7 +13601,7 @@ className={`
 
               {/* 하단 안내 */}
               <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
-                <span className="text-[12px] font-semibold text-gray-400">
+                <span className="text-[12px] font-semibold text-gray-500">
                   {copySelected.length > 0 ? `${copySelected.length}건 선택됨` : "행을 클릭해 선택하거나 더블클릭으로 바로 복사"}
                 </span>
                 <button
@@ -13092,7 +13662,7 @@ className={`
             className="bg-white border border-gray-100 rounded-xl p-3 text-center hover:shadow-sm transition">
             <div className={`w-2 h-2 rounded-full ${dot} ${pulse ? "animate-pulse" : ""} mx-auto mb-1.5`} />
             <div className="text-[24px] font-black text-[#1B2B4B] leading-none">{val}</div>
-            <div className="text-[11px] text-gray-400 font-semibold mt-1">{label}</div>
+            <div className="text-[11px] text-gray-500 font-semibold mt-1">{label}</div>
           </button>
         ))}
       </div>
@@ -13107,9 +13677,9 @@ className={`
         ].map(({ label, val, unit }) => (
           <div key={label} className="bg-white border border-gray-100 rounded-xl py-3 px-3 text-center">
             <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-none">
-              {val}<span className="text-[11px] font-semibold text-gray-300 ml-0.5">{unit}</span>
+              {val}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">{unit}</span>
             </div>
-            <div className="text-[11px] text-gray-400 font-semibold mt-1">{label}</div>
+            <div className="text-[11px] text-gray-500 font-semibold mt-1">{label}</div>
           </div>
         ))}
       </div>
@@ -13127,7 +13697,7 @@ className={`
           <div key={label} className="px-4 py-2.5 flex justify-between items-center border-b border-gray-50 last:border-0">
             <span className="text-[12px] text-gray-500 font-medium">{label}</span>
             <span className="text-[14px] font-bold text-[#1B2B4B] tabular-nums">
-              {val.toLocaleString()}<span className="text-gray-300 font-normal text-[11px] ml-0.5">원</span>
+              {val.toLocaleString()}<span className="text-gray-400 font-normal text-[11px] ml-0.5">원</span>
             </span>
           </div>
         ))}
@@ -13141,14 +13711,14 @@ className={`
       <div className="bg-white border border-gray-100 rounded-xl overflow-hidden flex-1 flex flex-col">
         <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between shrink-0">
           <span className="text-[13px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
-          <span className="text-[11px] text-gray-300 font-medium">오늘 오더</span>
+          <span className="text-[11px] text-gray-400 font-medium">오늘 오더</span>
         </div>
         <div className="px-2 py-2 flex-1 flex flex-col justify-center">
           {(() => {
             const counts = {};
             todayRows.forEach(r => { const name = r.거래처명?.trim(); if (name) counts[name] = (counts[name] || 0) + 1; });
             const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-            if (sorted.length === 0) return <div className="text-center py-4 text-[12px] text-gray-300">오늘 오더 없음</div>;
+            if (sorted.length === 0) return <div className="text-center py-4 text-[12px] text-gray-400">오늘 오더 없음</div>;
             const chartData = sorted.map(([name, value]) => ({ name: name.length > 5 ? name.slice(0, 5) + "…" : name, value }));
             return (
               <ResponsiveContainer width="100%" height={160}>
@@ -13246,7 +13816,7 @@ className={`
       </div>
       <div ref={contactListRef} className="relative p-5 grid grid-flow-col grid-rows-[repeat(4,min-content)] content-start auto-cols-[260px] gap-3 overflow-x-auto max-h-[70vh]">
         {visible.length === 0 && (
-          <div className="text-sm text-gray-400 text-center py-10 w-[260px]">검색 결과가 없습니다</div>
+          <div className="text-sm text-gray-500 text-center py-10 w-[260px]">검색 결과가 없습니다</div>
         )}
         {visible.map(({ c, i }, vi) => (
           <div
@@ -13300,7 +13870,7 @@ className={`
                 <div className="absolute top-2 right-2 flex gap-1">
                   <button
                     title="수정"
-                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-400 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition"
                     onClick={e => {
                       e.stopPropagation();
                       setEditContactData({ name: c.name || "", phone: c.phone || "" });
@@ -13314,7 +13884,7 @@ className={`
                   </button>
                   <button
                     title="삭제"
-                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-400 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition"
                     onClick={async e => {
                       e.stopPropagation();
                       if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
@@ -13432,7 +14002,7 @@ className={`
         />
         <div>
           <div className="text-[13px] font-semibold text-gray-700 mb-1.5">기사전달주의사항</div>
-          <div className="text-[11px] text-gray-400 mb-1.5">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다</div>
+          <div className="text-[11px] text-gray-500 mb-1.5">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다</div>
           <textarea
             rows={4}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
@@ -13444,7 +14014,7 @@ className={`
         <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
           <div>
             <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+            <div className="text-[11px] text-gray-500 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
           </div>
           <button type="button"
             onClick={() => setOrderMemoPopup(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
@@ -13598,7 +14168,7 @@ className={`
               <div className="flex flex-col gap-2">
                 <button onClick={() => resolve("overwrite")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">기존 거래처에 통합 (이름 업데이트)</button>
                 <button onClick={() => resolve("separate")} className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]">별도 거래처로 등록</button>
-                <button onClick={dismiss} className="w-full py-2 text-gray-400 text-[12px]">기존 데이터 사용</button>
+                <button onClick={dismiss} className="w-full py-2 text-gray-500 text-[12px]">기존 데이터 사용</button>
               </div>
             </>
           )}
@@ -13845,7 +14415,7 @@ className={`
           <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.key}</div>
           <div className="text-[13px] text-gray-800">
             <span className="text-gray-500">{confirmChange.before || "미설정"}</span>
-            <span className="mx-2 text-gray-300">→</span>
+            <span className="mx-2 text-gray-400">→</span>
             <span className="font-bold text-[#1B2B4B]">{confirmChange.after || "미설정"}</span>
           </div>
         </div>
@@ -14027,24 +14597,24 @@ setConfirmChange(null);
 
     {/* 결제 금액 */}
     <div className="px-6 py-4">
-      <div className="text-[15px] text-gray-400 font-semibold mb-1">결제예정금액 (VAT 별도)</div>
+      <div className="text-[15px] text-gray-500 font-semibold mb-1">결제예정금액 (VAT 별도)</div>
       <div className="flex items-baseline gap-1 mb-3">
         <span className="text-[30px] font-black text-[#1B2B4B] leading-none">
           <CountUp value={Number(form.청구운임 || 0)} />
         </span>
-        <span className="text-[14px] font-semibold text-gray-400">원~</span>
+        <span className="text-[14px] font-semibold text-gray-500">원~</span>
       </div>
       {(form.기사운임 || form.지급방식) && (
         <div className="space-y-1">
           {form.기사운임 && (
             <div className="flex justify-between text-[12px]">
-              <span className="text-gray-400">기사운임</span>
+              <span className="text-gray-500">기사운임</span>
               <span className="font-semibold text-gray-700">{Number(form.기사운임).toLocaleString()}원</span>
             </div>
           )}
           {form.지급방식 && (
             <div className="flex justify-between text-[12px]">
-              <span className="text-gray-400">지급방식</span>
+              <span className="text-gray-500">지급방식</span>
               <span className="font-semibold text-gray-700">{form.지급방식}</span>
             </div>
           )}
@@ -14054,7 +14624,7 @@ setConfirmChange(null);
 
     {/* 화물 정보 */}
     <div className="px-6 py-4">
-      <div className="text-[11px] text-gray-400 font-semibold mb-2">화물 정보</div>
+      <div className="text-[11px] text-gray-500 font-semibold mb-2">화물 정보</div>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
           { label: "화물", value: mergeViaCargoText(form.화물내용, [form.경유상차목록, form.경유하차목록]) },
@@ -14062,7 +14632,7 @@ setConfirmChange(null);
           { label: "톤수", value: mergeViaTonnage(form.차량톤수, [form.경유상차목록, form.경유하차목록]) },
         ].map(({ label, value }) => (
           <div key={label} className="border border-gray-200 rounded-lg py-2 px-1 bg-gray-50">
-            <div className="text-[13px] text-gray-400 mb-0.5">{label}</div>
+            <div className="text-[13px] text-gray-500 mb-0.5">{label}</div>
             <div className="text-[13px] font-bold text-gray-800">{value || "-"}</div>
           </div>
         ))}
@@ -14109,7 +14679,7 @@ setConfirmChange(null);
       {/* 경유 상차지 */}
       {(form.경유상차목록 || []).filter(s => s.업체명?.trim()).map((s, i) => (
         <div key={i} className="mt-2 pl-4 border-l-2 border-dashed border-gray-300">
-          <div className="text-[10px] font-bold text-gray-400 mb-0.5">경유상차지 {i+1}</div>
+          <div className="text-[10px] font-bold text-gray-500 mb-0.5">경유상차지 {i+1}</div>
           <div className="text-[13px] font-semibold text-gray-800">{s.업체명}</div>
           {s.주소 && <div className="text-[11px] text-gray-500">{s.주소}</div>}
           {s.담당자 && (
@@ -14160,7 +14730,7 @@ setConfirmChange(null);
       {/* 경유 하차지 */}
       {(form.경유하차목록 || []).filter(s => s.업체명?.trim()).map((s, i) => (
         <div key={i} className="mt-2 pl-4 border-l-2 border-dashed border-gray-200">
-          <div className="text-[10px] font-bold text-gray-400 mb-0.5">경유하차지 {i+1}</div>
+          <div className="text-[10px] font-bold text-gray-500 mb-0.5">경유하차지 {i+1}</div>
           <div className="text-[13px] font-semibold text-gray-800">{s.업체명}</div>
           {s.주소 && <div className="text-[11px] text-gray-500">{s.주소}</div>}
           {s.담당자 && (
@@ -14180,28 +14750,28 @@ setConfirmChange(null);
     {/* 경로 정보 */}{/* 경로 정보 */}
     {routeInfo && (routeInfo.distanceKm > 0 || routeInfo.durationMin > 0) && (
       <div className="px-6 py-4">
-        <div className="text-[11px] text-gray-400 font-semibold mb-2">경로 정보</div>
+        <div className="text-[11px] text-gray-500 font-semibold mb-2">경로 정보</div>
         <div className="flex gap-3">
           <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-            <div className="text-[10px] text-gray-400 mb-0.5">총 거리</div>
+            <div className="text-[10px] text-gray-500 mb-0.5">총 거리</div>
             <div className="text-[15px] font-black text-[#1B2B4B]">
               {routeInfo.distanceKm.toFixed(1)}
-              <span className="text-[10px] font-semibold text-gray-400 ml-0.5">km</span>
+              <span className="text-[10px] font-semibold text-gray-500 ml-0.5">km</span>
             </div>
           </div>
           <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-            <div className="text-[10px] text-gray-400 mb-0.5">예상 시간</div>
+            <div className="text-[10px] text-gray-500 mb-0.5">예상 시간</div>
             <div className="text-[15px] font-black text-[#1B2B4B]">
               {routeInfo.durationMin}
-              <span className="text-[10px] font-semibold text-gray-400 ml-0.5">분</span>
+              <span className="text-[10px] font-semibold text-gray-500 ml-0.5">분</span>
             </div>
           </div>
           {fareStats?.fare > 0 && (
             <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-              <div className="text-[10px] text-gray-400 mb-0.5">예상 운임</div>
+              <div className="text-[10px] text-gray-500 mb-0.5">예상 운임</div>
               <div className="text-[13px] font-black text-[#1B2B4B]">
                 {fareStats.fare.toLocaleString()}
-                <span className="text-[10px] font-semibold text-gray-400 ml-0.5">원~</span>
+                <span className="text-[10px] font-semibold text-gray-500 ml-0.5">원~</span>
               </div>
             </div>
           )}
@@ -14214,7 +14784,7 @@ setConfirmChange(null);
       <div className="px-6 py-4 space-y-3">
         {form.메모?.trim() && (
           <div>
-            <div className="text-[11px] text-gray-400 font-semibold mb-1">메모</div>
+            <div className="text-[11px] text-gray-500 font-semibold mb-1">메모</div>
             <div className="text-[12px] text-gray-700 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
               {form.메모}
             </div>
@@ -14222,7 +14792,7 @@ setConfirmChange(null);
         )}
         {form.전달사항?.trim() && (
           <div>
-            <div className="text-[11px] text-gray-400 font-semibold mb-1">전달사항</div>
+            <div className="text-[11px] text-gray-500 font-semibold mb-1">전달사항</div>
             <div className="text-[12px] text-gray-700 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
               {form.전달사항}
             </div>
@@ -14240,7 +14810,7 @@ setConfirmChange(null);
         {isSaving ? "저장 중..." : (typeof cafeSyncOn !== "undefined" && cafeSyncOn) ? "저장 + 배차마당 등록" : "배차마당 등록 (공유 OFF 상태)"}
       </button>
       {!(typeof cafeSyncOn !== "undefined" && cafeSyncOn) && (
-        <p className="text-[11px] text-gray-400 mt-1.5 text-center">회사정보에서 배차마당 공유를 켜면 이 오더가 배차마당에도 함께 올라갑니다.</p>
+        <p className="text-[11px] text-gray-500 mt-1.5 text-center">회사정보에서 배차마당 공유를 켜면 이 오더가 배차마당에도 함께 올라갑니다.</p>
       )}
     </div>
 
@@ -14252,7 +14822,7 @@ setConfirmChange(null);
       <div className="flex items-center justify-between mb-2">
         <div>
           <span className="text-[12px] font-bold text-[#1B2B4B]">날짜 개별 설정</span>
-          <span className="text-[10px] text-gray-400 ml-1.5">{multiCount}건 상차일/하차일 개별 지정</span>
+          <span className="text-[10px] text-gray-500 ml-1.5">{multiCount}건 상차일/하차일 개별 지정</span>
         </div>
         <button
           type="button"
@@ -14270,12 +14840,12 @@ setConfirmChange(null);
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-8 shrink-0" />
-            <span className="flex-1 text-[10px] font-bold text-gray-400 text-center">상차일</span>
-            <span className="flex-1 text-[10px] font-bold text-gray-400 text-center">하차일</span>
+            <span className="flex-1 text-[10px] font-bold text-gray-500 text-center">상차일</span>
+            <span className="flex-1 text-[10px] font-bold text-gray-500 text-center">하차일</span>
           </div>
           {Array.from({ length: multiCount }, (_, i) => (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
+              <span className="text-[11px] font-bold text-gray-500 w-8 shrink-0 text-right">{i + 1}번</span>
               <CustomDatePicker
                 value={orderDates[i] || form.상차일 || ""}
                 onChange={e => {
@@ -14308,7 +14878,7 @@ setConfirmChange(null);
               setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
               setOrderDropDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
             }}
-            className="w-full mt-0.5 py-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition text-center"
+            className="w-full mt-0.5 py-1 text-[10px] font-semibold text-gray-500 hover:text-gray-600 transition text-center"
           >
             전체 날짜 초기화
           </button>
@@ -14663,11 +15233,11 @@ setConfirmChange(null);
                     const _xv = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
                     const names = [...new Set([..._xv(r.경유지_상차),..._xv(r.경유상차목록),..._xv(r.경유지상차),..._xv(r.경유지_하차),..._xv(r.경유하차목록),..._xv(r.경유지하차)])];
                     if (!names.length) return null;
-                    return <div className="text-[11px] text-gray-400 mt-0.5">경유: {names.join(" → ")}</div>;
+                    return <div className="text-[11px] text-gray-500 mt-0.5">경유: {names.join(" → ")}</div>;
                   })()}
                   <div className="flex gap-3 text-[12px] text-gray-500">
                     <span>{r.차량종류}{r.차량톤수 ? ` / ${r.차량톤수}` : ""}</span>
-                    {r.화물내용 && <span className="text-gray-400">· {r.화물내용}</span>}
+                    {r.화물내용 && <span className="text-gray-500">· {r.화물내용}</span>}
                   </div>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-[13px] text-gray-600">기사 {r.이름 || "-"}</span>
@@ -14677,7 +15247,7 @@ setConfirmChange(null);
               </div>
             ))
         ) : (
-          <div className="text-center text-gray-400 py-16 text-[13px]">조회된 이력이 없습니다.</div>
+          <div className="text-center text-gray-500 py-16 text-[13px]">조회된 이력이 없습니다.</div>
         )}
       </div>
 
@@ -14706,7 +15276,7 @@ setConfirmChange(null);
         <button onClick={() => setFareQuickOpen(false)} className="text-white/40 hover:text-white text-xl px-1">×</button>
       </div>
       <div className="px-5 pt-3 pb-1">
-        <div className="text-[11px] text-gray-400">클릭하면 청구운임에 바로 적용됩니다</div>
+        <div className="text-[11px] text-gray-500">클릭하면 청구운임에 바로 적용됩니다</div>
       </div>
       <div className="px-5 pb-3 space-y-2 max-h-[52vh] overflow-y-auto">
         {fareQuickMatches.map((r, i) => {
@@ -14721,7 +15291,7 @@ setConfirmChange(null);
               <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100 group-hover:bg-[#1B2B4B]/5">
                 <span className="text-[12px] text-gray-500 font-medium">{r.상차일 || "-"}</span>
                 <span className="text-[22px] font-black text-[#1B2B4B] leading-none">
-                  {claim.toLocaleString()}<span className="text-[13px] font-semibold text-gray-400 ml-1">원</span>
+                  {claim.toLocaleString()}<span className="text-[13px] font-semibold text-gray-500 ml-1">원</span>
                 </span>
               </div>
               <div className="px-4 py-2.5 space-y-1.5">
@@ -14731,14 +15301,14 @@ setConfirmChange(null);
                       {r.화물내용}
                     </span>
                   )}
-                  {r.차량종류 && <span className="text-[11px] text-gray-400">{r.차량종류}</span>}
-                  {r.차량톤수 && <span className="text-[11px] text-gray-400">{r.차량톤수}</span>}
+                  {r.차량종류 && <span className="text-[11px] text-gray-500">{r.차량종류}</span>}
+                  {r.차량톤수 && <span className="text-[11px] text-gray-500">{r.차량톤수}</span>}
                   {(() => {
                     const _xv2 = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
                     const names = [...new Set([..._xv2(r.경유지_상차),..._xv2(r.경유상차목록),..._xv2(r.경유지상차),..._xv2(r.경유지_하차),..._xv2(r.경유하차목록),..._xv2(r.경유지하차)])];
                     if (!names.length) return null;
                     return (
-                      <span className="text-[11px] text-gray-400">경유: {names.join(" → ")}</span>
+                      <span className="text-[11px] text-gray-500">경유: {names.join(" → ")}</span>
                     );
                   })()}
                 </div>
@@ -14783,9 +15353,9 @@ setConfirmChange(null);
       </div>
       <div className="overflow-y-auto flex-1 p-5">
         {rateSheetMatches.length === 0 ? (
-          <div className="text-center py-16 text-gray-400 text-[13px]">
+          <div className="text-center py-16 text-gray-500 text-[13px]">
             일치하는 단가표가 없습니다.<br/>
-            <span className="text-[12px] text-gray-300">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
+            <span className="text-[12px] text-gray-400">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
           </div>
         ) : (
           <div className="space-y-3">
@@ -14802,9 +15372,9 @@ setConfirmChange(null);
               <div key={sheet.id + row.id + i} className="rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[12.5px]">
-                    <span className="text-gray-400">기준지</span>
+                    <span className="text-gray-500">기준지</span>
                     <span className="font-bold text-[#1B2B4B]">{sheet.baseName || "-"}</span>
-                    <span className="text-gray-300">→</span>
+                    <span className="text-gray-400">→</span>
                     <span className="font-bold text-[#1B2B4B]">{row.name}</span>
                   </div>
                   {nameHit
@@ -14828,7 +15398,7 @@ setConfirmChange(null);
                           const isMatch = c.id === matchedColId;
                           return (
                             <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
-                              {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                              {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
                               {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                             </td>
                           );
@@ -15047,7 +15617,7 @@ setConfirmChange(null);
           {/* 운임 범위 요약 — 지금 입력한 톤수 안에 드는 이력만으로 범위를 잡는다 */}
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 조회 운임 범위 ({rangeCount}건{_rangeTonInput != null ? ` · ${form.차량톤수 || _rangeTonInput + "톤"} 이하` : ""})
               </span>
               {trend && (
@@ -15058,7 +15628,7 @@ setConfirmChange(null);
             </div>
 
             {rangeCount === 0 ? (
-              <div className="py-6 text-center text-[13px] font-semibold text-gray-400">
+              <div className="py-6 text-center text-[13px] font-semibold text-gray-500">
                 입력한 톤수 이하의 과거 이력이 없습니다.
               </div>
             ) : (
@@ -15066,9 +15636,9 @@ setConfirmChange(null);
             {/* 최저~최고 */}
             <div className="flex items-baseline gap-2 mt-1 mb-4">
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{rangeMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[18px] font-bold text-gray-400">~</span>
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{rangeMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
 
             {/* 범위 바 */}
@@ -15080,7 +15650,7 @@ setConfirmChange(null);
                 style={{ left: `calc(${getRangeBarPct(rangeModeFare)}% - 6px)` }}
               />
             </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
               <span>최저 {rangeMin.toLocaleString()}원</span>
               <span className="text-[#1B2B4B] font-bold">대표 {rangeModeFare.toLocaleString()}원</span>
               <span>최고 {rangeMax.toLocaleString()}원</span>
@@ -15106,13 +15676,13 @@ setConfirmChange(null);
           ? "border-gray-300 bg-gray-50 hover:bg-[#1B2B4B] hover:border-[#1B2B4B]"
           : "border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:border-[#1B2B4B]"
         }`}>
-      <div className="text-[10px] font-bold mb-1 text-gray-400 group-hover:text-white/60">
+      <div className="text-[10px] font-bold mb-1 text-gray-500 group-hover:text-white/60">
         {label}
       </div>
       <div className="text-[18px] font-extrabold leading-none text-[#1B2B4B] group-hover:text-white">
         {value.toLocaleString()}
       </div>
-      <div className="text-[10px] mt-1 text-gray-400 group-hover:text-white/50">
+      <div className="text-[10px] mt-1 text-gray-500 group-hover:text-white/50">
         {sub}
       </div>
     </button>
@@ -15213,7 +15783,7 @@ setConfirmChange(null);
                           <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-[#1B2B4B] text-[#1B2B4B]">가장 흔한 운임 {r._groupSize}건</span>
                         )}
                         {(!modeRow || r !== modeRow) && r._groupSize > 1 && (
-                          <span className="px-2 py-0.5 text-[10px] rounded border border-gray-300 text-gray-400">이력 {r._groupSize}건</span>
+                          <span className="px-2 py-0.5 text-[10px] rounded border border-gray-300 text-gray-500">이력 {r._groupSize}건</span>
                         )}
                         {isOutlierRow(r) && (
                           <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-orange-300 text-orange-700">이례적 청구(반복없음)</span>
@@ -15275,7 +15845,7 @@ setConfirmChange(null);
                                 const fares = sortedHistory.map(r2 => Number(String(r2.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
                                 const avg = fares.length ? Math.round(fares.reduce((a,b)=>a+b,0)/fares.length) : 0;
                                 const diff = fare - avg;
-                                if (!avg || Math.abs(diff) < 1000) return <span className="text-[11px] text-gray-400 ml-1">평균</span>;
+                                if (!avg || Math.abs(diff) < 1000) return <span className="text-[11px] text-gray-500 ml-1">평균</span>;
                                 return (
                                   <span className={`text-[11px] ml-1 font-semibold ${diff > 0 ? "text-red-500" : "text-blue-500"}`}>
                                     {diff > 0 ? `+${diff.toLocaleString()}` : diff.toLocaleString()}원
@@ -15299,7 +15869,7 @@ setConfirmChange(null);
           )}
 
           {sortedHistory.length === 0 && (
-            <div className="py-12 text-center text-[13px] font-semibold text-gray-400">
+            <div className="py-12 text-center text-[13px] font-semibold text-gray-500">
               과거 운송 기록이 없습니다.
             </div>
           )}
@@ -15399,7 +15969,7 @@ function InlineEditCell({ value, placeholder, onSave }) {
         title={value || placeholder}
         onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
       >
-        {value || <span className="text-gray-300 text-[11px]">+메모</span>}
+        {value || <span className="text-gray-400 text-[11px]">+메모</span>}
       </div>
     );
   }
@@ -15750,9 +16320,9 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
             </div>
             <div className="min-w-0">
               <div className="font-bold text-[15px] text-[#1B2B4B] whitespace-nowrap">
-                첨부파일 <span className="text-[13px] font-normal text-gray-400">{loading ? "" : `${items.length}장`}</span>
+                첨부파일 <span className="text-[13px] font-normal text-gray-500">{loading ? "" : `${items.length}장`}</span>
               </div>
-              <div className="text-[12px] text-gray-400 mt-0.5 truncate max-w-[220px]">
+              <div className="text-[12px] text-gray-500 mt-0.5 truncate max-w-[220px]">
                 {row.상차지명} → {row.하차지명}{row.이름 ? ` · ${row.이름}` : ""}
               </div>
             </div>
@@ -15797,7 +16367,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
               </button>
             )}
             <button onClick={onClose}
-              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 text-lg transition shrink-0">
+              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-lg transition shrink-0">
               ×
             </button>
           </div>
@@ -15835,7 +16405,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
             );
           })()}
           {loading && (
-            <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+            <div className="flex items-center justify-center py-16 gap-2 text-gray-500">
               <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1B2B4B] rounded-full animate-spin" />
               <span className="text-[14px]">불러오는 중...</span>
             </div>
@@ -15847,8 +16417,8 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                 </svg>
               </div>
-              <div className="text-[14px] text-gray-400 font-medium">업로드된 파일이 없습니다</div>
-              <div className="text-[12px] text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+              <div className="text-[14px] text-gray-500 font-medium">업로드된 파일이 없습니다</div>
+              <div className="text-[12px] text-gray-400">기사님께 인수증 업로드를 요청하세요</div>
             </div>
           )}
           {!loading && items.length > 0 && (
@@ -15860,18 +16430,18 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
                     <img src={item.base64 || item.url} alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-200"
                       style={{ transform: `rotate(${getRotation(item.id)}deg)` }}
-                      onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-300 text-[12px]">미리보기 없음</div>'; }} />
+                      onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-400 text-[12px]">미리보기 없음</div>'; }} />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                       <span className="opacity-0 group-hover:opacity-100 text-white text-[11px] font-bold bg-black/40 px-2 py-1 rounded-full transition-opacity">확대보기</span>
                     </div>
                   </div>
                   <div className="px-3 py-2.5 bg-white">
-                    <div className="text-[11px] text-gray-400 truncate mb-2">
+                    <div className="text-[11px] text-gray-500 truncate mb-2">
                       {item.name || "파일"} {item.sizeKB ? `· ${item.sizeKB}KB` : ""}
                       {!item.잠금 && item.createdAt && (() => {
                         const d = daysUntilAutoDelete(item.createdAt);
                         if (d === null) return null;
-                        return <span className={d <= 0 ? "text-red-500 font-semibold" : "text-gray-400"}> · {d <= 0 ? "삭제 대상" : `${d}일 후 자동삭제`}</span>;
+                        return <span className={d <= 0 ? "text-red-500 font-semibold" : "text-gray-500"}> · {d <= 0 ? "삭제 대상" : `${d}일 후 자동삭제`}</span>;
                       })()}
                     </div>
                     <div className="flex gap-1.5">
@@ -15928,7 +16498,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
         {/* 완료 처리 푸터 */}
         {onToggleViewed && (
           <div className="border-t border-gray-100 px-5 py-3 bg-gray-50 flex items-center justify-between">
-            <span className="text-[12px] text-gray-400">파일 확인 여부를 수동으로 표시할 수 있습니다</span>
+            <span className="text-[12px] text-gray-500">파일 확인 여부를 수동으로 표시할 수 있습니다</span>
             <button
               onClick={onToggleViewed}
               className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${
@@ -16040,7 +16610,7 @@ function LiveLocationPopup({ row, onClose }) {
             </div>
           </>
         ) : (
-          <div className="px-5 py-16 text-center text-[13px] text-gray-400">
+          <div className="px-5 py-16 text-center text-[13px] text-gray-500">
             아직 위치 공유 정보가 없습니다.<br />
             기사님이 업로드 링크 화면에서 "실시간 위치 공유"를 켜면 여기 표시됩니다.
           </div>
@@ -16144,13 +16714,13 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
                       <span className="text-[13px] font-bold text-[#1B2B4B]">{s.업체명}</span>
                     </div>
                     <div className="px-4 py-3 space-y-2">
-                      {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700 break-words min-w-0">{s.주소}</span></div>}
-                      {(s.담당자||s.담당자번호) && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">담당자</span><span className="text-[12px] text-gray-700">{s.담당자}{s.담당자번호?` (${s.담당자번호})`:""}</span></div>}
-                      {timeVal && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">{timeLabel}</span><span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span></div>}
+                      {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700 break-words min-w-0">{s.주소}</span></div>}
+                      {(s.담당자||s.담당자번호) && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">담당자</span><span className="text-[12px] text-gray-700">{s.담당자}{s.담당자번호?` (${s.담당자번호})`:""}</span></div>}
+                      {timeVal && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">{timeLabel}</span><span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span></div>}
                       {(s.화물내용||s.차량톤수||s.톤수값) && (
                         <div className="flex gap-3 pt-1 border-t border-gray-100">
-                          {s.화물내용 && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-400 font-bold mb-0.5">화물내용</div><div className="text-[13px] font-bold text-gray-800">{s.화물내용}</div></div>}
-                          {(s.차량톤수||s.톤수값) && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-400 font-bold mb-0.5">화물톤수</div><div className="text-[13px] font-bold text-gray-800">{toTonUnit(s.차량톤수||s.톤수값)}</div></div>}
+                          {s.화물내용 && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물내용</div><div className="text-[13px] font-bold text-gray-800">{s.화물내용}</div></div>}
+                          {(s.차량톤수||s.톤수값) && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물톤수</div><div className="text-[13px] font-bold text-gray-800">{toTonUnit(s.차량톤수||s.톤수값)}</div></div>}
                         </div>
                       )}
                     </div>
@@ -16271,7 +16841,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
 
             {/* 본문 - 읽기 전용 */}
             <div className="p-5 space-y-4 overflow-y-auto max-h-[50vh]">
-              <p className="text-[12px] text-gray-400 -mt-1">전체 경유지 상세 정보</p>
+              <p className="text-[12px] text-gray-500 -mt-1">전체 경유지 상세 정보</p>
               {list.map((s, i) => {
                 const cargo = (() => {
                   const raw = s.화물내용 || "";
@@ -16620,7 +17190,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 const cargoDisabled = !cargoIsUnit && !String(stop.화물내용||"").trim();
                 return (
               <div className="relative">
-                <input autoComplete="off" className={`${inputCls} pr-[62px] ${cargoDisabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""}`}
+                <input autoComplete="off" className={`${inputCls} pr-[62px] ${cargoDisabled ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
                   disabled={cargoDisabled}
                   placeholder={cargoDisabled ? "" : (cargoIsUnit?"숫자만 입력":"화물내용 (예: 2)")}
                   value={cargoDisabled ? "" : (cargoIsUnit
@@ -16654,7 +17224,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 const tonDisabled = !tonIsUnit && !String(tonCurVal||"").trim();
                 return (
               <div className="relative">
-                <input autoComplete="off" className={`${inputCls} pr-[52px] ${tonDisabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""}`}
+                <input autoComplete="off" className={`${inputCls} pr-[52px] ${tonDisabled ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
                   disabled={tonDisabled}
                   placeholder={tonDisabled ? "" : (tonIsUnit?"톤수 (예: 1)":"예: 5톤 또는 소형")}
                   value={tonDisabled ? "" : tonCurVal}
@@ -17039,7 +17609,7 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
         value={value || ""}
         disabled={disabled}
         onChange={e => onChange(e.target.value)}
-        className={(selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]").replace(/\bw-full\b/, "w-[108px]") + " shrink-0 disabled:bg-gray-100 disabled:text-gray-400"}
+        className={(selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]").replace(/\bw-full\b/, "w-[108px]") + " shrink-0 disabled:bg-gray-100 disabled:text-gray-500"}
       >
         <option value="">시간 선택</option>
         {times.map(t => (
@@ -17201,8 +17771,8 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
         )}
         {/* 결과 */}
         <div className="flex-1 overflow-y-auto">
-          {!searched && <div className="flex items-center justify-center py-20 text-[15px] font-medium text-gray-400">거래처명과 기간을 선택 후 조회하세요</div>}
-          {searched && results.length === 0 && <div className="flex items-center justify-center py-20 text-[15px] font-medium text-gray-400">해당 기간에 오더가 없습니다</div>}
+          {!searched && <div className="flex items-center justify-center py-20 text-[15px] font-medium text-gray-500">거래처명과 기간을 선택 후 조회하세요</div>}
+          {searched && results.length === 0 && <div className="flex items-center justify-center py-20 text-[15px] font-medium text-gray-500">해당 기간에 오더가 없습니다</div>}
           {searched && results.length > 0 && (
             <table className="w-full text-[14px]">
               <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
@@ -17325,7 +17895,7 @@ function RealtimeRowBase({
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, getDispatchConfirmedMs, formatKstDateTime, getCreatorLabel,
   editableInput, renderAddrCell, renderCargoCell, canEdit, handleEditChange,
-  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName, restExpanded, toggleRestExpanded,
+  dispatchData, placeRows, timeOptions, patchDispatch, lunchByName, isFirstPickupLunch, isFirstDropLunch,
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
@@ -17462,7 +18032,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(r.상차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} isFirst={isFirstPickupLunch} />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
@@ -17475,12 +18045,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </div>
 </td>
 
-                  {restExpanded && (
-                    <td className={cell}>
-                      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} expanded={restExpanded} />
-                    </td>
-                  )}
-
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
@@ -17488,7 +18052,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(r.하차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} isFirst={isFirstDropLunch} />
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -17499,12 +18063,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
   </div>
 </td>
-
-                  {restExpanded && (
-                    <td className={cell}>
-                      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} expanded={restExpanded} />
-                    </td>
-                  )}
 
                   <td className={addrCell}>
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
@@ -17768,7 +18326,8 @@ function realtimeRowPropsEqual(prev, next) {
     prev.driverConfirmOpen === next.driverConfirmOpen &&
     prev.memoAlert === next.memoAlert &&
     prev.blackAlert === next.blackAlert &&
-    prev.restExpanded === next.restExpanded
+    prev.isFirstPickupLunch === next.isFirstPickupLunch &&
+    prev.isFirstDropLunch === next.isFirstDropLunch
   );
 }
 
@@ -17998,7 +18557,7 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
 
         <div className="flex-1 overflow-y-auto">
           {candidates.length === 0 ? (
-            <div className="py-16 text-center text-[13px] text-gray-400">
+            <div className="py-16 text-center text-[13px] text-gray-500">
               같은 노선을 다녀간 기사 이력이 없습니다.
             </div>
           ) : (
@@ -18014,9 +18573,9 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
                       <div className="flex items-center gap-2 flex-nowrap whitespace-nowrap">
                         <span className="font-bold text-[14px] text-gray-900">{c.이름 || "-"}</span>
                         <span className="text-[12px] font-semibold text-gray-500 font-mono">{c.차량번호 || "-"}</span>
-                        <span className="text-[11px] font-semibold text-gray-400">{formatPhone(c.전화번호) || "-"}</span>
+                        <span className="text-[11px] font-semibold text-gray-500">{formatPhone(c.전화번호) || "-"}</span>
                       </div>
-                      <div className="text-[12px] text-gray-400 mt-0.5 whitespace-nowrap">
+                      <div className="text-[12px] text-gray-500 mt-0.5 whitespace-nowrap">
                         이 노선 <span className="font-semibold text-[#1B2B4B]">{c.count}</span>회 · 최근 {c.latest?.상차일 || "-"} · 평균운임 {avgFare.toLocaleString()}원
                         {c.dayPattern && <> · {c.dayPattern}</>}
                       </div>
@@ -18036,7 +18595,7 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-nowrap shrink-0">
-          <span className="text-[12px] text-gray-400 truncate min-w-0">{selected.size > 0 ? `${selected.size}명 선택됨` : "여러 명을 체크하면 한 번에 문자를 보낼 수 있습니다"}</span>
+          <span className="text-[12px] text-gray-500 truncate min-w-0">{selected.size > 0 ? `${selected.size}명 선택됨` : "여러 명을 체크하면 한 번에 문자를 보낼 수 있습니다"}</span>
           <div className="flex gap-2 shrink-0 whitespace-nowrap">
             <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap">닫기</button>
             <button
@@ -18109,12 +18668,6 @@ const mergedClients = React.useMemo(() => {
 
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
-// 휴게 컬럼 접기/펼치기 — 항상 접힌 채로 시작하고, 메뉴를 옮겼다 와도(모듈이
-// 새로 로드되지 않는 한) 마지막 상태가 유지되도록 모듈 스코프 변수와 동기화한다.
-const [restExpanded, setRestExpanded] = React.useState(_restColumnExpandedShared);
-const toggleRestExpanded = React.useCallback(() => {
-  setRestExpanded(p => { const next = !p; _restColumnExpandedShared = next; return next; });
-}, []);
 
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
@@ -19312,6 +19865,8 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   // 우클릭 컨텍스트 메뉴
   const [contextMenu, setContextMenu] = React.useState(null); // { x, y, row }
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
+  const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
+  const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
 
   React.useEffect(() => {
     const close = () => setContextMenu(null);
@@ -20911,6 +21466,20 @@ if (sortKey) {
       return withStops;
     });
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
+  // 화면에 보이는 순서상 그 상/하차지명이 처음 등장하는 행의 _id만 모아둔다 —
+  // 같은 업체가 여러 건이어도 휴게(점심시간) 아이콘이 첫 행에만 뜨게 하기 위함
+  // (RestCell의 isFirst prop으로 전달, 겹침 경고는 이 dedup과 무관하게 항상 표시).
+  const lunchFirstIds = React.useMemo(() => {
+    const pickup = new Set(), drop = new Set();
+    const seenP = new Set(), seenD = new Set();
+    for (const r of filtered) {
+      const pk = _lunchNameKey(r.상차지명);
+      if (pk && lunchByName.get(pk) && !seenP.has(pk)) { seenP.add(pk); pickup.add(r._id); }
+      const dk = _lunchNameKey(r.하차지명);
+      if (dk && lunchByName.get(dk) && !seenD.has(dk)) { seenD.add(dk); drop.add(r._id); }
+    }
+    return { pickup, drop };
+  }, [filtered, lunchByName]);
   // =========================
   // 📊 상태 요약 (추가 위치)
   // =========================
@@ -22218,7 +22787,7 @@ const head = isDark
     <div className="flex items-center justify-center h-48">
       <div className="flex flex-col items-center gap-3">
         <div className="w-8 h-8 border-4 border-[#1B2B4B] border-t-transparent rounded-full animate-spin" />
-        <div className="text-[13px] font-semibold text-gray-400">데이터 불러오는 중...</div>
+        <div className="text-[13px] font-semibold text-gray-500">데이터 불러오는 중...</div>
       </div>
     </div>
   );
@@ -22485,7 +23054,7 @@ const head = isDark
       </div>
       <div ref={panelContactListRef4} className="relative p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[70vh]">
         {visible4.length === 0 && (
-          <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
+          <div className="text-sm text-gray-500 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
         {visible4.map(({ c, i }, vi) => (
           <div key={i}
@@ -22666,10 +23235,8 @@ const head = isDark
                 "하차시간",
                 "거래처명",
                 "상차지명",
-                "상차휴게",
                 "상차지주소",
                 "하차지명",
-                "하차휴게",
                 "하차지주소",
                 "화물내용",
                 "차량종류",
@@ -22688,7 +23255,7 @@ const head = isDark
                 "전달사항",
                "첨부",
                 "전달상태",
-              ].filter((h) => restExpanded || (h !== "상차휴게" && h !== "하차휴게")).map((h) => (
+              ].map((h) => (
                 <th key={h} className={head}>
                   {h === "선택" ? (
                     <input autoComplete="off" type="checkbox"
@@ -22702,9 +23269,7 @@ const head = isDark
                           : Array.from(new Set([...prev, ...filteredIds])));
                       }}
                     />
-                  ) : h === "상차휴게" || h === "하차휴게"
-                    ? "휴게"
-                    : h}
+                  ) : h}
                 </th>
               ))}
             </tr>
@@ -22713,7 +23278,7 @@ const head = isDark
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={restExpanded ? 29 : 27} className="py-16 text-center text-[13px] text-gray-400">
+                <td colSpan={27} className="py-16 text-center text-[13px] text-gray-500">
                   조회된 결과가 없습니다.
                 </td>
               </tr>
@@ -22745,8 +23310,8 @@ const head = isDark
                 dispatchData={dispatchData}
                 placeRows={placeRows}
                 lunchByName={lunchByName}
-                restExpanded={restExpanded}
-                toggleRestExpanded={toggleRestExpanded}
+                isFirstPickupLunch={lunchFirstIds.pickup.has(r._id)}
+                isFirstDropLunch={lunchFirstIds.drop.has(r._id)}
                 timeOptions={timeOptions}
                 patchDispatch={patchDispatch}
                 setRows={setRows}
@@ -22792,7 +23357,7 @@ const head = isDark
               <div>
                 <span className="text-[13px] font-bold text-[#1B2B4B]">{r.상차시간}</span>
                 <span className="text-[13px] text-gray-600 ml-2">{r.상차지명}</span>
-                <span className="text-[11px] text-gray-400 ml-1">({r.거래처명})</span>
+                <span className="text-[11px] text-gray-500 ml-1">({r.거래처명})</span>
               </div>
             </div>
           ))}
@@ -22855,6 +23420,12 @@ const head = isDark
 {fareCertRow && (
   <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
 )}
+{scheduleChartRows && (
+  <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
+)}
+{bulkEditRows && (
+  <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+)}
 {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
   <div
@@ -22890,7 +23461,7 @@ const head = isDark
 >
   <div>
     <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
-    <p className="text-[13px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
+    <p className="text-[13px] text-gray-500 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
     {/* A/B 스타일 전환 */}
@@ -23000,7 +23571,7 @@ flashRow(savedId);
     {/* 닫기 */}
      <button
       onClick={() => setCopyPanelOpen(false)}
-      className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 transition text-lg"
+      className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 transition text-lg"
     >
       ✕
     </button>
@@ -23540,7 +24111,7 @@ checkWarningStatus(c.거래처명, "거래처");
 <div className="p-4">
     <div className="relative" style={{overflow: "visible"}}>
       <input autoComplete="off"
-        className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
+        className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ4}
         onChange={e=>handleSmart4Input(e.target.value)}
@@ -23894,7 +24465,7 @@ value={copyTarget?.화물수량 || ""}
     <div>
       <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
       <textarea
-        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="메모를 입력하세요"
         value={copyTarget?.메모 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
@@ -23910,7 +24481,7 @@ value={copyTarget?.화물수량 || ""}
         </button>
       </div>
       <textarea
-        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="기사에게 전달할 내용"
         value={copyTarget?.전달사항 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
@@ -23926,7 +24497,7 @@ value={copyTarget?.화물수량 || ""}
     <div className="max-h-48 overflow-y-auto space-y-2">
       {[...copyTarget.history].reverse().map((h, i) => (
         <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
-          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="text-gray-500 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
           <span className="text-gray-500 shrink-0">{h.user}</span>
           <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
         </div>
@@ -23973,22 +24544,22 @@ value={copyTarget?.화물수량 || ""}
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 조회 운임 범위 ({fareResult.count}건)
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[18px] font-bold text-gray-400">~</span>
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
               <div className="absolute inset-0 bg-gray-200 rounded-full" />
               <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
                 style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
             </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
               <span>최저 {fareMin.toLocaleString()}원</span>
               <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
               <span>최고 {fareMax.toLocaleString()}원</span>
@@ -24002,9 +24573,9 @@ value={copyTarget?.화물수량 || ""}
                 <button key={label}
                   onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
-                  <div className="text-[10px] font-bold text-gray-400 group-hover:text-white/60 mb-1">{label}</div>
+                  <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-400 group-hover:text-white/50 mt-1">{sub}</div>
+                  <div className="text-[10px] text-gray-500 group-hover:text-white/50 mt-1">{sub}</div>
                 </button>
               ))}
             </div>
@@ -24147,7 +24718,7 @@ value={copyTarget?.화물수량 || ""}
                               <span className={`text-[11px] ml-1 font-semibold ${_diff4c > 0 ? "text-red-500" : "text-blue-500"}`}>
                                 {_diff4c > 0 ? `+${_diff4c.toLocaleString()}` : _diff4c.toLocaleString()}원
                               </span>
-                            ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                            ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                           </div>
                           <button
                             onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
@@ -24316,9 +24887,9 @@ value={copyTarget?.화물수량 || ""}
                   </div>
                   <div className="overflow-y-auto flex-1 p-5">
                     {rateSheetMatches4.length === 0 ? (
-                      <div className="text-center py-16 text-gray-400 text-[13px]">
+                      <div className="text-center py-16 text-gray-500 text-[13px]">
                         일치하는 단가표가 없습니다.<br/>
-                        <span className="text-[12px] text-gray-300">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
+                        <span className="text-[12px] text-gray-400">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -24334,9 +24905,9 @@ value={copyTarget?.화물수량 || ""}
                           <div key={sheet.id + row.id + i} className="rounded-xl border border-gray-200 overflow-hidden">
                             <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                               <div className="flex items-center gap-2 text-[12.5px]">
-                                <span className="text-gray-400">기준지</span>
+                                <span className="text-gray-500">기준지</span>
                                 <span className="font-bold text-[#1B2B4B]">{sheet.baseName || "-"}</span>
-                                <span className="text-gray-300">→</span>
+                                <span className="text-gray-400">→</span>
                                 <span className="font-bold text-[#1B2B4B]">{row.name}</span>
                               </div>
                               {nameHit
@@ -24360,7 +24931,7 @@ value={copyTarget?.화물수량 || ""}
                                       const isMatch = c.id === matchedColId;
                                       return (
                                         <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
-                                          {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                                          {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
                                           {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                                         </td>
                                       );
@@ -24422,22 +24993,22 @@ value={copyTarget?.화물수량 || ""}
           {/* 운임 범위 요약 */}
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 조회 운임 범위 ({fareResult.count}건)
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[18px] font-bold text-gray-400">~</span>
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
               <div className="absolute inset-0 bg-gray-200 rounded-full" />
               <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
                 style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
             </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
               <span>최저 {fareMin.toLocaleString()}원</span>
               <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
               <span>최고 {fareMax.toLocaleString()}원</span>
@@ -24456,9 +25027,9 @@ value={copyTarget?.화물수량 || ""}
                     setFarePanelOpen(false);
                   }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
-                  <div className="text-[10px] font-bold text-gray-400 group-hover:text-white/60 mb-1">{label}</div>
+                  <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-400 group-hover:text-white/50 mt-1">{sub}</div>
+                  <div className="text-[10px] text-gray-500 group-hover:text-white/50 mt-1">{sub}</div>
                 </button>
               ))}
             </div>
@@ -24602,7 +25173,7 @@ value={copyTarget?.화물수량 || ""}
                               <span className={`text-[11px] ml-1 font-semibold ${_diff4e > 0 ? "text-red-500" : "text-blue-500"}`}>
                                 {_diff4e > 0 ? `+${_diff4e.toLocaleString()}` : _diff4e.toLocaleString()}원
                               </span>
-                            ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                            ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                           </div>
                           <button
                             onClick={() => {
@@ -24675,7 +25246,7 @@ value={copyTarget?.화물수량 || ""}
                   className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${
                     rateSheetMatches4.length > 0
                       ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
-                      : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
                   }`}
                   title={rateSheetMatches4.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
                 >
@@ -24702,7 +25273,7 @@ value={copyTarget?.화물수량 || ""}
               </div>
               <div className="relative">
               <input autoComplete="off"
-                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.거래처명 || ""}
                 onChange={(e) => {
@@ -24779,7 +25350,7 @@ value={copyTarget?.화물수량 || ""}
               {showEditClientDropdown && (
                 <div ref={editClientDropdownListRef} className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
                   {editClientOptions.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-400">
+                    <div className="px-3 py-2 text-sm text-gray-500">
                       검색 결과 없음
                     </div>
                   ) : (
@@ -24824,7 +25395,7 @@ value={copyTarget?.화물수량 || ""}
   <div>
     <label>상차일</label>
     <CustomDatePicker
-      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.상차일 || ""}
       onChange={(e) =>
@@ -24844,7 +25415,7 @@ value={copyTarget?.화물수량 || ""}
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       />
       <CustomSelect
-        className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
+        className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-500"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={editTarget.상차시간기준 || ""}
         onChange={(e) =>
@@ -24862,7 +25433,7 @@ value={copyTarget?.화물수량 || ""}
   <div>
     <label>하차일</label>
     <CustomDatePicker
-      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.하차일 || ""}
       onChange={(e) =>
@@ -24882,7 +25453,7 @@ value={copyTarget?.화물수량 || ""}
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       />
       <CustomSelect
-        className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-400"
+        className="border p-2 rounded text-sm shrink-0 disabled:bg-gray-100 disabled:text-gray-500"
         disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
         value={editTarget.하차시간기준 || ""}
         onChange={(e) =>
@@ -24904,7 +25475,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3 relative">
               <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("pickup")} /></label>
               <input autoComplete="off"
-                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.상차지명 || ""}
                 onChange={(e) => {
@@ -25014,7 +25585,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3">
               <label>상차지주소</label>
               <input autoComplete="off"
-                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.상차지주소 || ""}
                 onChange={(e) =>
@@ -25025,15 +25596,15 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">상차지 담당자</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차지 연락처</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: formatPhone(e.target.value) }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">상차방법</label>
-                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
+                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
@@ -25073,7 +25644,7 @@ value={copyTarget?.화물수량 || ""}
               <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("drop")} /></label>
 
               <input autoComplete="off"
-                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.하차지명 || ""}
                 onChange={(e) => {
@@ -25183,7 +25754,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="mb-3">
               <label>하차지주소</label>
               <input autoComplete="off"
-                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.하차지주소 || ""}
                 onChange={(e) =>
@@ -25194,15 +25765,15 @@ value={copyTarget?.화물수량 || ""}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium">하차지 담당자</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차지 연락처</label>
-                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: formatPhone(e.target.value) }))} />
+                <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
                 <label className="text-sm font-medium">하차방법</label>
-                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
+                <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
                   <option value="수작업">수작업</option>
@@ -25251,7 +25822,7 @@ value={copyTarget?.화물수량 || ""}
 
   {/* 입력 */}
   <input autoComplete="off"
-    className="border p-2 rounded w-full pr-[110px] disabled:bg-gray-100 disabled:text-gray-400"
+    className="border p-2 rounded w-full pr-[110px] disabled:bg-gray-100 disabled:text-gray-500"
     disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
     value={editTarget.화물수량 || ""}
     onChange={(e) => {
@@ -25295,7 +25866,7 @@ value={copyTarget?.화물수량 || ""}
   <div>
     <label>차량종류</label>
     <CustomSelect
-      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.차량종류 || ""}
       onChange={(e) =>
@@ -25330,7 +25901,7 @@ value={copyTarget?.화물수량 || ""}
 
     {/* 🔹 입력창 */}
     <input autoComplete="off"
-      className="border p-2 rounded w-full pr-[70px] disabled:bg-gray-100 disabled:text-gray-400"
+      className="border p-2 rounded w-full pr-[70px] disabled:bg-gray-100 disabled:text-gray-500"
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.톤수값 || ""}
       onChange={(e) => {
@@ -25387,7 +25958,7 @@ value={copyTarget?.화물수량 || ""}
               <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">기사 스마트 검색</label>
               <div className="relative">
                 <input autoComplete="off"
-                  className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
+                  className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
                   placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
                   value={smartQ4}
                   onChange={e => handleSmart4Input(e.target.value)}
@@ -25640,9 +26211,9 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
+                <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-500 ml-1">(화주사 전용)</span>}</label>
                 <CustomSelect
-                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                   value={editTarget.지급방식 || ""}
                   onChange={(e) =>
@@ -25662,7 +26233,7 @@ value={copyTarget?.화물수량 || ""}
               <div>
                 <label>배차방식</label>
                 <CustomSelect
-                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
@@ -25734,7 +26305,7 @@ value={copyTarget?.화물수량 || ""}
                     .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(editTarget[k] ?? "") !== String(v ?? ""))
                     .map(([k, v]) => (
                       <div key={k} className="text-[11px] text-gray-700">
-                        <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(editTarget[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
+                        <span className="font-semibold">{k}</span>: <span className="text-gray-500">{String(editTarget[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
                       </div>
                     ))}
                 </div>
@@ -25776,9 +26347,9 @@ value={copyTarget?.화물수량 || ""}
                       .reverse()
                       .map((h, i) => (
                         <div key={i} className="flex items-start gap-2 text-[11px] pb-1.5 border-b border-gray-50 last:border-b-0">
-                          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="text-gray-500 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
                           <span className="text-gray-500 shrink-0">{h.user}</span>
-                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
+                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
                         </div>
                       ))}
                   </div>
@@ -25966,7 +26537,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                   {a.count}장 업로드
                 </div>
               </div>
-              <div className="mt-2 text-[11px] text-gray-400">클릭하면 바로 확인할 수 있습니다</div>
+              <div className="mt-2 text-[11px] text-gray-500">클릭하면 바로 확인할 수 있습니다</div>
             </div>
           </div>
         ))}
@@ -26050,7 +26621,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                     주의
                   </span>
                 )}
-                <span className="text-gray-300 group-hover:text-[#1B2B4B] text-lg transition">›</span>
+                <span className="text-gray-400 group-hover:text-[#1B2B4B] text-lg transition">›</span>
               </div>
             </div>
           </button>
@@ -26175,7 +26746,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-semibold text-gray-500 w-20">기사명</span>
       <span className={`flex-1 text-[14px] font-bold text-right ${
-        driverConfirmInfo.이름 ? "text-[#1B2B4B]" : "text-gray-400"
+        driverConfirmInfo.이름 ? "text-[#1B2B4B]" : "text-gray-500"
       }`}>
         {driverConfirmInfo.이름 || "정보 없음"}
       </span>
@@ -26184,7 +26755,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-semibold text-gray-500 w-20">연락처</span>
       <span className={`flex-1 text-[14px] font-bold text-right ${
-        driverConfirmInfo.전화번호 ? "text-[#1B2B4B]" : "text-gray-400"
+        driverConfirmInfo.전화번호 ? "text-[#1B2B4B]" : "text-gray-500"
       }`}>
         {formatPhone(driverConfirmInfo.전화번호) || "정보 없음"}
       </span>
@@ -26306,7 +26877,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       <button
         className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
           driverConfirmInfo.type === "new"
-            ? "bg-[#1B2B4B]/20 text-gray-400 cursor-not-allowed"
+            ? "bg-[#1B2B4B]/20 text-gray-500 cursor-not-allowed"
             : "bg-[#1B2B4B] hover:bg-[#243a60] text-white"
         }`}
         disabled={driverConfirmInfo.type === "new"}
@@ -26355,7 +26926,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                     <div className="font-bold text-[14px] text-gray-800">{d.이름 || "-"}</div>
                     <div className="text-[12px] text-gray-500 mt-0.5">{formatPhone(d.전화번호)}</div>
                   </div>
-                  {(d.등급 || d.grade) && <span className="text-[11px] font-semibold text-gray-400">{d.등급 || d.grade}</span>}
+                  {(d.등급 || d.grade) && <span className="text-[11px] font-semibold text-gray-500">{d.등급 || d.grade}</span>}
                 </button>
               ))}
             </div>
@@ -26531,6 +27102,34 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
             최적매칭
           </button>
+          {/* 스케줄표 — 선택한(없으면 우클릭한 1건) 오더들을 날짜별/기사별로 정리해
+              미리보기하고, 이미지/PDF저장·인쇄까지 할 수 있는 팝업을 연다. */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenu.row;
+              const targets = selected.length > 0 ? rows.filter(x => selected.includes(x._id)) : [r];
+              setScheduleChartRows(targets);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            스케줄표{selected.length > 1 ? ` (${selected.length}건)` : ""}
+          </button>
+          {/* 일괄수정 — 2건 이상 선택했을 때만 활성화. 선택한 오더들을 한 화면에
+              늘어놓고 운임/메모/전달사항 등을 일괄 또는 개별로 고쳐 한 번에 저장. */}
+          {selected.length > 1 && (
+            <button
+              className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+              onClick={() => {
+                setBulkEditRows(rows.filter(x => selected.includes(x._id)));
+                setContextMenu(null);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              일괄수정 ({selected.length}건)
+            </button>
+          )}
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
           <button
@@ -26543,7 +27142,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             삭제
-            <span className="ml-auto text-[11px] text-gray-400 font-mono">Del</span>
+            <span className="ml-auto text-[11px] text-gray-500 font-mono">Del</span>
           </button>
         </div>
       )}
@@ -26647,7 +27246,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {ctxAddrResults4.length === 0 ? (
-          <div className="text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+          <div className="text-center text-gray-500 text-[13px] py-8">검색 결과가 없습니다</div>
         ) : (
           <div className="space-y-2">
             {ctxAddrResults4.map((rec, idx) => {
@@ -26662,7 +27261,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                   )}
                   <div className="px-4 py-3 bg-white">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                      <span className="text-[12px] font-bold text-gray-500">{rec.상차일}</span>
                       <div className="flex gap-1">
                         {rec.긴급 === true && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>}
                         {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
@@ -26672,9 +27271,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                       </div>
                     </div>
                     <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
-                    <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
+                    <div className="text-[12px] text-gray-500 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <span className="text-[12px] text-gray-500">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
                       <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                     </div>
                   </div>
@@ -26732,22 +27331,22 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           )}
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 조회 운임 범위 ({ctxFare4Result.count}건)
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[18px] font-bold text-gray-400">~</span>
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
               <div className="absolute inset-0 bg-gray-200 rounded-full" />
               <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
                 style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
             </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
               <span>최저 {fareMin.toLocaleString()}원</span>
               <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
               <span>최고 {fareMax.toLocaleString()}원</span>
@@ -26760,9 +27359,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               ].map(({ label, sub, value }) => (
                 <div key={label}
                   className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-center">
-                  <div className="text-[10px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className="text-[10px] font-bold text-gray-500 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] leading-none">{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-400 mt-1">{sub}</div>
+                  <div className="text-[10px] text-gray-500 mt-1">{sub}</div>
                 </div>
               ))}
             </div>
@@ -26873,7 +27472,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                             <span className={`text-[11px] ml-1 font-semibold ${_diff4ctx > 0 ? "text-red-500" : "text-blue-500"}`}>
                               {_diff4ctx > 0 ? `+${_diff4ctx.toLocaleString()}` : _diff4ctx.toLocaleString()}원
                             </span>
-                          ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                          ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                         </div>
                       </div>
                     </div>
@@ -26930,9 +27529,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                       <div><b>차량</b> {r.차량번호||"-"} / {r.이름||"-"}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-3 text-center text-[12px]">
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">수수료</div><div className={`font-bold ${fee<0?"text-red-600":"text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">수수료</div><div className={`font-bold ${fee<0?"text-red-600":"text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
                     </div>
                   </div>
                 );
@@ -26974,16 +27573,16 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                 {copyOptions.map(({ type, label, desc, icon, primary }) => (
                   <button key={type} onClick={() => copyMessage(type)}
                     className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-colors ${primary ? "bg-[#1B2B4B] text-white" : "bg-gray-50 border border-gray-200 text-gray-800"}`}>
-                    <span className={primary ? "text-white/80" : "text-gray-400"}>{icon}</span>
+                    <span className={primary ? "text-white/80" : "text-gray-500"}>{icon}</span>
                     <div className="flex-1 min-w-0">
                       <div className={`text-[13px] font-semibold ${primary ? "text-white" : "text-gray-800"}`}>{label}</div>
-                      <div className={`text-[11px] mt-0.5 ${primary ? "text-white/70" : "text-gray-400"}`}>{desc}</div>
+                      <div className={`text-[11px] mt-0.5 ${primary ? "text-white/70" : "text-gray-500"}`}>{desc}</div>
                     </div>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={primary ? "rgba(255,255,255,0.6)" : "#CBD5E1"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                   </button>
                 ))}
                 <div className="pt-1 border-t border-gray-100">
-                  <p className="text-[11px] text-gray-400 text-center mb-2">이미지 복사 (카카오톡 전용)</p>
+                  <p className="text-[11px] text-gray-500 text-center mb-2">이미지 복사 (카카오톡 전용)</p>
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={copyAccountImage4} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-100 transition">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
@@ -27015,7 +27614,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                 <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.key}</div>
                 <div className="text-[13px] text-gray-800">
                   <span className="text-gray-500">{confirmChange.before || "없음"}</span>
-                  <span className="mx-2 text-gray-300">→</span>
+                  <span className="mx-2 text-gray-400">→</span>
                   <span className="font-bold text-[#1B2B4B]">{confirmChange.after}</span>
                 </div>
               </div>
@@ -27095,7 +27694,7 @@ setConfirmChange(null);
                       <div key={i} className="text-[14px] text-gray-800 leading-relaxed pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
                         <span className="font-bold">{d.label}</span>
                         <div className="mt-1 text-[13px] text-gray-500">
-                          {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-300">→</span>{" "}
+                          {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-400">→</span>{" "}
                           <span className="font-semibold text-emerald-700">{String(d.after ?? "없음") || "없음"}</span>
                         </div>
                       </div>
@@ -27268,7 +27867,7 @@ setConfirmChange(null);
                     <div className="text-[12px] font-semibold text-gray-500 mb-1">업체전달상태</div>
                     <div className="text-[13px] text-gray-800">
                       <span className="text-gray-500">{String(deliveryConfirm.before || "미전달")}</span>
-                      <span className="mx-2 text-gray-300">→</span>
+                      <span className="mx-2 text-gray-400">→</span>
                       <span className="font-bold text-[#1B2B4B]">{String(deliveryConfirm.after || "없음")}</span>
                     </div>
                   </>
@@ -27591,7 +28190,7 @@ setConfirmChange(null);
           <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0 flex items-center justify-between gap-4">
             <div>
               <div className="text-[11px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
+              <div className="text-[10px] text-gray-500 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
             </div>
             <button
               onClick={async () => {
@@ -27701,7 +28300,7 @@ setConfirmChange(null);
               <div className="border-t border-gray-100"/>
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
-                <div className="text-[11px] text-gray-400 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
+                <div className="text-[11px] text-gray-500 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
                 <div className="space-y-2 mb-3">
                   {tempFilterConditions.map((cond,idx)=>(
                     <div key={idx} className="flex gap-1.5 items-center">
@@ -27722,11 +28321,11 @@ setConfirmChange(null);
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
-                      <button className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
+                      <button className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
                     </div>
                   ))}
                 </div>
-                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
+                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
@@ -27748,7 +28347,7 @@ setConfirmChange(null);
         <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
       </span>
     ))}
-    <button className="ml-auto text-[11px] text-gray-400 hover:text-red-500" onClick={()=>setFilterConditions([])}>전체 해제</button>
+    <button className="ml-auto text-[11px] text-gray-500 hover:text-red-500" onClick={()=>setFilterConditions([])}>전체 해제</button>
   </div>
 )}
 {/* 오류오더 필터 활성 배너 */}
@@ -28063,7 +28662,7 @@ function NoteIconCell({ value = "", onSave }) {
                 />
               ) : (
                 <p className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed min-h-[40px]">
-                  {has ? clean : <span className="text-gray-400">전달사항이 없습니다.</span>}
+                  {has ? clean : <span className="text-gray-500">전달사항이 없습니다.</span>}
                 </p>
               )}
             </div>
@@ -28167,12 +28766,6 @@ const mergedClients = React.useMemo(() => {
 
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
-// 휴게 컬럼 접기/펼치기 — 항상 접힌 채로 시작하고, 메뉴를 옮겼다 와도(모듈이
-// 새로 로드되지 않는 한) 마지막 상태가 유지되도록 모듈 스코프 변수와 동기화한다.
-const [restExpanded, setRestExpanded] = React.useState(_restColumnExpandedShared);
-const toggleRestExpanded = React.useCallback(() => {
-  setRestExpanded(p => { const next = !p; _restColumnExpandedShared = next; return next; });
-}, []);
 
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
@@ -31122,6 +31715,22 @@ const filtered = React.useMemo(() => {
     return filtered.slice(start, end);
   }, [filtered, page]);
 
+  // 화면(현재 페이지)에 보이는 순서상 그 상/하차지명이 처음 등장하는 행의 id만
+  // 모아둔다 — 같은 업체가 여러 건이어도 휴게(점심시간) 아이콘이 첫 행에만 뜨게
+  // 하기 위함(RestCell의 isFirst prop으로 전달, 겹침 경고는 이 dedup과 무관하게 항상 표시).
+  const lunchFirstIds = React.useMemo(() => {
+    const pickup = new Set(), drop = new Set();
+    const seenP = new Set(), seenD = new Set();
+    for (const r of pageRows) {
+      const id = getId(r);
+      const pk = _lunchNameKey(r.상차지명);
+      if (pk && lunchByName.get(pk) && !seenP.has(pk)) { seenP.add(pk); pickup.add(id); }
+      const dk = _lunchNameKey(r.하차지명);
+      if (dk && lunchByName.get(dk) && !seenD.has(dk)) { seenD.add(dk); drop.add(id); }
+    }
+    return { pickup, drop };
+  }, [pageRows, lunchByName]);
+
   const statusSummary = React.useMemo(() => {
     let 미배차 = 0;
     let 완료 = 0;
@@ -31186,6 +31795,8 @@ const save = {
   // 우클릭 컨텍스트 메뉴 (배차현황)
   const [contextMenuDS, setContextMenuDS] = React.useState(null);
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
+  const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
+  const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
   React.useEffect(() => {
     const close = () => setContextMenuDS(null);
     const onKey = (e) => {
@@ -31638,7 +32249,7 @@ return (
       </div>
       <div ref={panelContactListRef5} className="relative p-5 grid grid-flow-col grid-rows-[repeat(5,min-content)] content-start auto-cols-[210px] gap-2 overflow-x-auto max-h-[70vh]">
         {visible5.length === 0 && (
-          <div className="text-sm text-gray-400 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
+          <div className="text-sm text-gray-500 text-center py-10 w-[210px]">검색 결과가 없습니다</div>
         )}
         {visible5.map(({ c, i }, vi) => (
           <div key={i}
@@ -31775,12 +32386,12 @@ return (
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
-          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap flex-shrink-0 ${page===0?"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
+          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap flex-shrink-0 ${page===0?"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
           ◀ 이전
         </button>
-        <span className="text-[11px] font-semibold text-gray-600 px-1 whitespace-nowrap flex-shrink-0">{page+1}<span className="text-gray-400"> / {Math.ceil(filtered.length/pageSize)}</span></span>
+        <span className="text-[11px] font-semibold text-gray-600 px-1 whitespace-nowrap flex-shrink-0">{page+1}<span className="text-gray-500"> / {Math.ceil(filtered.length/pageSize)}</span></span>
         <button disabled={(page+1)*pageSize>=filtered.length} onClick={()=>setPage(p=>p+1)}
-          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap flex-shrink-0 ${(page+1)*pageSize>=filtered.length?"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
+          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap flex-shrink-0 ${(page+1)*pageSize>=filtered.length?"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
           다음 ▶
         </button>
 
@@ -31789,7 +32400,7 @@ return (
             고르고 종료일을 고르는 중에도 목록이 계속 바뀌어 보였다. 조회 버튼이
             날짜용/검색어용 2개로 따로 있던 것도 혼란스러워 하나로 합쳤다.) */}
         <CustomDatePicker className="w-[150px] border border-gray-300 rounded-lg px-2 py-1.5 text-[13px] font-semibold flex-shrink-0 bg-white" value={startDate} onChange={(e)=>{setStartDate(e.target.value);}} />
-        <span className="text-gray-400 text-[13px] flex-shrink-0">~</span>
+        <span className="text-gray-500 text-[13px] flex-shrink-0">~</span>
         <CustomDatePicker className="w-[150px] border border-gray-300 rounded-lg px-2 py-1.5 text-[13px] font-semibold flex-shrink-0 bg-white" value={endDate} onChange={(e)=>{setEndDate(e.target.value);}} />
 
         {/* 검색창 (통합) — 조회 버튼이 날짜/검색어 공용이라, 날짜만 바꾸고 아직
@@ -31865,7 +32476,7 @@ return (
               <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
             </span>
           ))}
-          <button className="ml-auto text-[11px] text-gray-400 hover:text-red-500" onClick={()=>setFilterConditions([])}>전체 해제</button>
+          <button className="ml-auto text-[11px] text-gray-500 hover:text-red-500" onClick={()=>setFilterConditions([])}>전체 해제</button>
         </div>
       )}
       {/* ★ 포커스 해제 버튼 */}
@@ -31890,11 +32501,11 @@ return (
             <tr>
               {[
                 "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-                "거래처명", "상차지명", "상차휴게", "상차지주소", "하차지명", "하차휴게", "하차지주소",
+                "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
-              ].filter((h) => restExpanded || (h !== "상차휴게" && h !== "하차휴게")).map((h) => (
+              ].map((h) => (
                 <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
                   {h === "선택" ? (
                     <input autoComplete="off"
@@ -31902,8 +32513,6 @@ return (
                       onChange={() => toggleAll(filtered)}
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
-                  ) : h === "상차휴게" || h === "하차휴게" ? (
-                    "휴게"
                   ) : h}
                 </th>
               ))}
@@ -31913,7 +32522,7 @@ return (
           <tbody>
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={restExpanded ? 31 : 29} className="py-16 text-center text-[13px] text-gray-400">
+                <td colSpan={29} className="py-16 text-center text-[13px] text-gray-500">
                   조회된 결과가 없습니다.
                 </td>
               </tr>
@@ -32008,24 +32617,17 @@ return (
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
 {[
   "상차일", "상차시간", "하차일", "하차시간",
-  "거래처명", "상차지명", "상차휴게", "상차지주소",
-  "하차지명", "하차휴게", "하차지주소",
+  "거래처명", "상차지명", "상차지주소",
+  "하차지명", "하차지주소",
   "화물내용", "차량종류", "차량톤수",
-].filter((key) => restExpanded || (key !== "상차휴게" && key !== "하차휴게")).map((key) => (
+].map((key) => (
   <td
     key={`${id}-${key}`}
     className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap"
   >
 
-    {/* 휴게(점심시간) — 상/하차지에 점심시간이 등록된 경우만 표시 */}
-    {key === "상차휴게" ? (
-      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} expanded={restExpanded} />
-
-    ) : key === "하차휴게" ? (
-      <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} expanded={restExpanded} />
-
-    ) : /* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */
-    key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
+    {/* ✅ 차량종류 즉시변경 드롭다운 — 화주사 오더는 최고관리자만 변경 가능 */}
+    {key === "차량종류" && (row.source === "shipper" || row.source === "shipper_mobile") ? (
       <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
@@ -32069,7 +32671,7 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(row.상차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} isFirst={lunchFirstIds.pickup.has(id)} />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -32083,7 +32685,7 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestToggleArrow show={!!lunchByName.get(_lunchNameKey(row.하차지명))} expanded={restExpanded} onToggle={toggleRestExpanded} />
+    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} isFirst={lunchFirstIds.drop.has(id)} />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
@@ -32430,7 +33032,7 @@ return (
                   className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${
                     rateSheetMatches5.length > 0
                       ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
-                      : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
                   }`}
                   title={rateSheetMatches5.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
                 >
@@ -32454,7 +33056,7 @@ return (
               </div>
               <div className="relative">
               <input autoComplete="off"
-                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                 value={editTarget.거래처명 || ""}
                 onChange={(e) => {
@@ -33104,7 +33706,7 @@ return (
               <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">기사 스마트 검색</label>
               <div className="relative">
                 <input autoComplete="off"
-                  className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
+                  className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
                   placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
                   value={smartQ5}
                   onChange={e => handleSmart5Input(e.target.value)}
@@ -33355,9 +33957,9 @@ return (
             {/* ------------------------------------------------ */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-400 ml-1">(화주사 전용)</span>}</label>
+                <label>지급방식{(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile") && <span className="text-[11px] text-gray-500 ml-1">(화주사 전용)</span>}</label>
                 <CustomSelect
-                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                   disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
                   value={editTarget.지급방식 || ""}
                   onChange={(e) =>
@@ -33377,7 +33979,7 @@ return (
               <div>
                 <label>배차방식</label>
                 <CustomSelect
-                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-400"
+                  className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                   value={editTarget.배차방식 || ""}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
@@ -33452,7 +34054,7 @@ return (
                     .filter(([k, v]) => !IGNORE_HISTORY_FIELDS.has(k) && String(editTarget[k] ?? "") !== String(v ?? ""))
                     .map(([k, v]) => (
                       <div key={k} className="text-[11px] text-gray-700">
-                        <span className="font-semibold">{k}</span>: <span className="text-gray-400">{String(editTarget[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
+                        <span className="font-semibold">{k}</span>: <span className="text-gray-500">{String(editTarget[k] ?? "없음") || "없음"}</span> → <span className="font-semibold text-sky-700">{String(v ?? "없음") || "없음"}</span>
                       </div>
                     ))}
                 </div>
@@ -33494,9 +34096,9 @@ return (
                       .reverse()
                       .map((h, i) => (
                         <div key={i} className="flex items-start gap-2 text-[11px] pb-1.5 border-b border-gray-50 last:border-b-0">
-                          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="text-gray-500 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
                           <span className="text-gray-500 shrink-0">{h.user}</span>
-                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
+                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
                         </div>
                       ))}
                   </div>
@@ -33667,6 +34269,12 @@ return (
       {fareCertRow && (
         <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
       )}
+      {scheduleChartRows && (
+        <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
+      )}
+      {bulkEditRows && (
+        <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+      )}
       {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
   <div
@@ -33702,7 +34310,7 @@ return (
 >
   <div>
     <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
-    <p className="text-[13px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
+    <p className="text-[13px] text-gray-500 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
     {/* A/B 스타일 전환 */}
@@ -34319,7 +34927,7 @@ setCopyPlaceOptions(list);
   <div className="p-4">
     <div className="relative">
       <input autoComplete="off"
-        className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
+        className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ5}
         onChange={e=>handleSmart5Input(e.target.value)}
@@ -34654,7 +35262,7 @@ setCopyPlaceOptions(list);
     <div>
       <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
       <textarea
-        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="메모를 입력하세요"
         value={copyTarget?.메모 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
@@ -34670,7 +35278,7 @@ setCopyPlaceOptions(list);
         </button>
       </div>
       <textarea
-        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="기사에게 전달할 내용"
         value={copyTarget?.전달사항 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
@@ -34686,7 +35294,7 @@ setCopyPlaceOptions(list);
     <div className="max-h-48 overflow-y-auto space-y-2">
       {[...copyTarget.history].reverse().map((h, i) => (
         <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
-          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="text-gray-500 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
           <span className="text-gray-500 shrink-0">{h.user}</span>
           <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
         </div>
@@ -34733,22 +35341,22 @@ setCopyPlaceOptions(list);
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 조회 운임 범위 ({fareResult.count}건)
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[18px] font-bold text-gray-400">~</span>
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
               <div className="absolute inset-0 bg-gray-200 rounded-full" />
               <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
                 style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
             </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
               <span>최저 {fareMin.toLocaleString()}원</span>
               <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
               <span>최고 {fareMax.toLocaleString()}원</span>
@@ -34762,9 +35370,9 @@ setCopyPlaceOptions(list);
                 <button key={label}
                   onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
-                  <div className="text-[10px] font-bold text-gray-400 group-hover:text-white/60 mb-1">{label}</div>
+                  <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-400 group-hover:text-white/50 mt-1">{sub}</div>
+                  <div className="text-[10px] text-gray-500 group-hover:text-white/50 mt-1">{sub}</div>
                 </button>
               ))}
             </div>
@@ -34907,7 +35515,7 @@ setCopyPlaceOptions(list);
                               <span className={`text-[11px] ml-1 font-semibold ${_diff5c > 0 ? "text-red-500" : "text-blue-500"}`}>
                                 {_diff5c > 0 ? `+${_diff5c.toLocaleString()}` : _diff5c.toLocaleString()}원
                               </span>
-                            ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                            ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                           </div>
                           <button
                             onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
@@ -35008,9 +35616,9 @@ setCopyPlaceOptions(list);
             </div>
             <div className="overflow-y-auto flex-1 p-5">
               {rateSheetMatches5.length === 0 ? (
-                <div className="text-center py-16 text-gray-400 text-[13px]">
+                <div className="text-center py-16 text-gray-500 text-[13px]">
                   일치하는 단가표가 없습니다.<br/>
-                  <span className="text-[12px] text-gray-300">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
+                  <span className="text-[12px] text-gray-400">단가표 메뉴 → 다목적지 단가표에서 해당 하차지를 등록하면 여기서 바로 확인할 수 있습니다.</span>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -35026,9 +35634,9 @@ setCopyPlaceOptions(list);
                     <div key={sheet.id + row.id + i} className="rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                         <div className="flex items-center gap-2 text-[12.5px]">
-                          <span className="text-gray-400">기준지</span>
+                          <span className="text-gray-500">기준지</span>
                           <span className="font-bold text-[#1B2B4B]">{sheet.baseName || "-"}</span>
-                          <span className="text-gray-300">→</span>
+                          <span className="text-gray-400">→</span>
                           <span className="font-bold text-[#1B2B4B]">{row.name}</span>
                         </div>
                         {nameHit
@@ -35052,7 +35660,7 @@ setCopyPlaceOptions(list);
                                 const isMatch = c.id === matchedColId;
                                 return (
                                   <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
-                                    {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-300">-</span>}
+                                    {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
                                     {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                                   </td>
                                 );
@@ -35111,22 +35719,22 @@ setCopyPlaceOptions(list);
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 조회 운임 범위 ({fareResult.count}건)
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[18px] font-bold text-gray-400">~</span>
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
               <div className="absolute inset-0 bg-gray-200 rounded-full" />
               <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
                 style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
             </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
               <span>최저 {fareMin.toLocaleString()}원</span>
               <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
               <span>최고 {fareMax.toLocaleString()}원</span>
@@ -35143,9 +35751,9 @@ setCopyPlaceOptions(list);
                     setFareModalOpen(false);
                   }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
-                  <div className="text-[10px] font-bold text-gray-400 group-hover:text-white/60 mb-1">{label}</div>
+                  <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-400 group-hover:text-white/50 mt-1">{sub}</div>
+                  <div className="text-[10px] text-gray-500 group-hover:text-white/50 mt-1">{sub}</div>
                 </button>
               ))}
             </div>
@@ -35201,7 +35809,7 @@ setCopyPlaceOptions(list);
                     )}
                     <div className="px-4 py-3 bg-white">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <span className="text-[12px] font-bold text-gray-500">{rec.상차일}</span>
                         <div className="flex gap-1">
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
@@ -35221,7 +35829,7 @@ setCopyPlaceOptions(list);
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
-                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                      <div className="text-[12px] font-semibold text-gray-500 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
                       </div>
@@ -35332,14 +35940,14 @@ setCopyPlaceOptions(list);
                 <div className="border-t border-gray-200" />
                 <div className="flex items-center justify-between">
                   <span className="text-[13px] font-semibold text-gray-500 w-20">기사명</span>
-                  <span className={`flex-1 text-[14px] font-bold text-right ${driverConfirmInfo.driver?.이름 ? "text-[#1B2B4B]" : "text-gray-400"}`}>
+                  <span className={`flex-1 text-[14px] font-bold text-right ${driverConfirmInfo.driver?.이름 ? "text-[#1B2B4B]" : "text-gray-500"}`}>
                     {driverConfirmInfo.driver?.이름 || "정보 없음"}
                   </span>
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex items-center justify-between">
                   <span className="text-[13px] font-semibold text-gray-500 w-20">연락처</span>
-                  <span className={`flex-1 text-[14px] font-bold text-right ${driverConfirmInfo.driver?.전화번호 ? "text-[#1B2B4B]" : "text-gray-400"}`}>
+                  <span className={`flex-1 text-[14px] font-bold text-right ${driverConfirmInfo.driver?.전화번호 ? "text-[#1B2B4B]" : "text-gray-500"}`}>
                     {formatPhone(driverConfirmInfo.driver?.전화번호 || "") || "정보 없음"}
                   </span>
                 </div>
@@ -35420,7 +36028,7 @@ setCopyPlaceOptions(list);
                     disabled={driverConfirmInfo.type === "new"}
                     className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
                       driverConfirmInfo.type === "new"
-                        ? "bg-[#1B2B4B]/20 text-gray-400 cursor-not-allowed"
+                        ? "bg-[#1B2B4B]/20 text-gray-500 cursor-not-allowed"
                         : "bg-[#1B2B4B] hover:bg-[#243a60] text-white"
                     }`}
                     onClick={async () => {
@@ -35514,7 +36122,7 @@ setCopyPlaceOptions(list);
                       {d.등급 === "주의" && (
                         <span className="px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-bold">주의</span>
                       )}
-                      <span className="text-gray-300 group-hover:text-[#1B2B4B] text-lg transition">›</span>
+                      <span className="text-gray-400 group-hover:text-[#1B2B4B] text-lg transition">›</span>
                     </div>
                   </div>
                 </button>
@@ -35571,9 +36179,9 @@ setCopyPlaceOptions(list);
                       <div><b>차량</b> {r.차량번호 || "-"} / {r.이름 || "-"}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-3 text-center text-[12px]">
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-400 text-[10px]">수수료</div><div className={`font-bold ${fee < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">수수료</div><div className={`font-bold ${fee < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
                     </div>
                   </div>
                 );
@@ -35627,7 +36235,7 @@ setCopyPlaceOptions(list);
                 기사 전달용 (상세 + 전달메시지)
               </button>
               <div className="border-t border-gray-100 pt-2 mt-1 space-y-2">
-                <p className="text-[11px] text-gray-400 text-center">이미지 복사 (카카오톡 전용)</p>
+                <p className="text-[11px] text-gray-500 text-center">이미지 복사 (카카오톡 전용)</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={copyAccountImage5} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
                     계좌 이미지
@@ -35637,7 +36245,7 @@ setCopyPlaceOptions(list);
                   </button>
                 </div>
               </div>
-              <button onClick={() => { setCopyModalOpen(false); setSelected(new Set()); }} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
+              <button onClick={() => { setCopyModalOpen(false); setSelected(new Set()); }} className="w-full py-2 text-[12px] text-gray-500 hover:text-gray-600 transition">
                 취소
               </button>
             </div>
@@ -35725,7 +36333,7 @@ setCopyPlaceOptions(list);
                       <div key={i} className="text-[14px] text-gray-800 leading-relaxed pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
                         <span className="font-bold">{d.label}</span>
                         <div className="mt-1 text-[13px] text-gray-500">
-                          {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-300">→</span>{" "}
+                          {String(d.before ?? "없음") || "없음"} <span className="mx-1 text-gray-400">→</span>{" "}
                           <span className="font-semibold text-emerald-700">{String(d.after ?? "없음") || "없음"}</span>
                         </div>
                       </div>
@@ -35834,7 +36442,7 @@ setCopyPlaceOptions(list);
                     <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.field}</div>
                     <div className="text-[13px] text-gray-800">
                       <span className="text-gray-500">{String(confirmChange.before || "없음")}</span>
-                      <span className="mx-2 text-gray-300">→</span>
+                      <span className="mx-2 text-gray-400">→</span>
                       <span className="font-bold text-[#1B2B4B]">{String(confirmChange.after || "없음")}</span>
                     </div>
                   </>
@@ -35883,7 +36491,7 @@ setCopyPlaceOptions(list);
               <div className="border-t border-gray-100"/>
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
-                <div className="text-[11px] text-gray-400 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
+                <div className="text-[11px] text-gray-500 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
                 <div className="space-y-2 mb-3">
                   {tempFilterConditions.map((cond,idx)=>(
                     <div key={idx} className="flex gap-1.5 items-center">
@@ -35904,11 +36512,11 @@ setCopyPlaceOptions(list);
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
                       )}
-                      <button className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
+                      <button className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
                     </div>
                   ))}
                 </div>
-                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
+                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
@@ -35948,7 +36556,7 @@ setCopyPlaceOptions(list);
                     <div className="font-bold text-[14px] text-gray-800">{d.이름 || "-"}</div>
                     <div className="text-[12px] text-gray-500 mt-0.5">{formatPhone(d.전화번호)}</div>
                   </div>
-                  {(d.등급 || d.grade) && <span className="text-[11px] font-semibold text-gray-400">{d.등급 || d.grade}</span>}
+                  {(d.등급 || d.grade) && <span className="text-[11px] font-semibold text-gray-500">{d.등급 || d.grade}</span>}
                 </button>
               ))}
             </div>
@@ -36185,7 +36793,7 @@ setCopyPlaceOptions(list);
           <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0 flex items-center justify-between gap-4">
             <div>
               <div className="text-[11px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
+              <div className="text-[10px] text-gray-500 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
             </div>
             <button
               onClick={async () => {
@@ -36471,12 +37079,36 @@ setCopyPlaceOptions(list);
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
             최적매칭
           </button>
+          {/* 스케줄표 — 선택한(없으면 우클릭한 1건) 오더들을 날짜별/기사별로 정리해
+              미리보기하고, 이미지/PDF저장·인쇄까지 할 수 있는 팝업을 연다. */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenuDS.row;
+              const targets = selected.size > 0 ? filtered.filter(x => selected.has(getId(x))) : [r];
+              setScheduleChartRows(targets);
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            스케줄표{selected.size > 1 ? ` (${selected.size}건)` : ""}
+          </button>
+          {/* 일괄수정 — 2건 이상 선택했을 때만 활성화. 선택한 오더들을 한 화면에
+              늘어놓고 운임/메모/전달사항 등을 일괄 또는 개별로 고쳐 한 번에 저장. */}
+          {selected.size > 1 && (
+            <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+              onClick={() => {
+                setBulkEditRows(filtered.filter(x => selected.has(getId(x))));
+                setContextMenuDS(null);
+              }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              일괄수정 ({selected.size}건)
+            </button>
+          )}
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
             onClick={() => { setSelected(new Set([getId(contextMenuDS.row)])); setShowDeletePopup(true); setContextMenuDS(null); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             삭제
-            <span className="ml-auto text-[11px] text-gray-400 font-mono">Del</span>
+            <span className="ml-auto text-[11px] text-gray-500 font-mono">Del</span>
           </button>
         </div>
       )}
@@ -36580,7 +37212,7 @@ setCopyPlaceOptions(list);
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {ctxAddrResults5.length === 0 ? (
-          <div className="text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+          <div className="text-center text-gray-500 text-[13px] py-8">검색 결과가 없습니다</div>
         ) : (
           <div className="space-y-2">
             {ctxAddrResults5.map((rec, idx) => {
@@ -36595,7 +37227,7 @@ setCopyPlaceOptions(list);
                   )}
                   <div className="px-4 py-3 bg-white">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                      <span className="text-[12px] font-bold text-gray-500">{rec.상차일}</span>
                       <div className="flex gap-1">
                         {rec.긴급 === true && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-red-600 text-white">긴급</span>}
                         {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
@@ -36605,9 +37237,9 @@ setCopyPlaceOptions(list);
                       </div>
                     </div>
                     <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
-                    <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
+                    <div className="text-[12px] text-gray-500 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <span className="text-[12px] text-gray-500">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
                       <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                     </div>
                   </div>
@@ -36665,22 +37297,22 @@ setCopyPlaceOptions(list);
           )}
           <div className="px-6 py-5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 조회 운임 범위 ({ctxFare5Result.count}건)
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[18px] font-bold text-gray-400">~</span>
               <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
               <div className="absolute inset-0 bg-gray-200 rounded-full" />
               <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
                 style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
             </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
               <span>최저 {fareMin.toLocaleString()}원</span>
               <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
               <span>최고 {fareMax.toLocaleString()}원</span>
@@ -36693,9 +37325,9 @@ setCopyPlaceOptions(list);
               ].map(({ label, sub, value }) => (
                 <div key={label}
                   className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-center">
-                  <div className="text-[10px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className="text-[10px] font-bold text-gray-500 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] leading-none">{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-400 mt-1">{sub}</div>
+                  <div className="text-[10px] text-gray-500 mt-1">{sub}</div>
                 </div>
               ))}
             </div>
@@ -36834,7 +37466,7 @@ setCopyPlaceOptions(list);
                             <span className={`text-[11px] ml-1 font-semibold ${_diff5ctx > 0 ? "text-red-500" : "text-blue-500"}`}>
                               {_diff5ctx > 0 ? `+${_diff5ctx.toLocaleString()}` : _diff5ctx.toLocaleString()}원
                             </span>
-                          ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                          ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                         </div>
                       </div>
                     </div>
@@ -36994,7 +37626,7 @@ function AddressCell({ text = "", max = 5, valueClassName = "", popupTitle = "�
   const isLong = clean.length > max;
   const short = isLong ? clean.slice(0, max) + "…" : clean;
 
-  if (!clean) return <span className="text-gray-400">-</span>;
+  if (!clean) return <span className="text-gray-500">-</span>;
 
   return (
     <div className="relative inline-block">
@@ -37032,7 +37664,7 @@ function AddressCell({ text = "", max = 5, valueClassName = "", popupTitle = "�
 /* ---------------------- 메모 더보기 ---------------------- */
 function MemoCell({ text }) {
   const [showFull, setShowFull] = React.useState(false);
-  if (!text) return <span className="text-gray-400">-</span>;
+  if (!text) return <span className="text-gray-500">-</span>;
 
   const clean = String(text);
   const short = clean.length > 5 ? clean.slice(0, 5) + "…" : clean;
@@ -37689,7 +38321,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
   const yearTotal = (fn) => MONTHS.reduce((s, m) => s + fn(m), 0);
 
   const cellClass = (v) => {
-    if (v === 0) return "text-gray-300";
+    if (v === 0) return "text-gray-400";
     return v > 0 ? "text-gray-800" : "text-rose-600";
   };
 
@@ -37745,7 +38377,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
 
   const RateCell = ({ profit, revenue }) => (
     <td className={`px-1 py-0.5 text-center border-r border-gray-100 text-[11px] font-medium ${
-      revenue ? (profit / revenue >= 0 ? "text-emerald-600" : "text-rose-500") : "text-gray-300"
+      revenue ? (profit / revenue >= 0 ? "text-emerald-600" : "text-rose-500") : "text-gray-400"
     }`}>
       {pct(profit, revenue)}
     </td>
@@ -37763,10 +38395,10 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
 
   const MomRow = ({ calcFn }) => (
     <tr className="border-t border-gray-50">
-      <td className="px-3 py-0.5 text-[10px] text-gray-400 whitespace-nowrap border-r border-gray-200 pl-8">전월대비</td>
+      <td className="px-3 py-0.5 text-[10px] text-gray-500 whitespace-nowrap border-r border-gray-200 pl-8">전월대비</td>
       {MONTHS.map(m => {
         const p = momPct(calcFn, m);
-        if (p === null) return <td key={m} className="px-1 py-0.5 text-center border-r border-gray-100 text-[10px] text-gray-300">–</td>;
+        if (p === null) return <td key={m} className="px-1 py-0.5 text-center border-r border-gray-100 text-[10px] text-gray-400">–</td>;
         const isPos = p >= 0;
         return (
           <td key={m} className="px-1 py-0.5 text-center border-r border-gray-100 text-[10px] font-semibold"
@@ -37789,10 +38421,10 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
     <tr className="bg-gray-100 border-t border-gray-200">
       <td className="px-3 py-1 text-[12px] font-semibold text-gray-700 whitespace-nowrap border-r border-gray-200 w-[140px]">
         {label}
-        {note && <span className="ml-1 text-[10px] text-gray-400 font-normal">{note}</span>}
+        {note && <span className="ml-1 text-[10px] text-gray-500 font-normal">{note}</span>}
       </td>
       {MONTHS.map((m, i) => (
-        <td key={m} className="px-1 py-1 text-center text-[11px] text-gray-400 font-medium border-r border-gray-200 w-[72px]">
+        <td key={m} className="px-1 py-1 text-center text-[11px] text-gray-500 font-medium border-r border-gray-200 w-[72px]">
           {MONTH_LABELS[i]}
         </td>
       ))}
@@ -38003,7 +38635,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-[16px] font-bold text-[#1B2B4B]">손익보고서</h2>
-          <p className="text-[12px] text-gray-400 mt-0.5">자동 집계 항목 외 수동 입력 항목은 셀을 클릭하거나 엑셀로 업로드하세요</p>
+          <p className="text-[12px] text-gray-500 mt-0.5">자동 집계 항목 외 수동 입력 항목은 셀을 클릭하거나 엑셀로 업로드하세요</p>
         </div>
         <div className="flex items-center gap-2">
           {saving && <span className="text-[12px] text-blue-500">저장 중...</span>}
@@ -38084,7 +38716,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-[11px] text-gray-400">* 자동: 배차완료 기준 청구운임(매출) / 기사운임(운반비) 자동 집계 &nbsp;|&nbsp; 빈 셀 클릭 시 수동 입력 (Firestore 저장)</p>
+      <p className="mt-3 text-[11px] text-gray-500">* 자동: 배차완료 기준 청구운임(매출) / 기사운임(운반비) 자동 집계 &nbsp;|&nbsp; 빈 셀 클릭 시 수동 입력 (Firestore 저장)</p>
 
       {/* ── 엑셀 업로드 미리보기 모달 ── */}
       {importPreview && (
@@ -38121,10 +38753,10 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
                           const current = currentRow[m] || 0;
                           const changed = imported !== null && imported !== current;
                           return (
-                            <td key={m} className={`px-1 py-1.5 border border-gray-100 text-right ${changed ? "text-[#1B2B4B] font-bold" : "text-gray-400"}`}>
+                            <td key={m} className={`px-1 py-1.5 border border-gray-100 text-right ${changed ? "text-[#1B2B4B] font-bold" : "text-gray-500"}`}>
                               {imported !== null ? (
                                 <span>
-                                  {changed && current !== 0 && <span className="text-gray-300 line-through text-[10px] block">{current.toLocaleString()}</span>}
+                                  {changed && current !== 0 && <span className="text-gray-400 line-through text-[10px] block">{current.toLocaleString()}</span>}
                                   <span>{imported !== 0 ? imported.toLocaleString() : "–"}</span>
                                 </span>
                               ) : ""}
@@ -38136,7 +38768,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
                   }).filter(Boolean)}
                 </tbody>
               </table>
-              <p className="text-[11px] text-gray-400 mt-3">파란색 배경 = 변경되는 항목 · 굵은 글씨 = 현재 값과 다른 항목 · 취소선 = 기존 값</p>
+              <p className="text-[11px] text-gray-500 mt-3">파란색 배경 = 변경되는 항목 · 굵은 글씨 = 현재 값과 다른 항목 · 취소선 = 기존 값</p>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end shrink-0">
               <button className="px-5 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50" onClick={() => setImportPreview(null)}>취소</button>
@@ -38334,11 +38966,11 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
   const KpiCard = ({ label, value, sub, highlight }) => (
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "16px 20px" }}>
-      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</div>
+      <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">{label}</div>
       <div className={`text-[20px] font-bold ${highlight === "danger" ? "text-red-600" : highlight === "ok" ? "text-emerald-700" : "text-[#1B2B4B]"}`}>
         {value}
       </div>
-      {sub && <div className="text-[11px] text-gray-400 mt-1">{sub}</div>}
+      {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );
 
@@ -38356,7 +38988,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-[16px] font-bold text-[#1B2B4B]">회계자료</h2>
-          <p className="text-[12px] text-gray-400 mt-0.5">미수금·지급현황·부가세·원가분석을 한 곳에서 관리하세요</p>
+          <p className="text-[12px] text-gray-500 mt-0.5">미수금·지급현황·부가세·원가분석을 한 곳에서 관리하세요</p>
         </div>
         <div className="flex items-center gap-2">
           {saving && <span className="text-[12px] text-blue-500">저장 중...</span>}
@@ -38372,7 +39004,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       <div className="flex gap-0 border-b border-gray-200 mb-6">
         {[["ar","미수금 현황"],["ap","지급 현황"],["vat","부가세 자료"],["cost","원가 분석"]].map(([k, label]) => (
           <button key={k} onClick={() => setSubTab(k)}
-            className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+            className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
             {label}
           </button>
         ))}
@@ -38420,7 +39052,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
                           </button>
                           {r.paid > 0 && (
                             <button onClick={() => resetPayment("ar", r.client)}
-                              className="px-2 py-1 rounded-md border border-gray-200 text-gray-400 text-[11px] hover:bg-gray-50 transition">
+                              className="px-2 py-1 rounded-md border border-gray-200 text-gray-500 text-[11px] hover:bg-gray-50 transition">
                               초기화
                             </button>
                           )}
@@ -38432,7 +39064,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-gray-400">* 배차완료 기준 청구운임 합계. 입금 처리 시 Firestore에 저장됩니다.</p>
+          <p className="text-[11px] text-gray-500">* 배차완료 기준 청구운임 합계. 입금 처리 시 Firestore에 저장됩니다.</p>
         </div>
       )}
 
@@ -38474,7 +39106,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
                         </button>
                         {r.paid > 0 && (
                           <button onClick={() => resetPayment("ap", r.driver)}
-                            className="px-2 py-1 rounded-md border border-gray-200 text-gray-400 text-[11px] hover:bg-gray-50 transition">
+                            className="px-2 py-1 rounded-md border border-gray-200 text-gray-500 text-[11px] hover:bg-gray-50 transition">
                             초기화
                           </button>
                         )}
@@ -38485,7 +39117,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-gray-400">* 배차완료 기준 기사운임 합계. 지급 처리 시 Firestore에 저장됩니다.</p>
+          <p className="text-[11px] text-gray-500">* 배차완료 기준 기사운임 합계. 지급 처리 시 Firestore에 저장됩니다.</p>
         </div>
       )}
 
@@ -38558,7 +39190,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-gray-400">* 배차완료 청구운임을 과세표준(공급가액)으로, 기사운임을 매입가액으로 산정합니다. 실제 신고 시 세무사 확인을 권장합니다.</p>
+          <p className="text-[11px] text-gray-500">* 배차완료 청구운임을 과세표준(공급가액)으로, 기사운임을 매입가액으로 산정합니다. 실제 신고 시 세무사 확인을 권장합니다.</p>
         </div>
       )}
 
@@ -38693,7 +39325,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
         <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4" onClick={() => setArModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">입금 처리</div>
-            <div className="text-[12px] text-gray-400 mb-4">{arModal}</div>
+            <div className="text-[12px] text-gray-500 mb-4">{arModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미수금 잔액: <strong>{(arByClient.find(r => r.client === arModal)?.outstanding || 0).toLocaleString()}원</strong></div>
             <input autoComplete="off"
               type="number"
@@ -38721,7 +39353,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
         <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4" onClick={() => setApModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">지급 처리</div>
-            <div className="text-[12px] text-gray-400 mb-4">{apModal}</div>
+            <div className="text-[12px] text-gray-500 mb-4">{apModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미지급 잔액: <strong>{(apByDriver.find(r => r.driver === apModal)?.outstanding || 0).toLocaleString()}원</strong></div>
             <input autoComplete="off"
               type="number"
@@ -39082,7 +39714,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   <div className="flex items-center justify-between">
     <div>
       <h1 className="text-[20px] font-bold text-[#1B2B4B] tracking-tight">매출관리</h1>
-      <p className="text-[12px] text-gray-400 mt-1">매출 · 수익 · 거래처 분석 리포트</p>
+      <p className="text-[12px] text-gray-500 mt-1">매출 · 수익 · 거래처 분석 리포트</p>
     </div>
     <div className="flex items-center gap-2">
       <button
@@ -39134,7 +39766,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
                 activeTab === tab.key
                   ? "border-[#1B2B4B] text-[#1B2B4B]"
-                  : "border-transparent text-gray-400 hover:text-gray-600"
+                  : "border-transparent text-gray-500 hover:text-gray-600"
               }`}
             >
               {tab.label}
@@ -39273,7 +39905,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                       <td className="border p-2 text-gray-600">{won(data.driver)}</td>
                       <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
                       <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
-                      <td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-400"}`}>
+                      <td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-500"}`}>
                         {key ? rateText(vr[key]) : "—"}
                       </td>
                     </tr>
@@ -39312,7 +39944,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                       <td className="border p-2 text-gray-600">{won(data.driver)}</td>
                       <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
                       <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
-                      <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-400"}`}>
+                      <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-500"}`}>
                         {key ? rateText(vrPure[key]) : "—"}
                       </td>
                     </tr>
@@ -39404,7 +40036,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                         ))}
                       </div>
                     )}
-                    <div className="text-[11px] text-gray-400">선택: {rangeClients.length}개</div>
+                    <div className="text-[11px] text-gray-500">선택: {rangeClients.length}개</div>
                   </div>
                 </div>
 
@@ -39454,7 +40086,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 function PeriodTrendChart({ data = [] }) {
   if (!data.length) {
     return (
-      <div className="h-[260px] flex items-center justify-center text-[13px] text-gray-400">
+      <div className="h-[260px] flex items-center justify-center text-[13px] text-gray-500">
         조회된 데이터가 없습니다
       </div>
     );
@@ -39614,10 +40246,10 @@ function SalesInsightPanel({ monthRows = [], allRows = [], targetMonth = "" }) {
           <div key={i} className="flex items-center gap-4 px-6 py-3.5">
             <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-bold shrink-0 ${ins.positive ? "bg-gray-100 text-gray-600" : "bg-rose-50 text-rose-500"}`}>{ins.icon}</span>
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] text-gray-400">{ins.label}</div>
+              <div className="text-[11px] text-gray-500">{ins.label}</div>
               <div className={`text-[14px] font-bold truncate ${ins.positive ? "text-gray-800" : "text-rose-600"}`}>{ins.value}</div>
             </div>
-            <div className="text-[11px] text-gray-400 text-right shrink-0">{ins.sub}</div>
+            <div className="text-[11px] text-gray-500 text-right shrink-0">{ins.sub}</div>
           </div>
         ))}
       </div>
@@ -39763,7 +40395,7 @@ function SettlementClientAnalysis({ topRows = [], dropRows = [], newClients = []
           {newClients.length ? (
             <SettlementNewClients rows={newClients} />
           ) : (
-            <div className="text-[13px] text-gray-400 text-center py-4">신규 거래처가 없습니다</div>
+            <div className="text-[13px] text-gray-500 text-center py-4">신규 거래처가 없습니다</div>
           )}
         </section>
 
@@ -40068,7 +40700,7 @@ function StatCard({ title, value, variant = "current", sub = null }) {
         <p className={`text-[12px] font-semibold tracking-tight ${isForecast ? "text-indigo-600" : "text-gray-500"}`}>{title}</p>
       </div>
       <p className={`tracking-tight ${isForecast ? "text-[17px] font-bold text-indigo-800" : "text-[19px] font-bold text-gray-900"}`}>{value}</p>
-      {sub && <p className="text-[11px] text-gray-400 mt-1">{sub}</p>}
+      {sub && <p className="text-[11px] text-gray-500 mt-1">{sub}</p>}
     </div>
   );
 }
@@ -40252,7 +40884,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
 
 function ClientInsight({ rows = [] }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  if (!rows.length) return <div className="text-[13px] text-gray-400 text-center py-6">데이터가 없습니다</div>;
+  if (!rows.length) return <div className="text-[13px] text-gray-500 text-center py-6">데이터가 없습니다</div>;
   const sale = rows.reduce((a, r) => a + toInt(r.청구운임), 0);
   const driver = rows.reduce((a, r) => a + toInt(r.기사운임), 0);
   const profit = sale - driver;
@@ -40416,7 +41048,7 @@ const tableData = React.useMemo(() => {
 
   const won = (n) => n ? `${n.toLocaleString()}` : "—";
   const diff = (n) => {
-    if (!n) return <span className="text-gray-300">—</span>;
+    if (!n) return <span className="text-gray-400">—</span>;
     return (
       <span className={n > 0 ? "text-emerald-600" : "text-rose-500"}>
         {n > 0 ? "+" : ""}{n.toLocaleString()}
@@ -40458,9 +41090,9 @@ const tableData = React.useMemo(() => {
           { label: "거래처 현황", value: `${activeClients}개 활성`, sub: `신규 ${newClients}개 / 중단 ${dropClients}개`, color: "text-[#1B2B4B]" },
         ].map((kpi, i) => (
           <div key={i} className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-sm">
-            <div className="text-[11px] font-semibold text-gray-400 mb-1">{kpi.label}</div>
+            <div className="text-[11px] font-semibold text-gray-500 mb-1">{kpi.label}</div>
             <div className={`text-[18px] font-bold ${kpi.color}`}>{kpi.value}</div>
-            {kpi.sub && <div className="text-[11px] text-gray-400 mt-1">{kpi.sub}</div>}
+            {kpi.sub && <div className="text-[11px] text-gray-500 mt-1">{kpi.sub}</div>}
           </div>
         ))}
       </div>
@@ -40475,11 +41107,11 @@ const tableData = React.useMemo(() => {
             onChange={e => setSearch(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-[220px] focus:outline-none focus:border-[#1B2B4B]"
           />
-          <div className="text-[12px] text-gray-400">
+          <div className="text-[12px] text-gray-500">
             {tableData.length}개 거래처
           </div>
         </div>
-        <div className="text-[12px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+        <div className="text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
           기준: 당월 1일 ~ {todayStr} / 전월 1일 ~ {prevSameDayStr} / 작년 1일 ~ {lastYearSameDayStr}
         </div>
       </div>
@@ -40507,17 +41139,17 @@ const tableData = React.useMemo(() => {
                 <th colSpan={2} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-indigo-600 bg-indigo-50">증감</th>
               </tr>
               <tr className="bg-gray-50 text-center">
-                <th className="border-b border-gray-200 px-3 py-2 text-left sticky left-0 bg-gray-50 text-[11px] text-gray-400">전체 {clientNames.length}개</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-left sticky left-0 bg-gray-50 text-[11px] text-gray-500">전체 {clientNames.length}개</th>
 
                 <SortTh k="curSale"   label="매출" />
                 <SortTh k="curProfit" label="수익" />
                 <SortTh k="curCnt"    label="건수" />
-                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">매출</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">수익</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">건수</th>
-                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">매출</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">수익</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">건수</th>
+                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">매출</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">수익</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">건수</th>
+                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">매출</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">수익</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">건수</th>
                 <SortTh k="saleDiff"   label="전월比" />
                 <SortTh k="saleDiffLY" label="작년比" />
               </tr>
@@ -40552,18 +41184,18 @@ const tableData = React.useMemo(() => {
                     <td className="px-3 py-3 text-center text-emerald-600 font-semibold">{won(r.curProfit)}</td>
                     <td className="px-3 py-3 text-center text-gray-600">{r.curCnt || "—"}</td>
                     <td className="px-3 py-3 text-center text-gray-500 border-l border-gray-100">{won(r.prevSale)}</td>
-                    <td className="px-3 py-3 text-center text-gray-400">{won(r.prevProfit)}</td>
-                    <td className="px-3 py-3 text-center text-gray-400">{r.prevCnt || "—"}</td>
+                    <td className="px-3 py-3 text-center text-gray-500">{won(r.prevProfit)}</td>
+                    <td className="px-3 py-3 text-center text-gray-500">{r.prevCnt || "—"}</td>
                     <td className="px-3 py-3 text-center text-gray-500 border-l border-gray-100">{won(r.lySale)}</td>
-                    <td className="px-3 py-3 text-center text-gray-400">{won(r.lyProfit)}</td>
-                    <td className="px-3 py-3 text-center text-gray-400">{r.lyCnt || "—"}</td>
+                    <td className="px-3 py-3 text-center text-gray-500">{won(r.lyProfit)}</td>
+                    <td className="px-3 py-3 text-center text-gray-500">{r.lyCnt || "—"}</td>
                     <td className="px-3 py-3 text-center border-l border-gray-100">{diff(r.saleDiff)}</td>
                     <td className="px-3 py-3 text-center">{diff(r.saleDiffLY)}</td>
                   </tr>
                 );
               })}
               {!tableData.length && (
-                <tr><td colSpan={12} className="text-center text-gray-400 py-16 text-[14px]">등록된 하차지 거래처가 없습니다</td></tr>
+                <tr><td colSpan={12} className="text-center text-gray-500 py-16 text-[14px]">등록된 하차지 거래처가 없습니다</td></tr>
               )}
             </tbody>
             {/* 합계 행 */}
@@ -40643,17 +41275,17 @@ const tableData = React.useMemo(() => {
               </div>
               <div className="flex gap-2">
                 {sortedMonths.map(ym => (
-                  <div key={ym} className="flex-1 text-center text-[10px] text-gray-400 truncate">{ym.slice(5)}월</div>
+                  <div key={ym} className="flex-1 text-center text-[10px] text-gray-500 truncate">{ym.slice(5)}월</div>
                 ))}
               </div>
               <div className="mt-4 grid grid-cols-3 gap-3 text-center">
                 {[
                   { label: "당월 매출", v: (curMap[selectedClient] || {}).sale || 0, color: "text-[#1B2B4B]" },
                   { label: "전월 매출", v: (prevMap[selectedClient] || {}).sale || 0, color: "text-gray-500" },
-                  { label: "작년 동월", v: (lastYearMap[selectedClient] || {}).sale || 0, color: "text-gray-400" },
+                  { label: "작년 동월", v: (lastYearMap[selectedClient] || {}).sale || 0, color: "text-gray-500" },
                 ].map((item, i) => (
                   <div key={i} className="bg-gray-50 rounded-xl px-3 py-3 border border-gray-100">
-                    <div className="text-[11px] text-gray-400 mb-1">{item.label}</div>
+                    <div className="text-[11px] text-gray-500 mb-1">{item.label}</div>
                     <div className={`text-[15px] font-bold ${item.color}`}>{item.v ? item.v.toLocaleString() + "원" : "—"}</div>
                   </div>
                 ))}
@@ -41154,7 +41786,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[18px] font-bold text-[#1B2B4B]">미배차현황</h2>
-          <p className="text-[12px] text-gray-400 mt-0.5">배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사</p>
+          <p className="text-[12px] text-gray-500 mt-0.5">배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사</p>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
           <span className="text-[12px] text-gray-500">대기</span>
@@ -41174,7 +41806,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
           />
           <div className="flex items-center gap-1">
             <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <span className="text-gray-400 text-[13px]">~</span>
+            <span className="text-gray-500 text-[13px]">~</span>
             <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className="flex items-center gap-1">
@@ -41223,7 +41855,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td className="text-center py-16 text-[13px] text-gray-400 font-medium" colSpan={headers.length + (deleteMode ? 1 : 0)}>
+                  <td className="text-center py-16 text-[13px] text-gray-500 font-medium" colSpan={headers.length + (deleteMode ? 1 : 0)}>
                     배차 대기 중인 오더가 없습니다
                   </td>
                 </tr>
@@ -41263,7 +41895,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={cellBase}>
                         {r.등록일 ? (() => {
                           const d = Math.floor((Date.now() - new Date(r.등록일).getTime()) / 86400000);
-                          if (d <= 0) return <span className="text-gray-400 text-[12px]">오늘</span>;
+                          if (d <= 0) return <span className="text-gray-500 text-[12px]">오늘</span>;
                           if (d >= 3) return <span className="text-red-600 font-bold text-[12px]">{d}일</span>;
                           return <span className="text-amber-600 text-[12px]">{d}일</span>;
                         })() : ""}
@@ -41646,7 +42278,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               <div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
                 <div>
                   <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
-                  <p className="text-[12px] text-gray-400 mt-0.5">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</p>
+                  <p className="text-[12px] text-gray-500 mt-0.5">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</p>
                 </div>
                 <div className="flex gap-2 items-center">
                   <button
@@ -41680,7 +42312,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   >
                     복사 등록
                   </button>
-                  <button onClick={() => setCopyPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 transition text-lg">✕</button>
+                  <button onClick={() => setCopyPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 transition text-lg">✕</button>
                 </div>
               </div>
 
@@ -41732,7 +42364,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             return (
                               <div key={c._id || c.id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyClientIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"}`} onMouseDown={() => { setCopyTarget(prev => ({...prev, 거래처명: name})); setShowCopyClientDropdown(false); checkWarningStatus(name, "거래처"); }}>
                                 <div className="font-semibold">{name}</div>
-                                <div className={`text-xs ${i === copyClientIndex ? "text-white/70" : "text-gray-400"}`}>{c.주소}</div>
+                                <div className={`text-xs ${i === copyClientIndex ? "text-white/70" : "text-gray-500"}`}>{c.주소}</div>
                               </div>
                             );
                           })}
@@ -41820,7 +42452,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                 <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"}`}
                                   onMouseDown={() => { setCopyTarget(prev => ({...prev, 상차지명: p.업체명 || "", 상차지주소: p.주소 || "", 상차지담당자: getManagerName(p), 상차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "상차지"); }}>
                                   <div className="font-semibold">{p.업체명}</div>
-                                  <div className={`text-xs ${i === copyActiveIndex ? "text-white/70" : "text-gray-400"}`}>{p.주소}</div>
+                                  <div className={`text-xs ${i === copyActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                                 </div>
                               ))}
                             </div>
@@ -41915,7 +42547,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                 <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"}`}
                                   onMouseDown={() => { setCopyTarget(prev => ({...prev, 하차지명: p.업체명 || "", 하차지주소: p.주소 || "", 하차지담당자: getManagerName(p), 하차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "하차지"); }}>
                                   <div className="font-semibold">{p.업체명}</div>
-                                  <div className={`text-xs ${i === copyActiveIndex ? "text-white/70" : "text-gray-400"}`}>{p.주소}</div>
+                                  <div className={`text-xs ${i === copyActiveIndex ? "text-white/70" : "text-gray-500"}`}>{p.주소}</div>
                                 </div>
                               ))}
                             </div>
@@ -41999,9 +42631,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                   <button type="button" className="flex-1 text-left px-4 py-3"
                                     onClick={() => selectSmart7Driver(d)}>
                                     <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
-                                    <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                                    <div className="text-[11px] text-gray-500 mt-0.5">{d.차량번호} · {d.전화번호}</div>
                                   </button>
-                                  <button type="button" className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs"
+                                  <button type="button" className="px-3 py-3 text-gray-500 hover:text-blue-500 text-xs"
                                     onClick={() => { setEditingDriver7Id(d.id || i); setEditingDriver7Data({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" }); }}>수정</button>
                                 </div>
                               )}
@@ -43706,7 +44338,7 @@ const handleBatchSettle = async (targetStatus) => {
       className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition-colors relative ${
         tab === key
           ? "border-[#1B2B4B] text-[#1B2B4B]"
-          : "border-transparent text-gray-400 hover:text-gray-600"
+          : "border-transparent text-gray-500 hover:text-gray-600"
       }`}
     >
       {label}
@@ -43941,7 +44573,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
                 <div className="text-[13px] font-bold text-gray-600">
                   명세서에 포함할 오더 선택
-                  <span className="text-[12px] text-gray-400 font-normal ml-1">(체크 해제하면 아래 명세서에서 빠집니다)</span>
+                  <span className="text-[12px] text-gray-500 font-normal ml-1">(체크 해제하면 아래 명세서에서 빠집니다)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <input
@@ -43978,7 +44610,7 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               </div>
               {invoiceRowFilter && (
-                <div className="text-[12px] text-gray-400 mb-2">검색결과 {filteredRowsInvoice.length}건 / 전체 {rowsInvoice.length}건</div>
+                <div className="text-[12px] text-gray-500 mb-2">검색결과 {filteredRowsInvoice.length}건 / 전체 {rowsInvoice.length}건</div>
               )}
               <div className="overflow-x-auto max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
                 <table className="w-full text-[12px]">
@@ -43996,7 +44628,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </thead>
                   <tbody>
                     {filteredRowsInvoice.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center text-gray-400 py-6 text-[12px]">검색 결과가 없습니다.</td></tr>
+                      <tr><td colSpan={8} className="text-center text-gray-500 py-6 text-[12px]">검색 결과가 없습니다.</td></tr>
                     ) : filteredRowsInvoice.map((r) => {
                       const checked = selectedInvoiceIds.has(r._id);
                       return (
@@ -44042,17 +44674,17 @@ const handleBatchSettle = async (targetStatus) => {
 
           {/* 미조회 상태 */}
           {!searched && (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
               <div className="text-4xl mb-3"></div>
               <div className="text-[15px] font-semibold">거래처명 또는 기사명을 입력 후 조회하세요.</div>
-              <div className="text-[13px] mt-1 text-gray-300">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
+              <div className="text-[13px] mt-1 text-gray-400">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
             </div>
           )}
 
           {/* ★ 월별 소계 카드 (조회 결과 위에) */}
           {searched && monthlySubtotals.size > 0 && (
             <div className="mb-4">
-              <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wider px-1">월별 소계</div>
+              <div className="text-[12px] font-bold text-gray-500 mb-2 uppercase tracking-wider px-1">월별 소계</div>
               <div className="flex gap-2 flex-wrap">
                 {Array.from(monthlySubtotals.entries())
                   .sort(([a], [b]) => a.localeCompare(b))
@@ -44061,7 +44693,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="text-[13px] font-bold text-[#1B2B4B]">{ym}</div>
                       <div className="text-[11px] text-gray-500 mt-0.5">{v.건수}건</div>
                       <div className="text-[14px] font-extrabold text-blue-700 mt-1">{won(v.공급가액)}원</div>
-                      <div className="text-[11px] text-gray-400">세액 {won(v.세액)}원</div>
+                      <div className="text-[11px] text-gray-500">세액 {won(v.세액)}원</div>
                     </div>
                   ))}
               </div>
@@ -44089,7 +44721,7 @@ const handleBatchSettle = async (targetStatus) => {
               {/* 공급자/받는자 */}
               <div className="grid grid-cols-2 gap-0 border-b border-gray-200">
                 <div className="p-5 border-r border-gray-200">
-                  <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wider">공급받는자</div>
+                  <div className="text-[11px] font-bold text-gray-500 mb-2 uppercase tracking-wider">공급받는자</div>
                   <table className="w-full text-[13px]">
                     <tbody>
                       {[["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소],["업태",cInfo.업태],["종목",cInfo.종목]].map(([k,v])=>(
@@ -44102,7 +44734,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </table>
                 </div>
                 <div className="p-5">
-  <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wider">공급자</div>
+  <div className="text-[11px] font-bold text-gray-500 mb-2 uppercase tracking-wider">공급자</div>
   <table className="w-full text-[13px]">
     <tbody>
       {/* 상호 */}
@@ -44162,7 +44794,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-bold text-gray-600">합계금액</span>
-                  <span className="text-[12px] text-gray-400">(공급가액+부가세)</span>
+                  <span className="text-[12px] text-gray-500">(공급가액+부가세)</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="text-[14px] font-bold text-[#1B2B4B]">
@@ -44186,7 +44818,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </thead>
                   <tbody>
                     {mapped.length === 0 ? (
-                      <tr><td colSpan={11} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
+                      <tr><td colSpan={11} className="text-center text-gray-500 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                     ) : (
                                                                  mapped.map((m, i) => (
                         <tr
@@ -44374,7 +45006,7 @@ const handleBatchSettle = async (targetStatus) => {
                               autoFocus />
                           </div>
                           {(clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).length === 0 ? (
-                            <div className="px-4 py-6 text-center text-[13px] text-gray-400">
+                            <div className="px-4 py-6 text-center text-[13px] text-gray-500">
                               {generalEmailAddrQuery ? "검색 결과 없음" : "등록된 이메일 없음 (거래처관리에서 이메일 등록)"}
                             </div>
                           ) : (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).map((c, i) => (
@@ -44460,11 +45092,11 @@ const handleBatchSettle = async (targetStatus) => {
                           {generalEmailFiles.map((f, i) => (
                             <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-2 py-1">
                               <span className="truncate text-gray-700">{f.name}</span>
-                              <span className="text-gray-400 ml-2 shrink-0">{f.size > 1024*1024 ? `${(f.size/1024/1024).toFixed(1)}MB` : `${Math.round(f.size/1024)}KB`}</span>
+                              <span className="text-gray-500 ml-2 shrink-0">{f.size > 1024*1024 ? `${(f.size/1024/1024).toFixed(1)}MB` : `${Math.round(f.size/1024)}KB`}</span>
                               <button onClick={() => setGeneralEmailFiles(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 ml-2 shrink-0">×</button>
                             </div>
                           ))}
-                          <div className="text-[11px] text-gray-400 text-right pt-1">
+                          <div className="text-[11px] text-gray-500 text-right pt-1">
                             총 {(generalEmailFiles.reduce((s,f)=>s+(f.size||0),0)/1024/1024).toFixed(1)}MB (권장 4MB 이하)
                           </div>
                         </div>
@@ -44475,7 +45107,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
                     <div>
                       <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
-                      <div className="text-[11px] text-gray-400">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
+                      <div className="text-[11px] text-gray-500">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
                     <button onClick={() => setIncludeCardGeneral(v => !v)} disabled={!cardImage}
                       className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardGeneral && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
@@ -44584,7 +45216,7 @@ const handleBatchSettle = async (targetStatus) => {
             <div className="flex items-center justify-between mb-2">
               <div>
                 <span className="text-[13px] font-bold text-[#1B2B4B]">{item.name}</span>
-                <span className="ml-2 text-[11px] text-gray-400">{item.start}~{item.end} · {item.mapped?.length||0}건</span>
+                <span className="ml-2 text-[11px] text-gray-500">{item.start}~{item.end} · {item.mapped?.length||0}건</span>
               </div>
               {!batchSending && (
                 <button onClick={() => setBatchSendList(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[13px] font-bold px-2 py-1">삭제</button>
@@ -44603,7 +45235,7 @@ const handleBatchSettle = async (targetStatus) => {
           </div>
         ))}
         {batchSendList.length === 0 && (
-          <div className="text-center py-8 text-[13px] text-gray-400">목록이 비어있습니다</div>
+          <div className="text-center py-8 text-[13px] text-gray-500">목록이 비어있습니다</div>
         )}
         {batchSending && batchSendProgress.total > 0 && (
           <div className="bg-blue-50 rounded-xl border border-blue-200 px-4 py-3 text-[13px]">
@@ -44742,7 +45374,7 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {scheduledEmailList.length === 0 ? (
-                    <div className="py-16 text-center text-[13px] text-gray-400">예약된 메일이 없습니다.</div>
+                    <div className="py-16 text-center text-[13px] text-gray-500">예약된 메일이 없습니다.</div>
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {scheduledEmailList.map((s) => {
@@ -44756,7 +45388,7 @@ const handleBatchSettle = async (targetStatus) => {
                                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${statusCls} shrink-0`}>{statusLabel}</span>
                                 <span className="font-bold text-[13px] text-gray-900 truncate">{s.type || "예약메일"} · {s.meta?.client || s.to}</span>
                               </div>
-                              <div className="text-[11px] text-gray-400 mt-0.5 truncate">
+                              <div className="text-[11px] text-gray-500 mt-0.5 truncate">
                                 {s.to} · {sendAtMs ? new Date(sendAtMs).toLocaleString("ko-KR") : "-"}
                                 {s.status === "failed" && s.error && <span className="text-red-500"> · {s.error}</span>}
                               </div>
@@ -44834,7 +45466,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
                     <div>
                       <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
-                      <div className="text-[11px] text-gray-400">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
+                      <div className="text-[11px] text-gray-500">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
                     <button onClick={() => setIncludeCardInvoice(v => !v)} disabled={!cardImage}
                       className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardInvoice && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
@@ -44882,7 +45514,7 @@ const handleBatchSettle = async (targetStatus) => {
                     }}>내용 복사</button>
                   <button
                     disabled={!emailTo.trim() || emailSending || (emailScheduleOn && !emailScheduleAt)}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
                       if (emailScheduleOn && !emailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
@@ -45022,7 +45654,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="border-t border-gray-100 px-6 py-4">
                   <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">발송 이력</div>
                   {emailLogs.filter(l => l.client === client).length === 0 ? (
-                    <div className="text-[12px] text-gray-400 text-center py-4">발송 이력이 없습니다</div>
+                    <div className="text-[12px] text-gray-500 text-center py-4">발송 이력이 없습니다</div>
                   ) : (
                     <div className="space-y-2 max-h-[320px] overflow-y-auto">
                       {emailLogs.filter(l => l.client === client).map(log => (
@@ -45086,7 +45718,7 @@ const handleBatchSettle = async (targetStatus) => {
                               setEditInfoClientDropOpen(false);
                             }}>
                             <span className="font-semibold text-[#1B2B4B]">{c.거래처명}</span>
-                            {c.이메일 && <span className="text-gray-400 text-[11px]">{c.이메일}</span>}
+                            {c.이메일 && <span className="text-gray-500 text-[11px]">{c.이메일}</span>}
                           </div>
                         ))}
                       </div>
@@ -45165,7 +45797,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
                   </select>
-                  <span className="text-gray-400 font-semibold text-[13px]">부터</span>
+                  <span className="text-gray-500 font-semibold text-[13px]">부터</span>
                   <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={yearTo} onChange={e=>{ setYearTo(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
@@ -45178,7 +45810,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
                   </select>
-                  <span className="text-gray-400 font-semibold text-[13px]">까지</span>
+                  <span className="text-gray-500 font-semibold text-[13px]">까지</span>
                 </div>
               </div>
               <div className="flex flex-col">
@@ -45202,7 +45834,7 @@ const handleBatchSettle = async (targetStatus) => {
                   선택 정산완료
                 </button>
                 <button onClick={settleAll} disabled={!monthRows.length}
-                  className={`px-3 py-2 rounded-lg text-[13px] font-bold transition border ${monthRows.length?"bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white":"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"}`}>
+                  className={`px-3 py-2 rounded-lg text-[13px] font-bold transition border ${monthRows.length?"bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white":"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"}`}>
                   전체 정산완료
                 </button>
                 <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">엑셀</button>
@@ -45235,7 +45867,7 @@ const handleBatchSettle = async (targetStatus) => {
     setEmailScheduleOn(false); setEmailScheduleAt("");
     setArEmailOpen(true);
   }}
-  className={`px-3 py-2 rounded-lg text-[13px] font-semibold transition border ${selClient ? "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white" : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"}`}
+  className={`px-3 py-2 rounded-lg text-[13px] font-semibold transition border ${selClient ? "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white" : "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"}`}
 >
   이메일발송
 </button>
@@ -45252,7 +45884,7 @@ const handleBatchSettle = async (targetStatus) => {
                 {label:"정산완료 금액", val:`${won(kpi.완료금)}원`, color:"text-emerald-600"},
               ].map(({label,val,color})=>(
                 <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <div className="text-[11px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
                   <div className={`text-[18px] font-extrabold ${color}`}>{val}</div>
                 </div>
               ))}
@@ -45265,7 +45897,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-[#1B2B4B]/4">
                 <span className="text-[12px] font-bold text-gray-500">조회 거래처</span>
                 <span className="text-[14px] font-extrabold text-[#1B2B4B]">{selClient}</span>
-                <span className="text-[12px] text-gray-400">— {THIS_YEAR}년 월별 정산 현황</span>
+                <span className="text-[12px] text-gray-500">— {THIS_YEAR}년 월별 정산 현황</span>
               </div>
             )}
             <table className="text-[13px]" style={{tableLayout:"fixed", width:"722px"}}>
@@ -45299,9 +45931,9 @@ const handleBatchSettle = async (targetStatus) => {
               </thead>
               <tbody>
                 {!selClient ? (
-                  <tr><td colSpan={8} className="text-center text-gray-400 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
+                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
                 ) : monthRows.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center text-gray-400 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
                 ) : (
                   monthRows.map((row, idx) => (
                     <tr key={row.yyyymm} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
@@ -45320,7 +45952,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <td className="px-3 py-3 text-center font-bold text-[#1B2B4B] border-b border-gray-100">{row.yyyymm}</td>
                       <td className="px-3 py-3 text-center border-b border-gray-100">{row.건수}건</td>
                       <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
-                        <span className={row.총청구금액>0?"text-[#1B2B4B]":"text-gray-400"}>
+                        <span className={row.총청구금액>0?"text-[#1B2B4B]":"text-gray-500"}>
                           {won(row.총청구금액)}원
                         </span>
                       </td>
@@ -45349,7 +45981,7 @@ const handleBatchSettle = async (targetStatus) => {
               </tbody>
             </table>
           </div>
-                            <div className="mt-2 text-[12px] text-gray-400">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
+                            <div className="mt-2 text-[12px] text-gray-500">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
 
                              {/* ★ 입금 엑셀 업로드 가이드 */}
           <div className="mt-6 p-6 bg-[#f8f9fb] border border-gray-200 rounded-2xl shadow-sm">
@@ -45376,14 +46008,14 @@ const handleBatchSettle = async (targetStatus) => {
                     <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">거해</td>
                     <td className="border border-gray-200 px-4 py-3 font-extrabold text-emerald-700">3,234,000</td>
                     <td className="border border-gray-200 px-4 py-3 text-gray-500">15,420,000</td>
-                    <td className="border border-gray-200 px-4 py-3 text-gray-400"></td>
+                    <td className="border border-gray-200 px-4 py-3 text-gray-500"></td>
                   </tr>
                   <tr className="bg-gray-50/80">
                     <td className="border border-gray-200 px-4 py-3 font-medium text-gray-700">2026-04-28</td>
                     <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">㈜대한물류</td>
                     <td className="border border-gray-200 px-4 py-3 font-extrabold text-emerald-700">5,500,000</td>
                     <td className="border border-gray-200 px-4 py-3 text-gray-500">20,920,000</td>
-                    <td className="border border-gray-200 px-4 py-3 text-gray-400"></td>
+                    <td className="border border-gray-200 px-4 py-3 text-gray-500"></td>
                   </tr>
                 </tbody>
               </table>
@@ -45421,9 +46053,9 @@ const handleBatchSettle = async (targetStatus) => {
             <div className="p-4 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[#1B2B4B] font-semibold">
                 <span>💡 <b>매칭 기준:</b> 입금액 = 월 총청구금액 × 1.1 (세액포함) ±10원 허용</span>
-                <span className="text-gray-300">|</span>
+                <span className="text-gray-400">|</span>
                 <span><b>지원 파일:</b> .xlsx, .xls, .csv</span>
-                <span className="text-gray-300">|</span>
+                <span className="text-gray-400">|</span>
                 <span><b>필수 컬럼:</b> 입금액 + 적요(또는 입금자명)</span>
               </div>
             </div>
@@ -45461,7 +46093,7 @@ const handleBatchSettle = async (targetStatus) => {
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
           </select>
-          <span className="text-gray-400 font-semibold">부터</span>
+          <span className="text-gray-500 font-semibold">부터</span>
           <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arToYear} onChange={e => setArToYear(e.target.value)}>
             {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
@@ -45474,7 +46106,7 @@ const handleBatchSettle = async (targetStatus) => {
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
           </select>
-          <span className="text-gray-400 font-semibold">까지</span>
+          <span className="text-gray-500 font-semibold">까지</span>
         </div>
       </div>
 
@@ -45576,11 +46208,11 @@ const handleBatchSettle = async (targetStatus) => {
           </div>
           <div>
             <div className="text-[13px] font-bold text-gray-700">미수금 있는 거래처만 출력</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">정산완료된 거래처는 보고서에서 제외됩니다</div>
+            <div className="text-[11px] text-gray-500 mt-0.5">정산완료된 거래처는 보고서에서 제외됩니다</div>
           </div>
         </div>
 
-        <div className="text-[12px] text-gray-400 bg-gray-50 rounded-lg px-4 py-3">
+        <div className="text-[12px] text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
           {arReportMode === "all"
             ? <>거래처 <b className="text-[#1B2B4B]">{clientOptions8.length}개사</b> 전체 대상</>
             : <>선택된 <b className="text-[#1B2B4B]">{arReportClients.size}개사</b> 대상</>
@@ -45598,7 +46230,7 @@ const handleBatchSettle = async (targetStatus) => {
           className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
             arReportMode === "all" || arReportClients.size > 0
               ? "bg-violet-600 text-white hover:bg-violet-700"
-              : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              : "bg-gray-200 text-gray-500 cursor-not-allowed"
           }`}
           onClick={handleARReport}
         >
@@ -45615,7 +46247,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[260px]">
                 <div className="w-12 h-12 border-4 border-[#1B2B4B]/20 border-t-[#1B2B4B] rounded-full animate-spin" />
                 <div className="text-[15px] font-bold text-[#1B2B4B]">정산 처리 중...</div>
-                <div className="text-[12px] text-gray-400 text-center">
+                <div className="text-[12px] text-gray-500 text-center">
                   데이터 양에 따라 시간이 걸릴 수 있습니다.<br />잠시만 기다려 주세요.
                 </div>
               </div>
@@ -45656,7 +46288,7 @@ const handleBatchSettle = async (targetStatus) => {
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
                     </select>
-                    <span className="text-gray-400 font-semibold">부터</span>
+                    <span className="text-gray-500 font-semibold">부터</span>
                     <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchToYear} onChange={e => setBatchToYear(e.target.value)}>
                       {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
@@ -45669,7 +46301,7 @@ const handleBatchSettle = async (targetStatus) => {
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
                     </select>
-                    <span className="text-gray-400 font-semibold">까지</span>
+                    <span className="text-gray-500 font-semibold">까지</span>
                   </div>
                 </div>
 
@@ -45679,7 +46311,7 @@ const handleBatchSettle = async (targetStatus) => {
                     <div className="text-[12px] font-bold text-gray-500">
                       거래처 선택
                       <span className="ml-2 text-[#1B2B4B]">({batchClients.size}/{batchEligibleClients.length})</span>
-                      <span className="ml-1 text-gray-400 font-normal">(미수금 있는 업체만)</span>
+                      <span className="ml-1 text-gray-500 font-normal">(미수금 있는 업체만)</span>
                     </div>
                     <button
                       className="ml-auto px-3 py-1 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
@@ -45735,7 +46367,7 @@ const handleBatchSettle = async (targetStatus) => {
                         );
                       })}
                     {batchEligibleClients.filter(name => !batchClientQ.trim() || name.toLowerCase().includes(batchClientQ.toLowerCase())).length === 0 && (
-                      <div className="col-span-2 text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+                      <div className="col-span-2 text-center text-gray-500 text-[13px] py-8">검색 결과가 없습니다</div>
                     )}
                   </div>
                 </div>
@@ -45758,7 +46390,7 @@ const handleBatchSettle = async (targetStatus) => {
                       className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
                         batchClients.size
                           ? "bg-amber-500 hover:bg-amber-600 text-white"
-                          : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                          : "bg-gray-200 text-gray-500 cursor-not-allowed"
                       }`}
                       onClick={() => handleBatchSettle("미정산")}>
                       미정산으로 변경
@@ -45768,7 +46400,7 @@ const handleBatchSettle = async (targetStatus) => {
                       className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
                         batchClients.size
                           ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                          : "bg-gray-200 text-gray-500 cursor-not-allowed"
                       }`}
                       onClick={() => handleBatchSettle("정산완료")}>
                       정산완료로 변경
@@ -45847,11 +46479,11 @@ const handleBatchSettle = async (targetStatus) => {
                         <div key={i} className="flex items-center gap-4 text-[12px] text-gray-600 bg-gray-50 rounded-lg px-4 py-2.5">
                           <span className="font-semibold text-gray-800">{d.amount.toLocaleString()}원</span>
                           <span>{d.name || "-"}</span>
-                          <span className="text-gray-400">{d.date}</span>
+                          <span className="text-gray-500">{d.date}</span>
                         </div>
                       ))}
                     </div>
-                    <p className="text-[11px] text-gray-400 mt-2">* 미정산 월 금액(세액포함)과 일치하지 않는 입금 건입니다. 수동으로 확인하세요.</p>
+                    <p className="text-[11px] text-gray-500 mt-2">* 미정산 월 금액(세액포함)과 일치하지 않는 입금 건입니다. 수동으로 확인하세요.</p>
                   </div>
                 )}
 
@@ -45991,7 +46623,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
                     <div>
                       <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
-                      <div className="text-[11px] text-gray-400">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
+                      <div className="text-[11px] text-gray-500">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
                     <button onClick={() => setIncludeCardAr(v => !v)} disabled={!cardImage}
                       className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardAr && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
@@ -46033,7 +46665,7 @@ const handleBatchSettle = async (targetStatus) => {
                     onClick={() => { navigator.clipboard.writeText(emailBody); showAlert("복사되었습니다."); }}>내용 복사</button>
                   <button
                     disabled={!emailTo.trim() || emailSending || (emailScheduleOn && !emailScheduleAt)}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim()&&!emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim()&&!emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
                       if (emailScheduleOn && !emailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
@@ -46184,7 +46816,7 @@ const handleBatchSettle = async (targetStatus) => {
                       발송 이력 — {selClient}
                     </div>
                     {emailLogs.filter(l=>l.client===selClient).length === 0 ? (
-                      <div className="text-[12px] text-gray-400 text-center py-4">발송 이력이 없습니다</div>
+                      <div className="text-[12px] text-gray-500 text-center py-4">발송 이력이 없습니다</div>
                     ) : (
                       <div className="space-y-2 max-h-[320px] overflow-y-auto">
                         {emailLogs.filter(l=>l.client===selClient).map(log => (
@@ -46210,7 +46842,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="flex items-center gap-3 mr-auto">
                 <div>
                   <div className="text-[15px] font-extrabold text-[#1B2B4B]">보낸메일함</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">총 {emailLogs.length}건 · 성공 {emailLogs.filter(l=>l.status==="success").length}건 · 실패 {emailLogs.filter(l=>l.status==="failed").length}건</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">총 {emailLogs.length}건 · 성공 {emailLogs.filter(l=>l.status==="success").length}건 · 실패 {emailLogs.filter(l=>l.status==="failed").length}건</div>
                 </div>
                 {/* 유형별 카운트 배지 */}
                 <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
@@ -46233,7 +46865,7 @@ const handleBatchSettle = async (targetStatus) => {
                   value={mailSearch}
                   onChange={e => { setMailSearch(e.target.value); setSelectedMails(new Set()); }}
                 />
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               </div>
               {/* 정렬 */}
               <select
@@ -46301,7 +46933,7 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
               <div className="overflow-y-auto flex-1">
                 {filteredMails.length === 0 ? (
-                  <div className="text-center text-gray-400 py-16 text-[13px]">
+                  <div className="text-center text-gray-500 py-16 text-[13px]">
                     {mailSearch || mailTypeFilter !== "전체" ? "검색 결과가 없습니다" : "발송된 메일이 없습니다"}
                   </div>
                 ) : (
@@ -46335,7 +46967,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-red-600 text-white"}`}>
                             {log.type || "메일"}
                           </span>
-                          <span className="text-[12px] text-gray-400 shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
+                          <span className="text-[12px] text-gray-500 shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
                         </div>
                         <div className="text-[13px] font-semibold text-gray-800 truncate">{log.subject || "(제목없음)"}</div>
                         <div className="text-[12px] text-gray-500 truncate">{log.to || "-"}</div>
@@ -46352,7 +46984,7 @@ const handleBatchSettle = async (targetStatus) => {
             {/* 오른쪽: 메일 상세 */}
             <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-w-0">
               {!selectedMail ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-30"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                   <div className="text-[14px]">왼쪽 목록에서 메일을 선택하세요</div>
                   {selectedMails.size > 0 && (
@@ -46371,21 +47003,21 @@ const handleBatchSettle = async (targetStatus) => {
                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${selectedMail.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
                           {selectedMail.status === "success" ? "발송완료" : "발송실패"}
                         </span>
-                        <button onClick={() => setSelectedMail(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded transition">×</button>
+                        <button onClick={() => setSelectedMail(null)} className="text-gray-500 hover:text-gray-600 text-xl leading-none w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded transition">×</button>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[12px] mb-2">
-                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">발신</span><span className="text-gray-700 truncate">{selectedMail.sentBy || "-"}</span></div>
-                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">수신</span><span className="text-gray-700 break-all">{selectedMail.to || "-"}</span></div>
-                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">유형</span><span className="text-gray-700">{selectedMail.type || "-"}</span></div>
-                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">발송일</span><span className="text-gray-700">{selectedMail.sentAt ? new Date(selectedMail.sentAt).toLocaleString("ko-KR") : "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">발신</span><span className="text-gray-700 truncate">{selectedMail.sentBy || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">수신</span><span className="text-gray-700 break-all">{selectedMail.to || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">유형</span><span className="text-gray-700">{selectedMail.type || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">발송일</span><span className="text-gray-700">{selectedMail.sentAt ? new Date(selectedMail.sentAt).toLocaleString("ko-KR") : "-"}</span></div>
                       {selectedMail.client && selectedMail.client !== "-" && (
-                        <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">거래처</span><span className="text-gray-700">{selectedMail.client}</span></div>
+                        <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">거래처</span><span className="text-gray-700">{selectedMail.client}</span></div>
                       )}
                     </div>
                     {selectedMail.attachmentNames?.length > 0 && (
                       <div className="flex items-center gap-2 flex-wrap mt-1">
-                        <span className="text-[11px] text-gray-400 font-semibold">첨부파일</span>
+                        <span className="text-[11px] text-gray-500 font-semibold">첨부파일</span>
                         {selectedMail.attachmentNames.map((n, i) => (
                           <span key={i} className="text-[11px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{n}</span>
                         ))}
@@ -46399,19 +47031,19 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
                   {/* 메일 본문 */}
                   <div className="flex-1 overflow-y-auto px-6 py-5">
-                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                       <span>본문</span>
-                      {!selectedMail.body && <span className="font-normal normal-case text-gray-300">이 메일 이전 발송분은 본문이 저장되지 않았습니다</span>}
+                      {!selectedMail.body && <span className="font-normal normal-case text-gray-400">이 메일 이전 발송분은 본문이 저장되지 않았습니다</span>}
                     </div>
                     {selectedMail.body ? (
                       <div className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedMail.body}</div>
                     ) : (
-                      <div className="text-gray-400 text-[13px] italic">저장된 본문 내용이 없습니다</div>
+                      <div className="text-gray-500 text-[13px] italic">저장된 본문 내용이 없습니다</div>
                     )}
                   </div>
                   {/* 하단 액션 */}
                   <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
-                    <div className="text-[11px] text-gray-400">
+                    <div className="text-[11px] text-gray-500">
                       {selectedMail.sentAt ? `발송: ${new Date(selectedMail.sentAt).toLocaleString("ko-KR")}` : ""}
                     </div>
                     <button
@@ -46805,7 +47437,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-[20px] font-bold text-[#1B2B4B]">지급관리</h2>
-          <p className="text-[12px] text-gray-400 mt-0.5">배차완료 오더의 기사운임 지급 현황 관리</p>
+          <p className="text-[12px] text-gray-500 mt-0.5">배차완료 오더의 기사운임 지급 현황 관리</p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
           <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-[12px]">
@@ -46813,7 +47445,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             <input autoComplete="off" type="number" min={0} max={10} step={0.01}
               className="w-16 border border-gray-200 rounded px-2 py-0.5 text-[12px] text-center outline-none focus:border-[#1B2B4B]"
               value={insuranceRate} onChange={e => setInsuranceRate(Number(e.target.value))} />
-            <span className="text-gray-400">%</span>
+            <span className="text-gray-500">%</span>
           </div>
           <label className="px-4 py-2 rounded-lg bg-amber-600 text-white text-[13px] font-semibold hover:bg-amber-700 transition cursor-pointer">
             엑셀 업로드 (지급매칭)
@@ -46835,7 +47467,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           { label: "미지급 금액", val: `${won(kpi.undoneAmt)}원`, color: "text-red-600", bg: "bg-red-50" },
         ].map(({ label, val, color, bg }) => (
           <div key={label} className={`${bg} rounded-xl border border-gray-200 p-4 shadow-sm`}>
-            <div className="text-[11px] font-bold text-gray-400 mb-1">{label}</div>
+            <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
             <div className={`text-[15px] font-extrabold ${color}`}>{val}</div>
           </div>
         ))}
@@ -46866,7 +47498,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             <label className="text-[11px] font-bold text-gray-500">상차일</label>
             <div className="flex items-center gap-1">
               <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadStart} onChange={e => setLoadStart(e.target.value)} />
-              <span className="text-gray-400 text-[12px]">~</span>
+              <span className="text-gray-500 text-[12px]">~</span>
               <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadEnd} onChange={e => setLoadEnd(e.target.value)} />
             </div>
           </div>
@@ -46907,11 +47539,11 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={selectedPayDate} onChange={e => setSelectedPayDate(e.target.value)} />
             </div>
             <button onClick={() => bulkPay(Array.from(selectedIds), "지급완료")} disabled={!selectedIds.size}
-              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
+              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}>
               선택 지급완료
             </button>
             <button onClick={() => bulkPay(Array.from(selectedIds), "지급중")} disabled={!selectedIds.size}
-              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-amber-500 hover:bg-amber-600" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
+              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-amber-500 hover:bg-amber-600" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}>
               선택 미지급
             </button>
             <button onClick={() => bulkPay(filtered.filter(r => (r.지급상태 || "지급중") !== "지급완료").map(r => r._id), "지급완료")}
@@ -46945,9 +47577,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               </thead>
               <tbody>
                 {!searched ? (
-                  <tr><td colSpan={16} className="text-center py-20 text-gray-400 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
+                  <tr><td colSpan={16} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={16} className="text-center py-16 text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={16} className="text-center py-16 text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                 ) : filtered.map((r, i) => {
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
                   const fee = toInt(r.청구운임) - toInt(r.기사운임);
@@ -46956,7 +47588,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
                         <input autoComplete="off" type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} className="w-4 h-4" />
                       </td>
-                      <td className="px-3 py-2.5 text-center text-gray-400 border-b border-gray-100">{i + 1}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-500 border-b border-gray-100">{i + 1}</td>
                       <td className="px-3 py-2.5 text-center whitespace-nowrap border-b border-gray-100">{r.상차일 || ""}</td>
                       <td className="px-3 py-2.5 text-center font-semibold border-b border-gray-100">{r.거래처명 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.상차지명 || ""}</td>
@@ -47017,9 +47649,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               </thead>
               <tbody>
                 {!searched ? (
-                  <tr><td colSpan={9} className="text-center py-20 text-gray-400 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
+                  <tr><td colSpan={9} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
                 ) : driverSummary.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-16 text-gray-400 text-[13px]">데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={9} className="text-center py-16 text-gray-500 text-[13px]">데이터가 없습니다.</td></tr>
                 ) : driverSummary.map((d, i) => (
                   <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.차량번호}</td>
@@ -47031,10 +47663,10 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[11px]">{d.지급완료}건</span>
                     </td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">
-                      {d.미지급 > 0 ? <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold text-[11px]">{d.미지급}건</span> : <span className="text-gray-300">-</span>}
+                      {d.미지급 > 0 ? <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold text-[11px]">{d.미지급}건</span> : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
-                      {d.미지급액 > 0 ? <span className="text-red-500">{won(d.미지급액)}원</span> : <span className="text-gray-300">-</span>}
+                      {d.미지급액 > 0 ? <span className="text-red-500">{won(d.미지급액)}원</span> : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">
                       {d.미지급 > 0 ? (
@@ -47126,7 +47758,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           <tbody>
                             {payExcelPreview.matched.filter(m=>!m.isSumMatch).map((m,i)=>(
                               <tr key={i} className={i%2===0?"bg-white":"bg-emerald-50/30"}>
-                                <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100 text-gray-500">{m.excelRow}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100 font-semibold">{m.기사명}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.excelDate}</td>
@@ -47174,7 +47806,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                               <tbody>
                                 {m.sumRecords.map((r,j)=>(
                                   <tr key={j} className="border-b border-gray-100">
-                                    <td className="px-3 py-1.5 text-center text-gray-400">{j+1}</td>
+                                    <td className="px-3 py-1.5 text-center text-gray-500">{j+1}</td>
                                     <td className="px-3 py-1.5 text-center">{r.상차일}</td>
                                     <td className="px-3 py-1.5 text-center">{r.상차지명||r.출발지||""}</td>
                                     <td className="px-3 py-1.5 text-center">{r.하차지명||r.도착지||""}</td>
@@ -47211,7 +47843,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           <tbody>
                             {payExcelPreview.unmatched.map((m,i)=>(
                               <tr key={i} className={i%2===0?"bg-white":"bg-red-50/30"}>
-                                <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100 text-gray-500">{m.excelRow}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.기사명}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.상차일}</td>
@@ -47520,7 +48152,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           <button key={key} onClick={() => { setGradeFilter(key); setShowAll(true); }}
             className={`rounded-xl border p-4 text-center shadow-sm transition ${gradeFilter===key ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-gray-200 hover:border-[#1B2B4B]"}`}>
             <div className={`text-[24px] font-extrabold ${gradeFilter===key ? "text-white" : "text-[#1B2B4B]"}`}>{val}</div>
-            <div className={`text-[12px] font-semibold mt-0.5 ${gradeFilter===key ? "text-white/70" : "text-gray-400"}`}>{label}</div>
+            <div className={`text-[12px] font-semibold mt-0.5 ${gradeFilter===key ? "text-white/70" : "text-gray-500"}`}>{label}</div>
           </button>
         ))}
       </div>
@@ -47541,7 +48173,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 {label:"메모", key:"메모", placeholder:"메모"},
               ].map(({label,key,placeholder,border}) => (
                 <div key={key}>
-                  <label className="text-[11px] font-semibold text-gray-400 mb-1 block">{label}</label>
+                  <label className="text-[11px] font-semibold text-gray-500 mb-1 block">{label}</label>
                   <input autoComplete="off"
                     className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
                     placeholder={placeholder}
@@ -47554,7 +48186,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 </div>
               ))}
               <div>
-                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">등급</label>
+                <label className="text-[11px] font-semibold text-gray-500 mb-1 block">등급</label>
                 <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
                   value={newForm.등급} onChange={e=>setNewForm(p=>({...p,등급:e.target.value}))}>
                   <option value="일반">일반</option>
@@ -47567,7 +48199,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               {(newForm.등급 === "지입" || newForm.등급 === "직영") && (
                 <>
                   <div>
-                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">거주지</label>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">거주지</label>
                     <input autoComplete="off"
                       className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
                       placeholder="예: 경기 김포시"
@@ -47576,7 +48208,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">근무가능요일</label>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">근무가능요일</label>
                     <div className="flex gap-1.5">
                       {WEEKDAYS.map(d => {
                         const on = (newForm.근무요일 || []).includes(d);
@@ -47626,7 +48258,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           <div className="mb-4">
             <label className="block text-[12px] font-bold text-gray-900 mb-1">검색어</label>
             <input autoComplete="off"
-              className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300 transition"
+              className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition"
               placeholder="차량번호·기사명·연락처"
               value={q}
               onChange={e => { setQ(e.target.value); setSearched(false); }}
@@ -47648,7 +48280,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             </select>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-gray-100 text-[12px] text-gray-400 font-medium">
+          <div className="mt-5 pt-4 border-t border-gray-100 text-[12px] text-gray-500 font-medium">
             총 <b className="text-[#1B2B4B]">{filtered.length}</b>명
           </div>
 
@@ -47656,14 +48288,14 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           {(showAll || searched) && totalPages > 1 && (
             <div className="mt-3 flex items-center justify-center gap-2">
               <button disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===1 ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===1 ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
                 이전
               </button>
               <span className="text-[12px] font-semibold text-gray-600 whitespace-nowrap">
-                {page} <span className="text-gray-400">/ {totalPages}</span>
+                {page} <span className="text-gray-500">/ {totalPages}</span>
               </span>
               <button disabled={page===totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===totalPages ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===totalPages ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
                 다음
               </button>
             </div>
@@ -47674,7 +48306,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         <div className="min-w-0">
           {/* 미조회 상태 */}
           {!showAll && !searched && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center py-20 text-gray-400">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center py-20 text-gray-500">
               <div className="text-[15px] font-semibold">검색어를 입력하거나 전체보기 버튼을 누르세요.</div>
             </div>
           )}
@@ -47700,7 +48332,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 <tbody>
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="text-center py-16 text-gray-400 text-[14px]">
+                      <td colSpan={13} className="text-center py-16 text-gray-500 text-[14px]">
                         {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                       </td>
                     </tr>
@@ -47716,7 +48348,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                         <td className="px-3 py-2.5 text-center">
                           <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                         </td>
-                        <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
+                        <td className="px-3 py-2.5 text-center text-gray-500">{(page-1)*perPage+i+1}</td>
                         <td className="px-2 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap w-[92px] overflow-hidden text-ellipsis">{r.차량번호||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
@@ -47738,7 +48370,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                         </td>
                         <td className="px-3 py-2.5 text-center">
                           {(r.메모 || "").trim() && (
-                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${memoPopupOn ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-400"}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${memoPopupOn ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
                               {memoPopupOn ? "ON" : "OFF"}
                             </span>
                           )}
@@ -47840,7 +48472,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                   <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                     <div>
                       <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">블랙 등급은 메모가 있으면 항상 켜져 있으며 끌 수 없습니다</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">블랙 등급은 메모가 있으면 항상 켜져 있으며 끌 수 없습니다</div>
                     </div>
                     <span className="relative inline-flex h-6 w-11 items-center rounded-full bg-[#1B2B4B] shrink-0">
                       <span className="inline-block h-4 w-4 translate-x-6 transform rounded-full bg-white" />
@@ -47850,7 +48482,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                   <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                     <div>
                       <div className="text-[13px] font-semibold text-gray-700">등록 시 메모/등급 팝업 표시</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">켜두면 이 기사를 어디서 선택하든 메모 안내 팝업이 뜹니다 (기본값: 꺼짐)</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">켜두면 이 기사를 어디서 선택하든 메모 안내 팝업이 뜹니다 (기본값: 꺼짐)</div>
                     </div>
                     <button type="button"
                       onClick={() => setEditDriverModal(p => ({ ...p, 팝업표시: p.팝업표시 === true ? false : true }))}
@@ -47887,7 +48519,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             <div className="flex border-b border-gray-200 shrink-0">
               {["연락처정규화","중복기사정리"].map(tab => (
                 <button key={tab} onClick={() => { setCleanupTab(tab); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }}
-                  className={`px-6 py-3 text-[13px] font-bold transition border-b-2 ${cleanupTab === tab ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+                  className={`px-6 py-3 text-[13px] font-bold transition border-b-2 ${cleanupTab === tab ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
                   {tab}
                 </button>
               ))}
@@ -47938,7 +48570,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             <div className="overflow-y-auto flex-1">
               {cleanupTab === "연락처정규화" && (
                 phoneNormTargets.length === 0 ? (
-                  <div className="flex items-center justify-center h-40 text-[13px] text-gray-400">
+                  <div className="flex items-center justify-center h-40 text-[13px] text-gray-500">
                     {cleanupDone ? "모든 연락처가 정규화되었습니다." : "정규화가 필요한 연락처가 없습니다."}
                   </div>
                 ) : (
@@ -47975,7 +48607,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 
               {cleanupTab === "중복기사정리" && (
                 dupGroups.length === 0 ? (
-                  <div className="flex items-center justify-center h-40 text-[13px] text-gray-400">
+                  <div className="flex items-center justify-center h-40 text-[13px] text-gray-500">
                     {cleanupDone ? "중복 기사가 정리되었습니다." : "중복된 기사가 없습니다."}
                   </div>
                 ) : (
@@ -47989,7 +48621,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                           <div className="bg-[#1B2B4B]/5 px-4 py-2 flex items-center gap-3 border-b border-gray-100">
                             <span className="text-[13px] font-bold text-[#1B2B4B]">{representative.차량번호 || "차량번호 없음"}</span>
                             <span className="text-[12px] text-gray-500">{representative.이름 || ""}</span>
-                            <span className="ml-auto text-[12px] text-gray-400">총 {group.length}건 (중복 {group.length - 1}건)</span>
+                            <span className="ml-auto text-[12px] text-gray-500">총 {group.length}건 (중복 {group.length - 1}건)</span>
                             <button
                               onClick={async () => {
                                 const toDelete = sorted.slice(1).map(d => d.id).filter(Boolean);
@@ -48046,7 +48678,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                                   <td className="px-3 py-2.5 text-[13px] text-gray-800 whitespace-nowrap">{d.이름 || "-"}</td>
                                   <td className="px-3 py-2.5 text-[13px] text-gray-600 whitespace-nowrap">{d.전화번호 || "-"}</td>
                                   <td className="px-3 py-2.5 text-[13px] text-gray-500 whitespace-nowrap">{d.등급 || "일반"}</td>
-                                  <td className="px-3 py-2.5 text-[12px] text-gray-400">{di === 0 ? "대표 (최신)" : "삭제 대상"}</td>
+                                  <td className="px-3 py-2.5 text-[12px] text-gray-500">{di === 0 ? "대표 (최신)" : "삭제 대상"}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -48826,7 +49458,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 <div className={`text-[22px] font-extrabold ${placeGradeFilter === key ? "text-white" : "text-[#1B2B4B]"}`}>
                   {gradeStats[key] || 0}
                 </div>
-                <div className={`text-[11px] font-semibold mt-0.5 ${placeGradeFilter === key ? "text-white/70" : "text-gray-400"}`}>
+                <div className={`text-[11px] font-semibold mt-0.5 ${placeGradeFilter === key ? "text-white/70" : "text-gray-500"}`}>
                   {label}
                 </div>
               </button>
@@ -48850,7 +49482,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <button onClick={() => setPlaceSearched(true)}
               className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">검색</button>
             {(placeSearched || placeGradeFilter !== "전체") && (
-              <span className="text-xs text-gray-400">검색결과 {filteredPlaces.length}건</span>
+              <span className="text-xs text-gray-500">검색결과 {filteredPlaces.length}건</span>
             )}
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setShowNewPlaceForm(true)}
@@ -48929,12 +49561,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 안내 / 빈 결과 */}
           {!placeSearched && placeGradeFilter === "전체" && (
-            <div className="bg-white rounded-xl border text-center py-14 text-gray-400 text-sm">
+            <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">
               검색어를 입력하거나 위 등급 카드를 클릭하세요
             </div>
           )}
           {(placeSearched || placeGradeFilter !== "전체") && filteredPlaces.length === 0 && (
-            <div className="bg-white rounded-xl border text-center py-14 text-gray-400 text-sm">검색 결과가 없습니다</div>
+            <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">검색 결과가 없습니다</div>
           )}
 
           {/* 테이블 */}
@@ -49056,7 +49688,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               {placeAddrDupGroups.map((group, gi) => (
                 <div key={gi} className="border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
                   <div className="bg-[#1B2B4B]/5 px-4 py-2 flex items-center justify-between">
-                    <span className="text-[13px] font-bold text-[#1B2B4B]">{group[0].업체명} <span className="text-gray-400 font-normal text-[12px]">· {group[0].주소}</span></span>
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">{group[0].업체명} <span className="text-gray-500 font-normal text-[12px]">· {group[0].주소}</span></span>
                     <button onClick={async () => {
                       const primary = group[0];
                       const duplicates = group.slice(1);
@@ -49076,7 +49708,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                         <tr key={p.id} className={`border-b border-gray-100 ${pi === 0 ? "bg-blue-50/30" : ""}`}>
                           <td className="px-3 py-2 text-center w-12">
                             {pi === 0 ? <span className="text-[10px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/10 px-1.5 py-0.5 rounded">대표</span>
-                              : <span className="text-[10px] text-gray-400">병합</span>}
+                              : <span className="text-[10px] text-gray-500">병합</span>}
                           </td>
                           <td className="px-3 py-2 font-semibold">{p.업체명}</td>
                           <td className="px-3 py-2 text-gray-500">{p.주소 || "-"}</td>
@@ -49092,7 +49724,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           </div>
         )}
         {placeDupGroups.length === 0 && placeAddrDupGroups.length === 0 ? (
-          <div className="text-center text-gray-400 py-12 text-[14px]">
+          <div className="text-center text-gray-500 py-12 text-[14px]">
             {placeDupDone ? "중복 거래처가 정리되었습니다." : "중복된 거래처가 없습니다."}
           </div>
         ) : placeDupGroups.length > 0 ? (
@@ -49126,7 +49758,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               return (
                 <div key={gi} className="border border-gray-200 rounded-xl overflow-hidden">
                   <div className="bg-[#1B2B4B]/5 px-4 py-2 flex items-center justify-between">
-                    <span className="text-[13px] font-bold text-[#1B2B4B]">{repr.업체명} <span className="text-gray-400 font-normal">({group.length}건)</span></span>
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">{repr.업체명} <span className="text-gray-500 font-normal">({group.length}건)</span></span>
                     <button
                       onClick={async () => {
                         const toDelete = sorted.slice(1);
@@ -49165,7 +49797,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           </td>
                           <td className="px-3 py-2 text-center">
                             {pi === 0 ? <span className="text-[11px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/10 px-2 py-0.5 rounded">대표</span>
-                              : <span className="text-[11px] text-gray-400">중복</span>}
+                              : <span className="text-[11px] text-gray-500">중복</span>}
                           </td>
                           <td className="px-3 py-2 text-center font-semibold">{p.업체명}</td>
                           <td className="px-3 py-2 text-center text-gray-500">{p.주소 || "-"}</td>
@@ -49246,7 +49878,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 placeholder="거래처명, 사업자번호, 담당자..."
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            <span className="text-sm text-gray-400">{filtered.length}건</span>
+            <span className="text-sm text-gray-500">{filtered.length}건</span>
             <button
               onClick={() => { setShowAllClients(v => !v); setQ(""); }}
               className={`h-[34px] px-4 rounded-lg text-sm font-semibold transition ${showAllClients ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
@@ -49405,7 +50037,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">안내사항 (기사전달주의사항)</label>
-                    <div className="text-[11px] text-gray-400 mb-1">이 거래처가 상/하차지로 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 하차지거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
+                    <div className="text-[11px] text-gray-500 mb-1">이 거래처가 상/하차지로 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 하차지거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
                     <textarea rows={3} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none resize-y"
                       placeholder="예: 안전화 착용 필수"
                       value={editClientModal.기사전달주의사항 || ""}
@@ -49413,13 +50045,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">점심시간</label>
-                    <div className="text-[11px] text-gray-400 mb-1">실시간배차현황/배차현황에서 상/하차지명 옆에 표시되고, 상/하차시간이 이 시간대와 겹치면 경고로 알려줍니다.</div>
+                    <div className="text-[11px] text-gray-500 mb-1">실시간배차현황/배차현황에서 상/하차지명 옆에 표시되고, 상/하차시간이 이 시간대와 겹치면 경고로 알려줍니다.</div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <TimeAmPmPicker
                         value={editClientModal.점심시작시간 || ""}
                         onChange={(v) => setEditClientModal(p => ({ ...p, 점심시작시간: v }))}
                       />
-                      <span className="text-[12px] text-gray-400">~</span>
+                      <span className="text-[12px] text-gray-500">~</span>
                       <TimeAmPmPicker
                         value={editClientModal.점심종료시간 || ""}
                         onChange={(v) => setEditClientModal(p => ({ ...p, 점심종료시간: v }))}
@@ -49427,7 +50059,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       {(editClientModal.점심시작시간 || editClientModal.점심종료시간) && (
                         <button type="button"
                           onClick={() => setEditClientModal(p => ({ ...p, 점심시작시간: "", 점심종료시간: "" }))}
-                          className="text-[11px] text-gray-400 hover:text-gray-600 underline">지우기</button>
+                          className="text-[11px] text-gray-500 hover:text-gray-600 underline">지우기</button>
                       )}
                     </div>
                   </div>
@@ -49435,7 +50067,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                       <div>
                         <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
                       </div>
                       <button type="button"
                         onClick={() => setEditClientModal(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
@@ -49474,7 +50106,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                             </div>
                           )}
                           <div className="flex items-center justify-center gap-3">
-                            <span className="text-[12px] text-gray-400">{editClientModal.첨부파일명}</span>
+                            <span className="text-[12px] text-gray-500">{editClientModal.첨부파일명}</span>
                             <button
                               className="text-[12px] text-[#1B2B4B] font-semibold hover:underline"
                               onClick={() => setFilePreview({ base64: editClientModal.첨부파일Base64, type: editClientModal.첨부파일타입, name: editClientModal.첨부파일명 })}>
@@ -49489,8 +50121,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                         </div>
                       ) : (
                         <div>
-                          <p className="text-[13px] text-gray-400 font-semibold">클릭하거나 파일을 여기로 끌어오세요</p>
-                          <p className="text-[11px] text-gray-300 mt-1">이미지 (JPG, PNG) 또는 PDF</p>
+                          <p className="text-[13px] text-gray-500 font-semibold">클릭하거나 파일을 여기로 끌어오세요</p>
+                          <p className="text-[11px] text-gray-400 mt-1">이미지 (JPG, PNG) 또는 PDF</p>
                         </div>
                       )}
                     </div>
@@ -49630,7 +50262,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border text-center py-14 text-gray-400 text-sm">
+            <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">
               {q ? "검색 결과가 없습니다" : (showAllClients ? "등록된 거래처가 없습니다" : "검색어를 입력하거나 전체보기 버튼을 누르세요.")}
             </div>
           )}
@@ -49693,7 +50325,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">안내사항 (기사전달주의사항)</label>
-                <div className="text-[11px] text-gray-400 mb-1">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 기본거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
+                <div className="text-[11px] text-gray-500 mb-1">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 기본거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
                 <textarea rows={3} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none resize-y"
                   placeholder="예: 안전화 착용 필수"
                   value={editPlaceModal.기사전달주의사항||""}
@@ -49701,13 +50333,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">점심시간</label>
-                <div className="text-[11px] text-gray-400 mb-1">실시간배차현황/배차현황에서 상/하차지명 옆에 표시되고, 상/하차시간이 이 시간대와 겹치면 경고로 알려줍니다.</div>
+                <div className="text-[11px] text-gray-500 mb-1">실시간배차현황/배차현황에서 상/하차지명 옆에 표시되고, 상/하차시간이 이 시간대와 겹치면 경고로 알려줍니다.</div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <TimeAmPmPicker
                     value={editPlaceModal.점심시작시간 || ""}
                     onChange={(v) => setEditPlaceModal(p => ({ ...p, 점심시작시간: v }))}
                   />
-                  <span className="text-[12px] text-gray-400">~</span>
+                  <span className="text-[12px] text-gray-500">~</span>
                   <TimeAmPmPicker
                     value={editPlaceModal.점심종료시간 || ""}
                     onChange={(v) => setEditPlaceModal(p => ({ ...p, 점심종료시간: v }))}
@@ -49715,7 +50347,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   {(editPlaceModal.점심시작시간 || editPlaceModal.점심종료시간) && (
                     <button type="button"
                       onClick={() => setEditPlaceModal(p => ({ ...p, 점심시작시간: "", 점심종료시간: "" }))}
-                      className="text-[11px] text-gray-400 hover:text-gray-600 underline">지우기</button>
+                      className="text-[11px] text-gray-500 hover:text-gray-600 underline">지우기</button>
                   )}
                 </div>
               </div>
@@ -49723,7 +50355,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                   <div>
                     <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
                   </div>
                   <button type="button"
                     onClick={() => setEditPlaceModal(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
@@ -49766,7 +50398,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3">
               {mismatchCandidates.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-10">불일치 항목이 없습니다.</div>
+                <div className="text-center text-gray-500 text-sm py-10">불일치 항목이 없습니다.</div>
               ) : (
                 <div className="space-y-2">
                   {mismatchCandidates.map((m) => {
@@ -49822,7 +50454,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 <input autoComplete="off"
                   ref={importInputRef}
                   autoFocus
-                  className="w-full border-2 border-[#1B2B4B] rounded-lg px-4 py-2.5 text-[13px] outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 placeholder:text-gray-400"
+                  className="w-full border-2 border-[#1B2B4B] rounded-lg px-4 py-2.5 text-[13px] outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 placeholder:text-gray-500"
                   placeholder="업체명 입력..."
                   value={importQ}
                   onChange={(e) => { setImportQ(e.target.value); setImportDropOpen(true); setImportDropIdx(0); }}
@@ -49854,7 +50486,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                             );
                           })()}
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">
+                        <div className="text-[11px] text-gray-500 mt-0.5">
                           {p.주소 && <span className="mr-3">{p.주소}</span>}
                           {p.담당자 && <span className="mr-2">{p.담당자}</span>}
                           {p.담당자번호 && <span>{p.담당자번호}</span>}
@@ -49867,7 +50499,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3">
               {importSelected.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-10">
+                <div className="text-center text-gray-500 text-sm py-10">
                   검색창에서 업체를 선택하면 여기에 추가됩니다
                 </div>
               ) : (
@@ -49885,7 +50517,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                         </div>
                       </div>
                       <button onClick={() => removeImportItem(p.id)}
-                        className="text-gray-400 hover:text-red-500 text-lg leading-none flex-shrink-0">×</button>
+                        className="text-gray-500 hover:text-red-500 text-lg leading-none flex-shrink-0">×</button>
                     </div>
                   ))}
                 </div>
@@ -49951,16 +50583,16 @@ function PaymentDateRuleSection({ companyName }) {
   if (!loaded || !rule) {
     return (
       <div>
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">결제일(계산서→입금) 규칙</p>
-        <div className="text-[13px] text-gray-400">로딩 중...</div>
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-4">결제일(계산서→입금) 규칙</p>
+        <div className="text-[13px] text-gray-500">로딩 중...</div>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">결제일(계산서→입금) 규칙</p>
-      <p className="text-[12px] text-gray-400 mb-4 leading-relaxed">
+      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">결제일(계산서→입금) 규칙</p>
+      <p className="text-[12px] text-gray-500 mb-4 leading-relaxed">
         기사가 업로드 링크의 "결제일 정보"에서 계산서 발행일을 입력하면, 아래 규칙으로 입금 예정일을 안내합니다.
       </p>
       <div className="space-y-4">
@@ -50050,14 +50682,14 @@ function RevenuePasswordSection({ companyName }) {
 
   return (
     <div>
-      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">매출관리 비밀번호</p>
+      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-4">매출관리 비밀번호</p>
       {!loaded ? (
-        <div className="text-[13px] text-gray-400">로딩 중...</div>
+        <div className="text-[13px] text-gray-500">로딩 중...</div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <div className="text-[13px] text-gray-500">
-              현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-400"}>{currentPw ? "설정됨" : "미설정"}</b>
+              현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-500"}>{currentPw ? "설정됨" : "미설정"}</b>
             </div>
             {currentPw && !changeMode && (
               <button onClick={() => { setChangeMode(true); setMsg(""); }}
@@ -50180,12 +50812,12 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
           <div className="grid grid-cols-2 gap-4">
             {co && (
               <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-                <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">회사명</div>
+                <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">회사명</div>
                 <div className="text-[15px] font-bold text-gray-900">{co}</div>
               </div>
             )}
             <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">이메일</div>
+              <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">이메일</div>
               <div className="text-[14px] font-semibold text-gray-800 break-all">{user?.email || "-"}</div>
             </div>
           </div>
@@ -50198,7 +50830,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                 <span className="text-[12px] font-semibold text-gray-500 w-16 flex-shrink-0">입사일</span>
                 <CustomDatePicker value={hireDate} onChange={e => saveHireDate(e.target.value)}
                   className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
-                {hireDateSaving && <span className="text-[11px] text-gray-400">저장 중...</span>}
+                {hireDateSaving && <span className="text-[11px] text-gray-500">저장 중...</span>}
               </div>
               {yearsOfService && (
                 <div className="px-3 py-2 bg-[#1B2B4B] rounded-xl text-center">
@@ -50209,11 +50841,11 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               {leave ? (
                 <div className="grid grid-cols-3 gap-2 pt-1">
                   <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">구분</div>
+                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">구분</div>
                     <div className="text-[14px] font-black text-[#1B2B4B]">{leave.leaveLabel}</div>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">사용</div>
+                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">사용</div>
                     <div className="text-[14px] font-black text-[#1B2B4B]">{leave.used}일</div>
                   </div>
                   <div className="bg-[#1B2B4B] rounded-lg px-3 py-2">
@@ -50224,16 +50856,16 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                     총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계 · 휴가/외근 결재 승인 건 기준
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">병가</div>
+                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">병가</div>
                     <div className="text-[14px] font-black text-[#1B2B4B]">{leave.sickDays}일</div>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-400 font-semibold mb-0.5">외근</div>
+                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">외근</div>
                     <div className="text-[14px] font-black text-[#1B2B4B]">{leave.fieldDays}일</div>
                   </div>
                 </div>
               ) : (
-                <div className="text-[11px] text-gray-400">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
+                <div className="text-[11px] text-gray-500">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
               )}
             </div>
           </div>
@@ -50250,12 +50882,12 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
           {/* 명함 이미지 */}
           <div>
             <div className="text-[13px] font-semibold text-gray-700 mb-1">명함 이미지</div>
-            <div className="text-[11px] text-gray-400 mb-3">이메일 발송 시 하단에 첨부되는 명함 이미지입니다.</div>
+            <div className="text-[11px] text-gray-500 mb-3">이메일 발송 시 하단에 첨부되는 명함 이미지입니다.</div>
             {cardImage && (
               <img src={cardImage} alt="명함" className="rounded-xl mb-3 border border-gray-200 object-contain max-h-28 max-w-xs" />
             )}
             <div className="flex gap-2">
-              <label className={`px-4 py-2 rounded-xl border text-[13px] font-semibold cursor-pointer transition ${cardImageUploading ? "bg-gray-100 text-gray-400 border-gray-200" : "bg-white border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+              <label className={`px-4 py-2 rounded-xl border text-[13px] font-semibold cursor-pointer transition ${cardImageUploading ? "bg-gray-100 text-gray-500 border-gray-200" : "bg-white border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
                 {cardImageUploading ? "업로드 중..." : "이미지 선택"}
                 <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
                   onChange={(e) => {
@@ -50311,8 +50943,8 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                 { label: "오늘 수익", value: (todayStats?.profit ?? 0).toLocaleString(), unit: "원" },
               ].map(({ label, value, unit }) => (
                 <div key={label} className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-                  <div className="text-[11px] text-gray-400 font-medium mb-0.5">{label}</div>
-                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-400 ml-0.5">{unit}</span></div>
+                  <div className="text-[11px] text-gray-500 font-medium mb-0.5">{label}</div>
+                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-500 ml-0.5">{unit}</span></div>
                 </div>
               ))}
             </div>
@@ -50328,8 +50960,8 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                 { label: "총 수익", value: (myStats?.totalProfit ?? 0).toLocaleString(), unit: "원" },
               ].map(({ label, value, unit }) => (
                 <div key={label} className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-                  <div className="text-[11px] text-gray-400 font-medium mb-0.5">{label}</div>
-                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-400 ml-0.5">{unit}</span></div>
+                  <div className="text-[11px] text-gray-500 font-medium mb-0.5">{label}</div>
+                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-500 ml-0.5">{unit}</span></div>
                 </div>
               ))}
             </div>
@@ -50704,7 +51336,7 @@ function HRManagementPage({ userCompany, role, userId }) {
           <span className="text-[12px] font-bold text-gray-600">{label}</span>
           <button onClick={() => setDraft(d => ({ ...d, [key]: [...(d[key] || []), {}] }))} className="text-[11px] text-[#1B2B4B] font-bold hover:underline">+ 추가</button>
         </div>
-        {items.length === 0 && <div className="text-[11px] text-gray-300">항목 없음</div>}
+        {items.length === 0 && <div className="text-[11px] text-gray-400">항목 없음</div>}
         {items.map((it, i) => (
           <div key={i} className="flex gap-1.5 mb-1.5">
             {Object.keys(placeholder).map(f => (
@@ -50712,7 +51344,7 @@ function HRManagementPage({ userCompany, role, userId }) {
                 onChange={e => setDraft(d => { const arr = [...d[key]]; arr[i] = { ...arr[i], [f]: e.target.value }; return { ...d, [key]: arr }; })}
                 className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]" />
             ))}
-            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} className="px-2 text-gray-300 hover:text-red-500">✕</button>
+            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} className="px-2 text-gray-400 hover:text-red-500">✕</button>
           </div>
         ))}
       </div>
@@ -50735,7 +51367,7 @@ function HRManagementPage({ userCompany, role, userId }) {
           </div>
         </div>
         <div className="overflow-y-auto flex-1">
-          {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[12px] text-gray-300">인원이 없습니다</div>}
+          {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[12px] text-gray-400">인원이 없습니다</div>}
           {Object.entries(grouped).map(([team, members2]) => (
             <div key={team}>
               <div className={`px-3 py-1.5 text-[11px] font-bold sticky top-0 border-b ${team === "미배정" ? TEAM_BADGE_CLASS_UNASSIGNED : TEAM_BADGE_CLASS}`}>{team} ({members2.length})</div>
@@ -50744,12 +51376,12 @@ function HRManagementPage({ userCompany, role, userId }) {
                 return (
                   <div key={r.uid} onClick={() => { setSelectedUid(r.uid); setEditMode(false); setDraft(null); }}
                     className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-gray-50 transition ${selectedUid === r.uid ? "bg-blue-50" : "hover:bg-gray-50"}`}>
-                    <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex-shrink-0 overflow-hidden flex items-center justify-center text-[10px] text-gray-400">
+                    <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex-shrink-0 overflow-hidden flex items-center justify-center text-[10px] text-gray-500">
                       {photo ? <img src={photo} className="w-full h-full object-cover" /> : (r.name || "?").slice(0, 1)}
                     </div>
                     <div className="min-w-0">
                       <div className="text-[12.5px] font-bold text-gray-800 truncate">{r.name || r.email}</div>
-                      <div className="text-[10.5px] text-gray-400 truncate">{r.position || "직책 미설정"}</div>
+                      <div className="text-[10.5px] text-gray-500 truncate">{r.position || "직책 미설정"}</div>
                     </div>
                     {r.pendingApprovals > 0 && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />}
                   </div>
@@ -50763,7 +51395,7 @@ function HRManagementPage({ userCompany, role, userId }) {
       {/* 우측: 상세 패널 */}
       <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col min-w-0">
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-[13px] text-gray-300">왼쪽에서 인원을 선택하세요</div>
+          <div className="flex-1 flex items-center justify-center text-[13px] text-gray-400">왼쪽에서 인원을 선택하세요</div>
         ) : (
           <>
             <div className="px-5 pt-4 pb-0 border-b border-gray-100 flex items-center justify-between">
@@ -50813,26 +51445,26 @@ function HRManagementPage({ userCompany, role, userId }) {
                     <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">이 력 서</div>
                     <div className="flex gap-5 mb-5">
                       <div className="w-[100px] h-[128px] flex-shrink-0 border border-gray-300 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center relative">
-                        {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[10px] text-gray-300">증명사진</span>}
+                        {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[10px] text-gray-400">증명사진</span>}
                         {canEditThis && (
-                          <label className={`absolute bottom-0 inset-x-0 text-center text-[10px] py-1 cursor-pointer ${photoUploading ? "bg-gray-200 text-gray-400" : "bg-black/60 text-white hover:bg-black/75"}`}>
+                          <label className={`absolute bottom-0 inset-x-0 text-center text-[10px] py-1 cursor-pointer ${photoUploading ? "bg-gray-200 text-gray-500" : "bg-black/60 text-white hover:bg-black/75"}`}>
                             {photoUploading ? "업로드중" : "사진 변경"}
                             <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={handlePhotoUpload} />
                           </label>
                         )}
                       </div>
                       <div className="flex-1 grid grid-cols-2 gap-2 text-[12.5px]">
-                        <div><div className="text-gray-400 text-[11px] mb-0.5">성명</div><div className="font-bold text-gray-800">{selected.name}</div></div>
-                        <div><div className="text-gray-400 text-[11px] mb-0.5">생년월일</div>
+                        <div><div className="text-gray-500 text-[11px] mb-0.5">성명</div><div className="font-bold text-gray-800">{selected.name}</div></div>
+                        <div><div className="text-gray-500 text-[11px] mb-0.5">생년월일</div>
                           {editMode ? <input autoComplete="off" value={draft.birthDate || ""} onChange={e => setDraft(d => ({ ...d, birthDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.birthDate || "-"}</div>}
                         </div>
-                        <div><div className="text-gray-400 text-[11px] mb-0.5">연락처</div><div className="font-semibold text-gray-700">{selected.phone || "-"}</div></div>
-                        <div><div className="text-gray-400 text-[11px] mb-0.5">이메일</div><div className="font-semibold text-gray-700">{selected.email || "-"}</div></div>
-                        <div className="col-span-2"><div className="text-gray-400 text-[11px] mb-0.5">주소</div>
+                        <div><div className="text-gray-500 text-[11px] mb-0.5">연락처</div><div className="font-semibold text-gray-700">{selected.phone || "-"}</div></div>
+                        <div><div className="text-gray-500 text-[11px] mb-0.5">이메일</div><div className="font-semibold text-gray-700">{selected.email || "-"}</div></div>
+                        <div className="col-span-2"><div className="text-gray-500 text-[11px] mb-0.5">주소</div>
                           {editMode ? <input autoComplete="off" value={draft.address || ""} onChange={e => setDraft(d => ({ ...d, address: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.address || "-"}</div>}
                         </div>
-                        <div><div className="text-gray-400 text-[11px] mb-0.5">소속</div><div className="font-semibold text-gray-700">{selected.team} / {selected.position || "-"}</div></div>
-                        <div><div className="text-gray-400 text-[11px] mb-0.5">입사일</div><div className="font-semibold text-gray-700">{selected.hireDate || "미등록"}</div></div>
+                        <div><div className="text-gray-500 text-[11px] mb-0.5">소속</div><div className="font-semibold text-gray-700">{selected.team} / {selected.position || "-"}</div></div>
+                        <div><div className="text-gray-500 text-[11px] mb-0.5">입사일</div><div className="font-semibold text-gray-700">{selected.hireDate || "미등록"}</div></div>
                       </div>
                     </div>
 
@@ -50852,31 +51484,31 @@ function HRManagementPage({ userCompany, role, userId }) {
                       <>
                         <div className="mb-4">
                           <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">학력사항</div>
-                          {(resume.education || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.education || []).map((e, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-400">{e.period}</span><span className="font-semibold">{e.school}</span><span>{e.detail}</span></div>
+                          {(resume.education || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.education || []).map((e, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{e.period}</span><span className="font-semibold">{e.school}</span><span>{e.detail}</span></div>
                           ))}
                         </div>
                         <div className="mb-4">
                           <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">경력사항</div>
-                          {(resume.career || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.career || []).map((c, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-400">{c.period}</span><span className="font-semibold">{c.company}</span><span>{c.detail}</span></div>
+                          {(resume.career || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.career || []).map((c, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{c.period}</span><span className="font-semibold">{c.company}</span><span>{c.detail}</span></div>
                           ))}
                         </div>
                         <div className="mb-4">
                           <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">자격/면허</div>
-                          {(resume.certificates || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.certificates || []).map((c, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-400">{c.date}</span><span className="font-semibold">{c.name}</span><span>{c.issuer}</span></div>
+                          {(resume.certificates || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.certificates || []).map((c, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{c.date}</span><span className="font-semibold">{c.name}</span><span>{c.issuer}</span></div>
                           ))}
                         </div>
                         <div className="mb-4">
                           <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">가족관계</div>
-                          {(resume.family || []).length === 0 ? <div className="text-[11.5px] text-gray-300">등록된 정보가 없습니다</div> : (resume.family || []).map((f, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-16 text-gray-400">{f.relation}</span><span className="w-20 font-semibold">{f.name}</span><span className="w-28 text-gray-500">{f.birth}</span><span>{f.job}</span></div>
+                          {(resume.family || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.family || []).map((f, i) => (
+                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-16 text-gray-500">{f.relation}</span><span className="w-20 font-semibold">{f.name}</span><span className="w-28 text-gray-500">{f.birth}</span><span>{f.job}</span></div>
                           ))}
                         </div>
                         <div>
                           <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">자기소개</div>
-                          <div className="text-[12.5px] text-gray-600 whitespace-pre-wrap leading-relaxed">{resume.intro || <span className="text-gray-300">등록된 자기소개가 없습니다</span>}</div>
+                          <div className="text-[12.5px] text-gray-600 whitespace-pre-wrap leading-relaxed">{resume.intro || <span className="text-gray-400">등록된 자기소개가 없습니다</span>}</div>
                         </div>
                       </>
                     )}
@@ -50918,21 +51550,21 @@ function HRManagementPage({ userCompany, role, userId }) {
                     <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">인사발령 이력</div>
                     <div className="flex gap-4 mb-5 text-[12.5px]">
                       <div className="flex-1 px-4 py-3 rounded-lg border border-gray-100 bg-gray-50/50">
-                        <div className="text-[11px] text-gray-400 font-semibold mb-1">현재 재직상태</div>
+                        <div className="text-[11px] text-gray-500 font-semibold mb-1">현재 재직상태</div>
                         <div className="text-[14px] font-black text-[#1B2B4B]">{selected.employmentStatus || "재직"}</div>
                       </div>
                       <div className="flex-1 px-4 py-3 rounded-lg border border-gray-100 bg-gray-50/50">
-                        <div className="text-[11px] text-gray-400 font-semibold mb-1">퇴사일</div>
+                        <div className="text-[11px] text-gray-500 font-semibold mb-1">퇴사일</div>
                         <div className="text-[14px] font-black text-[#1B2B4B]">{selected.resignedAt || "-"}</div>
                       </div>
                     </div>
                     <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-2">발령 이력</div>
                     {(!selected.personnelHistory || selected.personnelHistory.length === 0) ? (
-                      <div className="text-[11.5px] text-gray-300 py-6 text-center">등록된 인사발령 이력이 없습니다</div>
+                      <div className="text-[11.5px] text-gray-400 py-6 text-center">등록된 인사발령 이력이 없습니다</div>
                     ) : (
                       <table className="w-full border-collapse text-[12.5px]">
                         <thead>
-                          <tr className="border-b border-gray-200 text-gray-400">
+                          <tr className="border-b border-gray-200 text-gray-500">
                             <th className="text-left py-2 pr-4 font-semibold w-[120px]">일자</th>
                             <th className="text-left py-2 pr-4 font-semibold w-[100px]">구분</th>
                             <th className="text-left py-2 font-semibold">내용</th>
@@ -51028,7 +51660,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
         </button>
         <h3 className="text-[17px] font-bold text-gray-900 mb-4">직원관리</h3>
-        {!employees.length ? <div className="text-gray-400 text-[13px]">등록된 직원이 없습니다</div> : (
+        {!employees.length ? <div className="text-gray-500 text-[13px]">등록된 직원이 없습니다</div> : (
           <div className="grid grid-cols-2 gap-3">
             {employees.map(emp=>(
               <div key={emp.id} style={{ background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:"16px 18px",display:"flex",alignItems:"center",gap:12 }}>
@@ -51137,7 +51769,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
             </div>
           ))}
         </div>
-        {!payRows.length ? <div className="text-gray-400 text-[13px]">이 달 운행 기록이 없습니다</div> : (
+        {!payRows.length ? <div className="text-gray-500 text-[13px]">이 달 운행 기록이 없습니다</div> : (
           <table style={{ width:"100%",borderCollapse:"separate",borderSpacing:"0 6px" }}>
             <thead><tr style={{ fontSize:11,color:"#9ca3af",textAlign:"left" }}>
               <th style={{ padding:"0 12px 4px" }}>기사명</th><th>차량번호</th><th style={{ textAlign:"right" }}>운행건수</th><th style={{ textAlign:"right",paddingRight:12 }}>기사운임</th><th style={{ textAlign:"right",paddingRight:12 }}>건당평균</th>
@@ -51418,7 +52050,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     setResolvedNotice(null);
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400 text-[14px]">불러오는 중...</div>;
+  if (loading) return <div className="flex items-center justify-center h-64 text-gray-500 text-[14px]">불러오는 중...</div>;
 
   const InfoRow = ({ label, value }) => (
     <div className="flex items-start py-3 border-b border-gray-100 last:border-0">
@@ -51457,7 +52089,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               </div>
               {resolvedNotice.status === "rejected" && resolvedNotice.rejectReason && (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-                  <div className="text-[11px] font-semibold text-gray-400 mb-1">거절 사유</div>
+                  <div className="text-[11px] font-semibold text-gray-500 mb-1">거절 사유</div>
                   <div className="text-[13px] text-gray-800">{resolvedNotice.rejectReason}</div>
                 </div>
               )}
@@ -51494,7 +52126,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between">
           <div>
             <p className="text-[13px] font-bold text-gray-800">배차마당 공유</p>
-            <p className="text-[12px] text-gray-400 mt-0.5">
+            <p className="text-[12px] text-gray-500 mt-0.5">
               켜두면 배차요청장에서 "배차마당 등록" 버튼으로 저장한 오더가 배차마당(카페사이트)에도 함께 올라갑니다.
             </p>
           </div>
@@ -51506,7 +52138,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
         {/* 기본 정보 카드 */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-5">기본 정보</p>
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-5">기본 정보</p>
           {appData ? (
             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
               {[
@@ -51521,7 +52153,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 { label: "주소", value: appData.address || appData.주소, span: true },
               ].map(({ label, value, mono, span }) => (
                 <div key={label} className={span ? "col-span-2" : ""}>
-                  <div className="text-[11px] font-bold text-gray-400 mb-1.5 uppercase tracking-wide">{label}</div>
+                  <div className="text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</div>
                   {mono ? (
                     <div className="text-[14px] font-mono font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 inline-block px-3 py-1 rounded-lg">{value || "-"}</div>
                   ) : (
@@ -51531,13 +52163,13 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               ))}
             </div>
           ) : (
-            <div className="py-8 text-[14px] text-gray-400 text-center">가입 승인 후 표시됩니다.</div>
+            <div className="py-8 text-[14px] text-gray-500 text-center">가입 승인 후 표시됩니다.</div>
           )}
         </div>
 
         {/* 계좌 정보 카드 */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-5">계좌 정보</p>
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-5">계좌 정보</p>
           <div className="max-w-[420px] space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -51574,7 +52206,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             </div>
             {appData?.계좌은행 && (
               <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/10 rounded-xl px-4 py-3">
-                <div className="text-[11px] font-semibold text-gray-400 mb-1">현재 등록된 계좌</div>
+                <div className="text-[11px] font-semibold text-gray-500 mb-1">현재 등록된 계좌</div>
                 <div className="text-[15px] font-bold text-[#1B2B4B]">{appData.계좌은행} {appData.계좌번호}</div>
                 <div className="text-[13px] text-gray-500 mt-0.5">예금주: {appData.예금주 || "-"}</div>
               </div>
@@ -51592,7 +52224,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         {/* 사업자등록증 카드 */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-5">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">사업자등록증</p>
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">사업자등록증</p>
             <button
               className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40"
               onClick={() => fileRef.current?.click()}
@@ -51624,11 +52256,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                <svg className="w-10 h-10 text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
-                <p className="text-[12px] text-gray-400 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
+                <p className="text-[12px] text-gray-500 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
               </div>
             )}
           </div>
