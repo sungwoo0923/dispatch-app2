@@ -8223,6 +8223,16 @@ return {
   dropLabel: normalizeAreaForSearch(dropAddr),
 };
 }
+// ⭐ 연휴·성수기(특수일) 오더를 AI추천/기존운임비교 평균 계산에 포함할지 여부.
+// 기본값은 꺼짐(기존 동작 유지 — 특수일은 평균 계산에서 제외). AI추천 팝업에서
+// 사용자가 직접 켜서 특수일 포함 기준으로도 확인해볼 수 있다.
+// ⚠️ 아래 useEffect들의 deps 배열에서 바로 참조하므로(배열 리터럴은 useEffect
+// 호출 시점에 즉시 평가됨 — effect 콜백 본문과 달리 지연 실행되지 않는다),
+// 반드시 그 effect들보다 앞서 선언해야 한다. 원래 fareCompare 근처(더 아래)에
+// 있었는데, 그러면 첫 번째 effect의 deps가 아직 선언되지 않은 이 변수를 참조하게
+// 되어 "Cannot access 'includeSpecialFare' before initialization" 런타임
+// 에러로 배차관리 화면 전체가 크래시하는 버그가 있었다.
+const [includeSpecialFare, setIncludeSpecialFare] = React.useState(false);
 // ===============================
 // 🤖 AI 배차/운임 추천 (HERE)
 // ===============================
@@ -8305,10 +8315,6 @@ const [fareCompare, setFareCompare] = React.useState({
   sale: null,
   driver: null,
 });
-// ⭐ 연휴·성수기(특수일) 오더를 AI추천/기존운임비교 평균 계산에 포함할지 여부.
-// 기본값은 꺼짐(기존 동작 유지 — 특수일은 평균 계산에서 제외). AI추천 팝업에서
-// 사용자가 직접 켜서 특수일 포함 기준으로도 확인해볼 수 있다.
-const [includeSpecialFare, setIncludeSpecialFare] = React.useState(false);
 const [isSaving, setIsSaving] = React.useState(false);
 const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
 const [orderDates, setOrderDates] = React.useState([]); // 오더별 개별 상차일
