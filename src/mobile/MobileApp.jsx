@@ -14473,7 +14473,11 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
         return;
       }
       onCopySuccess?.("기사 문자 복사 완료");
-      (onAfterDriverCopy ?? onAfterFullCopy)?.();
+      // ⚠️ 여기서 onAfterFullCopy로 폴백하면 안 된다 — onAfterFullCopy는 "전달상태를
+      // 전달완료로 바꿀까요?" 확인 팝업을 띄우는 용도라, 기사전달용 복사(driver)에서까지
+      // 그 팝업이 잘못 뜨는 버그가 있었다. onAfterDriverCopy가 없으면(호출자가 안 넘겼으면)
+      // 그냥 아무 것도 하지 않는다.
+      onAfterDriverCopy?.();
       return;
     }
 
@@ -14633,7 +14637,8 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
                   window.location.href = `sms:${smsConfirm.phone}`;
                   setSmsConfirm(null);
                   onCopySuccess?.("기사 문자 복사 완료");
-                  (onAfterDriverCopy ?? onAfterFullCopy)?.();
+                  // (위 buildAndCopy와 동일한 이유로) onAfterFullCopy로 폴백하지 않는다.
+                  onAfterDriverCopy?.();
                 }}
               >문자 앱 열기</button>
             </div>

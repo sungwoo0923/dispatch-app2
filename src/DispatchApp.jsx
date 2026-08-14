@@ -8,7 +8,7 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChar
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { hardReloadForUpdate } from "./UpdateBanner";
-import CustomDatePicker from "./CustomDatePicker";
+import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import AdminMenu from "./AdminMenu";
 import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
@@ -25,13 +25,12 @@ import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 import AttendanceBoard from "./AttendanceBoard";
-import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday } from "./attendanceUtils";
+import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
-import { Clock } from "lucide-react";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -112,27 +111,10 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 }
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
-// 상/하차지명 옆에 붙는 휴게(점심시간) 표시 — 그 상/하차지에 등록된 점심시간이
-// 있을 때만 작은 검은색 시계 아이콘이 조용히 나타난다(모바일 쉬운모드와 동일하게
-// 알록달록한 색 이모지 대신 단색 라인 아이콘 사용). 평소엔 텍스트 없이 아이콘뿐이라
-// 표가 복잡해지지 않고, 필요할 때(마우스를 올렸을 때)만 정확한 시간대가 툴팁으로
-// 뜬다. 같은 업체(상/하차지명)가 여러 건 있을 때 행마다 아이콘이 반복돼 지저분해
-// 보이지 않도록, 그 업체가 화면에 처음 등장하는 행에서만 아이콘을 보여준다(isFirst).
-// 다만 그 오더의 상/하차 시간이 점심시간과 실제로 겹치는 경우엔 몇 번째 행이든
-// 무조건 아이콘을 빨간색으로 띄워 경고한다 — 이건 업체 단위가 아니라 그 오더
-// 하나하나에 해당하는 정보라 중복이어도 숨기면 안 된다.
-const RestCell = ({ lunchInfo, orderTime, isFirst }) => {
-  if (!lunchInfo) return null;
-  const overlap = isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end);
-  if (!overlap && !isFirst) return null;
-  return (
-    <HoverInfoTrigger
-      className={`inline-flex items-center justify-center w-4 h-4 shrink-0 cursor-default ${overlap ? "text-red-500" : "text-black"}`}
-      label={<Clock width={12} height={12} strokeWidth={2.25} />}
-      tooltipRows={<div>점심시간 {lunchInfo.start}~{lunchInfo.end}{overlap ? " · 이 시간과 겹칩니다" : ""}</div>}
-    />
-  );
-};
+// ⚠️ 예전엔 여기에 상/하차지명 옆 시계 아이콘(RestCell)이 있었는데, 상/하차지 칸이
+// 복잡해 보인다는 피드백으로 제거했다 — 대신 오더정보(우클릭 메뉴) 팝업에서 상세
+// 휴게시간을 확인할 수 있다(OrderInfoModal 참고). isLunchTimeOverlap/buildLunchByName/
+// _lunchNameKey는 그 팝업에서 계속 재사용한다.
 
 /* -------------------------------------------------
    운임정보(운임확인서) 미리보기 팝업 — 실시간배차현황/배차현황 우클릭 메뉴의
@@ -299,6 +281,298 @@ function _scheduleDateLabel(d) {
    알록달록한 배색 없이 프로그램 기본 톤(네이비/그레이)만 쓰고, 글자는
    또렷하게 굵은 글씨 위주로 구성한다.
 --------------------------------------------------*/
+/* --------------------------------------------------
+   오더등록 캘린더 패널 — 배차관리(3파트) 등록폼 오른쪽에 있던 "TODAY" 통계
+   패널 자리를 대체한다. 이번 달 달력에 현재 입력 중인 상차일/하차일을
+   네이비색 동그란 표시("상"/"하")로 함께 보여주고, 달력 안에서 날짜를
+   눌러 상차일·하차일을 직접 지정할 수도 있다. 공휴일/대체공휴일/명절연휴
+   이름은 CustomDatePicker의 달력과 동일하게 한 줄(줄바꿈 없이)로 표시한다.
+   덤으로 실시간 디지털 시계를 헤더에 넣어 데스크 시계처럼도 쓸 수 있게 했다.
+--------------------------------------------------*/
+function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate }) {
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+  const parseValidDate = (s) => {
+    const d = s ? new Date(s) : null;
+    return d && !isNaN(d.getTime()) ? d : null;
+  };
+
+  const [viewDate, setViewDate] = React.useState(() => parseValidDate(pickupDate) || parseValidDate(dropDate) || new Date());
+  const [target, setTarget] = React.useState("pickup"); // "pickup" | "drop" — 달력 클릭 시 어느 필드에 반영할지
+  const [clock, setClock] = React.useState(() => new Date());
+  const [schedules, setSchedules] = React.useState([]);
+
+  React.useEffect(() => {
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // 휴가/외근 승인 현황(인사관리 > 출근기록부와 동일한 "schedules" 컬렉션)을 구독해서,
+  // 승인 완료된 연차·외근·병가 등을 달력 날짜 칸에 함께 표시한다.
+  React.useEffect(() => {
+    const company = companyName || "돌캐";
+    const unsub = onSnapshot(collection(db, "schedules"), (snap) => {
+      setSchedules(snap.docs.map(d => d.data()).filter(s => (s.companyName || "돌캐") === company));
+    }, () => {});
+    return () => unsub();
+  }, [companyName]);
+
+  // 상차일이 바뀌면(폼에서 직접 입력해도) 그 달로 자동으로 이동해서, 별도
+  // 조작 없이도 방금 고른 날짜가 바로 달력에 보이게 한다.
+  React.useEffect(() => {
+    const d = parseValidDate(pickupDate);
+    if (!d) return;
+    setViewDate((prev) => (prev.getFullYear() === d.getFullYear() && prev.getMonth() === d.getMonth()) ? prev : d);
+  }, [pickupDate]);
+
+  const viewYear = viewDate.getFullYear();
+  const viewMonth = viewDate.getMonth();
+  const now = new Date();
+  const todayStr = fmt(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  // 날짜별 승인된 휴가/외근 목록 — 날짜마다 매번 전체 스캔하지 않도록 이번 달 범위만 미리 묶어둔다.
+  const leavesByDate = React.useMemo(() => {
+    const map = new Map();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = fmt(viewYear, viewMonth, d);
+      const hits = (schedules || []).filter(s =>
+        s.start && dateStr >= s.start && dateStr <= (s.end || s.start) && isScheduleApproved(s)
+      );
+      if (hits.length) map.set(dateStr, hits);
+    }
+    return map;
+  }, [schedules, viewYear, viewMonth, daysInMonth]);
+
+  const goMonth = (delta) => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
+
+  // ⚠️ "오늘로 이동"을 눌렀을 때, 이미 이번 달을 보고 있는 상태(가장 흔한 경우 —
+  // 상차일 기본값이 오늘이라 대부분 이미 이번 달이 떠 있음)라면 달력 화면이 그대로라
+  // 눌러도 "반응이 없다"고 느껴진다. 실제로 달이 바뀌든 안 바뀌든 오늘 칸을 잠깐
+  // 반짝여서(pulse) 클릭이 확실히 반영됐다는 걸 보여준다.
+  const [todayPulse, setTodayPulse] = React.useState(false);
+  const todayPulseTimer = React.useRef(null);
+  const goToday = () => {
+    const t = new Date();
+    setViewDate(new Date(t.getFullYear(), t.getMonth(), 1));
+    setTodayPulse(true);
+    if (todayPulseTimer.current) window.clearTimeout(todayPulseTimer.current);
+    todayPulseTimer.current = window.setTimeout(() => setTodayPulse(false), 900);
+  };
+  React.useEffect(() => () => { if (todayPulseTimer.current) window.clearTimeout(todayPulseTimer.current); }, []);
+
+  // ⭐ 묶음 오더(복수근무일) — 클릭할 때마다 근무일 목록에서 켜고/끄고 토글.
+  // 상차일/하차일은 그 목록의 최솟값/최댓값으로 부모(toggleWorkDate)가 자동 연동한다.
+  const handlePick = (dateStr) => {
+    if (multiMode) { onToggleWorkDate?.(dateStr); return; }
+    if (target === "pickup") onPickupChange?.(dateStr);
+    else onDropChange?.(dateStr);
+  };
+
+  const workDateSet = React.useMemo(() => new Set(multiMode ? (workDates || []) : []), [multiMode, workDates]);
+  const sortedWorkDates = React.useMemo(() => Array.from(workDateSet).sort(), [workDateSet]);
+  const minWorkDate = sortedWorkDates[0];
+  const maxWorkDate = sortedWorkDates[sortedWorkDates.length - 1];
+
+  const clockStr = `${pad2(clock.getHours())}:${pad2(clock.getMinutes())}:${pad2(clock.getSeconds())}`;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
+      {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
+      <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
+        <div>
+          <div className="text-[10px] text-white/50 font-semibold tracking-widest">TODAY</div>
+          <div className="text-[13px] text-white font-bold">{todayStr}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] text-white/50 font-semibold tracking-widest">TIME</div>
+          <div className="text-[20px] font-black text-white leading-none tabular-nums" style={{ fontFamily: "'DM Mono','Consolas',monospace" }}>
+            {clockStr}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto min-h-0">
+        {/* ⭐ 복수근무일(묶음) 모드 — 상/하차일 대상 토글 대신, 근무일을 하나씩
+            선택하는 중이라는 안내와 선택 개수/전체해제 버튼을 보여준다. */}
+        {multiMode ? (
+          <div className="rounded-xl py-2.5 px-3 bg-black text-white text-[12px] font-bold flex items-center justify-between shrink-0">
+            <span>📅 근무일을 클릭해 선택/해제하세요{sortedWorkDates.length ? ` (${sortedWorkDates.length}일 선택됨)` : ""}</span>
+            {sortedWorkDates.length > 0 && (
+              <button type="button"
+                onClick={() => sortedWorkDates.forEach(d => onToggleWorkDate?.(d))}
+                className="text-[11px] font-semibold text-white/70 hover:text-white underline shrink-0 ml-2">
+                전체 해제
+              </button>
+            )}
+          </div>
+        ) : (
+        /* 상차일/하차일 선택 대상 토글 — 누른 상태에서 달력 날짜를 클릭하면 그 필드에 반영 */
+        <div className="grid grid-cols-2 gap-2 shrink-0">
+          <button type="button" onClick={() => setTarget("pickup")}
+            className={`rounded-xl py-2 text-[12px] font-bold border transition flex items-center justify-center gap-1.5 ${
+              target === "pickup" ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}>
+            <span className="w-4 h-4 rounded-full bg-white text-[#1B2B4B] text-[9px] font-black flex items-center justify-center leading-none shrink-0" style={{ opacity: target === "pickup" ? 1 : 0.6 }}>상</span>
+            상차일{pickupDate ? ` · ${pickupDate.slice(5).replace("-", "/")}` : " 선택"}
+          </button>
+          <button type="button" onClick={() => setTarget("drop")}
+            className={`rounded-xl py-2 text-[12px] font-bold border transition flex items-center justify-center gap-1.5 ${
+              target === "drop" ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}>
+            <span className="w-4 h-4 rounded-full bg-white text-[#1B2B4B] text-[9px] font-black flex items-center justify-center leading-none shrink-0" style={{ opacity: target === "drop" ? 1 : 0.6 }}>하</span>
+            하차일{dropDate ? ` · ${dropDate.slice(5).replace("-", "/")}` : " 선택"}
+          </button>
+        </div>
+        )}
+
+        {/* 달력 */}
+        <div className="bg-white border border-gray-100 rounded-xl p-3 flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <button type="button" onClick={() => goMonth(-1)}
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-base font-bold">‹</button>
+            <div className="text-[13px] font-bold text-[#1B2B4B]">{viewYear}년 {viewMonth + 1}월</div>
+            <button type="button" onClick={() => goMonth(1)}
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-base font-bold">›</button>
+          </div>
+          {/* ⚠️ 요일 헤더 글씨가 너무 작아 안 보인다는 피드백 — 10px→13px, 굵게 */}
+          <div className="grid grid-cols-7 gap-1 mb-1 shrink-0">
+            {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
+              <div key={w} className={`text-center text-[13px] font-extrabold py-1 ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-500"}`}>{w}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1 flex-1">
+            {cells.map((d, i) => {
+              if (d == null) return <div key={i} />;
+              const dateStr = fmt(viewYear, viewMonth, d);
+              const isPickup = !multiMode && dateStr === pickupDate;
+              const isDrop = !multiMode && dateStr === dropDate;
+              const isWorkDate = multiMode && workDateSet.has(dateStr);
+              const isWorkMin = isWorkDate && dateStr === minWorkDate;
+              const isWorkMax = isWorkDate && dateStr === maxWorkDate;
+              const isMarked = isPickup || isDrop || isWorkDate;
+              const isToday = dateStr === todayStr;
+              const dow = new Date(viewYear, viewMonth, d).getDay();
+              const holidayName = KOREAN_HOLIDAYS[dateStr];
+              const isSunday = dow === 0;
+              const isSaturday = dow === 6;
+              const numberCls = isMarked
+                ? "text-white"
+                : holidayName || isSunday ? "text-red-500"
+                : isSaturday ? "text-blue-500"
+                : "text-gray-700";
+              const leaves = leavesByDate.get(dateStr) || [];
+              const leaveTitle = leaves.map(s => `${s.name || "직원"} ${LEAVE_TYPE_LABEL[s.type] || s.type}`).join(", ");
+              return (
+                <button key={i} type="button"
+                  title={[holidayName, leaveTitle].filter(Boolean).join(" · ") || undefined}
+                  onClick={() => handlePick(dateStr)}
+                  className={`min-h-[84px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
+                    isMarked ? (multiMode ? "bg-black" : "bg-[#1B2B4B]") :
+                    isToday ? "border-2 border-[#1B2B4B]" :
+                    "hover:bg-gray-100"
+                  } ${isToday && todayPulse ? "ring-4 ring-emerald-300" : ""}`}
+                >
+                  <span className={numberCls}>{d}</span>
+                  {/* ⚠️ 공휴일/대체공휴일/연휴 이름 글씨가 너무 작아 안 보인다는 피드백 —
+                      7px→10px로 키우고, 굵기·색 대비를 높여 또렷하게 보이게 한다.
+                      줄바꿈은 여전히 없음(한 줄, whitespace-nowrap). */}
+                  {holidayName && (
+                    <span className={`text-[10px] leading-none font-extrabold whitespace-nowrap ${isMarked ? "text-white" : "text-red-600"}`}>
+                      {shortHolidayLabel(holidayName)}
+                    </span>
+                  )}
+                  {/* ⭐ 상/하차일 표시 — 너무 작아 안 보인다는 피드백으로 크게(w-3→w-5) 키움 */}
+                  {isMarked && !multiMode && (
+                    <span className="flex gap-1">
+                      {isPickup && <span className="w-5 h-5 rounded-full bg-white text-[#1B2B4B] text-[11px] font-black flex items-center justify-center leading-none shrink-0">상</span>}
+                      {isDrop && <span className="w-5 h-5 rounded-full border-2 border-white text-white text-[11px] font-black flex items-center justify-center leading-none shrink-0">하</span>}
+                    </span>
+                  )}
+                  {/* ⭐ 복수근무일(묶음) 모드 — 선택된 근무일 중 가장 빠른 날은 "상",
+                      가장 늦은 날은 "하"(각각 상차일/하차일로 자동 연동되는 날짜라는 뜻),
+                      그 사이 선택된 날들은 체크(✓) 표시로 근무일임을 보여준다. */}
+                  {isWorkDate && (
+                    <span className="flex gap-1">
+                      {isWorkMin && <span className="w-5 h-5 rounded-full bg-white text-black text-[11px] font-black flex items-center justify-center leading-none shrink-0">상</span>}
+                      {isWorkMax && !isWorkMin && <span className="w-5 h-5 rounded-full border-2 border-white text-white text-[11px] font-black flex items-center justify-center leading-none shrink-0">하</span>}
+                      {!isWorkMin && !isWorkMax && <span className="w-5 h-5 rounded-full border-2 border-white text-white text-[11px] font-black flex items-center justify-center leading-none shrink-0">✓</span>}
+                    </span>
+                  )}
+                  {/* ⭐ 승인된 연차/외근/병가 등 — 인사관리(출근기록부)에서 최종 승인된
+                      일정만 표시. 여러 명이 겹치면 앞 2명만 보여주고 "+N"으로 요약,
+                      전체 목록은 title 툴팁으로 확인 가능. */}
+                  {leaves.length > 0 && (
+                    <span className="flex flex-col items-center gap-[3px] mt-0.5 w-full px-0.5">
+                      {leaves.slice(0, 2).map((s, li) => (
+                        <span key={li}
+                          className={`w-full text-center text-[11px] leading-tight font-extrabold rounded px-0.5 py-[2px] truncate ${ATTENDANCE_STATUS_COLOR[LEAVE_TYPE_LABEL[s.type] || s.type] || "bg-gray-500 text-white"}`}
+                        >
+                          {s.name || "직원"}·{LEAVE_TYPE_LABEL[s.type] || s.type}
+                        </span>
+                      ))}
+                      {leaves.length > 2 && (
+                        <span className={`text-[10.5px] leading-none font-extrabold ${isMarked ? "text-white/80" : "text-gray-500"}`}>+{leaves.length - 2}명</span>
+                      )}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100 shrink-0">
+            <button type="button" onClick={goToday} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">오늘로 이동</button>
+            <div className="flex items-center gap-2 text-[10px] font-semibold text-gray-400">
+              {multiMode ? (
+                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-black" />근무일(묶음)</span>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />상차일</span>
+                  <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#1B2B4B]" />하차일</span>
+                </>
+              )}
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-violet-700" />휴가·외근(승인)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 오더에 저장된 특수운임(연휴·성수기) 여부를 판단한다. 이 기능이 추가되기 전에
+// 이미 등록돼있던 오더는 이 필드 자체가 없는데, 그런 오더도 상차일을 공휴일
+// 캘린더에 다시 대조해서 특수일이면 특수운임으로 취급한다(StandardFare.jsx의
+// isSpecialDemandRow와 동일한 판단 기준).
+function isSpecialDemandOrder(r) {
+  if (r?.특수운임 === true) return true;
+  if (r?.특수운임 === false) return false;
+  return !!specialDemandInfo(r?.상차일)?.special;
+}
+
+// ⭐ 복수근무일(묶음 오더)의 근무일자목록을 안전하게 배열로 복원한다.
+// Firestore에 저장될 때 stripUndefinedDeep이 배열을 {0:"...",1:"..."} 형태의
+// 객체로 바꿔버리기 때문에(경유상차목록/경유지_상차 등 다른 배열 필드와 동일한
+// 문제), onSnapshot으로 다시 읽어온 오더의 근무일자목록은 배열이 아닐 수 있다.
+// 화면에서 근무일자목록을 참조하는 모든 곳은 반드시 이 함수를 거쳐야 한다.
+function _parseWorkDates(v) {
+  if (Array.isArray(v)) return v.filter(Boolean).sort();
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p.filter(Boolean).sort(); } catch {}
+  }
+  if (v && typeof v === "object") {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]).filter(Boolean).sort();
+  }
+  return [];
+}
+
 // 스케줄표 안에서 상세정보(기사용) 카드로 보여줄 때 쓰는 담당자 한 줄 표시.
 // 이름/번호 중 있는 것만 붙이고, 번호는 항상 하이픈을 채워서 보여준다.
 function _scheduleContactLine(name, phone) {
@@ -308,7 +582,7 @@ function _scheduleContactLine(name, phone) {
   return `${n || "담당자"}${p ? ` (${formatPhone(p)})` : ""}`;
 }
 
-function ScheduleChartModal({ rows, companyName, onClose }) {
+function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const [groupBy, setGroupBy] = React.useState("date"); // "date" | "driver"
   const [showFareCharge, setShowFareCharge] = React.useState(false); // 청구운임 포함
   const [showFareDriver, setShowFareDriver] = React.useState(false); // 기사운임 포함
@@ -321,9 +595,15 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
   const dateGroups = React.useMemo(() => {
     const map = new Map();
     for (const r of rows || []) {
-      const key = r.상차일 || "";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(r);
+      // ⭐ 복수근무일(묶음) 오더 — 1개의 오더가 여러 날짜에 걸쳐 근무하므로,
+      // 날짜별 스케줄표에서는 근무일자목록의 모든 날짜 섹션에 각각 나타나야 한다
+      // (실제 오더는 1건이지만, 그날 그 노선이 움직인다는 사실은 매일 보여야 함).
+      const parsedWorkDates = _parseWorkDates(r.근무일자목록);
+      const workDates = parsedWorkDates.length > 1 ? parsedWorkDates : [r.상차일 || ""];
+      for (const key of workDates) {
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(r);
+      }
     }
     return Array.from(map.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
@@ -332,6 +612,24 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
         list: [...list].sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""))),
       }));
   }, [rows]);
+
+  // ⭐ 복수근무일(묶음) 오더의 근무일자목록을 "9/2, 4~5, 7~11" 형태로 압축 요약.
+  // 기사별 보기에서 13일치를 13줄로 늘어놓지 않고 한 줄로 보여주기 위함.
+  const _compressWorkDates = (dates) => {
+    const sorted = [...(dates || [])].sort();
+    if (sorted.length === 0) return "";
+    const ranges = [];
+    let start = sorted[0], prev = sorted[0];
+    const nextDay = (d) => { const t = new Date(d + "T00:00:00"); t.setDate(t.getDate() + 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
+    const short = (d) => d.slice(5).replace("-", "/");
+    for (let i = 1; i <= sorted.length; i++) {
+      const cur = sorted[i];
+      if (cur && nextDay(prev) === cur) { prev = cur; continue; }
+      ranges.push(start === prev ? short(start) : `${short(start)}~${short(prev)}`);
+      start = cur; prev = cur;
+    }
+    return ranges.join(", ");
+  };
 
   const driverGroups = React.useMemo(() => {
     const map = new Map();
@@ -441,24 +739,32 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
     }
   };
 
-  // ⚠️ table-layout이 auto(기본값)면 헤더/셀 텍스트가 길 때 브라우저가 각 열의
-  // "최소 필요 너비"를 그대로 반영해서, w-[Npx] 지정을 무시하고 표 전체가 카드
-  // 폭(760px)보다 넓어져 청구운임/기사운임 칸이 카드 밖으로 삐져나가는 문제가
-  // 있었다. table-fixed로 열 너비를 강제 고정하고, 헤더도 줄바꿈을 허용해
-  // 어떤 경우에도 표가 카드 폭을 넘지 않게 한다.
-  const thCls = "border border-gray-200 px-2 py-1.5 font-bold text-gray-600 bg-gray-100 break-words";
-  const tdCls = "border border-gray-200 px-2 py-1.5 text-gray-800 break-words";
+  // table-fixed로 열 너비를 억지로 고정했더니, 좁은 칸 안에서 글자가 줄바꿈되지
+  // 않고 그대로 겹쳐 보이는 문제가 있었다. 표는 원래대로 auto 레이아웃(내용 길이에
+  // 맞춰 칸이 자연스럽게 늘어남) + 줄바꿈 없이 한 줄로 두고, 대신 카드/팝업 쪽을
+  // 내용 너비에 맞춰 커지게(w-fit) 해서 애초에 칸이 좁아질 일이 없게 한다.
+  // align-middle로 세로 정렬까지 맞춰 어떤 줄에서도 텍스트가 칸 상단에 붙어
+  // 어긋나 보이지 않게 한다.
+  const thCls = "border border-gray-200 px-3 py-1.5 font-bold text-gray-600 bg-gray-100 whitespace-nowrap align-middle";
+  const tdCls = "border border-gray-200 px-3 py-1.5 text-gray-800 whitespace-nowrap align-middle";
   const showFare = showFareCharge || showFareDriver;
 
   // 상세정보(기사용) 카드 — 표 대신 오더 1건을 카드로 펼쳐서, 기사가 실제로 알아야 하는
   // 정보(상/하차지 주소·담당자, 화물내용/톤수, 전달사항, 원하면 운임까지)를 한 번에 보여준다.
-  const DetailCard = ({ r }) => {
+  // dateOverride: 날짜별 보기에서 복수근무일 오더가 특정 날짜 섹션에 펼쳐져
+  // 들어올 때, 카드에는 오더의 상차일(최솟값)이 아니라 그 섹션의 날짜를 보여준다.
+  const DetailCard = ({ r, dateOverride }) => {
     const pickupContact = _scheduleContactLine(r.상차지담당자, r.상차지담당자번호);
     const dropContact = _scheduleContactLine(r.하차지담당자, r.하차지담당자번호);
+    const rWorkDates = _parseWorkDates(r.근무일자목록);
+    const isMultiWork = rWorkDates.length > 1;
     return (
       <div className="border border-gray-200 rounded-lg overflow-hidden">
         <div className="bg-gray-100 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
-          <span className="text-[12px] font-extrabold text-[#1B2B4B]">{_scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}</span>
+          <span className="text-[12px] font-extrabold text-[#1B2B4B]">
+            {dateOverride ? _scheduleDateLabel(dateOverride) : isMultiWork ? _compressWorkDates(rWorkDates) : _scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}
+          </span>
+          {isMultiWork && <span className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none">묶음</span>}
           <span className="text-[11px] font-bold text-gray-600 ml-auto">{r.차량종류 || "-"} / {r.차량톤수 || "-"}</span>
         </div>
         <div className="px-3 py-2.5 text-[12px] space-y-1.5">
@@ -503,7 +809,7 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[95vw] min-w-[720px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
           <h3 className="text-white font-bold text-[15px]">스케줄표 미리보기 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
@@ -552,11 +858,16 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
         {/* 본문 (확대/축소 미리보기) */}
         <div className="flex-1 overflow-auto bg-gray-100 p-6">
           <div style={{ transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform .15s" }}>
-            <div ref={captureRef} className="bg-white mx-auto p-8" style={{ width: "900px" }}>
-              <div className="text-center border-b-2 border-[#1B2B4B] pb-4 mb-5">
-                <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">배 차 스 케 줄 표</div>
-                <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
-                  {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {rows.length}건
+            <div ref={captureRef} className="bg-white mx-auto p-8 w-fit" style={{ minWidth: 640 }}>
+              <div className="relative border-b-2 border-[#1B2B4B] pb-4 mb-5">
+                {authorName && (
+                  <div className="absolute top-0 right-0 text-[11px] font-bold text-gray-500">작성자 {authorName}</div>
+                )}
+                <div className="text-center">
+                  <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">배 차 스 케 줄 표</div>
+                  <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
+                    {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {rows.length}건
+                  </div>
                 </div>
               </div>
 
@@ -570,10 +881,10 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
                       </div>
                       {showDetail ? (
                         <div className="space-y-2">
-                          {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
+                          {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} dateOverride={g.date} />)}
                         </div>
                       ) : (
-                        <table className="w-full table-fixed text-[12px] border border-gray-200 border-collapse">
+                        <table className="text-[12px] border border-gray-200 border-collapse">
                           <thead>
                             <tr>
                               <th className={`${thCls} w-[64px]`}>상차시간</th>
@@ -590,7 +901,12 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
                             {g.list.map((r, i) => (
                               <tr key={r._id || r.id || i}>
                                 <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
-                                <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                                <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>
+                                  {r.상차지명 || "-"} → {r.하차지명 || "-"}
+                                  {_parseWorkDates(r.근무일자목록).length > 1 && (
+                                    <span className="ml-1 bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none align-middle">묶음</span>
+                                  )}
+                                </td>
                                 <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.이름 || "-"}</td>
                                 <td className={`${tdCls} text-center`}>{formatPhone(r.전화번호) || "-"}</td>
                                 <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.차량번호 || "-"}</td>
@@ -633,7 +949,7 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
                             {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
                           </div>
                         ) : (
-                          <table className="w-full table-fixed text-[12px] border border-gray-200 border-collapse">
+                          <table className="text-[12px] border border-gray-200 border-collapse">
                             <thead>
                               <tr>
                                 <th className={`${thCls} w-[92px]`}>상차일</th>
@@ -647,7 +963,16 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
                             <tbody>
                               {g.list.map((r, i) => (
                                 <tr key={r._id || r.id || i}>
-                                  <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>{_scheduleDateLabel(r.상차일)}</td>
+                                  <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>
+                                    {/* ⭐ 복수근무일(묶음) 오더는 날짜 하나 대신 압축된 근무일 범위를 보여준다
+                                        (예: 9/2, 4~5, 7~11) — 13일치를 13줄로 늘어놓지 않기 위함. */}
+                                    {(() => {
+                                      const wd = _parseWorkDates(r.근무일자목록);
+                                      return wd.length > 1
+                                        ? <span title={`묶음 · 근무일 ${wd.length}일`}>{_compressWorkDates(wd)}</span>
+                                        : _scheduleDateLabel(r.상차일);
+                                    })()}
+                                  </td>
                                   <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                   <td className={`${tdCls} font-bold text-gray-900`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
                                   <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
@@ -713,7 +1038,7 @@ const MoneyInput = ({ value, onChange }) => (
     value={value ? Number(String(value).replace(/[^\d]/g, "")).toLocaleString() : ""}
     onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" />
 );
-function BulkEditModal({ rows, patchDispatch, onClose }) {
+function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
   const [edited, setEdited] = React.useState(() => {
     const init = {};
     for (const r of rows) {
@@ -770,6 +1095,12 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
         await patchDispatch(job.id, { ...job.patch, __col: job.col });
         setSaveProgress(p => ({ ...p, done: p.done + 1 }));
       }));
+      // ⚠️ patchDispatch가 resolve되는 시점은 "Firestore에 쓰기 요청이 반영된
+      // 시점"이지, 화면에 붙어있는 표(onSnapshot 구독)가 그 변경을 실제로
+      // 렌더링해서 눈에 보이는 시점은 아니다 — 그 사이 짧은 시차 때문에 로딩창이
+      // 사라진 뒤에도 뒤에 있는 표가 한 줄씩 바뀌는 게 보이던 문제가 있었다.
+      // onSnapshot이 따라잡을 시간을 살짝 벌어준 뒤에 로딩을 닫는다.
+      await new Promise(r => setTimeout(r, 500));
       setSaving(false);
       // 로딩 오버레이가 사라지자마자 곧바로 "n건 수정이 완료되었습니다" 배너를
       // 잠깐 띄운 뒤, 2초 후에 팝업을 닫는다.
@@ -784,7 +1115,10 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
       {saving && (
-        <div className="fixed inset-0 z-[9999999] bg-black/60 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        // ⚠️ 저장 중에는 뒤에 있는 표가 한 줄씩 바뀌는 게 비쳐 보이면 안 되므로
+        // (완전히 다 끝나고 나서 한 번에 자연스럽게 보여야 함) 배경을 반투명이
+        // 아니라 완전히 불투명하게 가린다.
+        <div className="fixed inset-0 z-[9999999] bg-gray-100 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 flex flex-col items-center gap-4 w-[300px]">
             <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
             <div className="text-[14px] font-extrabold text-gray-800">저장 중입니다...</div>
@@ -808,7 +1142,19 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
           <h3 className="text-white font-bold text-[15px]">선택 오더 일괄수정 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
-          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+          <div className="flex items-center gap-2">
+            {/* ⭐ 날짜 일괄 이동 — 우클릭 메뉴에 따로 두지 않고, 일괄수정 안에서
+                바로 열 수 있게 버튼으로 넣었다. 지금 선택한 오더 그대로
+                날짜이동 팝업이 뜬다(일괄수정 팝업은 뒤에 그대로 유지). */}
+            {onDateShift && (
+              <button type="button" onClick={onDateShift}
+                className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-gray-100 transition flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
+                날짜 일괄 이동
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+          </div>
         </div>
         <div className="px-5 py-2.5 border-b border-gray-100 bg-amber-50 text-[12px] font-semibold text-amber-700">
           맨 윗줄(일괄입력)에 값을 넣고 "전체적용"을 누르면 아래 선택한 오더 전체에 같은 값이 채워집니다. 각 오더 칸은 따로 다시 고칠 수 있어요.
@@ -877,6 +1223,158 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
           <button type="button" disabled={saving} onClick={handleSave} className="px-5 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition disabled:opacity-50">
             {saving ? "저장 중..." : `${rows.length}건 저장`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------
+   날짜 일괄 이동 — 실시간배차현황/배차현황에서 2건 이상 선택 후 우클릭 →
+   "날짜 일괄 이동"으로 연다. 거래처 쪽 일정이 통째로(예: 일주일) 밀리거나
+   당겨졌을 때, 이미 등록해둔 오더들을 하나씩 고치지 않고 상차일(+선택 시
+   하차일)을 한 번에 같은 일수만큼 이동시킬 수 있다.
+--------------------------------------------------*/
+function _shiftDateStr(dateStr, days) {
+  if (!dateStr) return dateStr;
+  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
+  if (isNaN(d.getTime())) return dateStr;
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
+  const [shiftDays, setShiftDays] = React.useState(7);
+  const [shiftDrop, setShiftDrop] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [saveProgress, setSaveProgress] = React.useState({ done: 0, total: 0 });
+  const [doneCount, setDoneCount] = React.useState(null);
+  const closeTimerRef = React.useRef(null);
+  React.useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); }, []);
+
+  if (!rows || rows.length === 0) return null;
+
+  // 미리보기 — 상차일 기준으로 중복 없이 한 번씩만 보여줘서 목록이 길어지지 않게 한다.
+  const preview = React.useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const r of rows) {
+      const oldD = r.상차일 || "";
+      if (!oldD || seen.has(oldD)) continue;
+      seen.add(oldD);
+      list.push({ old: oldD, next: _shiftDateStr(oldD, shiftDays) });
+    }
+    return list.sort((a, b) => a.old.localeCompare(b.old));
+  }, [rows, shiftDays]);
+
+  const handleApply = async () => {
+    if (!shiftDays) { window.alert("이동할 일수를 입력하세요. (0은 이동이 없습니다)"); return; }
+    const jobs = rows.map(r => {
+      const id = r._id || r.id;
+      const patch = {};
+      if (r.상차일) patch.상차일 = _shiftDateStr(r.상차일, shiftDays);
+      if (shiftDrop && r.하차일) patch.하차일 = _shiftDateStr(r.하차일, shiftDays);
+      return Object.keys(patch).length ? { id, col: r.__col, patch } : null;
+    }).filter(Boolean);
+    if (jobs.length === 0) { onClose(); return; }
+
+    setSaveProgress({ done: 0, total: jobs.length });
+    setSaving(true);
+    try {
+      await Promise.all(jobs.map(async (job) => {
+        await patchDispatch(job.id, { ...job.patch, __col: job.col });
+        setSaveProgress(p => ({ ...p, done: p.done + 1 }));
+      }));
+      // ⚠️ BulkEditModal과 동일한 이유 — onSnapshot이 표를 실제로 다시 그릴
+      // 시간을 살짝 벌어준 뒤에 로딩을 닫아야 "로딩이 사라진 뒤에도 계속
+      // 바뀌는" 것처럼 보이지 않는다.
+      await new Promise(r => setTimeout(r, 500));
+      setSaving(false);
+      setDoneCount(jobs.length);
+      closeTimerRef.current = setTimeout(onClose, 2000);
+    } catch (e) {
+      setSaving(false);
+      window.alert("저장 중 오류가 발생했습니다.\n" + (e?.message || ""));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+      {saving && (
+        // ⚠️ 저장 중 뒤에 있는 표가 비쳐 보이지 않도록 완전히 불투명하게 가린다.
+        <div className="fixed inset-0 z-[9999999] bg-gray-100 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 flex flex-col items-center gap-4 w-[300px]">
+            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+            <div className="text-[14px] font-extrabold text-gray-800">이동 적용 중입니다...</div>
+            <div className="text-[13px] font-bold text-gray-600">{saveProgress.done} / {saveProgress.total}건 완료</div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-[#1B2B4B] transition-all duration-200"
+                style={{ width: `${saveProgress.total ? Math.round((saveProgress.done / saveProgress.total) * 100) : 0}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
+      {doneCount != null && (
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center pointer-events-none">
+          <div className="bg-black text-white font-extrabold text-[16px] px-6 py-3.5 rounded-2xl shadow-2xl">
+            {doneCount}건 날짜가 이동되었습니다.
+          </div>
+        </div>
+      )}
+      <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
+          <h3 className="text-white font-bold text-[15px]">날짜 일괄 이동 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+        </div>
+        <div className="px-5 py-5 space-y-4">
+          <div className="text-[12px] text-gray-500 font-semibold leading-relaxed">
+            선택한 오더들의 상차일{shiftDrop ? "·하차일" : ""}을 한 번에 같은 일수만큼 이동합니다.
+            거래처 일정이 통째로 밀리거나 당겨졌을 때, 오더를 하나씩 고치지 않고 바로 반영할 수 있습니다.
+          </div>
+          <div>
+            <label className="block text-[12px] font-bold text-gray-600 mb-1.5">이동할 일수</label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setShiftDays(v => v - 1)}
+                className="w-9 h-9 shrink-0 rounded-lg border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition">−</button>
+              <input autoComplete="off" inputMode="numeric"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-center text-[16px] font-extrabold text-[#1B2B4B]"
+                value={shiftDays}
+                onChange={(e) => setShiftDays(Number(e.target.value.replace(/[^-\d]/g, "")) || 0)}
+              />
+              <button type="button" onClick={() => setShiftDays(v => v + 1)}
+                className="w-9 h-9 shrink-0 rounded-lg border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition">+</button>
+            </div>
+            <div className="text-[11px] text-gray-400 font-semibold mt-1">
+              양수(+)는 뒤로, 음수(−)는 앞으로 이동합니다. 예: 7 = 일주일 뒤로 밀기
+            </div>
+          </div>
+          <label className="flex items-center gap-1.5 cursor-pointer select-none w-fit">
+            <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={shiftDrop} onChange={() => setShiftDrop(v => !v)} />
+            <span className="text-[12px] font-semibold text-gray-600">하차일도 함께 이동</span>
+          </label>
+
+          {preview.length > 0 && (
+            <div>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5">미리보기 (상차일 기준, 중복 날짜는 한 번만 표시)</div>
+              <div className="border border-gray-100 rounded-lg max-h-[180px] overflow-y-auto divide-y divide-gray-50">
+                {preview.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-[12px]">
+                    <span className="font-semibold text-gray-500">{p.old}</span>
+                    <span className="text-gray-300">→</span>
+                    <span className="font-extrabold text-[#1B2B4B]">{p.next}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+          <button type="button" disabled={saving} onClick={handleApply} className="px-5 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition disabled:opacity-50">
+            {saving ? "적용 중..." : `${rows.length}건 이동 적용`}
           </button>
         </div>
       </div>
@@ -3221,7 +3719,7 @@ function FareSortDropdown({ value, onChange }) {
 }
 
 // ===================== 오더정보 모달 =====================
-function OrderInfoModal({ row, onClose }) {
+function OrderInfoModal({ row, onClose, lunchByName }) {
   const [routeInfo, setRouteInfo] = React.useState(null); // { distanceKm, durationText } | "loading" | "error"
   React.useEffect(() => {
     if (!row?.상차지주소 || !row?.하차지주소) { setRouteInfo(null); return; }
@@ -3248,6 +3746,7 @@ function OrderInfoModal({ row, onClose }) {
   }, [row?.상차지주소, row?.하차지주소, row?.경유상차목록, row?.경유지_상차, row?.경유하차목록, row?.경유지_하차]);
 
   if (!row) return null;
+  const orderInfoWorkDates = _parseWorkDates(row.근무일자목록);
   const _s = (v) => _parseWaypointList(v);
   const pickupStops = [..._s(row.경유상차목록), ..._s(row.경유지_상차), ..._s(row.경유지상차)]
     .filter((s, i, arr) => s && (s.업체명 || s.주소) && arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
@@ -3259,10 +3758,17 @@ function OrderInfoModal({ row, onClose }) {
   const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
   const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
-  const Row = ({ label, value }) => (
+  // ⚠️ 예전엔 break-words라 주소가 길면 줄바꿈됐는데, 그러면 오히려 읽기 불편하다는
+  // 피드백으로 한 줄(nowrap)로 바꾸고, 대신 팝업 자체가 내용 너비에 맞춰 커지게
+  // 했다(아래 모달 wrapper의 w-fit 참고).
+  // wrap=true인 행(메모/전달사항처럼 원래 줄바꿈이 자연스러운 긴 텍스트)만 예외적으로
+  // break-words를 쓰고, 나머지(주소 포함)는 전부 한 줄로 표시한다.
+  const Row = ({ label, value, wrap }) => (
     <div className="flex gap-2 text-[13px]">
       <span className="text-gray-600 font-semibold w-[72px] shrink-0">{label}</span>
-      <span className="text-gray-900 font-semibold break-words">{value || "-"}</span>
+      {/* wrap 행은 max-width를 줘서, 긴 메모 한 줄 때문에 팝업 전체(w-fit)가
+          한없이 넓어지지 않고 그 안에서 줄바꿈되게 한다. */}
+      <span className={`text-gray-900 font-semibold ${wrap ? "break-words max-w-[380px]" : "whitespace-nowrap"}`}>{value || "-"}</span>
     </div>
   );
   const Section = ({ title, children }) => (
@@ -3271,9 +3777,18 @@ function OrderInfoModal({ row, onClose }) {
       <div className="bg-gray-50 border border-gray-100 rounded-lg px-4 py-3 space-y-1.5">{children}</div>
     </div>
   );
+  // ⭐ 상/하차지에 등록된 휴게(점심)시간 — 그 거래처가 실제로 점심시간을 설정해둔
+  // 경우에만 표시된다(설정 안 한 거래처는 아예 행 자체가 안 뜸).
+  const pickupLunch = lunchByName?.get(_lunchNameKey(row.상차지명));
+  const dropLunch = lunchByName?.get(_lunchNameKey(row.하차지명));
+  const lunchValue = (lunch, orderTime) => {
+    if (!lunch) return null;
+    const overlap = isLunchTimeOverlap(orderTime, lunch.start, lunch.end);
+    return `${lunch.start}~${lunch.end}${overlap ? " (상하차시간과 겹침)" : ""}`;
+  };
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[92vw] min-w-[480px] max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
           <div>
             <h3 className="text-white font-bold text-[15px]">오더정보</h3>
@@ -3282,10 +3797,24 @@ function OrderInfoModal({ row, onClose }) {
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
         </div>
         <div className="px-6 py-5 space-y-4">
+          {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라
+              1개의 오더로 등록된 경우, 그 근무일 전체 목록을 보여준다. */}
+          {orderInfoWorkDates.length > 1 && (
+            <Section title={`근무일 (총 ${orderInfoWorkDates.length}일 · 묶음)`}>
+              <div className="flex flex-wrap gap-1.5">
+                {orderInfoWorkDates.map((d) => (
+                  <span key={d} className="bg-black text-white text-[12px] font-extrabold rounded px-2 py-1">
+                    {d.slice(5).replace("-", "/")}
+                  </span>
+                ))}
+              </div>
+            </Section>
+          )}
           <Section title="상차지">
             <Row label="업체명" value={row.상차지명} />
             <Row label="주소" value={row.상차지주소} />
             <Row label="상차시간" value={row.상차시간 ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분) : "즉시"} />
+            {pickupLunch && <Row label="휴게시간" value={lunchValue(pickupLunch, row.상차시간)} />}
           </Section>
           {pickupStops.length > 0 && (
             <Section title={`상차 경유지 (${pickupStops.length})`}>
@@ -3305,6 +3834,7 @@ function OrderInfoModal({ row, onClose }) {
             <Row label="업체명" value={row.하차지명} />
             <Row label="주소" value={row.하차지주소} />
             <Row label="하차시간" value={row.하차시간 ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분) : "즉시"} />
+            {dropLunch && <Row label="휴게시간" value={lunchValue(dropLunch, row.하차시간)} />}
           </Section>
           {dropStops.length > 0 && (
             <Section title={`하차 경유지 (${dropStops.length})`}>
@@ -3357,8 +3887,8 @@ function OrderInfoModal({ row, onClose }) {
           </Section>
           {(row.메모 || row.전달사항) && (
             <Section title="메모 / 전달사항">
-              {row.메모 && <Row label="메모" value={row.메모} />}
-              {row.전달사항 && <Row label="전달사항" value={row.전달사항} />}
+              {row.메모 && <Row label="메모" value={row.메모} wrap />}
+              {row.전달사항 && <Row label="전달사항" value={row.전달사항} wrap />}
             </Section>
           )}
         </div>
@@ -4498,6 +5028,11 @@ useEffect(() => {
     myRealName,
   } = useRealtimeCollections(user, userCompany, role);
 
+  // ⚠️ 아래 dispatchDataFiltered에서 커스텀 권한(관리자메뉴 > 권한관리에서 만든 역할)
+  // 여부를 판단하는 데 필요해서, 원래 더 아래(구 "역할별 차단 메뉴" 구역)에 있던
+  // useCustomRoles() 훅을 여기로 끌어올렸다. 아래쪽의 customRole 선언은 이 값을
+  // 그대로 재사용한다(중복 구독 방지).
+  const customRoles = useCustomRoles();
 
   // 🔍 admin = 전체 데이터, 일반 user = 본인 작성 데이터만
   const dispatchDataFiltered = useMemo(() => {
@@ -4516,14 +5051,25 @@ useEffect(() => {
       return docCompany === myCompany;
     });
 
-    // 실시간배차현황/배차현황 둘 다 접근 가능한 권한(관리자/경리회계/실무자/조회전용)은 회사 내 전체 데이터
-    if (role === "admin" || role === "test" || role === "viewer" || role === "user") return byCompany;
+    // 실시간배차현황/배차현황 둘 다 접근 가능한 권한(관리자/경리회계/실무자/조회전용/
+    // 인사관리자)은 회사 내 전체 데이터. 커스텀 권한(관리자메뉴 > 권한관리에서 새로
+    // 만든 역할, 예: 부분관리자)도 이미 해당 메뉴에 조회/조회+수정 접근권한을 부여받은
+    // 상태로 여기까지 들어온 것이므로 동일하게 전체 데이터를 봐야 한다.
+    // ⚠️ 예전엔 role이 "admin"/"test"/"viewer"/"user" 중 하나가 아니면 전부 "본인
+    // 데이터만" 보이게 걸러졌는데, 커스텀 권한 시스템이 나중에 추가되면서 새로 만든
+    // 역할(role_xxxxx)과 인사관리자(hrManager)는 이 목록에 없어서 메뉴 접근권한을
+    // write로 줘도 본인이 등록한 1~2건만 보이는 버그가 있었다.
+    if (
+      role === "admin" || role === "test" || role === "viewer" ||
+      role === "user" || role === "hrManager" ||
+      findCustomRole(customRoles, role)
+    ) return byCompany;
 
     // 그 외 권한은 회사 내 본인 데이터만
     return byCompany.filter(o =>
       !o?.작성자 || o?.작성자 === user.email
     );
-  }, [dispatchData, user, role, userCompany]);
+  }, [dispatchData, user, role, userCompany, customRoles]);
 
 
   // ⭐ 내 정보 통계 계산
@@ -4769,7 +5315,7 @@ React.useEffect(() => {
   // ---------------- 역할별 차단 메뉴 ----------------
   // 최고관리자가 새로 만든 커스텀 권한(역할) — 메뉴별 접근범위(숨김/조회/조회+수정)를
   // 직접 설정할 수 있다. 내장 역할(admin/user/test/viewer 등)에는 관여하지 않는다.
-  const customRoles = useCustomRoles();
+  // (customRoles 자체는 위쪽 dispatchDataFiltered 근처에서 이미 구독해뒀다.)
   const customRole = findCustomRole(customRoles, role);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
   const isViewer = role === "viewer" || (!!customRole && getMenuAccess(customRoles, role, menu) === "read");
@@ -5392,6 +5938,7 @@ return (
               clients={clients}
               places={places}
               isViewer={isViewer}
+              role={role}
             />
           ) : (
             <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
@@ -7383,7 +7930,11 @@ const filterPlaces = (q) => {
       혼적: false,
       긴급: false,
       운임보정: null,
-      
+      특수운임: false,       // ⭐ 연휴/성수기 등 특수 수요일 배차 여부(자동감지 + 수동토글)
+      특수운임사유: "",
+      특수운임수동: false,   // 사용자가 자동감지 결과를 직접 덮어썼는지
+      복수근무일: false,     // ⭐ 묶음 오더 — 연속 기간이 아니라 특정 날짜들만 골라 하나의
+      근무일자목록: [],      // 오더로 등록(예: 9/2,4,5,7~11,14~18). 상차일=최소값, 하차일=최대값으로 자동 연동.
     };
     const cargoInputRef = React.useRef(null);
     const cargoTypeTabbedRef = React.useRef(false); // 화물타입 "없음" 선택이 Tab으로 확정됐는지 추적(아래 참고)
@@ -7967,6 +8518,16 @@ return {
   dropLabel: normalizeAreaForSearch(dropAddr),
 };
 }
+// ⭐ 연휴·성수기(특수일) 오더를 AI추천/기존운임비교 평균 계산에 포함할지 여부.
+// 기본값은 꺼짐(기존 동작 유지 — 특수일은 평균 계산에서 제외). AI추천 팝업에서
+// 사용자가 직접 켜서 특수일 포함 기준으로도 확인해볼 수 있다.
+// ⚠️ 아래 useEffect들의 deps 배열에서 바로 참조하므로(배열 리터럴은 useEffect
+// 호출 시점에 즉시 평가됨 — effect 콜백 본문과 달리 지연 실행되지 않는다),
+// 반드시 그 effect들보다 앞서 선언해야 한다. 원래 fareCompare 근처(더 아래)에
+// 있었는데, 그러면 첫 번째 effect의 deps가 아직 선언되지 않은 이 변수를 참조하게
+// 되어 "Cannot access 'includeSpecialFare' before initialization" 런타임
+// 에러로 배차관리 화면 전체가 크래시하는 버그가 있었다.
+const [includeSpecialFare, setIncludeSpecialFare] = React.useState(false);
 // ===============================
 // 🤖 AI 배차/운임 추천 (HERE)
 // ===============================
@@ -7981,7 +8542,10 @@ React.useEffect(() => {
     return;
   }
 
-const similar = (dispatchData || []).filter(r =>
+// ⭐ 특수운임(연휴·성수기)으로 표시된 오더는 평소 시세보다 높게 형성된 경우가
+// 많아, 그대로 평균에 섞으면 다음 조회 때 그 특수 운임이 "평소 시세"처럼
+// 추천되는 문제가 있다 — 기본적으로 평균 계산에서 제외한다.
+const similarAll = (dispatchData || []).filter(r =>
   (r.운행유형 || "편도") === form.운행유형 &&   // ⭐ 추가
   normalizeKey(r.상차지명) === normalizeKey(pickup) &&
   normalizeKey(r.하차지명) === normalizeKey(drop) &&
@@ -7989,6 +8553,11 @@ const similar = (dispatchData || []).filter(r =>
   r.청구운임 &&
   r.기사운임
 );
+const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
+const specialInAllCount = similarAll.length - similarNormal.length;
+// includeSpecialFare 토글이 켜져 있으면 특수일도 그대로 포함해서 계산한다.
+const similar = (includeSpecialFare || similarNormal.length === 0) ? similarAll : similarNormal;
+const excludedSpecialCount = includeSpecialFare ? 0 : specialInAllCount;
 
   if (similar.length < 1) {
     setAiRecommend(null);
@@ -8013,6 +8582,7 @@ setAiRecommend({
   driverAvg,
   marginPercent: Math.round(((fareAvg - driverAvg) / fareAvg) * 100),
   sampleCount: similar.length,
+  excludedSpecialCount,   // ⭐ 특수운임(연휴·성수기)으로 평균에서 제외된 건수
 
   hasInputFare: inputFare > 0,   // ⭐ 핵심
   inputFare,
@@ -8031,6 +8601,7 @@ setAiRecommend({
   form.차량톤수,
   form.차량종류,
   dispatchData,
+  includeSpecialFare,
 ]);
 // =====================================================
 // 💰 기존 운임 대비 비교 표시 (🔥 여기 추가)
@@ -8051,6 +8622,15 @@ React.useEffect(() => {
   setOrderDropDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
 }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
+// ⭐ 연휴/성수기 자동감지 — 상차일이 바뀔 때마다 공휴일 캘린더 기준으로 다시
+// 판단해서 제안한다. 사용자가 직접 토글을 눌러 수동으로 정한 값은 존중하고 덮어쓰지
+// 않는다(다음 상차일 변경 시에는 다시 자동감지로 리셋 — 새 날짜엔 새 판단이 맞음).
+React.useEffect(() => {
+  if (form.특수운임수동) return;
+  const info = specialDemandInfo(form.상차일);
+  setForm((p) => (p.특수운임수동 ? p : { ...p, 특수운임: info.special, 특수운임사유: info.reason }));
+}, [form.상차일]); // eslint-disable-line react-hooks/exhaustive-deps
+
 React.useEffect(() => {
   const pickup = normalizeKey(form.상차지명);
   const drop   = normalizeKey(form.하차지명);
@@ -8061,13 +8641,18 @@ React.useEffect(() => {
     return;
   }
 
-  const similar = (dispatchData || []).filter(r =>
+  const similarAll = (dispatchData || []).filter(r =>
     normalizeKey(r.상차지명) === pickup &&
     normalizeKey(r.하차지명) === drop &&
     getTotalTonFromOrder(r) === ton &&
     r.청구운임 &&
     r.기사운임
   );
+  // ⭐ 연휴·성수기 특수운임 건은 "기존보다 높음/낮음" 비교 기준에서도 제외한다
+  // (해당 건들만 있는 경우엔 어쩔 수 없이 그대로 사용). includeSpecialFare
+  // 토글이 켜져 있으면 특수일도 포함해서 비교한다.
+  const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
+  const similar = (includeSpecialFare || similarNormal.length === 0) ? similarAll : similarNormal;
 
   if (similar.length === 0) {
     setFareCompare({ sale: null, driver: null });
@@ -8108,7 +8693,8 @@ React.useEffect(() => {
   form.차량톤수,
   form.청구운임,
   form.기사운임,
-  dispatchData
+  dispatchData,
+  includeSpecialFare,
 ]);
 // ===============================
 // 🤖 AI 설명 문장 생성
@@ -8116,10 +8702,16 @@ React.useEffect(() => {
 function makeAiExplain(ai) {
   if (!ai) return "";
 
+  // ⭐ 연휴·성수기로 표시된 오더는 평균에서 제외했다는 사실을 짧게 덧붙인다 —
+  // 왜 표시된 건수가 실제 이력보다 적어 보이는지 헷갈리지 않게.
+  const excludeNote = ai.excludedSpecialCount > 0
+    ? ` (연휴·성수기 ${ai.excludedSpecialCount}건 제외)`
+    : "";
+
   // ① 운임 미입력
   if (!ai.hasInputFare) {
     return (
-      `동일한 상/하차지·톤수로 최근 ${ai.sampleCount}건이 배차됐어요. ` +
+      `동일한 상/하차지·톤수로 최근 ${ai.sampleCount}건이 배차됐어요${excludeNote}. ` +
       `평균 ${ai.fareAvg.toLocaleString()}원, 적정 범위는 ` +
       `${ai.fareMin.toLocaleString()}~${ai.fareMax.toLocaleString()}원이에요.`
     );
@@ -8129,14 +8721,14 @@ function makeAiExplain(ai) {
   if (ai.isOutlier) {
     const dir = ai.fareDiffPercent > 0 ? "높아요" : "낮아요";
     return (
-      `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)보다 ` +
+      `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)${excludeNote}보다 ` +
       `${Math.abs(ai.fareDiffPercent)}% ${dir}. 거래처 협의 내용을 한 번 더 확인해보세요.`
     );
   }
 
   // ③ 정상
   return (
-    `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)과 ` +
+    `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)${excludeNote}과 ` +
     `비슷한 적정 범위예요. 이대로 진행하셔도 좋습니다.`
   );
 }
@@ -8313,6 +8905,12 @@ function swapPickupDrop() {
     const [autoDropMatched, setAutoDropMatched] = React.useState(false);
 
     const onChange = (key, value) => {
+      if (key === "특수운임") {
+        // 사용자가 직접 토글을 건드리면, 이후 상차일이 바뀌어 자동감지 결과가 새로
+        // 계산되기 전까지는 그 판단을 그대로 존중한다(자동감지가 수동 선택을 덮어쓰지 않음).
+        setForm((p) => ({ ...p, 특수운임: value, 특수운임수동: true, 특수운임사유: value ? (p.특수운임사유 || "수동 지정") : "" }));
+        return;
+      }
       if (isAdmin && (key === "청구운임" || key === "기사운임")) {
         setForm((p) => {
           const next = { ...p, [key]: value };
@@ -8330,11 +8928,39 @@ function swapPickupDrop() {
         });
         return;
       }
+      if (key === "복수근무일") {
+        // ⭐ 묶음 오더 토글 — 끄면 그동안 골라둔 근무일 목록은 비운다(다시 켜면
+        // 처음부터 다시 고르는 게 맞다 — 상/하차일은 그대로 남겨서 헷갈리지 않게 함).
+        setForm((p) => ({ ...p, 복수근무일: value, 근무일자목록: value ? p.근무일자목록 : [] }));
+        return;
+      }
       if (key === "차량종류" && value === "오토바이") {
         setForm((p) => ({ ...p, 차량종류: value, 상차방법: "수작업", 하차방법: "수작업", 배차방식: "인성" }));
         return;
       }
       setForm((p) => ({ ...p, [key]: value }));
+    };
+
+    // ⭐ 묶음 오더의 근무일 다중선택 — 달력에서 날짜를 하나씩 클릭할 때마다
+    // 켜고/끄고를 토글한다. 상차일/하차일은 이 목록의 최솟값/최댓값으로 항상
+    // 자동 연동해서, 기존에 상차일~하차일만 보고 동작하는 다른 로직(정렬·필터
+    // 등)이 그대로 잘 맞물리게 한다.
+    const toggleWorkDate = (dateStr) => {
+      if (!dateStr) return;
+      setForm((p) => {
+        // ⚠️ Firestore에서 방금 불러온(오더복사/수정) p.근무일자목록은 배열이 아니라
+        // {0:"...",1:"..."} 형태의 객체일 수 있다 — _parseWorkDates로 반드시 정규화.
+        const set = new Set(_parseWorkDates(p.근무일자목록));
+        if (set.has(dateStr)) set.delete(dateStr);
+        else set.add(dateStr);
+        const sorted = Array.from(set).sort();
+        return {
+          ...p,
+          근무일자목록: sorted,
+          상차일: sorted[0] || p.상차일,
+          하차일: sorted[sorted.length - 1] || p.하차일,
+        };
+      });
     };
 
     const handlePickupName = (value) => {
@@ -9274,7 +9900,16 @@ const saveCount = multiCount > 1 ? multiCount : 1;
 await Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
   const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
-  return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder });
+  // ⭐ 다중등록으로 오더별 상차일이 서로 다를 수 있어(useSeparateDates), 사용자가
+  // 특수운임을 직접 지정하지 않은 경우엔 각 오더의 실제 상차일 기준으로 특수운임
+  // 여부를 다시 계산한다(수동 지정 시엔 전체 오더에 그 값을 그대로 적용).
+  const specialPatch = rec.특수운임수동
+    ? {}
+    : (() => {
+        const info = specialDemandInfo(dateForOrder);
+        return { 특수운임: info.special, 특수운임사유: info.reason };
+      })();
+  return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch });
 }));
 
 // ★ 배차마당(카페사이트) 공유 — "배차마당 등록" 버튼으로 저장했고, 회사 설정에서
@@ -10770,12 +11405,27 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 
 {/* ================= 상차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B]">상차</label>
-  <CustomDatePicker
-    value={form.상차일 || ""}
-    showIcon
-    className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
-    onChange={(e) => onChange("상차일", e.target.value)}
-  />
+  {(() => {
+    const formWorkDates = _parseWorkDates(form.근무일자목록);
+    const isMultiWork = !!form.복수근무일 && formWorkDates.length > 1;
+    return (
+      <CustomDatePicker
+        value={form.상차일 || ""}
+        showIcon
+        className={`border-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold outline-none focus:ring-2 focus:ring-blue-200 ${
+          isMultiWork ? "border-red-600 text-red-600" : "border-[#1B2B4B] text-[#1B2B4B]"
+        }`}
+        onChange={(e) => onChange("상차일", e.target.value)}
+        multiSelect
+        multiActive={!!form.복수근무일}
+        onToggleMulti={() => onChange("복수근무일", !form.복수근무일)}
+        workDates={formWorkDates}
+        onToggleWorkDate={toggleWorkDate}
+        onClearWorkDates={() => onChange("근무일자목록", [])}
+        displayOverride={isMultiWork ? `${form.상차일 || ""} 외 ${formWorkDates.length - 1}일` : undefined}
+      />
+    );
+  })()}
   {/* 상차 시간 + 이전/이후 */}
   <div className="flex items-center gap-1">
     <TimeAmPmPicker
@@ -11779,7 +12429,11 @@ className={`
   <>
     {/* 청구운임 */}
     <div>
-      <label className={`${labelCls} flex items-center gap-2`}>
+      {/* ⚠️ 아래 특수운임 칩이 진짜 <label>(체크박스용)이라, 바깥까지 <label>로
+          이중 중첩하면 클릭 시 체크박스가 두 번 토글되는 등 이상 동작이 생길 수 있다.
+          이 바깥쪽은 htmlFor로 입력과 연결된 적이 없어 순수 스타일용이었으므로
+          div로 바꿔도 기능은 그대로다. */}
+      <div className={`${labelCls} flex items-center gap-2 flex-wrap`}>
         청구운임
 
         {fareCompare.sale === "high" && (
@@ -11797,7 +12451,36 @@ className={`
             기존과 유사
           </span>
         )}
-      </label>
+
+        {/* ⭐ 연휴·성수기 특수운임 표시 — 공휴일 캘린더 기준 자동감지 + 수동 조정 가능.
+            체크해두면 이 오더의 운임은 이후 자사운임표/AI추천 평균 계산에서 제외되어,
+            연휴 직전 등 일시적으로 오른 운임이 "평소 시세"처럼 참조되지 않는다.
+            ⚠️ 별도 grid 칸을 새로 차지하면 뒤 필드들이 한 줄씩 밀려버려서, 기존
+            칸 배치를 안 건드리고 청구운임 라벨 줄 안에 작은 칩으로 끼워 넣는다. */}
+        {/* ⚠️ 이전엔 체크 시 "· 사유" 텍스트가 붙어서 칩 너비 자체가 늘어나며
+            자리가 옮겨 보이는 문제가 있었다 — 너비를 고정하고, 상태에 따라
+            색만(회색↔네이비) 바뀌게 해서 체크해도 위치가 절대 안 움직인다.
+            사유는 title 툴팁으로만 보여준다. */}
+        {/* ⚠️ 특수일 관련 배지는 프로그램 전체에서 검은 바탕 + 굵은 흰 글씨로
+            통일한다(예전엔 주황/네이비 등 제각각이었음). */}
+        <label
+          onClick={(e) => e.stopPropagation()}
+          className={`ml-auto inline-flex items-center justify-center gap-1 w-[84px] shrink-0 px-1.5 py-1 rounded border cursor-pointer select-none text-[10.5px] font-extrabold normal-case transition-colors ${
+            form.특수운임
+              ? "bg-black border-black text-white"
+              : "bg-white border-gray-300 text-gray-400"
+          }`}
+          title={`연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다.${form.특수운임 && form.특수운임사유 ? `\n(${form.특수운임사유})` : ""}`}
+        >
+          <input
+            type="checkbox"
+            className="accent-black w-3 h-3 shrink-0"
+            checked={!!form.특수운임}
+            onChange={(e) => onChange("특수운임", e.target.checked)}
+          />
+          특수운임
+        </label>
+      </div>
 
       <input autoComplete="off"
         data-arrownav
@@ -11877,11 +12560,19 @@ className={`
 
       <div className="px-6 py-5">
         {/* 요약 */}
-        <div className={`mb-4 p-3.5 rounded-xl text-[13px] leading-relaxed font-semibold ${
+        <div className={`mb-3 p-3.5 rounded-xl text-[13px] leading-relaxed font-semibold ${
           aiRecommend.isOutlier ? "bg-red-50 text-red-700" : "bg-[#eef1f7] text-[#1B2B4B]"
         }`}>
           {makeAiExplain(aiRecommend)}
         </div>
+
+        {/* ⭐ 연휴·성수기(특수일) 포함 여부 — 기본은 제외(꺼짐), 켜면 특수일까지 포함해서
+            다시 계산한다. 자사운임표에도 동일한 토글이 있다. */}
+        <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit">
+          <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-black"
+            checked={includeSpecialFare} onChange={() => setIncludeSpecialFare(v => !v)} />
+          <span className="text-[12px] font-semibold text-gray-600">특수일(연휴·성수기)도 평균에 포함</span>
+        </label>
 
         {/* 추천 수치 */}
         <div className="grid grid-cols-2 gap-2.5 mb-1">
@@ -11891,7 +12582,14 @@ className={`
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
             <div className="text-[11px] font-bold text-gray-500 mb-1">표본 건수</div>
-            <div className="text-[14px] font-bold text-gray-900">{aiRecommend.sampleCount}건</div>
+            <div className="text-[14px] font-bold text-gray-900 flex items-center flex-wrap gap-1">
+              {aiRecommend.sampleCount}건
+              {aiRecommend.excludedSpecialCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-black text-white text-[10px] font-extrabold">
+                  연휴·성수기 {aiRecommend.excludedSpecialCount}건 제외
+                </span>
+              )}
+            </div>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
             <div className="text-[11px] font-bold text-gray-500 mb-1">추천 청구운임</div>
@@ -13633,117 +14331,18 @@ className={`
     {renderForm()}
   </div>
 
-  {/* 오른쪽: Today 패널 */}
-  <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
-    {/* 헤더 */}
-    <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
-      <div>
-        <div className="text-[10px] text-white/50 font-semibold tracking-widest">TODAY</div>
-        <div className="text-[13px] text-white font-bold">{today}</div>
-      </div>
-      <div className="text-right">
-        <div className="text-[10px] text-white/50 font-semibold">배차 진행률</div>
-        <div className="flex items-baseline gap-0.5 justify-end">
-          <span className="text-[26px] font-black text-white leading-none">{rate}</span>
-          <span className="text-[13px] font-bold text-white/50">%</span>
-        </div>
-      </div>
-    </div>
-    {/* 진행률 바 */}
-    <div className="w-full h-1 bg-gray-200 shrink-0">
-      <div className="h-full bg-[#1B2B4B] transition-all duration-1000" style={{ width: `${rate}%` }} />
-    </div>
-
-    <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto">
-      {/* 상태 3개 */}
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: "배차중", val: doing, dot: "bg-[#1B2B4B]", pulse: doing > 0, list: doingList },
-          { label: "미배차", val: pending, dot: "bg-gray-400", pulse: false, list: pendingList },
-          { label: "긴급", val: urgentList.length, dot: "bg-red-500", pulse: urgentList.length > 0, list: urgentList },
-        ].map(({ label, val, dot, pulse, list }) => (
-          <button key={label} type="button"
-            onClick={() => setStatusPopup({ title: `${label} 리스트`, list })}
-            className="bg-white border border-gray-100 rounded-xl p-3 text-center hover:shadow-sm transition">
-            <div className={`w-2 h-2 rounded-full ${dot} ${pulse ? "animate-pulse" : ""} mx-auto mb-1.5`} />
-            <div className="text-[24px] font-black text-[#1B2B4B] leading-none">{val}</div>
-            <div className="text-[11px] text-gray-500 font-semibold mt-1">{label}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* KPI 4개 */}
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          { label: "총 오더", val: total, unit: "건" },
-          { label: "완료", val: done, unit: "건" },
-          { label: "기사수", val: driverCount, unit: "명" },
-          { label: "진행중", val: doing, unit: "건" },
-        ].map(({ label, val, unit }) => (
-          <div key={label} className="bg-white border border-gray-100 rounded-xl py-3 px-3 text-center">
-            <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-none">
-              {val}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">{unit}</span>
-            </div>
-            <div className="text-[11px] text-gray-500 font-semibold mt-1">{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* 오늘 운임 */}
-      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-gray-50">
-          <span className="text-[13px] font-bold text-[#1B2B4B]">오늘 운임</span>
-        </div>
-        {[
-          { label: "청구", val: todayRevenue },
-          { label: "기사비용", val: todayDriverCost },
-          { label: "수수료", val: todayRevenue - todayDriverCost },
-        ].map(({ label, val }) => (
-          <div key={label} className="px-4 py-2.5 flex justify-between items-center border-b border-gray-50 last:border-0">
-            <span className="text-[12px] text-gray-500 font-medium">{label}</span>
-            <span className="text-[14px] font-bold text-[#1B2B4B] tabular-nums">
-              {val.toLocaleString()}<span className="text-gray-400 font-normal text-[11px] ml-0.5">원</span>
-            </span>
-          </div>
-        ))}
-        <div className="px-4 py-3 bg-[#1B2B4B] flex justify-between items-center">
-          <span className="text-[12px] text-white/60 font-semibold">마진율</span>
-          <span className="text-[18px] font-black text-white">{todayMarginRate.toFixed(1)}%</span>
-        </div>
-      </div>
-
-      {/* 거래처 TOP 5 */}
-      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden flex-1 flex flex-col">
-        <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between shrink-0">
-          <span className="text-[13px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
-          <span className="text-[11px] text-gray-400 font-medium">오늘 오더</span>
-        </div>
-        <div className="px-2 py-2 flex-1 flex flex-col justify-center">
-          {(() => {
-            const counts = {};
-            todayRows.forEach(r => { const name = r.거래처명?.trim(); if (name) counts[name] = (counts[name] || 0) + 1; });
-            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-            if (sorted.length === 0) return <div className="text-center py-4 text-[12px] text-gray-400">오늘 오더 없음</div>;
-            const chartData = sorted.map(([name, value]) => ({ name: name.length > 5 ? name.slice(0, 5) + "…" : name, value }));
-            return (
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={chartData} margin={{ top: 16, right: 4, left: 4, bottom: 28 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#1B2B4B", fontWeight: 700 }} interval={0} />
-                  <YAxis hide />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={36}>
-                    {chartData.map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296"} />
-                    ))}
-                    <LabelList dataKey="value" position="top" formatter={v => `${v}건`} style={{ fontSize: 9, fill: "#6b7280", fontWeight: 600 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            );
-          })()}
-        </div>
-      </div>
-    </div>
-  </div>
+  {/* 오른쪽: 상/하차일 캘린더 패널 (기존 Today 통계패널 자리를 대체) —
+      ⚠️ 복수근무일 다중선택은 이 패널이 아니라 상차일 입력칸 자체의 달력
+      (CustomDatePicker)에서 처리한다. 사용자 피드백: "오른쪽 패널에 있는
+      달력말고 오더정보에 있는 달력에 다중선택 버튼을 넣어달라" — 그래서
+      이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
+  <OrderCalendarPanel
+    pickupDate={form.상차일 || ""}
+    dropDate={form.하차일 || ""}
+    onPickupChange={(v) => onChange("상차일", v)}
+    onDropChange={(v) => onChange("하차일", v)}
+    companyName={userCompany || localStorage.getItem("userCompany") || "돌캐"}
+  />
 </div>
 {/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}
 {contactPopup && (() => {
@@ -18015,7 +18614,29 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   />
 </td>
 
-                  <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
+                  <td className={cell}>
+  <span className="inline-flex items-center gap-1">
+    {(() => {
+      const rWorkDates = _parseWorkDates(r.근무일자목록);
+      const isMultiWork = rWorkDates.length > 1;
+      return (
+        <>
+          {editableInput("상차일", r.상차일, r._id, isMultiWork)}
+          {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
+              오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. */}
+          {isMultiWork && (
+            <span
+              className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
+              title={`묶음 오더 · 근무일 ${rWorkDates.length}일: ${rWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
+            >
+              묶음 {rWorkDates.length}일
+            </span>
+          )}
+        </>
+      );
+    })()}
+  </span>
+</td>
                   <td className={cell}>
   <span className={emph}>
     {r.상차시간
@@ -18037,7 +18658,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} isFirst={isFirstPickupLunch} />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
@@ -18057,7 +18677,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} isFirst={isFirstDropLunch} />
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -19872,6 +20491,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
+  const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
 
   React.useEffect(() => {
     const close = () => setContextMenu(null);
@@ -22545,17 +23165,20 @@ const handleCloseFileUpload = async (e) => {
   const emphKeys = ["상차일", "하차일", "화물내용", "차량종류", "차량톤수"];
   const emphCls = darkMode ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
 
-  const editableInput = (key, val, rowId) => {
+  // ⭐ redOverride: 복수근무일(묶음) 오더의 상차일 칸을 빨간 글씨로 강조할 때만
+  // true로 넘긴다(emphCls 대신 적용). 그 외 모든 호출은 기존과 동일하게 동작한다.
+  const editableInput = (key, val, rowId, redOverride = false) => {
+    const emphClsFinal = redOverride ? "font-extrabold text-red-600" : emphCls;
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
     //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
-    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={emphCls}>{val}</span> : val;
+    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
 
     // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
     if (
       !canEdit(key, rowId) &&
       !["차량종류", "지급방식", "배차방식"].includes(key)
     ) {
-      return emphKeys.includes(key) ? <span className={emphCls}>{val}</span> : val;
+      return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
     }
 
     if (key === "상차일" || key === "하차일") {
@@ -22811,7 +23434,7 @@ const head = isDark
   />
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
-{orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} />}
+{orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} lunchByName={lunchByName} />}
 {addrPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -23426,10 +24049,13 @@ const head = isDark
   <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
 )}
 {scheduleChartRows && (
-  <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
+  <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
 )}
 {bulkEditRows && (
-  <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+  <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
+)}
+{dateShiftRows && (
+  <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
 )}
 {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
@@ -31802,6 +32428,7 @@ const save = {
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
+  const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
   React.useEffect(() => {
     const close = () => setContextMenuDS(null);
     const onKey = (e) => {
@@ -32037,7 +32664,7 @@ return (
   />
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
-{orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} />}
+{orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} lunchByName={lunchByName} />}
 {attachStatusDSOpen && (
   <AttachStatusPanel
     open={attachStatusDSOpen}
@@ -32676,7 +33303,6 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} isFirst={lunchFirstIds.pickup.has(id)} />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -32690,7 +33316,6 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} isFirst={lunchFirstIds.drop.has(id)} />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
@@ -32746,9 +33371,26 @@ return (
   const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
   return <span className="font-extrabold text-[#1B2B4B]">{mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || ""}</span>;
-})() : key === "상차일" || key === "하차일" ? (
-  <span className="font-extrabold text-[#1B2B4B]">{row[key] || ""}</span>
-) : (
+})() : key === "상차일" || key === "하차일" ? (() => {
+  const rowWorkDates = key === "상차일" ? _parseWorkDates(row.근무일자목록) : [];
+  const isMultiWork = rowWorkDates.length > 1;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"}`}>{row[key] || ""}</span>
+      {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
+          오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. 클릭하면 전체
+          근무일 목록을 볼 수 있게 오더정보(우클릭 메뉴)로 유도하는 툴팁을 붙인다. */}
+      {isMultiWork && (
+        <span
+          className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
+          title={`묶음 오더 · 근무일 ${rowWorkDates.length}일: ${rowWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
+        >
+          묶음 {rowWorkDates.length}일
+        </span>
+      )}
+    </span>
+  );
+})() : (
   row[key]
 )}
   </td>
@@ -34275,10 +34917,13 @@ return (
         <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
       )}
       {scheduleChartRows && (
-        <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
+        <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
       )}
       {bulkEditRows && (
-        <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+        <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
+      )}
+      {dateShiftRows && (
+        <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
       )}
       {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
@@ -39384,8 +40029,320 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   );
 }
 
+// ⭐ 경영인텔리전스 — AI 월간비교분석(최고관리자 전용).
+// 실제 LLM을 호출하지 않고(비용/키 불필요), 두 달의 매출·건수·평균단가·거래처·
+// 차종/톤수 구성·특수일(연휴·성수기) 비중·요일 분포를 규칙 기반으로 비교해
+// "건수는 늘었는데 매출은 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는
+// 통계 분석 엔진. rowsA/rowsB는 이미 배차완료로 필터링된 오더 배열(Settlement의
+// `rows`에서 월별로 잘라서 넘긴다).
+function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const won = (n) => `${Math.round(n).toLocaleString()}원`;
+  const pctStr = (a, b) => {
+    if (!a) return b ? "+100.0%" : "0.0%";
+    const p = ((b - a) / a) * 100;
+    return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
+  };
+
+  const summarize = (list) => {
+    const sale = list.reduce((a, r) => a + toInt(r.청구운임), 0);
+    const driver = list.reduce((a, r) => a + toInt(r.기사운임), 0);
+    const profit = sale - driver;
+    const cnt = list.length;
+    return {
+      sale, driver, profit, cnt,
+      avgSale: cnt ? sale / cnt : 0,
+      avgProfit: cnt ? profit / cnt : 0,
+      rate: sale ? (profit / sale) * 100 : 0,
+    };
+  };
+  const A = summarize(rowsA);
+  const B = summarize(rowsB);
+
+  const groupBy = (list, keyFn) => {
+    const map = new Map();
+    list.forEach((r) => {
+      const k = keyFn(r) || "미지정";
+      if (!map.has(k)) map.set(k, { sale: 0, cnt: 0 });
+      const o = map.get(k);
+      o.sale += toInt(r.청구운임);
+      o.cnt += 1;
+    });
+    return map;
+  };
+
+  // 거래처별 매출 증감 — 어떤 거래처가 이번 달 매출 변화를 주도했는지
+  const clientA = groupBy(rowsA, (r) => r.거래처명);
+  const clientB = groupBy(rowsB, (r) => r.거래처명);
+  const clientKeys = new Set([...clientA.keys(), ...clientB.keys()]);
+  const clientDeltas = Array.from(clientKeys)
+    .map((c) => {
+      const a = clientA.get(c) || { sale: 0, cnt: 0 };
+      const b = clientB.get(c) || { sale: 0, cnt: 0 };
+      return { client: c, saleA: a.sale, saleB: b.sale, delta: b.sale - a.sale, cntA: a.cnt, cntB: b.cnt };
+    })
+    .sort((x, y) => x.delta - y.delta);
+  const topDecline = clientDeltas.filter((c) => c.delta < 0).slice(0, 5);
+  const topGrowth = [...clientDeltas].filter((c) => c.delta > 0).sort((x, y) => y.delta - x.delta).slice(0, 5);
+
+  // 차종/톤수 구성비 — 저단가 소형차 비중이 늘면 평균단가가 자연히 낮아진다
+  const tonA = groupBy(rowsA, (r) => r.차량톤수 || r.차량종류);
+  const tonB = groupBy(rowsB, (r) => r.차량톤수 || r.차량종류);
+  const tonKeys = new Set([...tonA.keys(), ...tonB.keys()]);
+  const tonMix = Array.from(tonKeys)
+    .map((t) => {
+      const a = tonA.get(t) || { sale: 0, cnt: 0 };
+      const b = tonB.get(t) || { sale: 0, cnt: 0 };
+      return {
+        ton: t,
+        shareA: A.cnt ? (a.cnt / A.cnt) * 100 : 0,
+        shareB: B.cnt ? (b.cnt / B.cnt) * 100 : 0,
+        avgA: a.cnt ? a.sale / a.cnt : 0,
+        avgB: b.cnt ? b.sale / b.cnt : 0,
+        cntA: a.cnt, cntB: b.cnt,
+      };
+    });
+
+  // 특수운임(연휴·성수기) 비중 — 특수일 오더가 많았던 달은 평균단가가 자연히 높게 나온다
+  const specialA = rowsA.filter(isSpecialDemandOrder);
+  const specialB = rowsB.filter(isSpecialDemandOrder);
+  const specialStatA = summarize(specialA);
+  const specialStatB = summarize(specialB);
+
+  // 요일별 분포 — 평일/주말 오더 비중 변화
+  const weekdayOf = (r) => {
+    const d = r.상차일 ? new Date(r.상차일 + "T00:00:00") : null;
+    return d && !isNaN(d.getTime()) ? d.getDay() : null;
+  };
+  const weekendCnt = (list) => list.filter((r) => { const w = weekdayOf(r); return w === 0 || w === 6; }).length;
+  const weekendA = weekendCnt(rowsA), weekendB = weekendCnt(rowsB);
+
+  // ----- 인사이트(findings) 생성 -----
+  const findings = [];
+
+  // 1) 핵심 인사이트 — 건수 vs 매출 vs 평균단가 (요청의 핵심 질문에 대한 직접 답변)
+  const saleDelta = B.sale - A.sale;
+  const cntDelta = B.cnt - A.cnt;
+  if (cntDelta > 0 && saleDelta < 0) {
+    findings.push({
+      icon: "⚠️", tone: "warning",
+      title: "건수는 늘었는데 매출은 감소",
+      detail: `${labelB} 오더 건수는 ${labelA} 대비 ${cntDelta.toLocaleString()}건(${pctStr(A.cnt, B.cnt)}) 늘었지만, 매출은 ${won(Math.abs(saleDelta))}(${pctStr(A.sale, B.sale)}) 줄었습니다. 건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 변동한 것이 직접적인 원인입니다. 저단가·근거리 오더 비중이 늘었거나, 특수일(연휴·성수기) 고단가 오더가 상대적으로 줄었을 가능성이 높습니다.`,
+    });
+  } else if (cntDelta < 0 && saleDelta > 0) {
+    findings.push({
+      icon: "✅", tone: "good",
+      title: "건수는 줄었지만 매출은 증가",
+      detail: `${labelB} 오더 건수는 ${Math.abs(cntDelta).toLocaleString()}건 줄었지만 매출은 ${won(saleDelta)} 늘었습니다. 건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}(${pctStr(A.avgSale, B.avgSale)})로 상승해, 고단가 오더 중심으로 효율이 개선되었습니다.`,
+    });
+  } else if (Math.abs(pctStrToNum(pctStr(A.avgSale, B.avgSale))) >= 5) {
+    findings.push({
+      icon: B.avgSale >= A.avgSale ? "📈" : "📉", tone: B.avgSale >= A.avgSale ? "good" : "warning",
+      title: "건당 평균 운임 변동",
+      detail: `건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}(${pctStr(A.avgSale, B.avgSale)})로 변동했습니다.`,
+    });
+  }
+
+  // 2) 수익률 변화
+  const rateDeltaP = B.rate - A.rate;
+  if (Math.abs(rateDeltaP) >= 0.5) {
+    findings.push({
+      icon: rateDeltaP >= 0 ? "📈" : "📉", tone: rateDeltaP >= 0 ? "good" : "warning",
+      title: `수익률 ${rateDeltaP >= 0 ? "개선" : "악화"} (${A.rate.toFixed(1)}% → ${B.rate.toFixed(1)}%)`,
+      detail: `수익(매익)은 ${won(A.profit)} → ${won(B.profit)}(${pctStr(A.profit, B.profit)}), 수익률은 ${rateDeltaP >= 0 ? "+" : ""}${rateDeltaP.toFixed(1)}%p 변화했습니다.`,
+    });
+  }
+
+  // 3) 거래처 기여도
+  if (topDecline.length) {
+    findings.push({
+      icon: "📉", tone: "warning",
+      title: "매출 감소에 가장 크게 기여한 거래처",
+      detail: topDecline.map((c) => `${c.client} ${won(c.delta)}(${c.cntA}건→${c.cntB}건)`).join(" · "),
+    });
+  }
+  if (topGrowth.length) {
+    findings.push({
+      icon: "📈", tone: "good",
+      title: "매출 증가에 가장 크게 기여한 거래처",
+      detail: topGrowth.map((c) => `${c.client} +${won(c.delta)}(${c.cntA}건→${c.cntB}건)`).join(" · "),
+    });
+  }
+
+  // 4) 차종/톤수 믹스 변화 — 비중 변화가 큰 항목만 짚어준다
+  const tonShift = tonMix
+    .filter((t) => t.cntA >= 3 || t.cntB >= 3)
+    .map((t) => ({ ...t, shareDelta: t.shareB - t.shareA }))
+    .sort((x, y) => Math.abs(y.shareDelta) - Math.abs(x.shareDelta))
+    .filter((t) => Math.abs(t.shareDelta) >= 3)
+    .slice(0, 3);
+  if (tonShift.length) {
+    findings.push({
+      icon: "🚚", tone: "info",
+      title: "차종/톤수 구성 변화",
+      detail: tonShift
+        .map((t) => `${t.ton} 비중 ${t.shareA.toFixed(1)}% → ${t.shareB.toFixed(1)}%(${t.shareDelta >= 0 ? "+" : ""}${t.shareDelta.toFixed(1)}%p, 평균단가 ${won(t.avgA)}→${won(t.avgB)})`)
+        .join(" · "),
+    });
+  }
+
+  // 5) 특수운임(연휴·성수기) 비중
+  if (specialStatA.cnt > 0 || specialStatB.cnt > 0) {
+    const shareA = A.cnt ? (specialStatA.cnt / A.cnt) * 100 : 0;
+    const shareB = B.cnt ? (specialStatB.cnt / B.cnt) * 100 : 0;
+    if (Math.abs(shareA - shareB) >= 2) {
+      findings.push({
+        icon: "🎌", tone: "info",
+        title: "특수일(연휴·성수기) 오더 비중 변화",
+        detail: `${labelA} 특수일 오더 ${specialStatA.cnt}건(비중 ${shareA.toFixed(1)}%, 평균 ${won(specialStatA.avgSale)}) → ${labelB} ${specialStatB.cnt}건(비중 ${shareB.toFixed(1)}%, 평균 ${won(specialStatB.avgSale)}). 특수일 오더는 평소보다 단가가 높게 형성되는 경향이 있어, 이 비중 변화가 월 평균단가 차이의 일부를 설명합니다.`,
+      });
+    }
+  }
+
+  // 6) 요일 분포(주말 비중)
+  const weekendShareA = A.cnt ? (weekendA / A.cnt) * 100 : 0;
+  const weekendShareB = B.cnt ? (weekendB / B.cnt) * 100 : 0;
+  if (Math.abs(weekendShareA - weekendShareB) >= 3) {
+    findings.push({
+      icon: "📅", tone: "info",
+      title: "주말 오더 비중 변화",
+      detail: `주말(토·일) 오더 비중이 ${weekendShareA.toFixed(1)}% → ${weekendShareB.toFixed(1)}%로 변화했습니다.`,
+    });
+  }
+
+  if (!findings.length) {
+    findings.push({ icon: "ℹ️", tone: "info", title: "특별한 변화 없음", detail: "두 달 사이 매출·건수·거래처 구성에서 뚜렷한 이상 신호가 발견되지 않았습니다." });
+  }
+
+  return { A, B, clientDeltas, topDecline, topGrowth, tonMix, specialStatA, specialStatB, findings };
+}
+// pctStr()이 반환하는 "+12.3%" 형태 문자열에서 다시 숫자만 뽑아 비교용으로 쓴다.
+function pctStrToNum(s) {
+  const n = parseFloat(String(s).replace(/[^\d.-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+function MonthCompareInsight({ rows = [] }) {
+  const won = (n) => `${Math.round(n).toLocaleString()}원`;
+  const pctStr = (a, b) => {
+    if (!a) return b ? "+100.0%" : "0.0%";
+    const p = ((b - a) / a) * 100;
+    return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
+  };
+
+  const monthsAvail = React.useMemo(() => {
+    return Array.from(new Set(rows.map((r) => (r.상차일 || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)))).sort();
+  }, [rows]);
+
+  const [monthA, setMonthA] = React.useState("");
+  const [monthB, setMonthB] = React.useState("");
+
+  React.useEffect(() => {
+    if (!monthsAvail.length) return;
+    setMonthA((prev) => (prev && monthsAvail.includes(prev)) ? prev : monthsAvail[Math.max(0, monthsAvail.length - 2)]);
+    setMonthB((prev) => (prev && monthsAvail.includes(prev)) ? prev : monthsAvail[monthsAvail.length - 1]);
+  }, [monthsAvail]);
+
+  const rowsA = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthA)), [rows, monthA]);
+  const rowsB = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthB)), [rows, monthB]);
+
+  const insight = React.useMemo(() => {
+    if (!monthA || !monthB) return null;
+    return buildMonthCompareInsight(rowsA, rowsB, monthA, monthB);
+  }, [rowsA, rowsB, monthA, monthB]);
+
+  const toneCls = {
+    good: "border-emerald-200 bg-emerald-50",
+    warning: "border-rose-200 bg-rose-50",
+    info: "border-indigo-200 bg-indigo-50",
+  };
+
+  const kpiRows = insight ? [
+    { label: "매출", aText: won(insight.A.sale), bText: won(insight.B.sale), good: insight.B.sale >= insight.A.sale, deltaText: `${won(insight.B.sale - insight.A.sale)} (${pctStr(insight.A.sale, insight.B.sale)})` },
+    { label: "수익", aText: won(insight.A.profit), bText: won(insight.B.profit), good: insight.B.profit >= insight.A.profit, deltaText: `${won(insight.B.profit - insight.A.profit)} (${pctStr(insight.A.profit, insight.B.profit)})` },
+    { label: "수익률", aText: `${insight.A.rate.toFixed(1)}%`, bText: `${insight.B.rate.toFixed(1)}%`, good: insight.B.rate >= insight.A.rate, deltaText: `${(insight.B.rate - insight.A.rate) >= 0 ? "+" : ""}${(insight.B.rate - insight.A.rate).toFixed(1)}%p` },
+    { label: "오더 건수", aText: `${insight.A.cnt}건`, bText: `${insight.B.cnt}건`, good: insight.B.cnt >= insight.A.cnt, deltaText: `${(insight.B.cnt - insight.A.cnt) >= 0 ? "+" : ""}${insight.B.cnt - insight.A.cnt}건 (${pctStr(insight.A.cnt, insight.B.cnt)})` },
+    { label: "평균단가/건", aText: won(insight.A.avgSale), bText: won(insight.B.avgSale), good: insight.B.avgSale >= insight.A.avgSale, deltaText: `${won(insight.B.avgSale - insight.A.avgSale)} (${pctStr(insight.A.avgSale, insight.B.avgSale)})` },
+  ] : [];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="text-[15px] font-bold text-white flex items-center gap-2">
+            🤖 AI 월간비교분석
+            <span className="text-[10px] font-extrabold bg-amber-400 text-[#1B2B4B] px-1.5 py-0.5 rounded">최고관리자 전용</span>
+          </h3>
+          <p className="text-[11px] text-white/50 mt-0.5">두 달의 매출·건수·거래처·차종·특수일 데이터를 비교해 변화 원인을 자동으로 짚어드립니다</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <CustomSelect
+            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
+            value={monthA}
+            onChange={(e) => setMonthA(e.target.value)}
+          >
+            {monthsAvail.map((m) => <option key={m} value={m} className="text-gray-900">{m}</option>)}
+          </CustomSelect>
+          <span className="text-white/60 text-[12px] font-semibold">vs</span>
+          <CustomSelect
+            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
+            value={monthB}
+            onChange={(e) => setMonthB(e.target.value)}
+          >
+            {monthsAvail.map((m) => <option key={m} value={m} className="text-gray-900">{m}</option>)}
+          </CustomSelect>
+        </div>
+      </div>
+
+      {!insight ? (
+        <div className="p-8 text-center text-[13px] text-gray-500">비교할 데이터가 부족합니다.</div>
+      ) : (
+        <div className="p-6 space-y-6">
+          {/* KPI 비교 표 */}
+          <table className="w-full text-[13px] border-collapse text-center">
+            <thead>
+              <tr className="bg-gray-100 text-gray-700">
+                <th className="border p-2">지표</th>
+                <th className="border p-2">{monthA}</th>
+                <th className="border p-2">{monthB}</th>
+                <th className="border p-2">증감</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kpiRows.map((k) => (
+                <tr key={k.label} className="hover:bg-gray-50">
+                  <td className="border p-2 font-semibold text-gray-700">{k.label}</td>
+                  <td className="border p-2 text-gray-600">{k.aText}</td>
+                  <td className="border p-2 font-bold text-gray-900">{k.bText}</td>
+                  <td className={`border p-2 font-bold ${k.good ? "text-emerald-600" : "text-rose-600"}`}>
+                    {k.good ? "▲" : "▼"} {k.deltaText}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* AI 분석 코멘트 */}
+          <div className="space-y-2.5">
+            <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wide">🧠 AI 분석 코멘트</div>
+            {insight.findings.map((f, i) => (
+              <div key={i} className={`rounded-xl border p-4 ${toneCls[f.tone] || "border-gray-200 bg-gray-50"}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[15px]">{f.icon}</span>
+                  <span className="text-[13px] font-bold text-gray-800">{f.title}</span>
+                </div>
+                <p className="text-[12.5px] text-gray-700 leading-relaxed">{f.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
-function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false }) {
+function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role }) {
 
   const [activeTab, setActiveTab] = React.useState("overview"); // overview | client_compare
   const [rangeStart, setRangeStart] = React.useState("2026-01");
@@ -39764,6 +40721,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             { key: "client_compare", label: "거래처 동향 분석" },
             { key: "profit_loss", label: "손익보고서" },
             { key: "accounting", label: "회계자료" },
+            // ⭐ AI 월간비교분석 — 최고관리자 전용. 실제 LLM 호출 없이 매출·건수·평균단가·
+            // 거래처·차종/톤수·특수일 비중을 규칙 기반으로 비교해서 "건수는 늘었는데 매출은
+            // 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는 통계 분석 엔진.
+            ...(role === "totalMaster" ? [{ key: "ai_compare", label: "🤖 AI 월간비교분석" }] : []),
           ].map(tab => (
             <button
               key={tab.key}
@@ -39819,6 +40780,12 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           clients={clients}
           isViewer={isViewer}
         />
+      )}
+      {/* ================= AI 월간비교분석 탭 (최고관리자 전용) ================= */}
+      {activeTab === "ai_compare" && role === "totalMaster" && (
+        <div className="px-8 py-6">
+          <MonthCompareInsight rows={rows} />
+        </div>
       )}
 {/* ================= 매출 개요 탭 ================= */}
       {activeTab === "overview" && (

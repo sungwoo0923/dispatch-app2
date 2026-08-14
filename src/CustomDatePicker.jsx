@@ -55,6 +55,29 @@ export const KOREAN_HOLIDAYS = {
   "2027-12-25": "크리스마스",
 };
 
+// 특정 날짜가 "특수 수요일"(공휴일 당일이거나, 공휴일을 며칠 앞둔 날)인지 판단한다.
+// 연휴 직전에는 차량이 부족해져 평소보다 운임이 높게 형성되는 경우가 많은데, 그렇게
+// 형성된 운임이 나중에 "이 노선의 평소 시세"인 것처럼 그대로 참조되지 않도록, 배차
+// 등록 화면과 자사운임표에서 이 날짜들을 구분해서 보여주는 데 쓴다.
+export function specialDemandInfo(dateStr, aheadDays = 3) {
+  if (!dateStr) return { special: false, reason: "" };
+  const key = String(dateStr).slice(0, 10);
+  const base = new Date(`${key}T00:00:00`);
+  if (isNaN(base.getTime())) return { special: false, reason: "" };
+  if (KOREAN_HOLIDAYS[key]) {
+    return { special: true, reason: shortHolidayLabel(KOREAN_HOLIDAYS[key]) };
+  }
+  for (let i = 1; i <= aheadDays; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i);
+    const k = d.toISOString().slice(0, 10);
+    if (KOREAN_HOLIDAYS[k]) {
+      return { special: true, reason: `${shortHolidayLabel(KOREAN_HOLIDAYS[k])} 연휴 앞둠` };
+    }
+  }
+  return { special: false, reason: "" };
+}
+
 // 달력 셀에 표시할 짧은 이름 (좁은 칸에 들어가야 해서 접두어를 뗀 축약형)
 export function shortHolidayLabel(name) {
   if (!name) return "";
@@ -69,7 +92,15 @@ export function shortHolidayLabel(name) {
 // 브라우저 기본 달력(type="date")을 대체하는 커스텀 날짜 선택기 — PC/모바일 공용.
 // 트리거는 그대로 두고 달력 패널만 document.body에 fixed 포지션 portal로 띄운다.
 const CustomDatePicker = React.forwardRef(function CustomDatePicker(
-  { value, onChange, className = "", placeholder = "날짜 선택", disabled = false, showIcon = false },
+  {
+    value, onChange, className = "", placeholder = "날짜 선택", disabled = false, showIcon = false,
+    // ⭐ 복수근무일(묶음 오더) 다중선택 — 이 4개 props는 opt-in이라 기본값(false/[])일
+    // 때는 기존 단일선택 동작과 완전히 동일하다. multiSelect=true인 곳(현재는 등록폼의
+    // 상차일 필드)에서만 "다중선택" 버튼이 뜨고, multiActive가 true인 동안은 날짜를
+    // 클릭할 때마다 팝업이 닫히지 않고 onToggleWorkDate로 켜고/끈다.
+    multiSelect = false, multiActive = false, onToggleMulti, workDates = [], onToggleWorkDate, onClearWorkDates,
+    displayOverride,
+  },
   ref
 ) {
   const [open, setOpen] = React.useState(false);
@@ -155,7 +186,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
         onClick={() => { if (disabled) return; setOpen((v) => !v); }}
         className={`${className} text-left ${showIcon ? "flex items-center justify-between gap-1.5" : ""}`}
       >
-        <span>{value || <span className="text-gray-400">{placeholder}</span>}</span>
+        <span>{displayOverride || value || <span className="text-gray-400">{placeholder}</span>}</span>
         {showIcon && (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
             <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
@@ -193,7 +224,9 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
             {cells.map((d, i) => {
               if (d == null) return <div key={i} />;
               const dateStr = fmt(viewYear, viewMonth, d);
-              const isSelected = dateStr === value;
+              // ⭐ multiActive일 땐 workDates 목록 포함 여부로 선택 표시를 판단하고,
+              // 클릭도 단일값 커밋이 아니라 목록 토글(팝업 유지)로 동작한다.
+              const isSelected = multiActive ? workDates.includes(dateStr) : dateStr === value;
               const isToday = dateStr === todayStr;
               const dow = new Date(viewYear, viewMonth, d).getDay();
               const holidayName = KOREAN_HOLIDAYS[dateStr];
@@ -207,9 +240,12 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
               return (
                 <button key={i} type="button"
                   title={holidayName || undefined}
-                  onClick={() => { onChange?.({ target: { value: dateStr } }); setOpen(false); }}
+                  onClick={() => {
+                    if (multiActive) { onToggleWorkDate?.(dateStr); return; }
+                    onChange?.({ target: { value: dateStr } }); setOpen(false);
+                  }}
                   className={`h-11 rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 ${
-                    isSelected ? "bg-[#1B2B4B]" :
+                    isSelected ? (multiActive ? "bg-black" : "bg-[#1B2B4B]") :
                     isToday ? "border-2 border-[#1B2B4B]" :
                     "hover:bg-gray-100"
                   }`}
@@ -225,11 +261,31 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
             })}
           </div>
           <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-3">
+              <button type="button"
+                onClick={() => {
+                  if (multiActive) { onToggleWorkDate?.(todayStr); return; }
+                  onChange?.({ target: { value: todayStr } }); setOpen(false);
+                }}
+                className="text-[12px] font-bold text-[#1B2B4B] hover:underline">오늘</button>
+              {/* ⭐ 복수근무일(묶음) — "오늘" 버튼과 동일한 스타일(이모지 없이 텍스트만),
+                  다중선택 모드가 켜져 있으면 배경 pill로 활성 상태를 표시한다. */}
+              {multiSelect && (
+                <button type="button"
+                  onClick={() => onToggleMulti?.()}
+                  className={`text-[12px] font-bold hover:underline px-1.5 py-0.5 rounded ${
+                    multiActive ? "bg-black text-white" : "text-[#1B2B4B]"
+                  }`}
+                >
+                  다중선택{multiActive && workDates.length ? ` (${workDates.length}일)` : ""}
+                </button>
+              )}
+            </div>
             <button type="button"
-              onClick={() => { onChange?.({ target: { value: todayStr } }); setOpen(false); }}
-              className="text-[12px] font-bold text-[#1B2B4B] hover:underline">오늘</button>
-            <button type="button"
-              onClick={() => { onChange?.({ target: { value: "" } }); setOpen(false); }}
+              onClick={() => {
+                if (multiActive) { onClearWorkDates?.(); return; }
+                onChange?.({ target: { value: "" } }); setOpen(false);
+              }}
               className="text-[12px] font-semibold text-gray-400 hover:underline">지우기</button>
           </div>
         </div>,
