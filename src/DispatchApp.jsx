@@ -933,7 +933,7 @@ const MoneyInput = ({ value, onChange }) => (
     value={value ? Number(String(value).replace(/[^\d]/g, "")).toLocaleString() : ""}
     onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" />
 );
-function BulkEditModal({ rows, patchDispatch, onClose }) {
+function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
   const [edited, setEdited] = React.useState(() => {
     const init = {};
     for (const r of rows) {
@@ -990,6 +990,12 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
         await patchDispatch(job.id, { ...job.patch, __col: job.col });
         setSaveProgress(p => ({ ...p, done: p.done + 1 }));
       }));
+      // ⚠️ patchDispatch가 resolve되는 시점은 "Firestore에 쓰기 요청이 반영된
+      // 시점"이지, 화면에 붙어있는 표(onSnapshot 구독)가 그 변경을 실제로
+      // 렌더링해서 눈에 보이는 시점은 아니다 — 그 사이 짧은 시차 때문에 로딩창이
+      // 사라진 뒤에도 뒤에 있는 표가 한 줄씩 바뀌는 게 보이던 문제가 있었다.
+      // onSnapshot이 따라잡을 시간을 살짝 벌어준 뒤에 로딩을 닫는다.
+      await new Promise(r => setTimeout(r, 500));
       setSaving(false);
       // 로딩 오버레이가 사라지자마자 곧바로 "n건 수정이 완료되었습니다" 배너를
       // 잠깐 띄운 뒤, 2초 후에 팝업을 닫는다.
@@ -1004,7 +1010,10 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
       {saving && (
-        <div className="fixed inset-0 z-[9999999] bg-black/60 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        // ⚠️ 저장 중에는 뒤에 있는 표가 한 줄씩 바뀌는 게 비쳐 보이면 안 되므로
+        // (완전히 다 끝나고 나서 한 번에 자연스럽게 보여야 함) 배경을 반투명이
+        // 아니라 완전히 불투명하게 가린다.
+        <div className="fixed inset-0 z-[9999999] bg-gray-100 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 flex flex-col items-center gap-4 w-[300px]">
             <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
             <div className="text-[14px] font-extrabold text-gray-800">저장 중입니다...</div>
@@ -1028,7 +1037,19 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
           <h3 className="text-white font-bold text-[15px]">선택 오더 일괄수정 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
-          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+          <div className="flex items-center gap-2">
+            {/* ⭐ 날짜 일괄 이동 — 우클릭 메뉴에 따로 두지 않고, 일괄수정 안에서
+                바로 열 수 있게 버튼으로 넣었다. 지금 선택한 오더 그대로
+                날짜이동 팝업이 뜬다(일괄수정 팝업은 뒤에 그대로 유지). */}
+            {onDateShift && (
+              <button type="button" onClick={onDateShift}
+                className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-gray-100 transition flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
+                날짜 일괄 이동
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+          </div>
         </div>
         <div className="px-5 py-2.5 border-b border-gray-100 bg-amber-50 text-[12px] font-semibold text-amber-700">
           맨 윗줄(일괄입력)에 값을 넣고 "전체적용"을 누르면 아래 선택한 오더 전체에 같은 값이 채워집니다. 각 오더 칸은 따로 다시 고칠 수 있어요.
@@ -1162,6 +1183,10 @@ function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
         await patchDispatch(job.id, { ...job.patch, __col: job.col });
         setSaveProgress(p => ({ ...p, done: p.done + 1 }));
       }));
+      // ⚠️ BulkEditModal과 동일한 이유 — onSnapshot이 표를 실제로 다시 그릴
+      // 시간을 살짝 벌어준 뒤에 로딩을 닫아야 "로딩이 사라진 뒤에도 계속
+      // 바뀌는" 것처럼 보이지 않는다.
+      await new Promise(r => setTimeout(r, 500));
       setSaving(false);
       setDoneCount(jobs.length);
       closeTimerRef.current = setTimeout(onClose, 2000);
@@ -1174,7 +1199,8 @@ function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
       {saving && (
-        <div className="fixed inset-0 z-[9999999] bg-black/60 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        // ⚠️ 저장 중 뒤에 있는 표가 비쳐 보이지 않도록 완전히 불투명하게 가린다.
+        <div className="fixed inset-0 z-[9999999] bg-gray-100 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 flex flex-col items-center gap-4 w-[300px]">
             <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
             <div className="text-[14px] font-extrabold text-gray-800">이동 적용 중입니다...</div>
@@ -23832,7 +23858,7 @@ const head = isDark
   <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
 )}
 {bulkEditRows && (
-  <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+  <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
 )}
 {dateShiftRows && (
   <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
@@ -27539,21 +27565,6 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               일괄수정 ({selected.length}건)
-            </button>
-          )}
-          {/* 날짜 일괄 이동 — 2건 이상 선택했을 때만 활성화. 거래처 일정이 통째로
-              밀리거나 당겨졌을 때, 선택한 오더들의 상차일(+하차일)을 같은 일수만큼
-              한 번에 이동시킨다. */}
-          {selected.length > 1 && (
-            <button
-              className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-              onClick={() => {
-                setDateShiftRows(rows.filter(x => selected.includes(x._id)));
-                setContextMenu(null);
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
-              날짜 일괄 이동 ({selected.length}건)
             </button>
           )}
           <div className="border-t border-gray-100 my-1"/>
@@ -34698,7 +34709,7 @@ return (
         <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
       )}
       {bulkEditRows && (
-        <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+        <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
       )}
       {dateShiftRows && (
         <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
@@ -37529,19 +37540,6 @@ setCopyPlaceOptions(list);
               }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               일괄수정 ({selected.size}건)
-            </button>
-          )}
-          {/* 날짜 일괄 이동 — 2건 이상 선택했을 때만 활성화. 거래처 일정이 통째로
-              밀리거나 당겨졌을 때, 선택한 오더들의 상차일(+하차일)을 같은 일수만큼
-              한 번에 이동시킨다. */}
-          {selected.size > 1 && (
-            <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-              onClick={() => {
-                setDateShiftRows(filtered.filter(x => selected.has(getId(x))));
-                setContextMenuDS(null);
-              }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
-              날짜 일괄 이동 ({selected.size}건)
             </button>
           )}
           <div className="border-t border-gray-100 my-1"/>
