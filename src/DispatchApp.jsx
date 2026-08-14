@@ -1104,6 +1104,153 @@ function BulkEditModal({ rows, patchDispatch, onClose }) {
   );
 }
 
+/* -------------------------------------------------
+   날짜 일괄 이동 — 실시간배차현황/배차현황에서 2건 이상 선택 후 우클릭 →
+   "날짜 일괄 이동"으로 연다. 거래처 쪽 일정이 통째로(예: 일주일) 밀리거나
+   당겨졌을 때, 이미 등록해둔 오더들을 하나씩 고치지 않고 상차일(+선택 시
+   하차일)을 한 번에 같은 일수만큼 이동시킬 수 있다.
+--------------------------------------------------*/
+function _shiftDateStr(dateStr, days) {
+  if (!dateStr) return dateStr;
+  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
+  if (isNaN(d.getTime())) return dateStr;
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
+  const [shiftDays, setShiftDays] = React.useState(7);
+  const [shiftDrop, setShiftDrop] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [saveProgress, setSaveProgress] = React.useState({ done: 0, total: 0 });
+  const [doneCount, setDoneCount] = React.useState(null);
+  const closeTimerRef = React.useRef(null);
+  React.useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); }, []);
+
+  if (!rows || rows.length === 0) return null;
+
+  // 미리보기 — 상차일 기준으로 중복 없이 한 번씩만 보여줘서 목록이 길어지지 않게 한다.
+  const preview = React.useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const r of rows) {
+      const oldD = r.상차일 || "";
+      if (!oldD || seen.has(oldD)) continue;
+      seen.add(oldD);
+      list.push({ old: oldD, next: _shiftDateStr(oldD, shiftDays) });
+    }
+    return list.sort((a, b) => a.old.localeCompare(b.old));
+  }, [rows, shiftDays]);
+
+  const handleApply = async () => {
+    if (!shiftDays) { window.alert("이동할 일수를 입력하세요. (0은 이동이 없습니다)"); return; }
+    const jobs = rows.map(r => {
+      const id = r._id || r.id;
+      const patch = {};
+      if (r.상차일) patch.상차일 = _shiftDateStr(r.상차일, shiftDays);
+      if (shiftDrop && r.하차일) patch.하차일 = _shiftDateStr(r.하차일, shiftDays);
+      return Object.keys(patch).length ? { id, col: r.__col, patch } : null;
+    }).filter(Boolean);
+    if (jobs.length === 0) { onClose(); return; }
+
+    setSaveProgress({ done: 0, total: jobs.length });
+    setSaving(true);
+    try {
+      await Promise.all(jobs.map(async (job) => {
+        await patchDispatch(job.id, { ...job.patch, __col: job.col });
+        setSaveProgress(p => ({ ...p, done: p.done + 1 }));
+      }));
+      setSaving(false);
+      setDoneCount(jobs.length);
+      closeTimerRef.current = setTimeout(onClose, 2000);
+    } catch (e) {
+      setSaving(false);
+      window.alert("저장 중 오류가 발생했습니다.\n" + (e?.message || ""));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+      {saving && (
+        <div className="fixed inset-0 z-[9999999] bg-black/60 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-7 flex flex-col items-center gap-4 w-[300px]">
+            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+            <div className="text-[14px] font-extrabold text-gray-800">이동 적용 중입니다...</div>
+            <div className="text-[13px] font-bold text-gray-600">{saveProgress.done} / {saveProgress.total}건 완료</div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-[#1B2B4B] transition-all duration-200"
+                style={{ width: `${saveProgress.total ? Math.round((saveProgress.done / saveProgress.total) * 100) : 0}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
+      {doneCount != null && (
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center pointer-events-none">
+          <div className="bg-black text-white font-extrabold text-[16px] px-6 py-3.5 rounded-2xl shadow-2xl">
+            {doneCount}건 날짜가 이동되었습니다.
+          </div>
+        </div>
+      )}
+      <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
+          <h3 className="text-white font-bold text-[15px]">날짜 일괄 이동 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+        </div>
+        <div className="px-5 py-5 space-y-4">
+          <div className="text-[12px] text-gray-500 font-semibold leading-relaxed">
+            선택한 오더들의 상차일{shiftDrop ? "·하차일" : ""}을 한 번에 같은 일수만큼 이동합니다.
+            거래처 일정이 통째로 밀리거나 당겨졌을 때, 오더를 하나씩 고치지 않고 바로 반영할 수 있습니다.
+          </div>
+          <div>
+            <label className="block text-[12px] font-bold text-gray-600 mb-1.5">이동할 일수</label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setShiftDays(v => v - 1)}
+                className="w-9 h-9 shrink-0 rounded-lg border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition">−</button>
+              <input autoComplete="off" inputMode="numeric"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-center text-[16px] font-extrabold text-[#1B2B4B]"
+                value={shiftDays}
+                onChange={(e) => setShiftDays(Number(e.target.value.replace(/[^-\d]/g, "")) || 0)}
+              />
+              <button type="button" onClick={() => setShiftDays(v => v + 1)}
+                className="w-9 h-9 shrink-0 rounded-lg border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition">+</button>
+            </div>
+            <div className="text-[11px] text-gray-400 font-semibold mt-1">
+              양수(+)는 뒤로, 음수(−)는 앞으로 이동합니다. 예: 7 = 일주일 뒤로 밀기
+            </div>
+          </div>
+          <label className="flex items-center gap-1.5 cursor-pointer select-none w-fit">
+            <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={shiftDrop} onChange={() => setShiftDrop(v => !v)} />
+            <span className="text-[12px] font-semibold text-gray-600">하차일도 함께 이동</span>
+          </label>
+
+          {preview.length > 0 && (
+            <div>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5">미리보기 (상차일 기준, 중복 날짜는 한 번만 표시)</div>
+              <div className="border border-gray-100 rounded-lg max-h-[180px] overflow-y-auto divide-y divide-gray-50">
+                {preview.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-[12px]">
+                    <span className="font-semibold text-gray-500">{p.old}</span>
+                    <span className="text-gray-300">→</span>
+                    <span className="font-extrabold text-[#1B2B4B]">{p.next}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+          <button type="button" disabled={saving} onClick={handleApply} className="px-5 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition disabled:opacity-50">
+            {saving ? "적용 중..." : `${rows.length}건 이동 적용`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // kg/g으로 입력해도 항상 톤 단위 문자열로 통일 (예: "100kg" → "0.1톤")
 const toTonUnit = (v = "") => {
   const str = String(v ?? "").trim();
@@ -20127,6 +20274,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
+  const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
 
   React.useEffect(() => {
     const close = () => setContextMenu(null);
@@ -23685,6 +23833,9 @@ const head = isDark
 )}
 {bulkEditRows && (
   <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+)}
+{dateShiftRows && (
+  <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
 )}
 {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
@@ -27388,6 +27539,21 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               일괄수정 ({selected.length}건)
+            </button>
+          )}
+          {/* 날짜 일괄 이동 — 2건 이상 선택했을 때만 활성화. 거래처 일정이 통째로
+              밀리거나 당겨졌을 때, 선택한 오더들의 상차일(+하차일)을 같은 일수만큼
+              한 번에 이동시킨다. */}
+          {selected.length > 1 && (
+            <button
+              className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+              onClick={() => {
+                setDateShiftRows(rows.filter(x => selected.includes(x._id)));
+                setContextMenu(null);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
+              날짜 일괄 이동 ({selected.length}건)
             </button>
           )}
           <div className="border-t border-gray-100 my-1"/>
@@ -32057,6 +32223,7 @@ const save = {
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
+  const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
   React.useEffect(() => {
     const close = () => setContextMenuDS(null);
     const onKey = (e) => {
@@ -34532,6 +34699,9 @@ return (
       )}
       {bulkEditRows && (
         <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
+      )}
+      {dateShiftRows && (
+        <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
       )}
       {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
@@ -37359,6 +37529,19 @@ setCopyPlaceOptions(list);
               }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               일괄수정 ({selected.size}건)
+            </button>
+          )}
+          {/* 날짜 일괄 이동 — 2건 이상 선택했을 때만 활성화. 거래처 일정이 통째로
+              밀리거나 당겨졌을 때, 선택한 오더들의 상차일(+하차일)을 같은 일수만큼
+              한 번에 이동시킨다. */}
+          {selected.size > 1 && (
+            <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+              onClick={() => {
+                setDateShiftRows(filtered.filter(x => selected.has(getId(x))));
+                setContextMenuDS(null);
+              }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
+              날짜 일괄 이동 ({selected.size}건)
             </button>
           )}
           <div className="border-t border-gray-100 my-1"/>
