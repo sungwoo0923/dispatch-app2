@@ -25,7 +25,7 @@ import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 import AttendanceBoard from "./AttendanceBoard";
-import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday } from "./attendanceUtils";
+import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
@@ -307,7 +307,7 @@ function _scheduleDateLabel(d) {
    이름은 CustomDatePicker의 달력과 동일하게 한 줄(줄바꿈 없이)로 표시한다.
    덤으로 실시간 디지털 시계를 헤더에 넣어 데스크 시계처럼도 쓸 수 있게 했다.
 --------------------------------------------------*/
-function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange }) {
+function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName }) {
   const pad2 = (n) => String(n).padStart(2, "0");
   const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
   const parseValidDate = (s) => {
@@ -318,11 +318,22 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const [viewDate, setViewDate] = React.useState(() => parseValidDate(pickupDate) || parseValidDate(dropDate) || new Date());
   const [target, setTarget] = React.useState("pickup"); // "pickup" | "drop" — 달력 클릭 시 어느 필드에 반영할지
   const [clock, setClock] = React.useState(() => new Date());
+  const [schedules, setSchedules] = React.useState([]);
 
   React.useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // 휴가/외근 승인 현황(인사관리 > 출근기록부와 동일한 "schedules" 컬렉션)을 구독해서,
+  // 승인 완료된 연차·외근·병가 등을 달력 날짜 칸에 함께 표시한다.
+  React.useEffect(() => {
+    const company = companyName || "돌캐";
+    const unsub = onSnapshot(collection(db, "schedules"), (snap) => {
+      setSchedules(snap.docs.map(d => d.data()).filter(s => (s.companyName || "돌캐") === company));
+    }, () => {});
+    return () => unsub();
+  }, [companyName]);
 
   // 상차일이 바뀌면(폼에서 직접 입력해도) 그 달로 자동으로 이동해서, 별도
   // 조작 없이도 방금 고른 날짜가 바로 달력에 보이게 한다.
@@ -342,6 +353,19 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  // 날짜별 승인된 휴가/외근 목록 — 날짜마다 매번 전체 스캔하지 않도록 이번 달 범위만 미리 묶어둔다.
+  const leavesByDate = React.useMemo(() => {
+    const map = new Map();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = fmt(viewYear, viewMonth, d);
+      const hits = (schedules || []).filter(s =>
+        s.start && dateStr >= s.start && dateStr <= (s.end || s.start) && isScheduleApproved(s)
+      );
+      if (hits.length) map.set(dateStr, hits);
+    }
+    return map;
+  }, [schedules, viewYear, viewMonth, daysInMonth]);
 
   const goMonth = (delta) => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
 
@@ -396,9 +420,10 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
             <button type="button" onClick={() => goMonth(1)}
               className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-base font-bold">›</button>
           </div>
+          {/* ⚠️ 요일 헤더 글씨가 너무 작아 안 보인다는 피드백 — 10px→13px, 굵게 */}
           <div className="grid grid-cols-7 gap-1 mb-1 shrink-0">
             {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
-              <div key={w} className={`text-center text-[10px] font-bold py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{w}</div>
+              <div key={w} className={`text-center text-[13px] font-extrabold py-1 ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-500"}`}>{w}</div>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1 flex-1">
@@ -418,25 +443,49 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
                 : holidayName || isSunday ? "text-red-500"
                 : isSaturday ? "text-blue-500"
                 : "text-gray-700";
+              const leaves = leavesByDate.get(dateStr) || [];
+              const leaveTitle = leaves.map(s => `${s.name || "직원"} ${LEAVE_TYPE_LABEL[s.type] || s.type}`).join(", ");
               return (
-                <button key={i} type="button" title={holidayName || undefined}
+                <button key={i} type="button"
+                  title={[holidayName, leaveTitle].filter(Boolean).join(" · ") || undefined}
                   onClick={() => handlePick(dateStr)}
-                  className={`min-h-[44px] rounded-lg text-[12px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 ${
+                  className={`min-h-[68px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
                     isMarked ? "bg-[#1B2B4B]" :
                     isToday ? "border-2 border-[#1B2B4B]" :
                     "hover:bg-gray-100"
                   }`}
                 >
                   <span className={numberCls}>{d}</span>
+                  {/* ⚠️ 공휴일/대체공휴일/연휴 이름 글씨가 너무 작아 안 보인다는 피드백 —
+                      7px→10px로 키우고, 굵기·색 대비를 높여 또렷하게 보이게 한다.
+                      줄바꿈은 여전히 없음(한 줄, whitespace-nowrap). */}
                   {holidayName && (
-                    <span className={`text-[7px] leading-none font-bold whitespace-nowrap ${isMarked ? "text-white/80" : "text-red-400"}`}>
+                    <span className={`text-[10px] leading-none font-extrabold whitespace-nowrap ${isMarked ? "text-white" : "text-red-600"}`}>
                       {shortHolidayLabel(holidayName)}
                     </span>
                   )}
+                  {/* ⭐ 상/하차일 표시 — 너무 작아 안 보인다는 피드백으로 크게(w-3→w-5) 키움 */}
                   {isMarked && (
-                    <span className="flex gap-0.5">
-                      {isPickup && <span className="w-3 h-3 rounded-full bg-white text-[#1B2B4B] text-[7px] font-black flex items-center justify-center leading-none">상</span>}
-                      {isDrop && <span className="w-3 h-3 rounded-full border border-white text-white text-[7px] font-black flex items-center justify-center leading-none">하</span>}
+                    <span className="flex gap-1">
+                      {isPickup && <span className="w-5 h-5 rounded-full bg-white text-[#1B2B4B] text-[11px] font-black flex items-center justify-center leading-none shrink-0">상</span>}
+                      {isDrop && <span className="w-5 h-5 rounded-full border-2 border-white text-white text-[11px] font-black flex items-center justify-center leading-none shrink-0">하</span>}
+                    </span>
+                  )}
+                  {/* ⭐ 승인된 연차/외근/병가 등 — 인사관리(출근기록부)에서 최종 승인된
+                      일정만 표시. 여러 명이 겹치면 앞 2명만 보여주고 "+N"으로 요약,
+                      전체 목록은 title 툴팁으로 확인 가능. */}
+                  {leaves.length > 0 && (
+                    <span className="flex flex-col items-center gap-0.5 mt-0.5 w-full px-0.5">
+                      {leaves.slice(0, 2).map((s, li) => (
+                        <span key={li}
+                          className={`w-full text-center text-[9px] leading-none font-bold rounded px-0.5 py-[1.5px] truncate ${ATTENDANCE_STATUS_COLOR[LEAVE_TYPE_LABEL[s.type] || s.type] || "bg-gray-500 text-white"}`}
+                        >
+                          {s.name || "직원"}·{LEAVE_TYPE_LABEL[s.type] || s.type}
+                        </span>
+                      ))}
+                      {leaves.length > 2 && (
+                        <span className={`text-[9px] leading-none font-bold ${isMarked ? "text-white/80" : "text-gray-500"}`}>+{leaves.length - 2}명</span>
+                      )}
                     </span>
                   )}
                 </button>
@@ -448,6 +497,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
             <div className="flex items-center gap-2 text-[10px] font-semibold text-gray-400">
               <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />상차일</span>
               <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#1B2B4B]" />하차일</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-violet-700" />휴가·외근(승인)</span>
             </div>
           </div>
         </div>
@@ -13909,6 +13959,7 @@ className={`
     dropDate={form.하차일 || ""}
     onPickupChange={(v) => onChange("상차일", v)}
     onDropChange={(v) => onChange("하차일", v)}
+    companyName={userCompany || localStorage.getItem("userCompany") || "돌캐"}
   />
 </div>
 {/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}

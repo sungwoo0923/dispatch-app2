@@ -23,7 +23,7 @@ function normalizeName(name) {
 // 결재자 목록을 보고 해당 일정이 실제로 "승인 완료" 상태인지 판단
 // 결재자가 1명이라도 지정돼 있으면 전원이 승인(approved)해야 승인 완료로 간주하고,
 // 결재자가 아예 없는 과거 데이터는(결재 절차 도입 전 등록분) 반려되지 않은 이상 그대로 인정한다.
-function isScheduleApproved(s) {
+export function isScheduleApproved(s) {
   const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, status: s.approvalStatus || "pending" }] : []);
   if (approvers.length === 0) return true;
   if (approvers.some(a => a.status === "rejected")) return false;
