@@ -122,31 +122,43 @@ export default function RolePermissionsPanel() {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-[#1B2B4B] px-4 py-3 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[14px]">{selectedKey} 권한 설정</h3>
-              {savedRole && (
-                <button onClick={() => removeRole(selectedKey)} className="text-[11px] font-bold text-white/70 hover:text-white">
-                  {builtinInfo ? "기본값으로 초기화" : "삭제"}
+            {/* 헤더 — 큰 전체너비 저장 버튼 대신, 여기 오른쪽에 작은 버튼으로 배치 */}
+            <div className="bg-[#1B2B4B] px-4 py-2.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-white font-bold text-[13px] truncate">{selectedKey} 권한 설정</h3>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {savedRole && (
+                  <button onClick={() => removeRole(selectedKey)} className="text-[11px] font-semibold text-white/60 hover:text-white">
+                    {builtinInfo ? "기본값 초기화" : "삭제"}
+                  </button>
+                )}
+                <button onClick={saveDraft}
+                  className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-gray-100 transition">
+                  저장
                 </button>
-              )}
+              </div>
             </div>
             <div className="p-4 space-y-4">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 mb-1">표시 이름</label>
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] font-semibold text-gray-500 shrink-0">표시 이름</label>
                 <input autoComplete="off" value={draft.label}
                   onChange={e => setDraft(d => ({ ...d, label: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 mb-2">메뉴별 접근 범위</label>
-                <div className="border border-gray-100 rounded-lg divide-y divide-gray-50">
+                {/* ⚠️ 이전엔 메뉴 하나당 가로로 꽉 찬 줄 하나를 다 차지해서 화면이
+                    쓸데없이 넓어 보였다 — 2열 카드 그리드로 압축해서 한 화면에
+                    더 조밀하게 보이게 한다. */}
+                <div className="grid grid-cols-2 gap-2">
                   {CUSTOMIZABLE_MENUS.map(m => (
-                    <div key={m} className="flex items-center justify-between px-3 py-2">
-                      <span className="text-[13px] text-gray-700">{m}</span>
+                    <div key={m} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-2.5 py-1.5 bg-gray-50/50">
+                      <span className="text-[12.5px] font-semibold text-gray-700 truncate">{m}</span>
                       <CustomSelect
                         value={draft.menus[m] || "hidden"}
                         onChange={e => setDraft(d => ({ ...d, menus: { ...d.menus, [m]: e.target.value } }))}
-                        className="w-[120px] border border-gray-200 rounded-lg px-2 py-1 text-[12px] bg-white focus:outline-none focus:border-[#1B2B4B]"
+                        className="w-[92px] shrink-0 border border-gray-200 rounded-md px-1.5 py-1 text-[11px] bg-white focus:outline-none focus:border-[#1B2B4B]"
                       >
                         <option value="hidden">숨김</option>
                         <option value="read">조회만</option>
@@ -156,10 +168,6 @@ export default function RolePermissionsPanel() {
                   ))}
                 </div>
               </div>
-              <button onClick={saveDraft}
-                className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
-                저장
-              </button>
             </div>
           </div>
         )}

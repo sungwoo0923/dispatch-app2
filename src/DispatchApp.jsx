@@ -4671,6 +4671,11 @@ useEffect(() => {
     myRealName,
   } = useRealtimeCollections(user, userCompany, role);
 
+  // ⚠️ 아래 dispatchDataFiltered에서 커스텀 권한(관리자메뉴 > 권한관리에서 만든 역할)
+  // 여부를 판단하는 데 필요해서, 원래 더 아래(구 "역할별 차단 메뉴" 구역)에 있던
+  // useCustomRoles() 훅을 여기로 끌어올렸다. 아래쪽의 customRole 선언은 이 값을
+  // 그대로 재사용한다(중복 구독 방지).
+  const customRoles = useCustomRoles();
 
   // 🔍 admin = 전체 데이터, 일반 user = 본인 작성 데이터만
   const dispatchDataFiltered = useMemo(() => {
@@ -4689,14 +4694,25 @@ useEffect(() => {
       return docCompany === myCompany;
     });
 
-    // 실시간배차현황/배차현황 둘 다 접근 가능한 권한(관리자/경리회계/실무자/조회전용)은 회사 내 전체 데이터
-    if (role === "admin" || role === "test" || role === "viewer" || role === "user") return byCompany;
+    // 실시간배차현황/배차현황 둘 다 접근 가능한 권한(관리자/경리회계/실무자/조회전용/
+    // 인사관리자)은 회사 내 전체 데이터. 커스텀 권한(관리자메뉴 > 권한관리에서 새로
+    // 만든 역할, 예: 부분관리자)도 이미 해당 메뉴에 조회/조회+수정 접근권한을 부여받은
+    // 상태로 여기까지 들어온 것이므로 동일하게 전체 데이터를 봐야 한다.
+    // ⚠️ 예전엔 role이 "admin"/"test"/"viewer"/"user" 중 하나가 아니면 전부 "본인
+    // 데이터만" 보이게 걸러졌는데, 커스텀 권한 시스템이 나중에 추가되면서 새로 만든
+    // 역할(role_xxxxx)과 인사관리자(hrManager)는 이 목록에 없어서 메뉴 접근권한을
+    // write로 줘도 본인이 등록한 1~2건만 보이는 버그가 있었다.
+    if (
+      role === "admin" || role === "test" || role === "viewer" ||
+      role === "user" || role === "hrManager" ||
+      findCustomRole(customRoles, role)
+    ) return byCompany;
 
     // 그 외 권한은 회사 내 본인 데이터만
     return byCompany.filter(o =>
       !o?.작성자 || o?.작성자 === user.email
     );
-  }, [dispatchData, user, role, userCompany]);
+  }, [dispatchData, user, role, userCompany, customRoles]);
 
 
   // ⭐ 내 정보 통계 계산
@@ -4942,7 +4958,7 @@ React.useEffect(() => {
   // ---------------- 역할별 차단 메뉴 ----------------
   // 최고관리자가 새로 만든 커스텀 권한(역할) — 메뉴별 접근범위(숨김/조회/조회+수정)를
   // 직접 설정할 수 있다. 내장 역할(admin/user/test/viewer 등)에는 관여하지 않는다.
-  const customRoles = useCustomRoles();
+  // (customRoles 자체는 위쪽 dispatchDataFiltered 근처에서 이미 구독해뒀다.)
   const customRole = findCustomRole(customRoles, role);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
   const isViewer = role === "viewer" || (!!customRole && getMenuAccess(customRoles, role, menu) === "read");
