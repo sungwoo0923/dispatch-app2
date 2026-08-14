@@ -308,7 +308,7 @@ function _scheduleContactLine(name, phone) {
   return `${n || "담당자"}${p ? ` (${formatPhone(p)})` : ""}`;
 }
 
-function ScheduleChartModal({ rows, companyName, onClose }) {
+function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const [groupBy, setGroupBy] = React.useState("date"); // "date" | "driver"
   const [showFareCharge, setShowFareCharge] = React.useState(false); // 청구운임 포함
   const [showFareDriver, setShowFareDriver] = React.useState(false); // 기사운임 포함
@@ -441,13 +441,14 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
     }
   };
 
-  // ⚠️ table-layout이 auto(기본값)면 헤더/셀 텍스트가 길 때 브라우저가 각 열의
-  // "최소 필요 너비"를 그대로 반영해서, w-[Npx] 지정을 무시하고 표 전체가 카드
-  // 폭(760px)보다 넓어져 청구운임/기사운임 칸이 카드 밖으로 삐져나가는 문제가
-  // 있었다. table-fixed로 열 너비를 강제 고정하고, 헤더도 줄바꿈을 허용해
-  // 어떤 경우에도 표가 카드 폭을 넘지 않게 한다.
-  const thCls = "border border-gray-200 px-2 py-1.5 font-bold text-gray-600 bg-gray-100 break-words";
-  const tdCls = "border border-gray-200 px-2 py-1.5 text-gray-800 break-words";
+  // table-fixed로 열 너비를 억지로 고정했더니, 좁은 칸 안에서 글자가 줄바꿈되지
+  // 않고 그대로 겹쳐 보이는 문제가 있었다. 표는 원래대로 auto 레이아웃(내용 길이에
+  // 맞춰 칸이 자연스럽게 늘어남) + 줄바꿈 없이 한 줄로 두고, 대신 카드/팝업 쪽을
+  // 내용 너비에 맞춰 커지게(w-fit) 해서 애초에 칸이 좁아질 일이 없게 한다.
+  // align-middle로 세로 정렬까지 맞춰 어떤 줄에서도 텍스트가 칸 상단에 붙어
+  // 어긋나 보이지 않게 한다.
+  const thCls = "border border-gray-200 px-3 py-1.5 font-bold text-gray-600 bg-gray-100 whitespace-nowrap align-middle";
+  const tdCls = "border border-gray-200 px-3 py-1.5 text-gray-800 whitespace-nowrap align-middle";
   const showFare = showFareCharge || showFareDriver;
 
   // 상세정보(기사용) 카드 — 표 대신 오더 1건을 카드로 펼쳐서, 기사가 실제로 알아야 하는
@@ -503,7 +504,7 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[95vw] min-w-[720px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
           <h3 className="text-white font-bold text-[15px]">스케줄표 미리보기 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
@@ -552,11 +553,16 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
         {/* 본문 (확대/축소 미리보기) */}
         <div className="flex-1 overflow-auto bg-gray-100 p-6">
           <div style={{ transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform .15s" }}>
-            <div ref={captureRef} className="bg-white mx-auto p-8" style={{ width: "900px" }}>
-              <div className="text-center border-b-2 border-[#1B2B4B] pb-4 mb-5">
-                <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">배 차 스 케 줄 표</div>
-                <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
-                  {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {rows.length}건
+            <div ref={captureRef} className="bg-white mx-auto p-8 w-fit" style={{ minWidth: 640 }}>
+              <div className="relative border-b-2 border-[#1B2B4B] pb-4 mb-5">
+                {authorName && (
+                  <div className="absolute top-0 right-0 text-[11px] font-bold text-gray-500">작성자 {authorName}</div>
+                )}
+                <div className="text-center">
+                  <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">배 차 스 케 줄 표</div>
+                  <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
+                    {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {rows.length}건
+                  </div>
                 </div>
               </div>
 
@@ -573,7 +579,7 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
                           {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
                         </div>
                       ) : (
-                        <table className="w-full table-fixed text-[12px] border border-gray-200 border-collapse">
+                        <table className="text-[12px] border border-gray-200 border-collapse">
                           <thead>
                             <tr>
                               <th className={`${thCls} w-[64px]`}>상차시간</th>
@@ -633,7 +639,7 @@ function ScheduleChartModal({ rows, companyName, onClose }) {
                             {g.list.map((r, i) => <DetailCard key={r._id || r.id || i} r={r} />)}
                           </div>
                         ) : (
-                          <table className="w-full table-fixed text-[12px] border border-gray-200 border-collapse">
+                          <table className="text-[12px] border border-gray-200 border-collapse">
                             <thead>
                               <tr>
                                 <th className={`${thCls} w-[92px]`}>상차일</th>
@@ -23426,7 +23432,7 @@ const head = isDark
   <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
 )}
 {scheduleChartRows && (
-  <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
+  <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
 )}
 {bulkEditRows && (
   <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
@@ -34275,7 +34281,7 @@ return (
         <FareCertModal row={fareCertRow} companyName={userCompany} onClose={() => setFareCertRow(null)} />
       )}
       {scheduleChartRows && (
-        <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} onClose={() => setScheduleChartRows(null)} />
+        <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
       )}
       {bulkEditRows && (
         <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} />
