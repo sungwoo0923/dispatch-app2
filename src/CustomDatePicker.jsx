@@ -55,6 +55,29 @@ export const KOREAN_HOLIDAYS = {
   "2027-12-25": "크리스마스",
 };
 
+// 특정 날짜가 "특수 수요일"(공휴일 당일이거나, 공휴일을 며칠 앞둔 날)인지 판단한다.
+// 연휴 직전에는 차량이 부족해져 평소보다 운임이 높게 형성되는 경우가 많은데, 그렇게
+// 형성된 운임이 나중에 "이 노선의 평소 시세"인 것처럼 그대로 참조되지 않도록, 배차
+// 등록 화면과 자사운임표에서 이 날짜들을 구분해서 보여주는 데 쓴다.
+export function specialDemandInfo(dateStr, aheadDays = 3) {
+  if (!dateStr) return { special: false, reason: "" };
+  const key = String(dateStr).slice(0, 10);
+  const base = new Date(`${key}T00:00:00`);
+  if (isNaN(base.getTime())) return { special: false, reason: "" };
+  if (KOREAN_HOLIDAYS[key]) {
+    return { special: true, reason: shortHolidayLabel(KOREAN_HOLIDAYS[key]) };
+  }
+  for (let i = 1; i <= aheadDays; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i);
+    const k = d.toISOString().slice(0, 10);
+    if (KOREAN_HOLIDAYS[k]) {
+      return { special: true, reason: `${shortHolidayLabel(KOREAN_HOLIDAYS[k])} 연휴 앞둠` };
+    }
+  }
+  return { special: false, reason: "" };
+}
+
 // 달력 셀에 표시할 짧은 이름 (좁은 칸에 들어가야 해서 접두어를 뗀 축약형)
 export function shortHolidayLabel(name) {
   if (!name) return "";

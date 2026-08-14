@@ -8,7 +8,7 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChar
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { hardReloadForUpdate } from "./UpdateBanner";
-import CustomDatePicker from "./CustomDatePicker";
+import CustomDatePicker, { specialDemandInfo } from "./CustomDatePicker";
 import AdminMenu from "./AdminMenu";
 import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
@@ -7389,7 +7389,9 @@ const filterPlaces = (q) => {
       혼적: false,
       긴급: false,
       운임보정: null,
-      
+      특수운임: false,       // ⭐ 연휴/성수기 등 특수 수요일 배차 여부(자동감지 + 수동토글)
+      특수운임사유: "",
+      특수운임수동: false,   // 사용자가 자동감지 결과를 직접 덮어썼는지
     };
     const cargoInputRef = React.useRef(null);
     const cargoTypeTabbedRef = React.useRef(false); // 화물타입 "없음" 선택이 Tab으로 확정됐는지 추적(아래 참고)
@@ -7987,7 +7989,10 @@ React.useEffect(() => {
     return;
   }
 
-const similar = (dispatchData || []).filter(r =>
+// ⭐ 특수운임(연휴·성수기)으로 표시된 오더는 평소 시세보다 높게 형성된 경우가
+// 많아, 그대로 평균에 섞으면 다음 조회 때 그 특수 운임이 "평소 시세"처럼
+// 추천되는 문제가 있다 — 기본적으로 평균 계산에서 제외한다.
+const similarAll = (dispatchData || []).filter(r =>
   (r.운행유형 || "편도") === form.운행유형 &&   // ⭐ 추가
   normalizeKey(r.상차지명) === normalizeKey(pickup) &&
   normalizeKey(r.하차지명) === normalizeKey(drop) &&
@@ -7995,6 +8000,9 @@ const similar = (dispatchData || []).filter(r =>
   r.청구운임 &&
   r.기사운임
 );
+const similarNormal = similarAll.filter(r => !r.특수운임);
+const similar = similarNormal.length > 0 ? similarNormal : similarAll;
+const excludedSpecialCount = similarAll.length - similar.length;
 
   if (similar.length < 1) {
     setAiRecommend(null);
@@ -8019,6 +8027,7 @@ setAiRecommend({
   driverAvg,
   marginPercent: Math.round(((fareAvg - driverAvg) / fareAvg) * 100),
   sampleCount: similar.length,
+  excludedSpecialCount,   // ⭐ 특수운임(연휴·성수기)으로 평균에서 제외된 건수
 
   hasInputFare: inputFare > 0,   // ⭐ 핵심
   inputFare,
@@ -8057,6 +8066,15 @@ React.useEffect(() => {
   setOrderDropDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
 }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
+// ⭐ 연휴/성수기 자동감지 — 상차일이 바뀔 때마다 공휴일 캘린더 기준으로 다시
+// 판단해서 제안한다. 사용자가 직접 토글을 눌러 수동으로 정한 값은 존중하고 덮어쓰지
+// 않는다(다음 상차일 변경 시에는 다시 자동감지로 리셋 — 새 날짜엔 새 판단이 맞음).
+React.useEffect(() => {
+  if (form.특수운임수동) return;
+  const info = specialDemandInfo(form.상차일);
+  setForm((p) => (p.특수운임수동 ? p : { ...p, 특수운임: info.special, 특수운임사유: info.reason }));
+}, [form.상차일]); // eslint-disable-line react-hooks/exhaustive-deps
+
 React.useEffect(() => {
   const pickup = normalizeKey(form.상차지명);
   const drop   = normalizeKey(form.하차지명);
@@ -8067,13 +8085,17 @@ React.useEffect(() => {
     return;
   }
 
-  const similar = (dispatchData || []).filter(r =>
+  const similarAll = (dispatchData || []).filter(r =>
     normalizeKey(r.상차지명) === pickup &&
     normalizeKey(r.하차지명) === drop &&
     getTotalTonFromOrder(r) === ton &&
     r.청구운임 &&
     r.기사운임
   );
+  // ⭐ 연휴·성수기 특수운임 건은 "기존보다 높음/낮음" 비교 기준에서도 제외한다
+  // (해당 건들만 있는 경우엔 어쩔 수 없이 그대로 사용).
+  const similarNormal = similarAll.filter(r => !r.특수운임);
+  const similar = similarNormal.length > 0 ? similarNormal : similarAll;
 
   if (similar.length === 0) {
     setFareCompare({ sale: null, driver: null });
@@ -8122,10 +8144,16 @@ React.useEffect(() => {
 function makeAiExplain(ai) {
   if (!ai) return "";
 
+  // ⭐ 연휴·성수기로 표시된 오더는 평균에서 제외했다는 사실을 짧게 덧붙인다 —
+  // 왜 표시된 건수가 실제 이력보다 적어 보이는지 헷갈리지 않게.
+  const excludeNote = ai.excludedSpecialCount > 0
+    ? ` (연휴·성수기 ${ai.excludedSpecialCount}건 제외)`
+    : "";
+
   // ① 운임 미입력
   if (!ai.hasInputFare) {
     return (
-      `동일한 상/하차지·톤수로 최근 ${ai.sampleCount}건이 배차됐어요. ` +
+      `동일한 상/하차지·톤수로 최근 ${ai.sampleCount}건이 배차됐어요${excludeNote}. ` +
       `평균 ${ai.fareAvg.toLocaleString()}원, 적정 범위는 ` +
       `${ai.fareMin.toLocaleString()}~${ai.fareMax.toLocaleString()}원이에요.`
     );
@@ -8135,14 +8163,14 @@ function makeAiExplain(ai) {
   if (ai.isOutlier) {
     const dir = ai.fareDiffPercent > 0 ? "높아요" : "낮아요";
     return (
-      `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)보다 ` +
+      `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)${excludeNote}보다 ` +
       `${Math.abs(ai.fareDiffPercent)}% ${dir}. 거래처 협의 내용을 한 번 더 확인해보세요.`
     );
   }
 
   // ③ 정상
   return (
-    `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)과 ` +
+    `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)${excludeNote}과 ` +
     `비슷한 적정 범위예요. 이대로 진행하셔도 좋습니다.`
   );
 }
@@ -8319,6 +8347,12 @@ function swapPickupDrop() {
     const [autoDropMatched, setAutoDropMatched] = React.useState(false);
 
     const onChange = (key, value) => {
+      if (key === "특수운임") {
+        // 사용자가 직접 토글을 건드리면, 이후 상차일이 바뀌어 자동감지 결과가 새로
+        // 계산되기 전까지는 그 판단을 그대로 존중한다(자동감지가 수동 선택을 덮어쓰지 않음).
+        setForm((p) => ({ ...p, 특수운임: value, 특수운임수동: true, 특수운임사유: value ? (p.특수운임사유 || "수동 지정") : "" }));
+        return;
+      }
       if (isAdmin && (key === "청구운임" || key === "기사운임")) {
         setForm((p) => {
           const next = { ...p, [key]: value };
@@ -9280,7 +9314,16 @@ const saveCount = multiCount > 1 ? multiCount : 1;
 await Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
   const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
-  return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder });
+  // ⭐ 다중등록으로 오더별 상차일이 서로 다를 수 있어(useSeparateDates), 사용자가
+  // 특수운임을 직접 지정하지 않은 경우엔 각 오더의 실제 상차일 기준으로 특수운임
+  // 여부를 다시 계산한다(수동 지정 시엔 전체 오더에 그 값을 그대로 적용).
+  const specialPatch = rec.특수운임수동
+    ? {}
+    : (() => {
+        const info = specialDemandInfo(dateForOrder);
+        return { 특수운임: info.special, 특수운임사유: info.reason };
+      })();
+  return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch });
 }));
 
 // ★ 배차마당(카페사이트) 공유 — "배차마당 등록" 버튼으로 저장했고, 회사 설정에서
@@ -11783,6 +11826,34 @@ className={`
   {/* 금액 */}
 {isAdmin && (
   <>
+    {/* ⭐ 연휴·성수기 특수운임 표시 — 공휴일 캘린더 기준 자동감지 + 수동 조정 가능.
+        체크해두면 이 오더의 운임은 이후 자사운임표/AI추천 평균 계산에서 제외되어,
+        연휴 직전 등 일시적으로 오른 운임이 "평소 시세"처럼 참조되지 않는다. */}
+    <div className="col-span-4">
+      <label
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer select-none text-[12px] font-bold transition-colors ${
+          form.특수운임
+            ? "bg-orange-50 border-orange-300 text-orange-700"
+            : "bg-gray-50 border-gray-200 text-gray-500"
+        }`}
+        title="연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다."
+      >
+        <input
+          type="checkbox"
+          className="accent-orange-500"
+          checked={!!form.특수운임}
+          onChange={(e) => onChange("특수운임", e.target.checked)}
+        />
+        특수운임(연휴·성수기)
+        {form.특수운임 && form.특수운임사유 && (
+          <span className="text-orange-500 font-semibold">· {form.특수운임사유}</span>
+        )}
+        {!form.특수운임수동 && specialDemandInfo(form.상차일).special && (
+          <span className="text-gray-400 font-semibold">(자동감지)</span>
+        )}
+      </label>
+    </div>
+
     {/* 청구운임 */}
     <div>
       <label className={`${labelCls} flex items-center gap-2`}>
@@ -11897,7 +11968,14 @@ className={`
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
             <div className="text-[11px] font-bold text-gray-500 mb-1">표본 건수</div>
-            <div className="text-[14px] font-bold text-gray-900">{aiRecommend.sampleCount}건</div>
+            <div className="text-[14px] font-bold text-gray-900">
+              {aiRecommend.sampleCount}건
+              {aiRecommend.excludedSpecialCount > 0 && (
+                <span className="text-[11px] font-semibold text-orange-500 ml-1">
+                  (연휴·성수기 {aiRecommend.excludedSpecialCount}건 제외)
+                </span>
+              )}
+            </div>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
             <div className="text-[11px] font-bold text-gray-500 mb-1">추천 청구운임</div>
