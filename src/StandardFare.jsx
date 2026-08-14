@@ -558,6 +558,10 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   // 경유지가 있는 오더는 청구운임에 추가 구간 요금이 섞여있어, 순수 "상차지→하차지"
   // 단일구간 시세만 보고 싶을 때는 꺼서 제외할 수 있게 한다. 기본값은 켜짐(기존 동작 유지).
   const [includeViaOrders, setIncludeViaOrders] = useState(true);
+  // ⭐ 연휴·성수기(특수일)로 표시된 오더를 평균/최고/최저 등 통계 계산에 포함할지
+  // 여부. 기본값은 꺼짐(기존 동작 유지 — 특수일은 평소 시세를 왜곡할 수 있어
+  // 기본적으로 제외). 켜면 특수일 포함 전체 기준으로 통계를 다시 계산한다.
+  const [includeSpecial, setIncludeSpecial] = useState(false);
 
   // 전국운임 상태
   const [nfFrom, setNfFrom] = useState("");
@@ -918,9 +922,10 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     if (!result.length) return null;
     // ⭐ 연휴·성수기로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아, 그대로
     // 평균/최고/최저에 섞으면 그 특수 운임이 이 노선의 "평소 시세"처럼 보이게 된다 —
-    // 기본적으로 통계 계산에서는 제외하고, 건수만 별도로 알려준다.
+    // 기본적으로 통계 계산에서는 제외하고, 건수만 별도로 알려준다. includeSpecial
+    // 토글을 켜면 사용자가 직접 특수일까지 포함해서 다시 계산해볼 수 있다.
     const normalRows = result.filter(r => !isSpecialDemandRow(r));
-    const statRows = normalRows.length > 0 ? normalRows : result;
+    const statRows = includeSpecial || normalRows.length === 0 ? result : normalRows;
     const specialCount = result.length - normalRows.length;
     const fares = statRows.map(r=>Number(String(r.청구운임||0).replace(/[^\d]/g,""))).filter(n=>n>0);
     if (!fares.length) return null;
@@ -930,7 +935,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     const normal = result.filter(r=>r.fareLevel==="NORMAL").length;
     const spike = result.filter(r=>r.fareLevel==="SPIKE").length;
     return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike, specialCount };
-  }, [result]);
+  }, [result, includeSpecial]);
 
   const inputCls = "w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition";
   const labelCls = "block text-[12px] font-bold text-gray-900 mb-1";
@@ -1033,9 +1038,13 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
               <span className="text-[12px] font-semibold text-gray-600">경유지명도 검색에 포함</span>
             </label>
-            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="경유지가 있는 오더는 청구운임에 경유 구간 요금까지 섞여있어, 순수 상차지→하차지 단일구간 시세만 보려면 꺼주세요.">
+            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none w-fit" title="경유지가 있는 오더는 청구운임에 경유 구간 요금까지 섞여있어, 순수 상차지→하차지 단일구간 시세만 보려면 꺼주세요.">
               <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeViaOrders} onChange={() => setIncludeViaOrders(v => !v)} />
               <span className="text-[12px] font-semibold text-gray-600">경유지 있는 오더도 결과·평균에 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="연휴·성수기 등 특수일로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아 기본적으로 평균 계산에서 제외됩니다. 켜면 특수일 포함 전체 기준으로 다시 계산합니다.">
+              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeSpecial} onChange={() => setIncludeSpecial(v => !v)} />
+              <span className="text-[12px] font-semibold text-gray-600">특수일(연휴·성수기)도 평균에 포함</span>
             </label>
 
             <div className="space-y-4 mb-5">
@@ -1092,7 +1101,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               <div className="bg-[#1B2B4B] rounded-lg flex items-stretch divide-x divide-white/15 overflow-hidden">
                 {[
                   { label: "조회 건수", value: `${stats.count}건` },
-                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원`, sub: stats.specialCount > 0 ? `연휴·성수기 ${stats.specialCount}건 제외` : undefined },
+                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원`, sub: stats.specialCount > 0 ? `연휴·성수기 ${stats.specialCount}건 ${includeSpecial ? "포함" : "제외"}` : undefined },
                   { label: "최저 운임", value: `${stats.min.toLocaleString()}원` },
                   { label: "최고 운임", value: `${stats.max.toLocaleString()}원` },
                   { label: "평균 기사운임", value: `${stats.avgDriver.toLocaleString()}원`, sub: `마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원` },
@@ -1143,8 +1152,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                                 {r.상차일}
                                 {isSpecialDemandRow(r) && (
                                   <span
-                                    className="ml-1 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold align-middle"
-                                    title="연휴·성수기 등 특수 상황 배차로 표시된 오더입니다. 평균 운임 계산에서는 제외됩니다."
+                                    className="ml-1 px-1.5 py-0.5 rounded bg-black text-white text-[10px] font-extrabold align-middle"
+                                    title={`연휴·성수기 등 특수 상황 배차로 표시된 오더입니다.${includeSpecial ? "" : " 평균 운임 계산에서는 제외됩니다."}`}
                                   >
                                     특수일
                                   </span>

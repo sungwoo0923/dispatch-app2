@@ -31,7 +31,6 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
-import { Clock } from "lucide-react";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -112,27 +111,10 @@ function buildLunchByName(clientsArr = [], placeRowsArr = []) {
 }
 const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, "");
 
-// 상/하차지명 옆에 붙는 휴게(점심시간) 표시 — 그 상/하차지에 등록된 점심시간이
-// 있을 때만 작은 검은색 시계 아이콘이 조용히 나타난다(모바일 쉬운모드와 동일하게
-// 알록달록한 색 이모지 대신 단색 라인 아이콘 사용). 평소엔 텍스트 없이 아이콘뿐이라
-// 표가 복잡해지지 않고, 필요할 때(마우스를 올렸을 때)만 정확한 시간대가 툴팁으로
-// 뜬다. 같은 업체(상/하차지명)가 여러 건 있을 때 행마다 아이콘이 반복돼 지저분해
-// 보이지 않도록, 그 업체가 화면에 처음 등장하는 행에서만 아이콘을 보여준다(isFirst).
-// 다만 그 오더의 상/하차 시간이 점심시간과 실제로 겹치는 경우엔 몇 번째 행이든
-// 무조건 아이콘을 빨간색으로 띄워 경고한다 — 이건 업체 단위가 아니라 그 오더
-// 하나하나에 해당하는 정보라 중복이어도 숨기면 안 된다.
-const RestCell = ({ lunchInfo, orderTime, isFirst }) => {
-  if (!lunchInfo) return null;
-  const overlap = isLunchTimeOverlap(orderTime, lunchInfo.start, lunchInfo.end);
-  if (!overlap && !isFirst) return null;
-  return (
-    <HoverInfoTrigger
-      className={`inline-flex items-center justify-center w-4 h-4 shrink-0 cursor-default ${overlap ? "text-red-500" : "text-black"}`}
-      label={<Clock width={12} height={12} strokeWidth={2.25} />}
-      tooltipRows={<div>점심시간 {lunchInfo.start}~{lunchInfo.end}{overlap ? " · 이 시간과 겹칩니다" : ""}</div>}
-    />
-  );
-};
+// ⚠️ 예전엔 여기에 상/하차지명 옆 시계 아이콘(RestCell)이 있었는데, 상/하차지 칸이
+// 복잡해 보인다는 피드백으로 제거했다 — 대신 오더정보(우클릭 메뉴) 팝업에서 상세
+// 휴게시간을 확인할 수 있다(OrderInfoModal 참고). isLunchTimeOverlap/buildLunchByName/
+// _lunchNameKey는 그 팝업에서 계속 재사용한다.
 
 /* -------------------------------------------------
    운임정보(운임확인서) 미리보기 팝업 — 실시간배차현황/배차현황 우클릭 메뉴의
@@ -369,6 +351,21 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
 
   const goMonth = (delta) => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
 
+  // ⚠️ "오늘로 이동"을 눌렀을 때, 이미 이번 달을 보고 있는 상태(가장 흔한 경우 —
+  // 상차일 기본값이 오늘이라 대부분 이미 이번 달이 떠 있음)라면 달력 화면이 그대로라
+  // 눌러도 "반응이 없다"고 느껴진다. 실제로 달이 바뀌든 안 바뀌든 오늘 칸을 잠깐
+  // 반짝여서(pulse) 클릭이 확실히 반영됐다는 걸 보여준다.
+  const [todayPulse, setTodayPulse] = React.useState(false);
+  const todayPulseTimer = React.useRef(null);
+  const goToday = () => {
+    const t = new Date();
+    setViewDate(new Date(t.getFullYear(), t.getMonth(), 1));
+    setTodayPulse(true);
+    if (todayPulseTimer.current) window.clearTimeout(todayPulseTimer.current);
+    todayPulseTimer.current = window.setTimeout(() => setTodayPulse(false), 900);
+  };
+  React.useEffect(() => () => { if (todayPulseTimer.current) window.clearTimeout(todayPulseTimer.current); }, []);
+
   const handlePick = (dateStr) => {
     if (target === "pickup") onPickupChange?.(dateStr);
     else onDropChange?.(dateStr);
@@ -449,11 +446,11 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
                 <button key={i} type="button"
                   title={[holidayName, leaveTitle].filter(Boolean).join(" · ") || undefined}
                   onClick={() => handlePick(dateStr)}
-                  className={`min-h-[68px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
+                  className={`min-h-[84px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
                     isMarked ? "bg-[#1B2B4B]" :
                     isToday ? "border-2 border-[#1B2B4B]" :
                     "hover:bg-gray-100"
-                  }`}
+                  } ${isToday && todayPulse ? "ring-4 ring-emerald-300" : ""}`}
                 >
                   <span className={numberCls}>{d}</span>
                   {/* ⚠️ 공휴일/대체공휴일/연휴 이름 글씨가 너무 작아 안 보인다는 피드백 —
@@ -475,16 +472,16 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
                       일정만 표시. 여러 명이 겹치면 앞 2명만 보여주고 "+N"으로 요약,
                       전체 목록은 title 툴팁으로 확인 가능. */}
                   {leaves.length > 0 && (
-                    <span className="flex flex-col items-center gap-0.5 mt-0.5 w-full px-0.5">
+                    <span className="flex flex-col items-center gap-[3px] mt-0.5 w-full px-0.5">
                       {leaves.slice(0, 2).map((s, li) => (
                         <span key={li}
-                          className={`w-full text-center text-[9px] leading-none font-bold rounded px-0.5 py-[1.5px] truncate ${ATTENDANCE_STATUS_COLOR[LEAVE_TYPE_LABEL[s.type] || s.type] || "bg-gray-500 text-white"}`}
+                          className={`w-full text-center text-[11px] leading-tight font-extrabold rounded px-0.5 py-[2px] truncate ${ATTENDANCE_STATUS_COLOR[LEAVE_TYPE_LABEL[s.type] || s.type] || "bg-gray-500 text-white"}`}
                         >
                           {s.name || "직원"}·{LEAVE_TYPE_LABEL[s.type] || s.type}
                         </span>
                       ))}
                       {leaves.length > 2 && (
-                        <span className={`text-[9px] leading-none font-bold ${isMarked ? "text-white/80" : "text-gray-500"}`}>+{leaves.length - 2}명</span>
+                        <span className={`text-[10.5px] leading-none font-extrabold ${isMarked ? "text-white/80" : "text-gray-500"}`}>+{leaves.length - 2}명</span>
                       )}
                     </span>
                   )}
@@ -493,7 +490,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
             })}
           </div>
           <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100 shrink-0">
-            <button type="button" onClick={() => setViewDate(new Date())} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">오늘로 이동</button>
+            <button type="button" onClick={goToday} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">오늘로 이동</button>
             <div className="flex items-center gap-2 text-[10px] font-semibold text-gray-400">
               <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />상차일</span>
               <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#1B2B4B]" />하차일</span>
@@ -3444,7 +3441,7 @@ function FareSortDropdown({ value, onChange }) {
 }
 
 // ===================== 오더정보 모달 =====================
-function OrderInfoModal({ row, onClose }) {
+function OrderInfoModal({ row, onClose, lunchByName }) {
   const [routeInfo, setRouteInfo] = React.useState(null); // { distanceKm, durationText } | "loading" | "error"
   React.useEffect(() => {
     if (!row?.상차지주소 || !row?.하차지주소) { setRouteInfo(null); return; }
@@ -3482,10 +3479,17 @@ function OrderInfoModal({ row, onClose }) {
   const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
   const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
-  const Row = ({ label, value }) => (
+  // ⚠️ 예전엔 break-words라 주소가 길면 줄바꿈됐는데, 그러면 오히려 읽기 불편하다는
+  // 피드백으로 한 줄(nowrap)로 바꾸고, 대신 팝업 자체가 내용 너비에 맞춰 커지게
+  // 했다(아래 모달 wrapper의 w-fit 참고).
+  // wrap=true인 행(메모/전달사항처럼 원래 줄바꿈이 자연스러운 긴 텍스트)만 예외적으로
+  // break-words를 쓰고, 나머지(주소 포함)는 전부 한 줄로 표시한다.
+  const Row = ({ label, value, wrap }) => (
     <div className="flex gap-2 text-[13px]">
       <span className="text-gray-600 font-semibold w-[72px] shrink-0">{label}</span>
-      <span className="text-gray-900 font-semibold break-words">{value || "-"}</span>
+      {/* wrap 행은 max-width를 줘서, 긴 메모 한 줄 때문에 팝업 전체(w-fit)가
+          한없이 넓어지지 않고 그 안에서 줄바꿈되게 한다. */}
+      <span className={`text-gray-900 font-semibold ${wrap ? "break-words max-w-[380px]" : "whitespace-nowrap"}`}>{value || "-"}</span>
     </div>
   );
   const Section = ({ title, children }) => (
@@ -3494,9 +3498,18 @@ function OrderInfoModal({ row, onClose }) {
       <div className="bg-gray-50 border border-gray-100 rounded-lg px-4 py-3 space-y-1.5">{children}</div>
     </div>
   );
+  // ⭐ 상/하차지에 등록된 휴게(점심)시간 — 그 거래처가 실제로 점심시간을 설정해둔
+  // 경우에만 표시된다(설정 안 한 거래처는 아예 행 자체가 안 뜸).
+  const pickupLunch = lunchByName?.get(_lunchNameKey(row.상차지명));
+  const dropLunch = lunchByName?.get(_lunchNameKey(row.하차지명));
+  const lunchValue = (lunch, orderTime) => {
+    if (!lunch) return null;
+    const overlap = isLunchTimeOverlap(orderTime, lunch.start, lunch.end);
+    return `${lunch.start}~${lunch.end}${overlap ? " (상하차시간과 겹침)" : ""}`;
+  };
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[92vw] min-w-[480px] max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
           <div>
             <h3 className="text-white font-bold text-[15px]">오더정보</h3>
@@ -3509,6 +3522,7 @@ function OrderInfoModal({ row, onClose }) {
             <Row label="업체명" value={row.상차지명} />
             <Row label="주소" value={row.상차지주소} />
             <Row label="상차시간" value={row.상차시간 ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분) : "즉시"} />
+            {pickupLunch && <Row label="휴게시간" value={lunchValue(pickupLunch, row.상차시간)} />}
           </Section>
           {pickupStops.length > 0 && (
             <Section title={`상차 경유지 (${pickupStops.length})`}>
@@ -3528,6 +3542,7 @@ function OrderInfoModal({ row, onClose }) {
             <Row label="업체명" value={row.하차지명} />
             <Row label="주소" value={row.하차지주소} />
             <Row label="하차시간" value={row.하차시간 ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분) : "즉시"} />
+            {dropLunch && <Row label="휴게시간" value={lunchValue(dropLunch, row.하차시간)} />}
           </Section>
           {dropStops.length > 0 && (
             <Section title={`하차 경유지 (${dropStops.length})`}>
@@ -3580,8 +3595,8 @@ function OrderInfoModal({ row, onClose }) {
           </Section>
           {(row.메모 || row.전달사항) && (
             <Section title="메모 / 전달사항">
-              {row.메모 && <Row label="메모" value={row.메모} />}
-              {row.전달사항 && <Row label="전달사항" value={row.전달사항} />}
+              {row.메모 && <Row label="메모" value={row.메모} wrap />}
+              {row.전달사항 && <Row label="전달사항" value={row.전달사항} wrap />}
             </Section>
           )}
         </div>
@@ -8234,8 +8249,10 @@ const similarAll = (dispatchData || []).filter(r =>
   r.기사운임
 );
 const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
-const similar = similarNormal.length > 0 ? similarNormal : similarAll;
-const excludedSpecialCount = similarAll.length - similar.length;
+const specialInAllCount = similarAll.length - similarNormal.length;
+// includeSpecialFare 토글이 켜져 있으면 특수일도 그대로 포함해서 계산한다.
+const similar = (includeSpecialFare || similarNormal.length === 0) ? similarAll : similarNormal;
+const excludedSpecialCount = includeSpecialFare ? 0 : specialInAllCount;
 
   if (similar.length < 1) {
     setAiRecommend(null);
@@ -8279,6 +8296,7 @@ setAiRecommend({
   form.차량톤수,
   form.차량종류,
   dispatchData,
+  includeSpecialFare,
 ]);
 // =====================================================
 // 💰 기존 운임 대비 비교 표시 (🔥 여기 추가)
@@ -8287,6 +8305,10 @@ const [fareCompare, setFareCompare] = React.useState({
   sale: null,
   driver: null,
 });
+// ⭐ 연휴·성수기(특수일) 오더를 AI추천/기존운임비교 평균 계산에 포함할지 여부.
+// 기본값은 꺼짐(기존 동작 유지 — 특수일은 평균 계산에서 제외). AI추천 팝업에서
+// 사용자가 직접 켜서 특수일 포함 기준으로도 확인해볼 수 있다.
+const [includeSpecialFare, setIncludeSpecialFare] = React.useState(false);
 const [isSaving, setIsSaving] = React.useState(false);
 const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
 const [orderDates, setOrderDates] = React.useState([]); // 오더별 개별 상차일
@@ -8326,9 +8348,10 @@ React.useEffect(() => {
     r.기사운임
   );
   // ⭐ 연휴·성수기 특수운임 건은 "기존보다 높음/낮음" 비교 기준에서도 제외한다
-  // (해당 건들만 있는 경우엔 어쩔 수 없이 그대로 사용).
+  // (해당 건들만 있는 경우엔 어쩔 수 없이 그대로 사용). includeSpecialFare
+  // 토글이 켜져 있으면 특수일도 포함해서 비교한다.
   const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
-  const similar = similarNormal.length > 0 ? similarNormal : similarAll;
+  const similar = (includeSpecialFare || similarNormal.length === 0) ? similarAll : similarNormal;
 
   if (similar.length === 0) {
     setFareCompare({ sale: null, driver: null });
@@ -8369,7 +8392,8 @@ React.useEffect(() => {
   form.차량톤수,
   form.청구운임,
   form.기사운임,
-  dispatchData
+  dispatchData,
+  includeSpecialFare,
 ]);
 // ===============================
 // 🤖 AI 설명 문장 생성
@@ -12093,18 +12117,20 @@ className={`
             자리가 옮겨 보이는 문제가 있었다 — 너비를 고정하고, 상태에 따라
             색만(회색↔네이비) 바뀌게 해서 체크해도 위치가 절대 안 움직인다.
             사유는 title 툴팁으로만 보여준다. */}
+        {/* ⚠️ 특수일 관련 배지는 프로그램 전체에서 검은 바탕 + 굵은 흰 글씨로
+            통일한다(예전엔 주황/네이비 등 제각각이었음). */}
         <label
           onClick={(e) => e.stopPropagation()}
-          className={`ml-auto inline-flex items-center justify-center gap-1 w-[84px] shrink-0 px-1.5 py-1 rounded-md border cursor-pointer select-none text-[10.5px] font-bold normal-case transition-colors ${
+          className={`ml-auto inline-flex items-center justify-center gap-1 w-[84px] shrink-0 px-1.5 py-1 rounded border cursor-pointer select-none text-[10.5px] font-extrabold normal-case transition-colors ${
             form.특수운임
-              ? "bg-[#1B2B4B] border-[#1B2B4B] text-white"
+              ? "bg-black border-black text-white"
               : "bg-white border-gray-300 text-gray-400"
           }`}
           title={`연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다.${form.특수운임 && form.특수운임사유 ? `\n(${form.특수운임사유})` : ""}`}
         >
           <input
             type="checkbox"
-            className="accent-[#1B2B4B] w-3 h-3 shrink-0"
+            className="accent-black w-3 h-3 shrink-0"
             checked={!!form.특수운임}
             onChange={(e) => onChange("특수운임", e.target.checked)}
           />
@@ -12190,11 +12216,19 @@ className={`
 
       <div className="px-6 py-5">
         {/* 요약 */}
-        <div className={`mb-4 p-3.5 rounded-xl text-[13px] leading-relaxed font-semibold ${
+        <div className={`mb-3 p-3.5 rounded-xl text-[13px] leading-relaxed font-semibold ${
           aiRecommend.isOutlier ? "bg-red-50 text-red-700" : "bg-[#eef1f7] text-[#1B2B4B]"
         }`}>
           {makeAiExplain(aiRecommend)}
         </div>
+
+        {/* ⭐ 연휴·성수기(특수일) 포함 여부 — 기본은 제외(꺼짐), 켜면 특수일까지 포함해서
+            다시 계산한다. 자사운임표에도 동일한 토글이 있다. */}
+        <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit">
+          <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-black"
+            checked={includeSpecialFare} onChange={() => setIncludeSpecialFare(v => !v)} />
+          <span className="text-[12px] font-semibold text-gray-600">특수일(연휴·성수기)도 평균에 포함</span>
+        </label>
 
         {/* 추천 수치 */}
         <div className="grid grid-cols-2 gap-2.5 mb-1">
@@ -12204,11 +12238,11 @@ className={`
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
             <div className="text-[11px] font-bold text-gray-500 mb-1">표본 건수</div>
-            <div className="text-[14px] font-bold text-gray-900">
+            <div className="text-[14px] font-bold text-gray-900 flex items-center flex-wrap gap-1">
               {aiRecommend.sampleCount}건
               {aiRecommend.excludedSpecialCount > 0 && (
-                <span className="text-[11px] font-semibold text-orange-500 ml-1">
-                  (연휴·성수기 {aiRecommend.excludedSpecialCount}건 제외)
+                <span className="px-1.5 py-0.5 rounded bg-black text-white text-[10px] font-extrabold">
+                  연휴·성수기 {aiRecommend.excludedSpecialCount}건 제외
                 </span>
               )}
             </div>
@@ -18254,7 +18288,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.상차지명))} orderTime={r.상차시간} isFirst={isFirstPickupLunch} />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
 
 {r.__pickupStops?.length > 0 && (
@@ -18274,7 +18307,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(r.하차지명))} orderTime={r.하차시간} isFirst={isFirstDropLunch} />
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -23028,7 +23060,7 @@ const head = isDark
   />
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
-{orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} />}
+{orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} lunchByName={lunchByName} />}
 {addrPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -32254,7 +32286,7 @@ return (
   />
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
-{orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} />}
+{orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} lunchByName={lunchByName} />}
 {attachStatusDSOpen && (
   <AttachStatusPanel
     open={attachStatusDSOpen}
@@ -32893,7 +32925,6 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.상차지명))} orderTime={row.상차시간} isFirst={lunchFirstIds.pickup.has(id)} />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -32907,7 +32938,6 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <RestCell lunchInfo={lunchByName.get(_lunchNameKey(row.하차지명))} orderTime={row.하차시간} isFirst={lunchFirstIds.drop.has(id)} />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
