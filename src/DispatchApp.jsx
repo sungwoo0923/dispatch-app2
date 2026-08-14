@@ -11826,37 +11826,13 @@ className={`
   {/* 금액 */}
 {isAdmin && (
   <>
-    {/* ⭐ 연휴·성수기 특수운임 표시 — 공휴일 캘린더 기준 자동감지 + 수동 조정 가능.
-        체크해두면 이 오더의 운임은 이후 자사운임표/AI추천 평균 계산에서 제외되어,
-        연휴 직전 등 일시적으로 오른 운임이 "평소 시세"처럼 참조되지 않는다. */}
-    <div className="col-span-4">
-      <label
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer select-none text-[12px] font-bold transition-colors ${
-          form.특수운임
-            ? "bg-orange-50 border-orange-300 text-orange-700"
-            : "bg-gray-50 border-gray-200 text-gray-500"
-        }`}
-        title="연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다."
-      >
-        <input
-          type="checkbox"
-          className="accent-orange-500"
-          checked={!!form.특수운임}
-          onChange={(e) => onChange("특수운임", e.target.checked)}
-        />
-        특수운임(연휴·성수기)
-        {form.특수운임 && form.특수운임사유 && (
-          <span className="text-orange-500 font-semibold">· {form.특수운임사유}</span>
-        )}
-        {!form.특수운임수동 && specialDemandInfo(form.상차일).special && (
-          <span className="text-gray-400 font-semibold">(자동감지)</span>
-        )}
-      </label>
-    </div>
-
     {/* 청구운임 */}
     <div>
-      <label className={`${labelCls} flex items-center gap-2`}>
+      {/* ⚠️ 아래 특수운임 칩이 진짜 <label>(체크박스용)이라, 바깥까지 <label>로
+          이중 중첩하면 클릭 시 체크박스가 두 번 토글되는 등 이상 동작이 생길 수 있다.
+          이 바깥쪽은 htmlFor로 입력과 연결된 적이 없어 순수 스타일용이었으므로
+          div로 바꿔도 기능은 그대로다. */}
+      <div className={`${labelCls} flex items-center gap-2 flex-wrap`}>
         청구운임
 
         {fareCompare.sale === "high" && (
@@ -11874,7 +11850,31 @@ className={`
             기존과 유사
           </span>
         )}
-      </label>
+
+        {/* ⭐ 연휴·성수기 특수운임 표시 — 공휴일 캘린더 기준 자동감지 + 수동 조정 가능.
+            체크해두면 이 오더의 운임은 이후 자사운임표/AI추천 평균 계산에서 제외되어,
+            연휴 직전 등 일시적으로 오른 운임이 "평소 시세"처럼 참조되지 않는다.
+            ⚠️ 별도 grid 칸을 새로 차지하면 뒤 필드들이 한 줄씩 밀려버려서, 기존
+            칸 배치를 안 건드리고 청구운임 라벨 줄 안에 작은 칩으로 끼워 넣는다. */}
+        <label
+          onClick={(e) => e.stopPropagation()}
+          className={`ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border cursor-pointer select-none text-[10.5px] font-bold normal-case transition-colors ${
+            form.특수운임
+              ? "bg-orange-50 border-orange-300 text-orange-700"
+              : "bg-gray-50 border-gray-200 text-gray-400"
+          }`}
+          title="연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다."
+        >
+          <input
+            type="checkbox"
+            className="accent-orange-500 w-3 h-3"
+            checked={!!form.특수운임}
+            onChange={(e) => onChange("특수운임", e.target.checked)}
+          />
+          특수운임
+          {form.특수운임 && form.특수운임사유 && ` · ${form.특수운임사유}`}
+        </label>
+      </div>
 
       <input autoComplete="off"
         data-arrownav
