@@ -40117,104 +40117,79 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
   const weekendCnt = (list) => list.filter((r) => { const w = weekdayOf(r); return w === 0 || w === 6; }).length;
   const weekendA = weekendCnt(rowsA), weekendB = weekendCnt(rowsB);
 
-  // ----- 인사이트(findings) 생성 -----
-  const findings = [];
-
-  // 1) 핵심 인사이트 — 건수 vs 매출 vs 평균단가 (요청의 핵심 질문에 대한 직접 답변)
+  // ----- 보고서 섹션 생성 (테마별 문단 — 카드 나열이 아니라 하나로 이어지는 보고서 형식) -----
   const saleDelta = B.sale - A.sale;
   const cntDelta = B.cnt - A.cnt;
-  if (cntDelta > 0 && saleDelta < 0) {
-    findings.push({
-      icon: "⚠️", tone: "warning",
-      title: "건수는 늘었는데 매출은 감소",
-      detail: `${labelB} 오더 건수는 ${labelA} 대비 ${cntDelta.toLocaleString()}건(${pctStr(A.cnt, B.cnt)}) 늘었지만, 매출은 ${won(Math.abs(saleDelta))}(${pctStr(A.sale, B.sale)}) 줄었습니다. 건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 변동한 것이 직접적인 원인입니다. 저단가·근거리 오더 비중이 늘었거나, 특수일(연휴·성수기) 고단가 오더가 상대적으로 줄었을 가능성이 높습니다.`,
-    });
-  } else if (cntDelta < 0 && saleDelta > 0) {
-    findings.push({
-      icon: "✅", tone: "good",
-      title: "건수는 줄었지만 매출은 증가",
-      detail: `${labelB} 오더 건수는 ${Math.abs(cntDelta).toLocaleString()}건 줄었지만 매출은 ${won(saleDelta)} 늘었습니다. 건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}(${pctStr(A.avgSale, B.avgSale)})로 상승해, 고단가 오더 중심으로 효율이 개선되었습니다.`,
-    });
-  } else if (Math.abs(pctStrToNum(pctStr(A.avgSale, B.avgSale))) >= 5) {
-    findings.push({
-      icon: B.avgSale >= A.avgSale ? "📈" : "📉", tone: B.avgSale >= A.avgSale ? "good" : "warning",
-      title: "건당 평균 운임 변동",
-      detail: `건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}(${pctStr(A.avgSale, B.avgSale)})로 변동했습니다.`,
-    });
-  }
-
-  // 2) 수익률 변화
   const rateDeltaP = B.rate - A.rate;
-  if (Math.abs(rateDeltaP) >= 0.5) {
-    findings.push({
-      icon: rateDeltaP >= 0 ? "📈" : "📉", tone: rateDeltaP >= 0 ? "good" : "warning",
-      title: `수익률 ${rateDeltaP >= 0 ? "개선" : "악화"} (${A.rate.toFixed(1)}% → ${B.rate.toFixed(1)}%)`,
-      detail: `수익(매익)은 ${won(A.profit)} → ${won(B.profit)}(${pctStr(A.profit, B.profit)}), 수익률은 ${rateDeltaP >= 0 ? "+" : ""}${rateDeltaP.toFixed(1)}%p 변화했습니다.`,
-    });
-  }
-
-  // 3) 거래처 기여도
-  if (topDecline.length) {
-    findings.push({
-      icon: "📉", tone: "warning",
-      title: "매출 감소에 가장 크게 기여한 거래처",
-      detail: topDecline.map((c) => `${c.client} ${won(c.delta)}(${c.cntA}건→${c.cntB}건)`).join(" · "),
-    });
-  }
-  if (topGrowth.length) {
-    findings.push({
-      icon: "📈", tone: "good",
-      title: "매출 증가에 가장 크게 기여한 거래처",
-      detail: topGrowth.map((c) => `${c.client} +${won(c.delta)}(${c.cntA}건→${c.cntB}건)`).join(" · "),
-    });
-  }
-
-  // 4) 차종/톤수 믹스 변화 — 비중 변화가 큰 항목만 짚어준다
   const tonShift = tonMix
     .filter((t) => t.cntA >= 3 || t.cntB >= 3)
     .map((t) => ({ ...t, shareDelta: t.shareB - t.shareA }))
     .sort((x, y) => Math.abs(y.shareDelta) - Math.abs(x.shareDelta))
     .filter((t) => Math.abs(t.shareDelta) >= 3)
     .slice(0, 3);
-  if (tonShift.length) {
-    findings.push({
-      icon: "🚚", tone: "info",
-      title: "차종/톤수 구성 변화",
-      detail: tonShift
-        .map((t) => `${t.ton} 비중 ${t.shareA.toFixed(1)}% → ${t.shareB.toFixed(1)}%(${t.shareDelta >= 0 ? "+" : ""}${t.shareDelta.toFixed(1)}%p, 평균단가 ${won(t.avgA)}→${won(t.avgB)})`)
-        .join(" · "),
-    });
-  }
-
-  // 5) 특수운임(연휴·성수기) 비중
-  if (specialStatA.cnt > 0 || specialStatB.cnt > 0) {
-    const shareA = A.cnt ? (specialStatA.cnt / A.cnt) * 100 : 0;
-    const shareB = B.cnt ? (specialStatB.cnt / B.cnt) * 100 : 0;
-    if (Math.abs(shareA - shareB) >= 2) {
-      findings.push({
-        icon: "🎌", tone: "info",
-        title: "특수일(연휴·성수기) 오더 비중 변화",
-        detail: `${labelA} 특수일 오더 ${specialStatA.cnt}건(비중 ${shareA.toFixed(1)}%, 평균 ${won(specialStatA.avgSale)}) → ${labelB} ${specialStatB.cnt}건(비중 ${shareB.toFixed(1)}%, 평균 ${won(specialStatB.avgSale)}). 특수일 오더는 평소보다 단가가 높게 형성되는 경향이 있어, 이 비중 변화가 월 평균단가 차이의 일부를 설명합니다.`,
-      });
-    }
-  }
-
-  // 6) 요일 분포(주말 비중)
   const weekendShareA = A.cnt ? (weekendA / A.cnt) * 100 : 0;
   const weekendShareB = B.cnt ? (weekendB / B.cnt) * 100 : 0;
-  if (Math.abs(weekendShareA - weekendShareB) >= 3) {
-    findings.push({
-      icon: "📅", tone: "info",
-      title: "주말 오더 비중 변화",
-      detail: `주말(토·일) 오더 비중이 ${weekendShareA.toFixed(1)}% → ${weekendShareB.toFixed(1)}%로 변화했습니다.`,
-    });
+
+  const report = [];
+
+  // 1) 매출 및 수익성 — 요청의 핵심 질문(건수는 늘었는데 매출이 왜 줄었나)에 대한 직접 답변. 항상 포함.
+  {
+    const s = [];
+    s.push(`${labelB} 매출은 ${won(B.sale)}로 ${labelA}(${won(A.sale)}) 대비 ${pctStr(A.sale, B.sale)} 변동했습니다.`);
+    if (cntDelta > 0 && saleDelta < 0) {
+      s.push(`오더 건수는 ${cntDelta.toLocaleString()}건(${pctStr(A.cnt, B.cnt)}) 늘었음에도 매출이 줄어든 것은, 건당 평균 운임이 ${won(A.avgSale)}에서 ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 하락했기 때문입니다. 저단가·근거리 오더 비중이 늘었거나, 평소보다 단가가 높게 형성되는 특수일(연휴·성수기) 오더가 상대적으로 줄었을 가능성이 있습니다.`);
+    } else if (cntDelta < 0 && saleDelta > 0) {
+      s.push(`오더 건수는 ${Math.abs(cntDelta).toLocaleString()}건 줄었지만, 건당 평균 운임이 ${won(A.avgSale)}에서 ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 상승하며 매출이 오히려 증가했습니다. 고단가 오더 중심으로 효율이 개선된 결과로 보입니다.`);
+    } else if (Math.abs(pctStrToNum(pctStr(A.avgSale, B.avgSale))) >= 5) {
+      s.push(`건당 평균 운임은 ${won(A.avgSale)}에서 ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 변동했습니다.`);
+    } else {
+      s.push(`건당 평균 운임은 ${won(A.avgSale)}에서 ${won(B.avgSale)} 수준으로 큰 변동 없이 유지되었습니다.`);
+    }
+    if (Math.abs(rateDeltaP) >= 0.5) {
+      s.push(`수익(매익)은 ${won(A.profit)}에서 ${won(B.profit)}로 ${pctStr(A.profit, B.profit)} 변동했고, 수익률은 ${A.rate.toFixed(1)}%에서 ${B.rate.toFixed(1)}%로 ${rateDeltaP >= 0 ? "개선" : "악화"}(${rateDeltaP >= 0 ? "+" : ""}${rateDeltaP.toFixed(1)}%p)되었습니다.`);
+    } else {
+      s.push(`수익률은 ${A.rate.toFixed(1)}%에서 ${B.rate.toFixed(1)}% 수준으로 큰 변화 없이 유지되었습니다.`);
+    }
+    report.push({ title: "매출 및 수익성", body: s.join(" ") });
   }
 
-  if (!findings.length) {
-    findings.push({ icon: "ℹ️", tone: "info", title: "특별한 변화 없음", detail: "두 달 사이 매출·건수·거래처 구성에서 뚜렷한 이상 신호가 발견되지 않았습니다." });
+  // 2) 거래처 동향
+  {
+    const s = [];
+    if (topDecline.length) {
+      s.push(`매출 감소에 가장 크게 기여한 거래처는 ${topDecline.map((c) => `${c.client}(${won(c.delta)}, ${c.cntA}건→${c.cntB}건)`).join(", ")}입니다.`);
+    }
+    if (topGrowth.length) {
+      s.push(`반면 매출이 늘어난 거래처는 ${topGrowth.map((c) => `${c.client}(+${won(c.delta)}, ${c.cntA}건→${c.cntB}건)`).join(", ")}입니다.`);
+    }
+    if (s.length) report.push({ title: "거래처 동향", body: s.join(" ") });
   }
 
-  return { A, B, clientDeltas, topDecline, topGrowth, tonMix, specialStatA, specialStatB, findings };
+  // 3) 차종/톤수 구성 변화 — 비중 변화가 큰 항목만
+  if (tonShift.length) {
+    const body = tonShift
+      .map((t) => `${t.ton}은 비중이 ${t.shareA.toFixed(1)}%에서 ${t.shareB.toFixed(1)}%로 ${t.shareDelta >= 0 ? "증가" : "감소"}(${t.shareDelta >= 0 ? "+" : ""}${t.shareDelta.toFixed(1)}%p)했고, 평균단가는 ${won(t.avgA)}에서 ${won(t.avgB)}로 변동했습니다`)
+      .join("; ") + ".";
+    report.push({ title: "차종·톤수 구성 변화", body });
+  }
+
+  // 4) 특수일 및 요일 분포
+  {
+    const s = [];
+    if (specialStatA.cnt > 0 || specialStatB.cnt > 0) {
+      const shareA = A.cnt ? (specialStatA.cnt / A.cnt) * 100 : 0;
+      const shareB = B.cnt ? (specialStatB.cnt / B.cnt) * 100 : 0;
+      if (Math.abs(shareA - shareB) >= 2) {
+        s.push(`특수일(연휴·성수기) 오더는 ${labelA} ${specialStatA.cnt}건(비중 ${shareA.toFixed(1)}%, 평균 ${won(specialStatA.avgSale)})에서 ${labelB} ${specialStatB.cnt}건(비중 ${shareB.toFixed(1)}%, 평균 ${won(specialStatB.avgSale)})으로 변화했습니다. 특수일 오더는 평소보다 단가가 높게 형성되는 경향이 있어, 이 비중 변화가 월 평균단가 차이의 일부를 설명합니다.`);
+      }
+    }
+    if (Math.abs(weekendShareA - weekendShareB) >= 3) {
+      s.push(`주말(토·일) 오더 비중은 ${weekendShareA.toFixed(1)}%에서 ${weekendShareB.toFixed(1)}%로 변화했습니다.`);
+    }
+    if (s.length) report.push({ title: "특수일 및 요일 분포", body: s.join(" ") });
+  }
+
+  return { A, B, clientDeltas, topDecline, topGrowth, tonMix, specialStatA, specialStatB, report };
 }
 // pctStr()이 반환하는 "+12.3%" 형태 문자열에서 다시 숫자만 뽑아 비교용으로 쓴다.
 function pctStrToNum(s) {
@@ -40251,12 +40226,6 @@ function MonthCompareInsight({ rows = [] }) {
     return buildMonthCompareInsight(rowsA, rowsB, monthA, monthB);
   }, [rowsA, rowsB, monthA, monthB]);
 
-  const toneCls = {
-    good: "border-emerald-200 bg-emerald-50",
-    warning: "border-rose-200 bg-rose-50",
-    info: "border-indigo-200 bg-indigo-50",
-  };
-
   const kpiRows = insight ? [
     { label: "매출", aText: won(insight.A.sale), bText: won(insight.B.sale), good: insight.B.sale >= insight.A.sale, deltaText: `${won(insight.B.sale - insight.A.sale)} (${pctStr(insight.A.sale, insight.B.sale)})` },
     { label: "수익", aText: won(insight.A.profit), bText: won(insight.B.profit), good: insight.B.profit >= insight.A.profit, deltaText: `${won(insight.B.profit - insight.A.profit)} (${pctStr(insight.A.profit, insight.B.profit)})` },
@@ -40270,8 +40239,8 @@ function MonthCompareInsight({ rows = [] }) {
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between flex-wrap gap-3">
         <div>
           <h3 className="text-[15px] font-bold text-white flex items-center gap-2">
-            🤖 AI 월간비교분석
-            <span className="text-[10px] font-extrabold bg-amber-400 text-[#1B2B4B] px-1.5 py-0.5 rounded">최고관리자 전용</span>
+            AI 월간비교분석
+            <span className="text-[10px] font-bold bg-white/10 text-white/80 border border-white/20 px-1.5 py-0.5 rounded">최고관리자 전용</span>
           </h3>
           <p className="text-[11px] text-white/50 mt-0.5">두 달의 매출·건수·거래처·차종·특수일 데이터를 비교해 변화 원인을 자동으로 짚어드립니다</p>
         </div>
@@ -40322,18 +40291,24 @@ function MonthCompareInsight({ rows = [] }) {
             </tbody>
           </table>
 
-          {/* AI 분석 코멘트 */}
-          <div className="space-y-2.5">
-            <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wide">🧠 AI 분석 코멘트</div>
-            {insight.findings.map((f, i) => (
-              <div key={i} className={`rounded-xl border p-4 ${toneCls[f.tone] || "border-gray-200 bg-gray-50"}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[15px]">{f.icon}</span>
-                  <span className="text-[13px] font-bold text-gray-800">{f.title}</span>
-                </div>
-                <p className="text-[12.5px] text-gray-700 leading-relaxed">{f.detail}</p>
+          {/* AI 분석 보고서 — 테마별 카드로 흩어놓지 않고, 하나의 보고서 문서처럼 이어지는 형식 */}
+          <div className="border border-gray-200 rounded-xl p-6 bg-white">
+            <div className="pb-4 mb-5 border-b border-gray-200">
+              <div className="text-[11px] font-bold text-gray-400 tracking-widest">비교분석 보고서</div>
+              <div className="text-[16px] font-extrabold text-[#1B2B4B] mt-0.5">{monthA} vs {monthB} 매출 비교분석</div>
+            </div>
+            {insight.report.length === 0 ? (
+              <p className="text-[13px] text-gray-500">두 달 사이 매출·건수·거래처 구성에서 뚜렷한 변화가 발견되지 않았습니다.</p>
+            ) : (
+              <div className="space-y-5">
+                {insight.report.map((sec, i) => (
+                  <div key={i}>
+                    <h4 className="text-[13px] font-extrabold text-[#1B2B4B] mb-1.5 pb-1 border-b border-gray-100">{sec.title}</h4>
+                    <p className="text-[13px] text-gray-700 leading-[1.9]">{sec.body}</p>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -40724,7 +40699,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             // ⭐ AI 월간비교분석 — 최고관리자 전용. 실제 LLM 호출 없이 매출·건수·평균단가·
             // 거래처·차종/톤수·특수일 비중을 규칙 기반으로 비교해서 "건수는 늘었는데 매출은
             // 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는 통계 분석 엔진.
-            ...(role === "totalMaster" ? [{ key: "ai_compare", label: "🤖 AI 월간비교분석" }] : []),
+            ...(role === "totalMaster" ? [{ key: "ai_compare", label: "AI 월간비교분석" }] : []),
           ].map(tab => (
             <button
               key={tab.key}
