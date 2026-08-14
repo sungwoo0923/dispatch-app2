@@ -366,7 +366,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   };
   React.useEffect(() => () => { if (todayPulseTimer.current) window.clearTimeout(todayPulseTimer.current); }, []);
 
-  // ⭐ 반고정 오더(복수근무일) — 클릭할 때마다 근무일 목록에서 켜고/끄고 토글.
+  // ⭐ 묶음 오더(복수근무일) — 클릭할 때마다 근무일 목록에서 켜고/끄고 토글.
   // 상차일/하차일은 그 목록의 최솟값/최댓값으로 부모(toggleWorkDate)가 자동 연동한다.
   const handlePick = (dateStr) => {
     if (multiMode) { onToggleWorkDate?.(dateStr); return; }
@@ -398,7 +398,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
       </div>
 
       <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto min-h-0">
-        {/* ⭐ 복수근무일(반고정) 모드 — 상/하차일 대상 토글 대신, 근무일을 하나씩
+        {/* ⭐ 복수근무일(묶음) 모드 — 상/하차일 대상 토글 대신, 근무일을 하나씩
             선택하는 중이라는 안내와 선택 개수/전체해제 버튼을 보여준다. */}
         {multiMode ? (
           <div className="rounded-xl py-2.5 px-3 bg-black text-white text-[12px] font-bold flex items-center justify-between shrink-0">
@@ -494,7 +494,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
                       {isDrop && <span className="w-5 h-5 rounded-full border-2 border-white text-white text-[11px] font-black flex items-center justify-center leading-none shrink-0">하</span>}
                     </span>
                   )}
-                  {/* ⭐ 복수근무일(반고정) 모드 — 선택된 근무일 중 가장 빠른 날은 "상",
+                  {/* ⭐ 복수근무일(묶음) 모드 — 선택된 근무일 중 가장 빠른 날은 "상",
                       가장 늦은 날은 "하"(각각 상차일/하차일로 자동 연동되는 날짜라는 뜻),
                       그 사이 선택된 날들은 체크(✓) 표시로 근무일임을 보여준다. */}
                   {isWorkDate && (
@@ -529,7 +529,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
             <button type="button" onClick={goToday} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">오늘로 이동</button>
             <div className="flex items-center gap-2 text-[10px] font-semibold text-gray-400">
               {multiMode ? (
-                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-black" />근무일(반고정)</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-black" />근무일(묶음)</span>
               ) : (
                 <>
                   <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />상차일</span>
@@ -555,7 +555,7 @@ function isSpecialDemandOrder(r) {
   return !!specialDemandInfo(r?.상차일)?.special;
 }
 
-// ⭐ 복수근무일(반고정 오더)의 근무일자목록을 안전하게 배열로 복원한다.
+// ⭐ 복수근무일(묶음 오더)의 근무일자목록을 안전하게 배열로 복원한다.
 // Firestore에 저장될 때 stripUndefinedDeep이 배열을 {0:"...",1:"..."} 형태의
 // 객체로 바꿔버리기 때문에(경유상차목록/경유지_상차 등 다른 배열 필드와 동일한
 // 문제), onSnapshot으로 다시 읽어온 오더의 근무일자목록은 배열이 아닐 수 있다.
@@ -595,7 +595,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const dateGroups = React.useMemo(() => {
     const map = new Map();
     for (const r of rows || []) {
-      // ⭐ 복수근무일(반고정) 오더 — 1개의 오더가 여러 날짜에 걸쳐 근무하므로,
+      // ⭐ 복수근무일(묶음) 오더 — 1개의 오더가 여러 날짜에 걸쳐 근무하므로,
       // 날짜별 스케줄표에서는 근무일자목록의 모든 날짜 섹션에 각각 나타나야 한다
       // (실제 오더는 1건이지만, 그날 그 노선이 움직인다는 사실은 매일 보여야 함).
       const parsedWorkDates = _parseWorkDates(r.근무일자목록);
@@ -613,7 +613,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
       }));
   }, [rows]);
 
-  // ⭐ 복수근무일(반고정) 오더의 근무일자목록을 "9/2, 4~5, 7~11" 형태로 압축 요약.
+  // ⭐ 복수근무일(묶음) 오더의 근무일자목록을 "9/2, 4~5, 7~11" 형태로 압축 요약.
   // 기사별 보기에서 13일치를 13줄로 늘어놓지 않고 한 줄로 보여주기 위함.
   const _compressWorkDates = (dates) => {
     const sorted = [...(dates || [])].sort();
@@ -764,7 +764,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
           <span className="text-[12px] font-extrabold text-[#1B2B4B]">
             {dateOverride ? _scheduleDateLabel(dateOverride) : isMultiWork ? _compressWorkDates(rWorkDates) : _scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}
           </span>
-          {isMultiWork && <span className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none">반고정</span>}
+          {isMultiWork && <span className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none">묶음</span>}
           <span className="text-[11px] font-bold text-gray-600 ml-auto">{r.차량종류 || "-"} / {r.차량톤수 || "-"}</span>
         </div>
         <div className="px-3 py-2.5 text-[12px] space-y-1.5">
@@ -904,7 +904,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                 <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>
                                   {r.상차지명 || "-"} → {r.하차지명 || "-"}
                                   {_parseWorkDates(r.근무일자목록).length > 1 && (
-                                    <span className="ml-1 bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none align-middle">반고정</span>
+                                    <span className="ml-1 bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none align-middle">묶음</span>
                                   )}
                                 </td>
                                 <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.이름 || "-"}</td>
@@ -964,12 +964,12 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                               {g.list.map((r, i) => (
                                 <tr key={r._id || r.id || i}>
                                   <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>
-                                    {/* ⭐ 복수근무일(반고정) 오더는 날짜 하나 대신 압축된 근무일 범위를 보여준다
+                                    {/* ⭐ 복수근무일(묶음) 오더는 날짜 하나 대신 압축된 근무일 범위를 보여준다
                                         (예: 9/2, 4~5, 7~11) — 13일치를 13줄로 늘어놓지 않기 위함. */}
                                     {(() => {
                                       const wd = _parseWorkDates(r.근무일자목록);
                                       return wd.length > 1
-                                        ? <span title={`반고정 · 근무일 ${wd.length}일`}>{_compressWorkDates(wd)}</span>
+                                        ? <span title={`묶음 · 근무일 ${wd.length}일`}>{_compressWorkDates(wd)}</span>
                                         : _scheduleDateLabel(r.상차일);
                                     })()}
                                   </td>
@@ -3797,10 +3797,10 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
         </div>
         <div className="px-6 py-5 space-y-4">
-          {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라
+          {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라
               1개의 오더로 등록된 경우, 그 근무일 전체 목록을 보여준다. */}
           {orderInfoWorkDates.length > 1 && (
-            <Section title={`근무일 (총 ${orderInfoWorkDates.length}일 · 반고정)`}>
+            <Section title={`근무일 (총 ${orderInfoWorkDates.length}일 · 묶음)`}>
               <div className="flex flex-wrap gap-1.5">
                 {orderInfoWorkDates.map((d) => (
                   <span key={d} className="bg-black text-white text-[12px] font-extrabold rounded px-2 py-1">
@@ -7933,7 +7933,7 @@ const filterPlaces = (q) => {
       특수운임: false,       // ⭐ 연휴/성수기 등 특수 수요일 배차 여부(자동감지 + 수동토글)
       특수운임사유: "",
       특수운임수동: false,   // 사용자가 자동감지 결과를 직접 덮어썼는지
-      복수근무일: false,     // ⭐ 반고정 오더 — 연속 기간이 아니라 특정 날짜들만 골라 하나의
+      복수근무일: false,     // ⭐ 묶음 오더 — 연속 기간이 아니라 특정 날짜들만 골라 하나의
       근무일자목록: [],      // 오더로 등록(예: 9/2,4,5,7~11,14~18). 상차일=최소값, 하차일=최대값으로 자동 연동.
     };
     const cargoInputRef = React.useRef(null);
@@ -8929,7 +8929,7 @@ function swapPickupDrop() {
         return;
       }
       if (key === "복수근무일") {
-        // ⭐ 반고정 오더 토글 — 끄면 그동안 골라둔 근무일 목록은 비운다(다시 켜면
+        // ⭐ 묶음 오더 토글 — 끄면 그동안 골라둔 근무일 목록은 비운다(다시 켜면
         // 처음부터 다시 고르는 게 맞다 — 상/하차일은 그대로 남겨서 헷갈리지 않게 함).
         setForm((p) => ({ ...p, 복수근무일: value, 근무일자목록: value ? p.근무일자목록 : [] }));
         return;
@@ -8941,7 +8941,7 @@ function swapPickupDrop() {
       setForm((p) => ({ ...p, [key]: value }));
     };
 
-    // ⭐ 반고정 오더의 근무일 다중선택 — 달력에서 날짜를 하나씩 클릭할 때마다
+    // ⭐ 묶음 오더의 근무일 다중선택 — 달력에서 날짜를 하나씩 클릭할 때마다
     // 켜고/끄고를 토글한다. 상차일/하차일은 이 목록의 최솟값/최댓값으로 항상
     // 자동 연동해서, 기존에 상차일~하차일만 보고 동작하는 다른 로직(정렬·필터
     // 등)이 그대로 잘 맞물리게 한다.
@@ -18622,14 +18622,14 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
       return (
         <>
           {editableInput("상차일", r.상차일, r._id, isMultiWork)}
-          {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
+          {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
               오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. */}
           {isMultiWork && (
             <span
               className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
-              title={`반고정 오더 · 근무일 ${rWorkDates.length}일: ${rWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
+              title={`묶음 오더 · 근무일 ${rWorkDates.length}일: ${rWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
             >
-              반고정 {rWorkDates.length}일
+              묶음 {rWorkDates.length}일
             </span>
           )}
         </>
@@ -23165,7 +23165,7 @@ const handleCloseFileUpload = async (e) => {
   const emphKeys = ["상차일", "하차일", "화물내용", "차량종류", "차량톤수"];
   const emphCls = darkMode ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
 
-  // ⭐ redOverride: 복수근무일(반고정) 오더의 상차일 칸을 빨간 글씨로 강조할 때만
+  // ⭐ redOverride: 복수근무일(묶음) 오더의 상차일 칸을 빨간 글씨로 강조할 때만
   // true로 넘긴다(emphCls 대신 적용). 그 외 모든 호출은 기존과 동일하게 동작한다.
   const editableInput = (key, val, rowId, redOverride = false) => {
     const emphClsFinal = redOverride ? "font-extrabold text-red-600" : emphCls;
@@ -33377,15 +33377,15 @@ return (
   return (
     <span className="inline-flex items-center gap-1">
       <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"}`}>{row[key] || ""}</span>
-      {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
+      {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
           오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. 클릭하면 전체
           근무일 목록을 볼 수 있게 오더정보(우클릭 메뉴)로 유도하는 툴팁을 붙인다. */}
       {isMultiWork && (
         <span
           className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
-          title={`반고정 오더 · 근무일 ${rowWorkDates.length}일: ${rowWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
+          title={`묶음 오더 · 근무일 ${rowWorkDates.length}일: ${rowWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
         >
-          반고정 {rowWorkDates.length}일
+          묶음 {rowWorkDates.length}일
         </span>
       )}
     </span>

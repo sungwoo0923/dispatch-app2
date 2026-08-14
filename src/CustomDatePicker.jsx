@@ -94,7 +94,7 @@ export function shortHolidayLabel(name) {
 const CustomDatePicker = React.forwardRef(function CustomDatePicker(
   {
     value, onChange, className = "", placeholder = "날짜 선택", disabled = false, showIcon = false,
-    // ⭐ 복수근무일(반고정 오더) 다중선택 — 이 4개 props는 opt-in이라 기본값(false/[])일
+    // ⭐ 복수근무일(묶음 오더) 다중선택 — 이 4개 props는 opt-in이라 기본값(false/[])일
     // 때는 기존 단일선택 동작과 완전히 동일하다. multiSelect=true인 곳(현재는 등록폼의
     // 상차일 필드)에서만 "다중선택" 버튼이 뜨고, multiActive가 true인 동안은 날짜를
     // 클릭할 때마다 팝업이 닫히지 않고 onToggleWorkDate로 켜고/끈다.
@@ -268,7 +268,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
                   onChange?.({ target: { value: todayStr } }); setOpen(false);
                 }}
                 className="text-[12px] font-bold text-[#1B2B4B] hover:underline">오늘</button>
-              {/* ⭐ 복수근무일(반고정) — "오늘" 버튼과 동일한 스타일(이모지 없이 텍스트만),
+              {/* ⭐ 복수근무일(묶음) — "오늘" 버튼과 동일한 스타일(이모지 없이 텍스트만),
                   다중선택 모드가 켜져 있으면 배경 pill로 활성 상태를 표시한다. */}
               {multiSelect && (
                 <button type="button"
