@@ -555,6 +555,24 @@ function isSpecialDemandOrder(r) {
   return !!specialDemandInfo(r?.상차일)?.special;
 }
 
+// ⭐ 복수근무일(반고정 오더)의 근무일자목록을 안전하게 배열로 복원한다.
+// Firestore에 저장될 때 stripUndefinedDeep이 배열을 {0:"...",1:"..."} 형태의
+// 객체로 바꿔버리기 때문에(경유상차목록/경유지_상차 등 다른 배열 필드와 동일한
+// 문제), onSnapshot으로 다시 읽어온 오더의 근무일자목록은 배열이 아닐 수 있다.
+// 화면에서 근무일자목록을 참조하는 모든 곳은 반드시 이 함수를 거쳐야 한다.
+function _parseWorkDates(v) {
+  if (Array.isArray(v)) return v.filter(Boolean).sort();
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p.filter(Boolean).sort(); } catch {}
+  }
+  if (v && typeof v === "object") {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]).filter(Boolean).sort();
+  }
+  return [];
+}
+
 // 스케줄표 안에서 상세정보(기사용) 카드로 보여줄 때 쓰는 담당자 한 줄 표시.
 // 이름/번호 중 있는 것만 붙이고, 번호는 항상 하이픈을 채워서 보여준다.
 function _scheduleContactLine(name, phone) {
@@ -580,7 +598,8 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
       // ⭐ 복수근무일(반고정) 오더 — 1개의 오더가 여러 날짜에 걸쳐 근무하므로,
       // 날짜별 스케줄표에서는 근무일자목록의 모든 날짜 섹션에 각각 나타나야 한다
       // (실제 오더는 1건이지만, 그날 그 노선이 움직인다는 사실은 매일 보여야 함).
-      const workDates = r.근무일자목록?.length > 1 ? r.근무일자목록 : [r.상차일 || ""];
+      const parsedWorkDates = _parseWorkDates(r.근무일자목록);
+      const workDates = parsedWorkDates.length > 1 ? parsedWorkDates : [r.상차일 || ""];
       for (const key of workDates) {
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(r);
@@ -737,12 +756,13 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const DetailCard = ({ r, dateOverride }) => {
     const pickupContact = _scheduleContactLine(r.상차지담당자, r.상차지담당자번호);
     const dropContact = _scheduleContactLine(r.하차지담당자, r.하차지담당자번호);
-    const isMultiWork = r.근무일자목록?.length > 1;
+    const rWorkDates = _parseWorkDates(r.근무일자목록);
+    const isMultiWork = rWorkDates.length > 1;
     return (
       <div className="border border-gray-200 rounded-lg overflow-hidden">
         <div className="bg-gray-100 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
           <span className="text-[12px] font-extrabold text-[#1B2B4B]">
-            {dateOverride ? _scheduleDateLabel(dateOverride) : isMultiWork ? _compressWorkDates(r.근무일자목록) : _scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}
+            {dateOverride ? _scheduleDateLabel(dateOverride) : isMultiWork ? _compressWorkDates(rWorkDates) : _scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}
           </span>
           {isMultiWork && <span className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none">반고정</span>}
           <span className="text-[11px] font-bold text-gray-600 ml-auto">{r.차량종류 || "-"} / {r.차량톤수 || "-"}</span>
@@ -883,7 +903,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                 <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                 <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>
                                   {r.상차지명 || "-"} → {r.하차지명 || "-"}
-                                  {r.근무일자목록?.length > 1 && (
+                                  {_parseWorkDates(r.근무일자목록).length > 1 && (
                                     <span className="ml-1 bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none align-middle">반고정</span>
                                   )}
                                 </td>
@@ -946,9 +966,12 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                   <td className={`${tdCls} text-center font-extrabold text-[#1B2B4B]`}>
                                     {/* ⭐ 복수근무일(반고정) 오더는 날짜 하나 대신 압축된 근무일 범위를 보여준다
                                         (예: 9/2, 4~5, 7~11) — 13일치를 13줄로 늘어놓지 않기 위함. */}
-                                    {r.근무일자목록?.length > 1
-                                      ? <span title={`반고정 · 근무일 ${r.근무일자목록.length}일`}>{_compressWorkDates(r.근무일자목록)}</span>
-                                      : _scheduleDateLabel(r.상차일)}
+                                    {(() => {
+                                      const wd = _parseWorkDates(r.근무일자목록);
+                                      return wd.length > 1
+                                        ? <span title={`반고정 · 근무일 ${wd.length}일`}>{_compressWorkDates(wd)}</span>
+                                        : _scheduleDateLabel(r.상차일);
+                                    })()}
                                   </td>
                                   <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                   <td className={`${tdCls} font-bold text-gray-900`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
@@ -3723,6 +3746,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
   }, [row?.상차지주소, row?.하차지주소, row?.경유상차목록, row?.경유지_상차, row?.경유하차목록, row?.경유지_하차]);
 
   if (!row) return null;
+  const orderInfoWorkDates = _parseWorkDates(row.근무일자목록);
   const _s = (v) => _parseWaypointList(v);
   const pickupStops = [..._s(row.경유상차목록), ..._s(row.경유지_상차), ..._s(row.경유지상차)]
     .filter((s, i, arr) => s && (s.업체명 || s.주소) && arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
@@ -3775,10 +3799,10 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
         <div className="px-6 py-5 space-y-4">
           {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라
               1개의 오더로 등록된 경우, 그 근무일 전체 목록을 보여준다. */}
-          {row.근무일자목록?.length > 1 && (
-            <Section title={`근무일 (총 ${row.근무일자목록.length}일 · 반고정)`}>
+          {orderInfoWorkDates.length > 1 && (
+            <Section title={`근무일 (총 ${orderInfoWorkDates.length}일 · 반고정)`}>
               <div className="flex flex-wrap gap-1.5">
-                {row.근무일자목록.map((d) => (
+                {orderInfoWorkDates.map((d) => (
                   <span key={d} className="bg-black text-white text-[12px] font-extrabold rounded px-2 py-1">
                     {d.slice(5).replace("-", "/")}
                   </span>
@@ -5914,6 +5938,7 @@ return (
               clients={clients}
               places={places}
               isViewer={isViewer}
+              role={role}
             />
           ) : (
             <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
@@ -8923,7 +8948,9 @@ function swapPickupDrop() {
     const toggleWorkDate = (dateStr) => {
       if (!dateStr) return;
       setForm((p) => {
-        const set = new Set(p.근무일자목록 || []);
+        // ⚠️ Firestore에서 방금 불러온(오더복사/수정) p.근무일자목록은 배열이 아니라
+        // {0:"...",1:"..."} 형태의 객체일 수 있다 — _parseWorkDates로 반드시 정규화.
+        const set = new Set(_parseWorkDates(p.근무일자목록));
         if (set.has(dateStr)) set.delete(dateStr);
         else set.add(dateStr);
         const sorted = Array.from(set).sort();
@@ -11378,12 +11405,27 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 
 {/* ================= 상차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B]">상차</label>
-  <CustomDatePicker
-    value={form.상차일 || ""}
-    showIcon
-    className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
-    onChange={(e) => onChange("상차일", e.target.value)}
-  />
+  {(() => {
+    const formWorkDates = _parseWorkDates(form.근무일자목록);
+    const isMultiWork = !!form.복수근무일 && formWorkDates.length > 1;
+    return (
+      <CustomDatePicker
+        value={form.상차일 || ""}
+        showIcon
+        className={`border-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold outline-none focus:ring-2 focus:ring-blue-200 ${
+          isMultiWork ? "border-red-600 text-red-600" : "border-[#1B2B4B] text-[#1B2B4B]"
+        }`}
+        onChange={(e) => onChange("상차일", e.target.value)}
+        multiSelect
+        multiActive={!!form.복수근무일}
+        onToggleMulti={() => onChange("복수근무일", !form.복수근무일)}
+        workDates={formWorkDates}
+        onToggleWorkDate={toggleWorkDate}
+        onClearWorkDates={() => onChange("근무일자목록", [])}
+        displayOverride={isMultiWork ? `${form.상차일 || ""} 외 ${formWorkDates.length - 1}일` : undefined}
+      />
+    );
+  })()}
   {/* 상차 시간 + 이전/이후 */}
   <div className="flex items-center gap-1">
     <TimeAmPmPicker
@@ -11560,30 +11602,6 @@ title="상차지 ↔ 하차지 교체"
 >
 ⇄ 상·하차 교체
 </button>
-
-{/* ⭐ 반고정 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의 오더로 등록 */}
-<button
-  type="button"
-  onClick={() => onChange("복수근무일", !form.복수근무일)}
-  className={`ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold rounded-lg border-2 transition active:scale-95 ${
-    form.복수근무일
-      ? "bg-black text-white border-black"
-      : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-  }`}
-  title="반고정 오더 — 연속 기간이 아니라 특정 근무일들만 골라 1개의 오더로 등록합니다"
->
-  📅 복수근무일{form.복수근무일 && form.근무일자목록?.length ? ` (${form.근무일자목록.length}일)` : ""}
-</button>
-{form.복수근무일 && (
-  <span className="text-[11px] font-semibold text-gray-500 ml-1">
-    오른쪽 달력에서 근무일을 하나씩 클릭해 선택하세요
-    {form.근무일자목록?.length > 0 && (
-      <span className="ml-1 font-bold text-black">
-        ({form.근무일자목록.map(d => d.slice(5).replace("-", "/")).join(", ")})
-      </span>
-    )}
-  </span>
-)}
   </div>
 </div>
 {/* ===== 오더 자동파싱 영역 ===== */}
@@ -14313,16 +14331,17 @@ className={`
     {renderForm()}
   </div>
 
-  {/* 오른쪽: 상/하차일 캘린더 패널 (기존 Today 통계패널 자리를 대체) */}
+  {/* 오른쪽: 상/하차일 캘린더 패널 (기존 Today 통계패널 자리를 대체) —
+      ⚠️ 복수근무일 다중선택은 이 패널이 아니라 상차일 입력칸 자체의 달력
+      (CustomDatePicker)에서 처리한다. 사용자 피드백: "오른쪽 패널에 있는
+      달력말고 오더정보에 있는 달력에 다중선택 버튼을 넣어달라" — 그래서
+      이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
   <OrderCalendarPanel
     pickupDate={form.상차일 || ""}
     dropDate={form.하차일 || ""}
     onPickupChange={(v) => onChange("상차일", v)}
     onDropChange={(v) => onChange("하차일", v)}
     companyName={userCompany || localStorage.getItem("userCompany") || "돌캐"}
-    multiMode={!!form.복수근무일}
-    workDates={form.근무일자목록 || []}
-    onToggleWorkDate={toggleWorkDate}
   />
 </div>
 {/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}
@@ -18597,17 +18616,25 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   <td className={cell}>
   <span className="inline-flex items-center gap-1">
-    {editableInput("상차일", r.상차일, r._id)}
-    {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
-        오더로 등록된 경우, 상차일 칸에 검은 뱃지로 표시. */}
-    {r.근무일자목록?.length > 1 && (
-      <span
-        className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
-        title={`반고정 오더 · 근무일 ${r.근무일자목록.length}일: ${r.근무일자목록.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
-      >
-        반고정 {r.근무일자목록.length}일
-      </span>
-    )}
+    {(() => {
+      const rWorkDates = _parseWorkDates(r.근무일자목록);
+      const isMultiWork = rWorkDates.length > 1;
+      return (
+        <>
+          {editableInput("상차일", r.상차일, r._id, isMultiWork)}
+          {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
+              오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. */}
+          {isMultiWork && (
+            <span
+              className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
+              title={`반고정 오더 · 근무일 ${rWorkDates.length}일: ${rWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
+            >
+              반고정 {rWorkDates.length}일
+            </span>
+          )}
+        </>
+      );
+    })()}
   </span>
 </td>
                   <td className={cell}>
@@ -23138,17 +23165,20 @@ const handleCloseFileUpload = async (e) => {
   const emphKeys = ["상차일", "하차일", "화물내용", "차량종류", "차량톤수"];
   const emphCls = darkMode ? "font-extrabold text-blue-300" : "font-extrabold text-[#1B2B4B]";
 
-  const editableInput = (key, val, rowId) => {
+  // ⭐ redOverride: 복수근무일(반고정) 오더의 상차일 칸을 빨간 글씨로 강조할 때만
+  // true로 넘긴다(emphCls 대신 적용). 그 외 모든 호출은 기존과 동일하게 동작한다.
+  const editableInput = (key, val, rowId, redOverride = false) => {
+    const emphClsFinal = redOverride ? "font-extrabold text-red-600" : emphCls;
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
     //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
-    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={emphCls}>{val}</span> : val;
+    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
 
     // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
     if (
       !canEdit(key, rowId) &&
       !["차량종류", "지급방식", "배차방식"].includes(key)
     ) {
-      return emphKeys.includes(key) ? <span className={emphCls}>{val}</span> : val;
+      return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
     }
 
     if (key === "상차일" || key === "하차일") {
@@ -33341,22 +33371,26 @@ return (
   const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
   const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
   return <span className="font-extrabold text-[#1B2B4B]">{mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || ""}</span>;
-})() : key === "상차일" || key === "하차일" ? (
-  <span className="inline-flex items-center gap-1">
-    <span className="font-extrabold text-[#1B2B4B]">{row[key] || ""}</span>
-    {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
-        오더로 등록된 경우, 상차일 칸에 검은 뱃지로 표시. 클릭하면 전체 근무일
-        목록을 볼 수 있게 오더정보(우클릭 메뉴)로 유도하는 툴팁을 붙인다. */}
-    {key === "상차일" && row.근무일자목록?.length > 1 && (
-      <span
-        className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
-        title={`반고정 오더 · 근무일 ${row.근무일자목록.length}일: ${row.근무일자목록.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
-      >
-        반고정 {row.근무일자목록.length}일
-      </span>
-    )}
-  </span>
-) : (
+})() : key === "상차일" || key === "하차일" ? (() => {
+  const rowWorkDates = key === "상차일" ? _parseWorkDates(row.근무일자목록) : [];
+  const isMultiWork = rowWorkDates.length > 1;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"}`}>{row[key] || ""}</span>
+      {/* ⭐ 복수근무일(반고정) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
+          오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. 클릭하면 전체
+          근무일 목록을 볼 수 있게 오더정보(우클릭 메뉴)로 유도하는 툴팁을 붙인다. */}
+      {isMultiWork && (
+        <span
+          className="bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none shrink-0"
+          title={`반고정 오더 · 근무일 ${rowWorkDates.length}일: ${rowWorkDates.map(d => d.slice(5).replace("-", "/")).join(", ")}\n(우클릭 → 오더정보에서 전체 확인)`}
+        >
+          반고정 {rowWorkDates.length}일
+        </span>
+      )}
+    </span>
+  );
+})() : (
   row[key]
 )}
   </td>
@@ -39995,8 +40029,320 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   );
 }
 
+// ⭐ 경영인텔리전스 — AI 월간비교분석(최고관리자 전용).
+// 실제 LLM을 호출하지 않고(비용/키 불필요), 두 달의 매출·건수·평균단가·거래처·
+// 차종/톤수 구성·특수일(연휴·성수기) 비중·요일 분포를 규칙 기반으로 비교해
+// "건수는 늘었는데 매출은 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는
+// 통계 분석 엔진. rowsA/rowsB는 이미 배차완료로 필터링된 오더 배열(Settlement의
+// `rows`에서 월별로 잘라서 넘긴다).
+function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const won = (n) => `${Math.round(n).toLocaleString()}원`;
+  const pctStr = (a, b) => {
+    if (!a) return b ? "+100.0%" : "0.0%";
+    const p = ((b - a) / a) * 100;
+    return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
+  };
+
+  const summarize = (list) => {
+    const sale = list.reduce((a, r) => a + toInt(r.청구운임), 0);
+    const driver = list.reduce((a, r) => a + toInt(r.기사운임), 0);
+    const profit = sale - driver;
+    const cnt = list.length;
+    return {
+      sale, driver, profit, cnt,
+      avgSale: cnt ? sale / cnt : 0,
+      avgProfit: cnt ? profit / cnt : 0,
+      rate: sale ? (profit / sale) * 100 : 0,
+    };
+  };
+  const A = summarize(rowsA);
+  const B = summarize(rowsB);
+
+  const groupBy = (list, keyFn) => {
+    const map = new Map();
+    list.forEach((r) => {
+      const k = keyFn(r) || "미지정";
+      if (!map.has(k)) map.set(k, { sale: 0, cnt: 0 });
+      const o = map.get(k);
+      o.sale += toInt(r.청구운임);
+      o.cnt += 1;
+    });
+    return map;
+  };
+
+  // 거래처별 매출 증감 — 어떤 거래처가 이번 달 매출 변화를 주도했는지
+  const clientA = groupBy(rowsA, (r) => r.거래처명);
+  const clientB = groupBy(rowsB, (r) => r.거래처명);
+  const clientKeys = new Set([...clientA.keys(), ...clientB.keys()]);
+  const clientDeltas = Array.from(clientKeys)
+    .map((c) => {
+      const a = clientA.get(c) || { sale: 0, cnt: 0 };
+      const b = clientB.get(c) || { sale: 0, cnt: 0 };
+      return { client: c, saleA: a.sale, saleB: b.sale, delta: b.sale - a.sale, cntA: a.cnt, cntB: b.cnt };
+    })
+    .sort((x, y) => x.delta - y.delta);
+  const topDecline = clientDeltas.filter((c) => c.delta < 0).slice(0, 5);
+  const topGrowth = [...clientDeltas].filter((c) => c.delta > 0).sort((x, y) => y.delta - x.delta).slice(0, 5);
+
+  // 차종/톤수 구성비 — 저단가 소형차 비중이 늘면 평균단가가 자연히 낮아진다
+  const tonA = groupBy(rowsA, (r) => r.차량톤수 || r.차량종류);
+  const tonB = groupBy(rowsB, (r) => r.차량톤수 || r.차량종류);
+  const tonKeys = new Set([...tonA.keys(), ...tonB.keys()]);
+  const tonMix = Array.from(tonKeys)
+    .map((t) => {
+      const a = tonA.get(t) || { sale: 0, cnt: 0 };
+      const b = tonB.get(t) || { sale: 0, cnt: 0 };
+      return {
+        ton: t,
+        shareA: A.cnt ? (a.cnt / A.cnt) * 100 : 0,
+        shareB: B.cnt ? (b.cnt / B.cnt) * 100 : 0,
+        avgA: a.cnt ? a.sale / a.cnt : 0,
+        avgB: b.cnt ? b.sale / b.cnt : 0,
+        cntA: a.cnt, cntB: b.cnt,
+      };
+    });
+
+  // 특수운임(연휴·성수기) 비중 — 특수일 오더가 많았던 달은 평균단가가 자연히 높게 나온다
+  const specialA = rowsA.filter(isSpecialDemandOrder);
+  const specialB = rowsB.filter(isSpecialDemandOrder);
+  const specialStatA = summarize(specialA);
+  const specialStatB = summarize(specialB);
+
+  // 요일별 분포 — 평일/주말 오더 비중 변화
+  const weekdayOf = (r) => {
+    const d = r.상차일 ? new Date(r.상차일 + "T00:00:00") : null;
+    return d && !isNaN(d.getTime()) ? d.getDay() : null;
+  };
+  const weekendCnt = (list) => list.filter((r) => { const w = weekdayOf(r); return w === 0 || w === 6; }).length;
+  const weekendA = weekendCnt(rowsA), weekendB = weekendCnt(rowsB);
+
+  // ----- 인사이트(findings) 생성 -----
+  const findings = [];
+
+  // 1) 핵심 인사이트 — 건수 vs 매출 vs 평균단가 (요청의 핵심 질문에 대한 직접 답변)
+  const saleDelta = B.sale - A.sale;
+  const cntDelta = B.cnt - A.cnt;
+  if (cntDelta > 0 && saleDelta < 0) {
+    findings.push({
+      icon: "⚠️", tone: "warning",
+      title: "건수는 늘었는데 매출은 감소",
+      detail: `${labelB} 오더 건수는 ${labelA} 대비 ${cntDelta.toLocaleString()}건(${pctStr(A.cnt, B.cnt)}) 늘었지만, 매출은 ${won(Math.abs(saleDelta))}(${pctStr(A.sale, B.sale)}) 줄었습니다. 건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 변동한 것이 직접적인 원인입니다. 저단가·근거리 오더 비중이 늘었거나, 특수일(연휴·성수기) 고단가 오더가 상대적으로 줄었을 가능성이 높습니다.`,
+    });
+  } else if (cntDelta < 0 && saleDelta > 0) {
+    findings.push({
+      icon: "✅", tone: "good",
+      title: "건수는 줄었지만 매출은 증가",
+      detail: `${labelB} 오더 건수는 ${Math.abs(cntDelta).toLocaleString()}건 줄었지만 매출은 ${won(saleDelta)} 늘었습니다. 건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}(${pctStr(A.avgSale, B.avgSale)})로 상승해, 고단가 오더 중심으로 효율이 개선되었습니다.`,
+    });
+  } else if (Math.abs(pctStrToNum(pctStr(A.avgSale, B.avgSale))) >= 5) {
+    findings.push({
+      icon: B.avgSale >= A.avgSale ? "📈" : "📉", tone: B.avgSale >= A.avgSale ? "good" : "warning",
+      title: "건당 평균 운임 변동",
+      detail: `건당 평균 운임이 ${won(A.avgSale)} → ${won(B.avgSale)}(${pctStr(A.avgSale, B.avgSale)})로 변동했습니다.`,
+    });
+  }
+
+  // 2) 수익률 변화
+  const rateDeltaP = B.rate - A.rate;
+  if (Math.abs(rateDeltaP) >= 0.5) {
+    findings.push({
+      icon: rateDeltaP >= 0 ? "📈" : "📉", tone: rateDeltaP >= 0 ? "good" : "warning",
+      title: `수익률 ${rateDeltaP >= 0 ? "개선" : "악화"} (${A.rate.toFixed(1)}% → ${B.rate.toFixed(1)}%)`,
+      detail: `수익(매익)은 ${won(A.profit)} → ${won(B.profit)}(${pctStr(A.profit, B.profit)}), 수익률은 ${rateDeltaP >= 0 ? "+" : ""}${rateDeltaP.toFixed(1)}%p 변화했습니다.`,
+    });
+  }
+
+  // 3) 거래처 기여도
+  if (topDecline.length) {
+    findings.push({
+      icon: "📉", tone: "warning",
+      title: "매출 감소에 가장 크게 기여한 거래처",
+      detail: topDecline.map((c) => `${c.client} ${won(c.delta)}(${c.cntA}건→${c.cntB}건)`).join(" · "),
+    });
+  }
+  if (topGrowth.length) {
+    findings.push({
+      icon: "📈", tone: "good",
+      title: "매출 증가에 가장 크게 기여한 거래처",
+      detail: topGrowth.map((c) => `${c.client} +${won(c.delta)}(${c.cntA}건→${c.cntB}건)`).join(" · "),
+    });
+  }
+
+  // 4) 차종/톤수 믹스 변화 — 비중 변화가 큰 항목만 짚어준다
+  const tonShift = tonMix
+    .filter((t) => t.cntA >= 3 || t.cntB >= 3)
+    .map((t) => ({ ...t, shareDelta: t.shareB - t.shareA }))
+    .sort((x, y) => Math.abs(y.shareDelta) - Math.abs(x.shareDelta))
+    .filter((t) => Math.abs(t.shareDelta) >= 3)
+    .slice(0, 3);
+  if (tonShift.length) {
+    findings.push({
+      icon: "🚚", tone: "info",
+      title: "차종/톤수 구성 변화",
+      detail: tonShift
+        .map((t) => `${t.ton} 비중 ${t.shareA.toFixed(1)}% → ${t.shareB.toFixed(1)}%(${t.shareDelta >= 0 ? "+" : ""}${t.shareDelta.toFixed(1)}%p, 평균단가 ${won(t.avgA)}→${won(t.avgB)})`)
+        .join(" · "),
+    });
+  }
+
+  // 5) 특수운임(연휴·성수기) 비중
+  if (specialStatA.cnt > 0 || specialStatB.cnt > 0) {
+    const shareA = A.cnt ? (specialStatA.cnt / A.cnt) * 100 : 0;
+    const shareB = B.cnt ? (specialStatB.cnt / B.cnt) * 100 : 0;
+    if (Math.abs(shareA - shareB) >= 2) {
+      findings.push({
+        icon: "🎌", tone: "info",
+        title: "특수일(연휴·성수기) 오더 비중 변화",
+        detail: `${labelA} 특수일 오더 ${specialStatA.cnt}건(비중 ${shareA.toFixed(1)}%, 평균 ${won(specialStatA.avgSale)}) → ${labelB} ${specialStatB.cnt}건(비중 ${shareB.toFixed(1)}%, 평균 ${won(specialStatB.avgSale)}). 특수일 오더는 평소보다 단가가 높게 형성되는 경향이 있어, 이 비중 변화가 월 평균단가 차이의 일부를 설명합니다.`,
+      });
+    }
+  }
+
+  // 6) 요일 분포(주말 비중)
+  const weekendShareA = A.cnt ? (weekendA / A.cnt) * 100 : 0;
+  const weekendShareB = B.cnt ? (weekendB / B.cnt) * 100 : 0;
+  if (Math.abs(weekendShareA - weekendShareB) >= 3) {
+    findings.push({
+      icon: "📅", tone: "info",
+      title: "주말 오더 비중 변화",
+      detail: `주말(토·일) 오더 비중이 ${weekendShareA.toFixed(1)}% → ${weekendShareB.toFixed(1)}%로 변화했습니다.`,
+    });
+  }
+
+  if (!findings.length) {
+    findings.push({ icon: "ℹ️", tone: "info", title: "특별한 변화 없음", detail: "두 달 사이 매출·건수·거래처 구성에서 뚜렷한 이상 신호가 발견되지 않았습니다." });
+  }
+
+  return { A, B, clientDeltas, topDecline, topGrowth, tonMix, specialStatA, specialStatB, findings };
+}
+// pctStr()이 반환하는 "+12.3%" 형태 문자열에서 다시 숫자만 뽑아 비교용으로 쓴다.
+function pctStrToNum(s) {
+  const n = parseFloat(String(s).replace(/[^\d.-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+function MonthCompareInsight({ rows = [] }) {
+  const won = (n) => `${Math.round(n).toLocaleString()}원`;
+  const pctStr = (a, b) => {
+    if (!a) return b ? "+100.0%" : "0.0%";
+    const p = ((b - a) / a) * 100;
+    return `${p >= 0 ? "+" : ""}${p.toFixed(1)}%`;
+  };
+
+  const monthsAvail = React.useMemo(() => {
+    return Array.from(new Set(rows.map((r) => (r.상차일 || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)))).sort();
+  }, [rows]);
+
+  const [monthA, setMonthA] = React.useState("");
+  const [monthB, setMonthB] = React.useState("");
+
+  React.useEffect(() => {
+    if (!monthsAvail.length) return;
+    setMonthA((prev) => (prev && monthsAvail.includes(prev)) ? prev : monthsAvail[Math.max(0, monthsAvail.length - 2)]);
+    setMonthB((prev) => (prev && monthsAvail.includes(prev)) ? prev : monthsAvail[monthsAvail.length - 1]);
+  }, [monthsAvail]);
+
+  const rowsA = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthA)), [rows, monthA]);
+  const rowsB = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthB)), [rows, monthB]);
+
+  const insight = React.useMemo(() => {
+    if (!monthA || !monthB) return null;
+    return buildMonthCompareInsight(rowsA, rowsB, monthA, monthB);
+  }, [rowsA, rowsB, monthA, monthB]);
+
+  const toneCls = {
+    good: "border-emerald-200 bg-emerald-50",
+    warning: "border-rose-200 bg-rose-50",
+    info: "border-indigo-200 bg-indigo-50",
+  };
+
+  const kpiRows = insight ? [
+    { label: "매출", aText: won(insight.A.sale), bText: won(insight.B.sale), good: insight.B.sale >= insight.A.sale, deltaText: `${won(insight.B.sale - insight.A.sale)} (${pctStr(insight.A.sale, insight.B.sale)})` },
+    { label: "수익", aText: won(insight.A.profit), bText: won(insight.B.profit), good: insight.B.profit >= insight.A.profit, deltaText: `${won(insight.B.profit - insight.A.profit)} (${pctStr(insight.A.profit, insight.B.profit)})` },
+    { label: "수익률", aText: `${insight.A.rate.toFixed(1)}%`, bText: `${insight.B.rate.toFixed(1)}%`, good: insight.B.rate >= insight.A.rate, deltaText: `${(insight.B.rate - insight.A.rate) >= 0 ? "+" : ""}${(insight.B.rate - insight.A.rate).toFixed(1)}%p` },
+    { label: "오더 건수", aText: `${insight.A.cnt}건`, bText: `${insight.B.cnt}건`, good: insight.B.cnt >= insight.A.cnt, deltaText: `${(insight.B.cnt - insight.A.cnt) >= 0 ? "+" : ""}${insight.B.cnt - insight.A.cnt}건 (${pctStr(insight.A.cnt, insight.B.cnt)})` },
+    { label: "평균단가/건", aText: won(insight.A.avgSale), bText: won(insight.B.avgSale), good: insight.B.avgSale >= insight.A.avgSale, deltaText: `${won(insight.B.avgSale - insight.A.avgSale)} (${pctStr(insight.A.avgSale, insight.B.avgSale)})` },
+  ] : [];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="text-[15px] font-bold text-white flex items-center gap-2">
+            🤖 AI 월간비교분석
+            <span className="text-[10px] font-extrabold bg-amber-400 text-[#1B2B4B] px-1.5 py-0.5 rounded">최고관리자 전용</span>
+          </h3>
+          <p className="text-[11px] text-white/50 mt-0.5">두 달의 매출·건수·거래처·차종·특수일 데이터를 비교해 변화 원인을 자동으로 짚어드립니다</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <CustomSelect
+            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
+            value={monthA}
+            onChange={(e) => setMonthA(e.target.value)}
+          >
+            {monthsAvail.map((m) => <option key={m} value={m} className="text-gray-900">{m}</option>)}
+          </CustomSelect>
+          <span className="text-white/60 text-[12px] font-semibold">vs</span>
+          <CustomSelect
+            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
+            value={monthB}
+            onChange={(e) => setMonthB(e.target.value)}
+          >
+            {monthsAvail.map((m) => <option key={m} value={m} className="text-gray-900">{m}</option>)}
+          </CustomSelect>
+        </div>
+      </div>
+
+      {!insight ? (
+        <div className="p-8 text-center text-[13px] text-gray-500">비교할 데이터가 부족합니다.</div>
+      ) : (
+        <div className="p-6 space-y-6">
+          {/* KPI 비교 표 */}
+          <table className="w-full text-[13px] border-collapse text-center">
+            <thead>
+              <tr className="bg-gray-100 text-gray-700">
+                <th className="border p-2">지표</th>
+                <th className="border p-2">{monthA}</th>
+                <th className="border p-2">{monthB}</th>
+                <th className="border p-2">증감</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kpiRows.map((k) => (
+                <tr key={k.label} className="hover:bg-gray-50">
+                  <td className="border p-2 font-semibold text-gray-700">{k.label}</td>
+                  <td className="border p-2 text-gray-600">{k.aText}</td>
+                  <td className="border p-2 font-bold text-gray-900">{k.bText}</td>
+                  <td className={`border p-2 font-bold ${k.good ? "text-emerald-600" : "text-rose-600"}`}>
+                    {k.good ? "▲" : "▼"} {k.deltaText}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* AI 분석 코멘트 */}
+          <div className="space-y-2.5">
+            <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wide">🧠 AI 분석 코멘트</div>
+            {insight.findings.map((f, i) => (
+              <div key={i} className={`rounded-xl border p-4 ${toneCls[f.tone] || "border-gray-200 bg-gray-50"}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[15px]">{f.icon}</span>
+                  <span className="text-[13px] font-bold text-gray-800">{f.title}</span>
+                </div>
+                <p className="text-[12.5px] text-gray-700 leading-relaxed">{f.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
-function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false }) {
+function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role }) {
 
   const [activeTab, setActiveTab] = React.useState("overview"); // overview | client_compare
   const [rangeStart, setRangeStart] = React.useState("2026-01");
@@ -40375,6 +40721,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             { key: "client_compare", label: "거래처 동향 분석" },
             { key: "profit_loss", label: "손익보고서" },
             { key: "accounting", label: "회계자료" },
+            // ⭐ AI 월간비교분석 — 최고관리자 전용. 실제 LLM 호출 없이 매출·건수·평균단가·
+            // 거래처·차종/톤수·특수일 비중을 규칙 기반으로 비교해서 "건수는 늘었는데 매출은
+            // 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는 통계 분석 엔진.
+            ...(role === "totalMaster" ? [{ key: "ai_compare", label: "🤖 AI 월간비교분석" }] : []),
           ].map(tab => (
             <button
               key={tab.key}
@@ -40430,6 +40780,12 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           clients={clients}
           isViewer={isViewer}
         />
+      )}
+      {/* ================= AI 월간비교분석 탭 (최고관리자 전용) ================= */}
+      {activeTab === "ai_compare" && role === "totalMaster" && (
+        <div className="px-8 py-6">
+          <MonthCompareInsight rows={rows} />
+        </div>
       )}
 {/* ================= 매출 개요 탭 ================= */}
       {activeTab === "overview" && (
