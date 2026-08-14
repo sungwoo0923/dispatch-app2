@@ -8,7 +8,7 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChar
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { hardReloadForUpdate } from "./UpdateBanner";
-import CustomDatePicker, { specialDemandInfo } from "./CustomDatePicker";
+import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import AdminMenu from "./AdminMenu";
 import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
@@ -299,6 +299,173 @@ function _scheduleDateLabel(d) {
    알록달록한 배색 없이 프로그램 기본 톤(네이비/그레이)만 쓰고, 글자는
    또렷하게 굵은 글씨 위주로 구성한다.
 --------------------------------------------------*/
+/* --------------------------------------------------
+   오더등록 캘린더 패널 — 배차관리(3파트) 등록폼 오른쪽에 있던 "TODAY" 통계
+   패널 자리를 대체한다. 이번 달 달력에 현재 입력 중인 상차일/하차일을
+   네이비색 동그란 표시("상"/"하")로 함께 보여주고, 달력 안에서 날짜를
+   눌러 상차일·하차일을 직접 지정할 수도 있다. 공휴일/대체공휴일/명절연휴
+   이름은 CustomDatePicker의 달력과 동일하게 한 줄(줄바꿈 없이)로 표시한다.
+   덤으로 실시간 디지털 시계를 헤더에 넣어 데스크 시계처럼도 쓸 수 있게 했다.
+--------------------------------------------------*/
+function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange }) {
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+  const parseValidDate = (s) => {
+    const d = s ? new Date(s) : null;
+    return d && !isNaN(d.getTime()) ? d : null;
+  };
+
+  const [viewDate, setViewDate] = React.useState(() => parseValidDate(pickupDate) || parseValidDate(dropDate) || new Date());
+  const [target, setTarget] = React.useState("pickup"); // "pickup" | "drop" — 달력 클릭 시 어느 필드에 반영할지
+  const [clock, setClock] = React.useState(() => new Date());
+
+  React.useEffect(() => {
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // 상차일이 바뀌면(폼에서 직접 입력해도) 그 달로 자동으로 이동해서, 별도
+  // 조작 없이도 방금 고른 날짜가 바로 달력에 보이게 한다.
+  React.useEffect(() => {
+    const d = parseValidDate(pickupDate);
+    if (!d) return;
+    setViewDate((prev) => (prev.getFullYear() === d.getFullYear() && prev.getMonth() === d.getMonth()) ? prev : d);
+  }, [pickupDate]);
+
+  const viewYear = viewDate.getFullYear();
+  const viewMonth = viewDate.getMonth();
+  const now = new Date();
+  const todayStr = fmt(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const goMonth = (delta) => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
+
+  const handlePick = (dateStr) => {
+    if (target === "pickup") onPickupChange?.(dateStr);
+    else onDropChange?.(dateStr);
+  };
+
+  const clockStr = `${pad2(clock.getHours())}:${pad2(clock.getMinutes())}:${pad2(clock.getSeconds())}`;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
+      {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
+      <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
+        <div>
+          <div className="text-[10px] text-white/50 font-semibold tracking-widest">TODAY</div>
+          <div className="text-[13px] text-white font-bold">{todayStr}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] text-white/50 font-semibold tracking-widest">TIME</div>
+          <div className="text-[20px] font-black text-white leading-none tabular-nums" style={{ fontFamily: "'DM Mono','Consolas',monospace" }}>
+            {clockStr}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto min-h-0">
+        {/* 상차일/하차일 선택 대상 토글 — 누른 상태에서 달력 날짜를 클릭하면 그 필드에 반영 */}
+        <div className="grid grid-cols-2 gap-2 shrink-0">
+          <button type="button" onClick={() => setTarget("pickup")}
+            className={`rounded-xl py-2 text-[12px] font-bold border transition flex items-center justify-center gap-1.5 ${
+              target === "pickup" ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}>
+            <span className="w-4 h-4 rounded-full bg-white text-[#1B2B4B] text-[9px] font-black flex items-center justify-center leading-none shrink-0" style={{ opacity: target === "pickup" ? 1 : 0.6 }}>상</span>
+            상차일{pickupDate ? ` · ${pickupDate.slice(5).replace("-", "/")}` : " 선택"}
+          </button>
+          <button type="button" onClick={() => setTarget("drop")}
+            className={`rounded-xl py-2 text-[12px] font-bold border transition flex items-center justify-center gap-1.5 ${
+              target === "drop" ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}>
+            <span className="w-4 h-4 rounded-full bg-white text-[#1B2B4B] text-[9px] font-black flex items-center justify-center leading-none shrink-0" style={{ opacity: target === "drop" ? 1 : 0.6 }}>하</span>
+            하차일{dropDate ? ` · ${dropDate.slice(5).replace("-", "/")}` : " 선택"}
+          </button>
+        </div>
+
+        {/* 달력 */}
+        <div className="bg-white border border-gray-100 rounded-xl p-3 flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <button type="button" onClick={() => goMonth(-1)}
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-base font-bold">‹</button>
+            <div className="text-[13px] font-bold text-[#1B2B4B]">{viewYear}년 {viewMonth + 1}월</div>
+            <button type="button" onClick={() => goMonth(1)}
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#1B2B4B] text-base font-bold">›</button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 mb-1 shrink-0">
+            {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
+              <div key={w} className={`text-center text-[10px] font-bold py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{w}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1 flex-1">
+            {cells.map((d, i) => {
+              if (d == null) return <div key={i} />;
+              const dateStr = fmt(viewYear, viewMonth, d);
+              const isPickup = dateStr === pickupDate;
+              const isDrop = dateStr === dropDate;
+              const isMarked = isPickup || isDrop;
+              const isToday = dateStr === todayStr;
+              const dow = new Date(viewYear, viewMonth, d).getDay();
+              const holidayName = KOREAN_HOLIDAYS[dateStr];
+              const isSunday = dow === 0;
+              const isSaturday = dow === 6;
+              const numberCls = isMarked
+                ? "text-white"
+                : holidayName || isSunday ? "text-red-500"
+                : isSaturday ? "text-blue-500"
+                : "text-gray-700";
+              return (
+                <button key={i} type="button" title={holidayName || undefined}
+                  onClick={() => handlePick(dateStr)}
+                  className={`min-h-[44px] rounded-lg text-[12px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 ${
+                    isMarked ? "bg-[#1B2B4B]" :
+                    isToday ? "border-2 border-[#1B2B4B]" :
+                    "hover:bg-gray-100"
+                  }`}
+                >
+                  <span className={numberCls}>{d}</span>
+                  {holidayName && (
+                    <span className={`text-[7px] leading-none font-bold whitespace-nowrap ${isMarked ? "text-white/80" : "text-red-400"}`}>
+                      {shortHolidayLabel(holidayName)}
+                    </span>
+                  )}
+                  {isMarked && (
+                    <span className="flex gap-0.5">
+                      {isPickup && <span className="w-3 h-3 rounded-full bg-white text-[#1B2B4B] text-[7px] font-black flex items-center justify-center leading-none">상</span>}
+                      {isDrop && <span className="w-3 h-3 rounded-full border border-white text-white text-[7px] font-black flex items-center justify-center leading-none">하</span>}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100 shrink-0">
+            <button type="button" onClick={() => setViewDate(new Date())} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">오늘로 이동</button>
+            <div className="flex items-center gap-2 text-[10px] font-semibold text-gray-400">
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />상차일</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#1B2B4B]" />하차일</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 오더에 저장된 특수운임(연휴·성수기) 여부를 판단한다. 이 기능이 추가되기 전에
+// 이미 등록돼있던 오더는 이 필드 자체가 없는데, 그런 오더도 상차일을 공휴일
+// 캘린더에 다시 대조해서 특수일이면 특수운임으로 취급한다(StandardFare.jsx의
+// isSpecialDemandRow와 동일한 판단 기준).
+function isSpecialDemandOrder(r) {
+  if (r?.특수운임 === true) return true;
+  if (r?.특수운임 === false) return false;
+  return !!specialDemandInfo(r?.상차일)?.special;
+}
+
 // 스케줄표 안에서 상세정보(기사용) 카드로 보여줄 때 쓰는 담당자 한 줄 표시.
 // 이름/번호 중 있는 것만 붙이고, 번호는 항상 하이픈을 채워서 보여준다.
 function _scheduleContactLine(name, phone) {
@@ -8000,7 +8167,7 @@ const similarAll = (dispatchData || []).filter(r =>
   r.청구운임 &&
   r.기사운임
 );
-const similarNormal = similarAll.filter(r => !r.특수운임);
+const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
 const similar = similarNormal.length > 0 ? similarNormal : similarAll;
 const excludedSpecialCount = similarAll.length - similar.length;
 
@@ -8094,7 +8261,7 @@ React.useEffect(() => {
   );
   // ⭐ 연휴·성수기 특수운임 건은 "기존보다 높음/낮음" 비교 기준에서도 제외한다
   // (해당 건들만 있는 경우엔 어쩔 수 없이 그대로 사용).
-  const similarNormal = similarAll.filter(r => !r.특수운임);
+  const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
   const similar = similarNormal.length > 0 ? similarNormal : similarAll;
 
   if (similar.length === 0) {
@@ -11856,23 +12023,26 @@ className={`
             연휴 직전 등 일시적으로 오른 운임이 "평소 시세"처럼 참조되지 않는다.
             ⚠️ 별도 grid 칸을 새로 차지하면 뒤 필드들이 한 줄씩 밀려버려서, 기존
             칸 배치를 안 건드리고 청구운임 라벨 줄 안에 작은 칩으로 끼워 넣는다. */}
+        {/* ⚠️ 이전엔 체크 시 "· 사유" 텍스트가 붙어서 칩 너비 자체가 늘어나며
+            자리가 옮겨 보이는 문제가 있었다 — 너비를 고정하고, 상태에 따라
+            색만(회색↔네이비) 바뀌게 해서 체크해도 위치가 절대 안 움직인다.
+            사유는 title 툴팁으로만 보여준다. */}
         <label
           onClick={(e) => e.stopPropagation()}
-          className={`ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border cursor-pointer select-none text-[10.5px] font-bold normal-case transition-colors ${
+          className={`ml-auto inline-flex items-center justify-center gap-1 w-[84px] shrink-0 px-1.5 py-1 rounded-md border cursor-pointer select-none text-[10.5px] font-bold normal-case transition-colors ${
             form.특수운임
-              ? "bg-orange-50 border-orange-300 text-orange-700"
-              : "bg-gray-50 border-gray-200 text-gray-400"
+              ? "bg-[#1B2B4B] border-[#1B2B4B] text-white"
+              : "bg-white border-gray-300 text-gray-400"
           }`}
-          title="연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다."
+          title={`연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다.${form.특수운임 && form.특수운임사유 ? `\n(${form.특수운임사유})` : ""}`}
         >
           <input
             type="checkbox"
-            className="accent-orange-500 w-3 h-3"
+            className="accent-[#1B2B4B] w-3 h-3 shrink-0"
             checked={!!form.특수운임}
             onChange={(e) => onChange("특수운임", e.target.checked)}
           />
           특수운임
-          {form.특수운임 && form.특수운임사유 && ` · ${form.특수운임사유}`}
         </label>
       </div>
 
@@ -13717,117 +13887,13 @@ className={`
     {renderForm()}
   </div>
 
-  {/* 오른쪽: Today 패널 */}
-  <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
-    {/* 헤더 */}
-    <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
-      <div>
-        <div className="text-[10px] text-white/50 font-semibold tracking-widest">TODAY</div>
-        <div className="text-[13px] text-white font-bold">{today}</div>
-      </div>
-      <div className="text-right">
-        <div className="text-[10px] text-white/50 font-semibold">배차 진행률</div>
-        <div className="flex items-baseline gap-0.5 justify-end">
-          <span className="text-[26px] font-black text-white leading-none">{rate}</span>
-          <span className="text-[13px] font-bold text-white/50">%</span>
-        </div>
-      </div>
-    </div>
-    {/* 진행률 바 */}
-    <div className="w-full h-1 bg-gray-200 shrink-0">
-      <div className="h-full bg-[#1B2B4B] transition-all duration-1000" style={{ width: `${rate}%` }} />
-    </div>
-
-    <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto">
-      {/* 상태 3개 */}
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: "배차중", val: doing, dot: "bg-[#1B2B4B]", pulse: doing > 0, list: doingList },
-          { label: "미배차", val: pending, dot: "bg-gray-400", pulse: false, list: pendingList },
-          { label: "긴급", val: urgentList.length, dot: "bg-red-500", pulse: urgentList.length > 0, list: urgentList },
-        ].map(({ label, val, dot, pulse, list }) => (
-          <button key={label} type="button"
-            onClick={() => setStatusPopup({ title: `${label} 리스트`, list })}
-            className="bg-white border border-gray-100 rounded-xl p-3 text-center hover:shadow-sm transition">
-            <div className={`w-2 h-2 rounded-full ${dot} ${pulse ? "animate-pulse" : ""} mx-auto mb-1.5`} />
-            <div className="text-[24px] font-black text-[#1B2B4B] leading-none">{val}</div>
-            <div className="text-[11px] text-gray-500 font-semibold mt-1">{label}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* KPI 4개 */}
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          { label: "총 오더", val: total, unit: "건" },
-          { label: "완료", val: done, unit: "건" },
-          { label: "기사수", val: driverCount, unit: "명" },
-          { label: "진행중", val: doing, unit: "건" },
-        ].map(({ label, val, unit }) => (
-          <div key={label} className="bg-white border border-gray-100 rounded-xl py-3 px-3 text-center">
-            <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-none">
-              {val}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">{unit}</span>
-            </div>
-            <div className="text-[11px] text-gray-500 font-semibold mt-1">{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* 오늘 운임 */}
-      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-gray-50">
-          <span className="text-[13px] font-bold text-[#1B2B4B]">오늘 운임</span>
-        </div>
-        {[
-          { label: "청구", val: todayRevenue },
-          { label: "기사비용", val: todayDriverCost },
-          { label: "수수료", val: todayRevenue - todayDriverCost },
-        ].map(({ label, val }) => (
-          <div key={label} className="px-4 py-2.5 flex justify-between items-center border-b border-gray-50 last:border-0">
-            <span className="text-[12px] text-gray-500 font-medium">{label}</span>
-            <span className="text-[14px] font-bold text-[#1B2B4B] tabular-nums">
-              {val.toLocaleString()}<span className="text-gray-400 font-normal text-[11px] ml-0.5">원</span>
-            </span>
-          </div>
-        ))}
-        <div className="px-4 py-3 bg-[#1B2B4B] flex justify-between items-center">
-          <span className="text-[12px] text-white/60 font-semibold">마진율</span>
-          <span className="text-[18px] font-black text-white">{todayMarginRate.toFixed(1)}%</span>
-        </div>
-      </div>
-
-      {/* 거래처 TOP 5 */}
-      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden flex-1 flex flex-col">
-        <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between shrink-0">
-          <span className="text-[13px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
-          <span className="text-[11px] text-gray-400 font-medium">오늘 오더</span>
-        </div>
-        <div className="px-2 py-2 flex-1 flex flex-col justify-center">
-          {(() => {
-            const counts = {};
-            todayRows.forEach(r => { const name = r.거래처명?.trim(); if (name) counts[name] = (counts[name] || 0) + 1; });
-            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-            if (sorted.length === 0) return <div className="text-center py-4 text-[12px] text-gray-400">오늘 오더 없음</div>;
-            const chartData = sorted.map(([name, value]) => ({ name: name.length > 5 ? name.slice(0, 5) + "…" : name, value }));
-            return (
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={chartData} margin={{ top: 16, right: 4, left: 4, bottom: 28 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#1B2B4B", fontWeight: 700 }} interval={0} />
-                  <YAxis hide />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={36}>
-                    {chartData.map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296"} />
-                    ))}
-                    <LabelList dataKey="value" position="top" formatter={v => `${v}건`} style={{ fontSize: 9, fill: "#6b7280", fontWeight: 600 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            );
-          })()}
-        </div>
-      </div>
-    </div>
-  </div>
+  {/* 오른쪽: 상/하차일 캘린더 패널 (기존 Today 통계패널 자리를 대체) */}
+  <OrderCalendarPanel
+    pickupDate={form.상차일 || ""}
+    dropDate={form.하차일 || ""}
+    onPickupChange={(v) => onChange("상차일", v)}
+    onDropChange={(v) => onChange("하차일", v)}
+  />
 </div>
 {/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}
 {contactPopup && (() => {
