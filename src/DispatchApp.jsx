@@ -31,6 +31,7 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
+import RouteMapModal from "./RouteMapModal";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -571,6 +572,69 @@ function _parseWorkDates(v) {
       return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]).filter(Boolean).sort();
   }
   return [];
+}
+
+// ⭐ 오늘/미래 날짜에 완전히 동일한 오더가 이미 등록돼 있는지 확인한다. 저장을
+// 막는 하드 체크가 아니라, 여러 담당자가 같은 오더를 모르고 중복 등록하는 것을
+// 막기 위한 안내용 알림에 쓰인다(PC/모바일 공용 로직 — 두 파일에 각각 둔다).
+// 상차일·상차지명·하차지명·청구운임이 모두 같으면 "완전히 같은 오더"로
+// 간주한다(취소 처리된 오더는 검사 대상에서 제외).
+function findDuplicateOrders(form, existingRows) {
+  if (!form?.상차일 || !form?.상차지명 || !form?.하차지명) return [];
+  const todayKst = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (form.상차일 < todayKst) return [];
+  const norm = (s) => String(s || "").replace(/\s+/g, "").trim();
+  const formSale = String(form.청구운임 || "").replace(/[^\d]/g, "");
+  return (existingRows || []).filter((r) => {
+    if (!r || (form._id && r._id === form._id)) return false; // 수정 중인 자기 자신 제외
+    if (r.배차상태 === "배차취소") return false;
+    if ((r.상차일 || "") !== form.상차일) return false;
+    if (norm(r.상차지명) !== norm(form.상차지명)) return false;
+    if (norm(r.하차지명) !== norm(form.하차지명)) return false;
+    if (String(r.청구운임 || "").replace(/[^\d]/g, "") !== formSale) return false;
+    return true;
+  });
+}
+
+// ⭐ 중복 오더 알림 팝업 — 저장을 막지 않고 "취소"/"그래도 등록" 중 선택하게 한다.
+// 알록달록한 경고색 대신, 프로그램 전체 톤(네이비 헤더 + 무채색)에 맞춘 디자인.
+function DuplicateOrderModal({ matches, onCancel, onProceed }) {
+  if (!matches || !matches.length) return null;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999999] p-4" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4">
+          <div className="text-white font-bold text-[14px]">중복 등록 확인</div>
+          <div className="text-white/60 text-[11px] mt-0.5">같은 조건의 오더가 이미 등록되어 있습니다</div>
+        </div>
+        <div className="px-5 py-4 space-y-3 max-h-[45vh] overflow-y-auto">
+          <p className="text-[13px] text-gray-600 leading-relaxed">
+            같은 날짜·상하차지·운임의 오더가 아래처럼 이미 등록돼 있습니다. 다른 담당자가 먼저 등록했을 수도 있으니 확인 후 진행해 주세요.
+          </p>
+          {matches.slice(0, 5).map((r, i) => (
+            <div key={r._id || i} className="border border-gray-200 rounded-lg px-3 py-2.5 text-[12px] space-y-1 bg-gray-50">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-[#1B2B4B]">{r.상차일}</span>
+                <span className="text-gray-500">{r.배차상태 || "-"}</span>
+              </div>
+              <div className="text-gray-700 font-semibold">{r.상차지명} → {r.하차지명}</div>
+              <div className="flex justify-between text-gray-500">
+                <span>{r.차량번호 ? `${r.차량번호} · ${r.이름 || ""}` : "미배차"}</span>
+                <span className="font-semibold text-gray-700">{Number(r.청구운임 || 0).toLocaleString()}원</span>
+              </div>
+            </div>
+          ))}
+          {matches.length > 5 && (
+            <div className="text-[11px] text-gray-400 text-center">외 {matches.length - 5}건 더 있음</div>
+          )}
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-600 font-bold text-[13px] hover:bg-gray-50 transition">취소</button>
+          <button type="button" onClick={onProceed} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] transition">그래도 등록</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // 스케줄표 안에서 상세정보(기사용) 카드로 보여줄 때 쓰는 담당자 한 줄 표시.
@@ -3771,12 +3835,16 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
       <span className={`text-gray-900 font-semibold ${wrap ? "break-words max-w-[380px]" : "whitespace-nowrap"}`}>{value || "-"}</span>
     </div>
   );
-  const Section = ({ title, children }) => (
+  const Section = ({ title, action, children }) => (
     <div>
-      <div className="text-[11px] font-extrabold text-gray-600 uppercase tracking-wider mb-1.5">{title}</div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[11px] font-extrabold text-gray-600 uppercase tracking-wider">{title}</div>
+        {action}
+      </div>
       <div className="bg-gray-50 border border-gray-100 rounded-lg px-4 py-3 space-y-1.5">{children}</div>
     </div>
   );
+  const [showRouteMap, setShowRouteMap] = React.useState(false);
   // ⭐ 상/하차지에 등록된 휴게(점심)시간 — 그 거래처가 실제로 점심시간을 설정해둔
   // 경우에만 표시된다(설정 안 한 거래처는 아예 행 자체가 안 뜸).
   const pickupLunch = lunchByName?.get(_lunchNameKey(row.상차지명));
@@ -3851,7 +3919,18 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
             </Section>
           )}
           {row.상차지주소 && row.하차지주소 && (
-            <Section title="이동 정보">
+            <Section
+              title="이동 정보"
+              action={routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
+                <button
+                  type="button"
+                  onClick={() => setShowRouteMap(true)}
+                  className="px-2 py-0.5 text-[11px] font-bold rounded border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
+                >
+                  경로보기
+                </button>
+              )}
+            >
               {routeInfo === "loading" ? (
                 <div className="text-[13px] text-gray-500">거리·시간 조회 중...</div>
               ) : routeInfo === "error" || !routeInfo ? (
@@ -3863,6 +3942,17 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
                 </>
               )}
             </Section>
+          )}
+          {showRouteMap && (
+            <RouteMapModal
+              pickupAddr={row.상차지주소}
+              dropAddr={row.하차지주소}
+              pickupName={row.상차지명}
+              dropName={row.하차지명}
+              viaPickup={pickupStops.map((s) => s.주소).filter(Boolean)}
+              viaDrop={dropStops.map((s) => s.주소).filter(Boolean)}
+              onClose={() => setShowRouteMap(false)}
+            />
           )}
           <Section title="화물 정보">
             <Row label={hasWaypointCargo ? "총화물내용" : "화물내용"} value={mergedCargo || row.화물내용} />
@@ -6731,6 +6821,7 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
       const [areaFareHint, setAreaFareHint] = React.useState(null);
       const [distanceFareEstimate, setDistanceFareEstimate] = React.useState(null);
+      const [showFareRouteMap, setShowFareRouteMap] = React.useState(false); // ⭐ 운임추천 바 "경로보기"
       const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
@@ -8611,6 +8702,16 @@ const [fareCompare, setFareCompare] = React.useState({
   driver: null,
 });
 const [isSaving, setIsSaving] = React.useState(false);
+// ⭐ 완전히 동일한 오더 중복 등록 알림 — 저장을 막지는 않고, 사용자가 직접
+// 판단할 수 있게 알림창만 띄운다(계속 등록/취소 선택). dupOrderResolveRef에
+// Promise의 resolve를 담아두고, 모달에서 선택하면 그 resolve를 호출해 대기 중이던
+// doSave의 await를 재개시킨다.
+const [dupOrderMatches, setDupOrderMatches] = React.useState(null);
+const dupOrderResolveRef = React.useRef(null);
+const confirmDuplicateOrder = (matches) => new Promise((resolve) => {
+  dupOrderResolveRef.current = resolve;
+  setDupOrderMatches(matches);
+});
 const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
 const [orderDates, setOrderDates] = React.useState([]); // 오더별 개별 상차일
 const [orderDropDates, setOrderDropDates] = React.useState([]); // 오더별 개별 하차일
@@ -9791,6 +9892,15 @@ showAlert(
 );
     setIsSaving(false);
     return;
+  }
+
+  // ⭐ 완전히 동일한 오더 중복 등록 알림 — 저장을 막지는 않고, 이미 같은 조건의
+  // 오더가 등록돼 있으면 알려서 사용자가 직접 판단하게 한다(여러 담당자가 같은
+  // 오더를 모르고 중복 등록하는 것을 방지). "그래도 등록"을 누르면 계속 진행.
+  const dupOrders = findDuplicateOrders(form, dispatchData);
+  if (dupOrders.length > 0) {
+    const proceed = await confirmDuplicateOrder(dupOrders);
+    if (!proceed) { setIsSaving(false); return; }
   }
 
 const status = form.지급방식 === "취소"
@@ -11396,9 +11506,29 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
           티맵 {distanceFareEstimate.distance}km 기준 {distanceFareEstimate.min.toLocaleString()}~{distanceFareEstimate.max.toLocaleString()}원
         </span>
       )}
+      {form.상차지주소 && form.하차지주소 && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setShowFareRouteMap(true); }}
+          className="ml-2 px-2 py-0.5 text-[11px] font-bold rounded border border-white/30 text-white hover:bg-white/10 transition shrink-0"
+        >
+          경로보기
+        </button>
+      )}
     </div>
   )}
 </div>
+{showFareRouteMap && (
+  <RouteMapModal
+    pickupAddr={form.상차지주소}
+    dropAddr={form.하차지주소}
+    pickupName={form.상차지명}
+    dropName={form.하차지명}
+    viaPickup={(form.경유상차목록 || []).map((s) => s.주소).filter(Boolean)}
+    viaDrop={(form.경유하차목록 || []).map((s) => s.주소).filter(Boolean)}
+    onClose={() => setShowFareRouteMap(false)}
+  />
+)}
   <div className="w-px h-7 bg-gray-200" />
   {/* 날짜 시간 ▼ */}
 <div className="flex items-center gap-3 text-sm">
@@ -14344,6 +14474,13 @@ className={`
     companyName={userCompany || localStorage.getItem("userCompany") || "돌캐"}
   />
 </div>
+{dupOrderMatches && (
+  <DuplicateOrderModal
+    matches={dupOrderMatches}
+    onCancel={() => { dupOrderResolveRef.current?.(false); setDupOrderMatches(null); }}
+    onProceed={() => { dupOrderResolveRef.current?.(true); setDupOrderMatches(null); }}
+  />
+)}
 {/* ================= 담당자 선택 팝업 (가로 3단 배치) ================= */}
 {contactPopup && (() => {
   const _contactNorm = (s = "") => String(s || "").trim().toLowerCase();

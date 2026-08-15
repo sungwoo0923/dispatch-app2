@@ -7,6 +7,7 @@ import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
 import CustomDatePicker from "../CustomDatePicker";
+import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import { createPortal } from "react-dom";
@@ -521,6 +522,72 @@ function MobilePagination({ page, total, onChange }) {
           className={`w-7 h-7 rounded-full text-xs font-semibold ${p === page ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}
         >{p}</button>
       ))}
+    </div>
+  );
+}
+
+// ⭐ 오늘/미래 날짜에 완전히 동일한 오더가 이미 등록돼 있는지 확인한다. 저장을
+// 막는 하드 체크가 아니라, 여러 담당자가 같은 오더를 모르고 중복 등록하는 것을
+// 막기 위한 안내용 알림에 쓰인다(PC DispatchApp.jsx의 findDuplicateOrders와
+// 동일한 로직). 상차일·상차지명·하차지명·청구운임이 모두 같으면 "완전히 같은
+// 오더"로 간주한다(취소 처리된 오더는 검사 대상에서 제외).
+function findDuplicateOrders(form, existingRows) {
+  if (!form?.상차일 || !form?.상차지명 || !form?.하차지명) return [];
+  const todayKst = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (form.상차일 < todayKst) return [];
+  const norm = (s) => String(s || "").replace(/\s+/g, "").trim();
+  const formSale = String(form.청구운임 || "").replace(/[^\d]/g, "");
+  return (existingRows || []).filter((r) => {
+    if (!r || (form._id && (r._id === form._id || r.id === form._id))) return false;
+    if (r.배차상태 === "배차취소") return false;
+    if ((r.상차일 || "") !== form.상차일) return false;
+    if (norm(r.상차지명) !== norm(form.상차지명)) return false;
+    if (norm(r.하차지명) !== norm(form.하차지명)) return false;
+    if (String(r.청구운임 || "").replace(/[^\d]/g, "") !== formSale) return false;
+    return true;
+  });
+}
+
+// ⭐ 중복 오더 알림 팝업 — 저장을 막지 않고 "취소"/"그래도 등록" 중 선택하게 한다.
+// 모바일 다른 팝업들과 동일한 하단 시트(bottom sheet) 형태, 알록달록한 경고색 없이
+// 네이비 헤더 + 무채색으로 통일.
+function MobileDuplicateOrderModal({ matches, onCancel, onProceed }) {
+  if (!matches || !matches.length) return null;
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-end bg-black/50" onClick={onCancel}>
+      <div className="w-full bg-white rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl shrink-0">
+          <div className="text-white font-bold text-[15px]">중복 등록 확인</div>
+          <div className="text-white/60 text-[12px] mt-0.5">같은 조건의 오더가 이미 등록되어 있습니다</div>
+        </div>
+        <div className="overflow-y-auto px-4 pt-4 pb-2 flex-1">
+          <p className="text-[13px] text-gray-600 leading-relaxed mb-3">
+            같은 날짜·상하차지·운임의 오더가 아래처럼 이미 등록돼 있습니다. 다른 담당자가 먼저 등록했을 수도 있으니 확인 후 진행해 주세요.
+          </p>
+          <div className="space-y-2">
+            {matches.slice(0, 5).map((r, i) => (
+              <div key={r._id || r.id || i} className="border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] space-y-1 bg-gray-50">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-[#1B2B4B]">{r.상차일}</span>
+                  <span className="text-gray-500">{r.배차상태 || "-"}</span>
+                </div>
+                <div className="text-gray-700 font-semibold">{r.상차지명} → {r.하차지명}</div>
+                <div className="flex justify-between text-gray-500">
+                  <span>{r.차량번호 ? `${r.차량번호} · ${r.이름 || r.기사명 || ""}` : "미배차"}</span>
+                  <span className="font-semibold text-gray-700">{Number(r.청구운임 || 0).toLocaleString()}원</span>
+                </div>
+              </div>
+            ))}
+            {matches.length > 5 && (
+              <div className="text-[11px] text-gray-400 text-center py-1">외 {matches.length - 5}건 더 있음</div>
+            )}
+          </div>
+        </div>
+        <div className="px-4 pb-6 pt-3 shrink-0 flex gap-2">
+          <button type="button" onClick={onCancel} className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-600 font-bold text-[14px]">취소</button>
+          <button type="button" onClick={onProceed} className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white font-bold text-[14px]">그래도 등록</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2913,6 +2980,15 @@ const groupedByDate = useMemo(() => {
   // 등록 완료 후 간단한 요약 팝업에 띄울 정보
   const [registeredSummary, setRegisteredSummary] = useState(null);
 
+  // ⭐ 완전히 동일한 오더 중복 등록 알림 — 저장을 막지는 않고, 사용자가 직접
+  // 판단할 수 있게 알림창만 띄운다(계속 등록/취소 선택).
+  const [dupOrderMatches, setDupOrderMatches] = useState(null);
+  const dupOrderResolveRef = useRef(null);
+  const confirmDuplicateOrder = (matches) => new Promise((resolve) => {
+    dupOrderResolveRef.current = resolve;
+    setDupOrderMatches(matches);
+  });
+
   // --------------------------------------------------
   // 5. 저장 / 수정
   // --------------------------------------------------
@@ -3069,6 +3145,14 @@ const groupedByDate = useMemo(() => {
       return;
     }
 
+    // ⭐ 완전히 동일한 오더 중복 등록 알림 — 저장을 막지는 않고, 이미 같은 조건의
+    // 오더가 등록돼 있으면 알려서 사용자가 직접 판단하게 한다(여러 담당자가 같은
+    // 오더를 모르고 중복 등록하는 것을 방지). "그래도 등록"을 누르면 계속 진행.
+    const dupOrders = findDuplicateOrders(docData, orders);
+    if (dupOrders.length > 0) {
+      const proceed = await confirmDuplicateOrder(dupOrders);
+      if (!proceed) return;
+    }
 
     // 🔹 신규 등록 — PC 배차관리와 동일하게 수량(multiCount)만큼 등록하고,
     // "날짜 개별 설정"이 켜져 있으면 건별로 지정한 상/하차일을 사용한다.
@@ -4942,6 +5026,14 @@ setOpenMemo={setOpenMemo}
             setOrderDates={setOrderDates}
             orderDropDates={orderDropDates}
             setOrderDropDates={setOrderDropDates}
+          />
+        )}
+
+        {dupOrderMatches && (
+          <MobileDuplicateOrderModal
+            matches={dupOrderMatches}
+            onCancel={() => { dupOrderResolveRef.current?.(false); setDupOrderMatches(null); }}
+            onProceed={() => { dupOrderResolveRef.current?.(true); setDupOrderMatches(null); }}
           />
         )}
 
@@ -7418,6 +7510,29 @@ function CardAttachViewer({ order, onClose }) {
 // 모바일 오더정보 모달
 // ────────────────────────────────────────────────────────────────
 function MobileOrderInfoModal({ order: row, onClose }) {
+  // ⭐ 상/하차지 예상 이동거리·시간 — PC 오더정보 팝업과 동일하게 조회한다.
+  const [routeInfo, setRouteInfo] = useState(null); // { distanceKm, durationText } | "loading" | "error"
+  const [showRouteMap, setShowRouteMap] = useState(false);
+  useEffect(() => {
+    if (!row?.상차지주소 || !row?.하차지주소) { setRouteInfo(null); return; }
+    let cancelled = false;
+    setRouteInfo("loading");
+    fetch(`${(import.meta.env.VITE_API_BASE || "")}/api/route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromAddr: row.상차지주소, toAddr: row.하차지주소 }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled) return;
+        const km = Number(data?.distanceKm);
+        if (!km) { setRouteInfo("error"); return; }
+        setRouteInfo({ distanceKm: km, durationText: data?.durationText || (data?.durationMin ? `${data.durationMin}분` : "-") });
+      })
+      .catch(() => { if (!cancelled) setRouteInfo("error"); });
+    return () => { cancelled = true; };
+  }, [row?.상차지주소, row?.하차지주소]);
+
   if (!row) return null;
   const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
@@ -7428,9 +7543,12 @@ function MobileOrderInfoModal({ order: row, onClose }) {
       <span className="text-gray-800 break-all">{value}</span>
     </div>
   ) : null;
-  const Section = ({ title, children }) => (
+  const Section = ({ title, action, children }) => (
     <div className="mb-4">
-      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">{title}</div>
+      <div className="flex items-center justify-between mb-1.5 px-1">
+        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{title}</div>
+        {action}
+      </div>
       <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2">{children}</div>
     </div>
   );
@@ -7455,6 +7573,31 @@ function MobileOrderInfoModal({ order: row, onClose }) {
             <InfoRow label="주소" value={row.하차지주소} />
             <InfoRow label="하차시간" value={row.하차시간 ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}` : null} />
           </Section>
+          {row.상차지주소 && row.하차지주소 && (
+            <Section
+              title="이동 정보"
+              action={routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
+                <button
+                  type="button"
+                  onClick={() => setShowRouteMap(true)}
+                  className="px-2 py-0.5 text-[11px] font-bold rounded border border-[#1B2B4B] text-[#1B2B4B]"
+                >
+                  경로보기
+                </button>
+              )}
+            >
+              {routeInfo === "loading" ? (
+                <div className="text-[13px] text-gray-400 py-1">거리·시간 조회 중...</div>
+              ) : routeInfo === "error" || !routeInfo ? (
+                <div className="text-[13px] text-gray-400 py-1">거리·시간 정보를 가져올 수 없습니다</div>
+              ) : (
+                <>
+                  <InfoRow label="예상거리" value={`${routeInfo.distanceKm.toFixed(1)} km`} />
+                  <InfoRow label="예상시간" value={routeInfo.durationText} />
+                </>
+              )}
+            </Section>
+          )}
           <Section title="화물 정보">
             <InfoRow label="화물내용" value={row.화물내용} />
             <InfoRow label="화물톤수" value={row.차량톤수} />
@@ -7481,6 +7624,15 @@ function MobileOrderInfoModal({ order: row, onClose }) {
           <button className="w-full py-3.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[14px]" onClick={onClose}>닫기</button>
         </div>
       </div>
+      {showRouteMap && (
+        <RouteMapModal
+          pickupAddr={row.상차지주소}
+          dropAddr={row.하차지주소}
+          pickupName={row.상차지명}
+          dropName={row.하차지명}
+          onClose={() => setShowRouteMap(false)}
+        />
+      )}
     </div>
   );
 }
@@ -8599,6 +8751,7 @@ function MobileOrderDetail({
       .catch(() => { if (!cancelled) setRouteInfo("error"); });
     return () => { cancelled = true; };
   }, [order?.상차지주소, order?.하차지주소]);
+  const [showRouteMap, setShowRouteMap] = useState(false); // ⭐ 상세보기 "경로보기"
   const [isNewDriver, setIsNewDriver] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
   const [attachItems, setAttachItems] = useState([]);
@@ -9445,12 +9598,28 @@ const handleAssignClick = () => {
                   <>
                     <span>{routeInfo.distanceKm.toFixed(1)}km</span>
                     <span>{routeInfo.durationText}</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowRouteMap(true)}
+                      className={`ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded border ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
+                    >
+                      경로보기
+                    </button>
                   </>
                 )}
               </div>
             </div>
           </div>
         </div>
+      )}
+      {showRouteMap && (
+        <RouteMapModal
+          pickupAddr={order.상차지주소}
+          dropAddr={order.하차지주소}
+          pickupName={order.상차지명}
+          dropName={order.하차지명}
+          onClose={() => setShowRouteMap(false)}
+        />
       )}
     </div>
 
