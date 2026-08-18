@@ -1754,6 +1754,31 @@ function getNetRevenueExcludedNames(clientsList, placesList) {
   return Array.from(names);
 }
 
+// ⭐ 성능 최적화용 — isNetRevenueExcludedClient는 매번 clients/places 배열을
+// find()로 스캔해서 O(거래처 수)가 드는데, 매출관리처럼 수천 건의 오더를 한 건씩
+// 이 함수로 필터링하는 화면에서는 그게 O(오더 수 × 거래처 수)로 불어나 렉의 주범이
+// 된다. clients/places가 바뀔 때 딱 한 번만 이름→플래그 Map을 만들어두면, 이후
+// 오더 한 건당 조회는 O(1)로 끝난다. (기본거래처 플래그가 하차지거래처보다
+// 우선한다는 isNetRevenueExcludedClient의 규칙과 동일하게, clients를 나중에 덮어써
+// 우선순위를 맞춘다.)
+function buildNetRevenueExclusionLookup(clientsList, placesList) {
+  const map = new Map();
+  (placesList || []).forEach((p) => {
+    const nm = String(p.업체명 || "").trim();
+    if (nm && typeof p.순수매출제외 === "boolean") map.set(nm, p.순수매출제외);
+  });
+  (clientsList || []).forEach((c) => {
+    const nm = String(c.거래처명 || "").trim();
+    if (nm && typeof c.순수매출제외 === "boolean") map.set(nm, c.순수매출제외);
+  });
+  return (name) => {
+    const n = String(name || "").trim();
+    if (!n) return false;
+    if (map.has(n)) return map.get(n);
+    return LEGACY_NET_REVENUE_EXCLUDED_NAMES.some((x) => n.includes(x));
+  };
+}
+
 // 거래처/상하차지별로 "기사전달용" 복사 시 자동으로 함께 붙는 주의사항 문구.
 // 실제 값은 clients/places 문서의 기사전달주의사항 필드에 저장되며(오더메모와
 // 동일한 저장 구조 재사용), 여기서는 그 값이 아직 없을 때 편집 팝업에 채워줄
@@ -39176,6 +39201,13 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
   const [editingCell, setEditingCell] = React.useState(null); // { rowKey, month }
   const [importPreview, setImportPreview] = React.useState(null); // { parsed, fileName }
 
+  // ⭐ 성능 최적화 — clients/places가 바뀔 때만 이름→플래그 Map을 새로 만들어
+  // 월별 오더를 순수매출제외 여부로 분류할 때 매번 배열 스캔을 하지 않게 한다.
+  const isExcludedFast = React.useMemo(
+    () => buildNetRevenueExclusionLookup(clients, places),
+    [clients, places]
+  );
+
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 
   const MONTHS = ["01","02","03","04","05","06","07","08","09","10","11","12"];
@@ -39266,7 +39298,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
       const pay = String(r.지급방식 || "");
 
       // ── 매출 분류 ──
-      if (isNetRevenueExcludedClient(client, clients, places)) {
+      if (isExcludedFast(client)) {
         addRow("rev_fresh", month, sale, 0);
       } else if (pay === "선불" || pay === "착불") {
         const cashAmt = r.__isFixed ? (r.실수수료 || 0) : Math.max(0, sale - cost);
@@ -39278,7 +39310,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
       // ── 매출원가(기사운임) 분류 ──
       if (bm === "인성") {
         addRow("cost_auto", month, 0, cost);
-      } else if (isNetRevenueExcludedClient(client, clients, places)) {
+      } else if (isExcludedFast(client)) {
         addRow("cost_fresh", month, 0, cost);
       } else {
         addRow("cost_freight", month, 0, cost);
@@ -40679,7 +40711,12 @@ function pctStrToNum(s) {
   return isNaN(n) ? 0 : n;
 }
 
-function MonthCompareInsight({ rows = [] }) {
+// ⭐ monthA/monthB/setMonthA/setMonthB는 부모(Settlement)가 상태를 들고 있다가
+// 넘겨주는 controlled 방식이 기본이다 — 매출관리는 activeTab에 따라 이 탭을
+// 아예 안 그리므로(다른 탭으로 갔다 오면 이 컴포넌트 자체가 unmount/remount됨),
+// 선택한 월을 이 컴포넌트 내부 state로만 들고 있으면 탭을 옮길 때마다 초기화돼
+// 버린다. prop이 없을 때(다른 곳에서 재사용될 경우 대비)는 내부 state로 폴백한다.
+function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMonthAProp, monthB: monthBProp, setMonthB: setMonthBProp }) {
   const won = (n) => `${Math.round(n).toLocaleString()}원`;
   const pctStr = (a, b) => {
     if (!a) return b ? "+100.0%" : "0.0%";
@@ -40691,8 +40728,12 @@ function MonthCompareInsight({ rows = [] }) {
     return Array.from(new Set(rows.map((r) => (r.상차일 || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)))).sort();
   }, [rows]);
 
-  const [monthA, setMonthA] = React.useState("");
-  const [monthB, setMonthB] = React.useState("");
+  const [monthAState, setMonthAState] = React.useState("");
+  const [monthBState, setMonthBState] = React.useState("");
+  const monthA = monthAProp !== undefined ? monthAProp : monthAState;
+  const setMonthA = setMonthAProp || setMonthAState;
+  const monthB = monthBProp !== undefined ? monthBProp : monthBState;
+  const setMonthB = setMonthBProp || setMonthBState;
 
   React.useEffect(() => {
     if (!monthsAvail.length) return;
@@ -40836,6 +40877,20 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   );
   const [detailClient, setDetailClient] = React.useState(null);
   const [aiMode, setAiMode] = React.useState(null);
+  // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
+  // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
+  // Settlement가 들고 있는다.
+  const [aiCompareMonthA, setAiCompareMonthA] = React.useState("");
+  const [aiCompareMonthB, setAiCompareMonthB] = React.useState("");
+
+  // ⭐ 성능 최적화 — 이 화면은 오더 수천 건을 순수매출제외 여부로 여러 번 걸러내는데,
+  // 매번 clients/places 배열을 find()로 스캔하면 렉이 걸린다. clients/places가
+  // 실제로 바뀔 때만 이름→플래그 Map을 새로 만들고, 그 외 렌더(탭 전환, 월 변경
+  // 등)에서는 이미 만들어둔 O(1) 조회 함수를 재사용한다.
+  const isExcludedFast = React.useMemo(
+    () => buildNetRevenueExclusionLookup(clients, places),
+    [clients, places]
+  );
 
   const toInt = (v) =>
     parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -40892,23 +40947,29 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     prevMonthDate.getMonth() + 1
   ).padStart(2, "0")}`;
 
-  const dispatchRows = Array.isArray(dispatchData)
-    ? dispatchData
-        .filter((r) => (r.배차상태 || "") === "배차완료")
-        .map((r) => {
-          const sale = toInt(r.청구운임);
-          const driver = toInt(r.기사운임);
-          return {
-            ...r,
-            수수료:
-              r.수수료 !== undefined && r.수수료 !== null && String(r.수수료).trim() !== ""
-                ? toInt(r.수수료)
-                : Math.max(sale - driver, 0),
-          };
-        })
-    : [];
+  // ⭐ 성능 최적화 — dispatchData는 회사 전체 이력(수천 건)이라 이 매핑 자체가
+  // 무겁다. useMemo 없이 plain const로 두면 activeTab 전환·팝업 열기 등 이
+  // 컴포넌트의 모든 리렌더마다 다시 돌아서 렉의 큰 원인이 됐다. dispatchData/
+  // fixedRows가 실제로 바뀔 때만 다시 계산한다.
+  const dispatchRows = React.useMemo(() => (
+    Array.isArray(dispatchData)
+      ? dispatchData
+          .filter((r) => (r.배차상태 || "") === "배차완료")
+          .map((r) => {
+            const sale = toInt(r.청구운임);
+            const driver = toInt(r.기사운임);
+            return {
+              ...r,
+              수수료:
+                r.수수료 !== undefined && r.수수료 !== null && String(r.수수료).trim() !== ""
+                  ? toInt(r.수수료)
+                  : Math.max(sale - driver, 0),
+            };
+          })
+      : []
+  ), [dispatchData]);
 
-  const fixedMapped = (fixedRows || []).map((r) => {
+  const fixedMapped = React.useMemo(() => (fixedRows || []).map((r) => {
     const sale = toInt(r.청구운임);
     const driver = toInt(r.기사운임);
     const fee =
@@ -40925,9 +40986,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       수수료: fee,
       배차상태: "배차완료",
     };
-  });
+  }), [fixedRows]);
 
-  const rows = [...dispatchRows, ...fixedMapped];
+  const rows = React.useMemo(() => [...dispatchRows, ...fixedMapped], [dispatchRows, fixedMapped]);
 
   const allClients = React.useMemo(() => {
     return Array.from(
@@ -40948,7 +41009,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       .slice(0, 10);
   }, [clientSearch, allClients]);
 
-  const rangeRows = rows.filter((r) => {
+  const rangeRows = React.useMemo(() => rows.filter((r) => {
     if (!r.상차일) return false;
     const ym = r.상차일.slice(0, 7);
     if (ym < rangeStart || ym > rangeEnd) return false;
@@ -40962,7 +41023,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       if (!ok) return false;
     }
     return true;
-  });
+  }), [rows, rangeStart, rangeEnd, rangeClients]);
 
   const rangeMonthly = React.useMemo(() => {
     const map = {};
@@ -40983,44 +41044,49 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const rangeProfit = rangeSummary.fee;
   const rangeProfitRate = rangeSummary.sale === 0 ? 0 : (rangeSummary.fee / rangeSummary.sale) * 100;
 
-  const dayRows = rows.filter((r) => (r.상차일 || "") === kpiDay);
-  const monthRows = rows.filter((r) => (r.상차일 || "").startsWith(monthKey));
+  const dayRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "") === kpiDay), [rows, kpiDay]);
+  const monthRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthKey)), [rows, monthKey]);
 
   const startKey = `${yearKey}-01-01`;
   const endKey = `${targetMonth}-${String(new Date(yearKey, monthNum, 0).getDate()).padStart(2, "0")}`;
-  const yearRows = rows.filter((r) => {
+  const yearRows = React.useMemo(() => rows.filter((r) => {
     const d = r.상차일;
     if (!d) return false;
     return d >= startKey && d <= endKey;
-  });
+  }), [rows, startKey, endKey]);
 
-  const prevMonthRows = rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey));
+  const prevMonthRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey)), [rows, prevMonthKey]);
 
-  const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !isNetRevenueExcludedClient(c, clients, places);
-  const firstAppearMap = new Map();
-  rows.forEach((r) => {
-    const c = r.거래처명 || "";
-    const d = r.상차일 || "";
-    if (!isValidClientName(c) || !d) return;
-    if (!firstAppearMap.has(c) || d < firstAppearMap.get(c)) firstAppearMap.set(c, d);
-  });
+  const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !isExcludedFast(c);
+  // ⭐ firstAppearMap/newClients도 매번 전체 rows(수천 건)를 순회하는데, activeTab
+  // 전환 등 targetMonth와 무관한 리렌더에서는 다시 계산할 필요가 없다.
+  const { firstAppearMap, newClients } = React.useMemo(() => {
+    const map = new Map();
+    rows.forEach((r) => {
+      const c = r.거래처명 || "";
+      const d = r.상차일 || "";
+      if (!isValidClientName(c) || !d) return;
+      if (!map.has(c) || d < map.get(c)) map.set(c, d);
+    });
 
-  const basicClientNames = new Set((clients || []).map(c => (c.거래처명 || "").trim()).filter(Boolean));
-  const newClients = [];
-  firstAppearMap.forEach((firstDate, client) => {
-    if (firstDate.startsWith(monthKey) && basicClientNames.has(client.trim())) {
-      const clientRows = monthRows.filter((r) => r.거래처명 === client);
-      const sale = sum(clientRows, "청구운임");
-      const driver = sum(clientRows, "기사운임");
-      const fee = sum(clientRows, "수수료");
-      const profit = sale - driver;
-      newClients.push({ client, firstDate, cnt: clientRows.length, sale, profit, fee });
-    }
-  });
+    const basicNames = new Set((clients || []).map(c => (c.거래처명 || "").trim()).filter(Boolean));
+    const list = [];
+    map.forEach((firstDate, client) => {
+      if (firstDate.startsWith(monthKey) && basicNames.has(client.trim())) {
+        const clientRows = monthRows.filter((r) => r.거래처명 === client);
+        const sale = sum(clientRows, "청구운임");
+        const driver = sum(clientRows, "기사운임");
+        const fee = sum(clientRows, "수수료");
+        const profit = sale - driver;
+        list.push({ client, firstDate, cnt: clientRows.length, sale, profit, fee });
+      }
+    });
+    return { firstAppearMap: map, newClients: list };
+  }, [rows, clients, monthKey, monthRows, isExcludedFast]);
 
   const won = (n) => `${(n || 0).toLocaleString()}원`;
-  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients, places);
-  const isExcludedClient = (name = "") => isNetRevenueExcludedClient(name, clients, places);
+  const isFresh = (r) => isExcludedFast(r.거래처명);
+  const isExcludedClient = (name = "") => isExcludedFast(name);
   const excludedClientNames = getNetRevenueExcludedNames(clients, places);
   const hasExcludedClients = excludedClientNames.length > 0;
 
@@ -41262,7 +41328,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       {/* ================= AI 월간비교분석 탭 (최고관리자 전용) ================= */}
       {activeTab === "ai_compare" && role === "totalMaster" && (
         <div className="px-8 py-6">
-          <MonthCompareInsight rows={rows} />
+          <MonthCompareInsight rows={rows} monthA={aiCompareMonthA} setMonthA={setAiCompareMonthA} monthB={aiCompareMonthB} setMonthB={setAiCompareMonthB} />
         </div>
       )}
 {/* ================= 매출 개요 탭 ================= */}
@@ -42231,7 +42297,13 @@ function AIPremiumInsight({ rows = [], targetMonth, forecast2026, yPure }) {
 
 function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [], places = [] }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients, places);
+  // ⭐ 성능 최적화 — clients/places가 바뀔 때만 이름→플래그 Map을 새로 만들어
+  // 매달 오더를 순수매출제외 여부로 나눌 때 매번 배열 스캔을 하지 않게 한다.
+  const isExcludedFast = React.useMemo(
+    () => buildNetRevenueExclusionLookup(clients, places),
+    [clients, places]
+  );
+  const isFresh = (r) => isExcludedFast(r.거래처명);
   const excludedClientNames = getNetRevenueExcludedNames(clients, places);
   const hasExcludedClients = excludedClientNames.length > 0;
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
