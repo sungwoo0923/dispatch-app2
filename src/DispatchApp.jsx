@@ -40717,7 +40717,7 @@ function pctStrToNum(s) {
 // 아예 안 그리므로(다른 탭으로 갔다 오면 이 컴포넌트 자체가 unmount/remount됨),
 // 선택한 월을 이 컴포넌트 내부 state로만 들고 있으면 탭을 옮길 때마다 초기화돼
 // 버린다. prop이 없을 때(다른 곳에서 재사용될 경우 대비)는 내부 state로 폴백한다.
-function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMonthAProp, monthB: monthBProp, setMonthB: setMonthBProp, companyName = "" }) {
+function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMonthAProp, monthB: monthBProp, setMonthB: setMonthBProp }) {
   const won = (n) => `${Math.round(n).toLocaleString()}원`;
   const pctStr = (a, b) => {
     if (!a) return b ? "+100.0%" : "0.0%";
@@ -40750,40 +40750,6 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
     return buildMonthCompareInsight(rowsA, rowsB, monthA, monthB);
   }, [rowsA, rowsB, monthA, monthB]);
 
-  // ⭐ PPT 리포트 생성 — 이 화면이 이미 계산해둔 insight(매출·수익 KPI, 거래처
-  // 증감 TOP5, 자동 비교분석 문단)를 그대로 담아 캔바에서 매달 수작업으로 만들던
-  // 실적 보고서를 .pptx로 즉시 다운로드한다. 데이터로는 알 수 없는 배경 설명(왜
-  // 이 거래처가 줄었는지, 이번 달 내부 계획 등)은 관리자가 코멘트로 직접 채워
-  // 자동 생성 내용과 함께 넣는다.
-  const [pptTemplate, setPptTemplate] = React.useState(PPT_TEMPLATES[0].id);
-  const [pptAuthor, setPptAuthor] = React.useState("");
-  const [pptComments, setPptComments] = React.useState("");
-  const [pptBusy, setPptBusy] = React.useState(false);
-  const [pptError, setPptError] = React.useState("");
-  const [pptDone, setPptDone] = React.useState("");
-  const handleGeneratePPT = async () => {
-    if (!insight || pptBusy) return;
-    setPptBusy(true);
-    setPptError("");
-    setPptDone("");
-    try {
-      const fileName = await generateMonthlyReportPPT({
-        templateId: pptTemplate,
-        companyName,
-        monthA, monthB,
-        insight,
-        comments: pptComments,
-        author: pptAuthor,
-      });
-      setPptDone(fileName);
-    } catch (e) {
-      console.error("PPT 리포트 생성 오류:", e);
-      setPptError("PPT 생성 중 오류가 발생했습니다. 다시 시도해 주세요.");
-    } finally {
-      setPptBusy(false);
-    }
-  };
-
   const kpiRows = insight ? [
     { label: "매출", aText: won(insight.A.sale), bText: won(insight.B.sale), good: insight.B.sale >= insight.A.sale, deltaText: `${won(insight.B.sale - insight.A.sale)} (${pctStr(insight.A.sale, insight.B.sale)})` },
     { label: "수익", aText: won(insight.A.profit), bText: won(insight.B.profit), good: insight.B.profit >= insight.A.profit, deltaText: `${won(insight.B.profit - insight.A.profit)} (${pctStr(insight.A.profit, insight.B.profit)})` },
@@ -40795,7 +40761,6 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
   ] : [];
 
   return (
-    <div className="space-y-6">
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -40874,37 +40839,121 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
         </div>
       )}
     </div>
+  );
+}
 
-    {/* ================= PPT 리포트 생성 (AI 월간비교분석 속 메뉴) ================= */}
-    {insight && (
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-[#1B2B4B] px-6 py-4">
+// ⭐ PPT 리포트 생성 — AI 월간비교분석 탭에 마우스를 올리면 뜨는 하위 메뉴에서
+// 들어오는 별도 화면. AI 월간비교분석이 계산하는 것과 동일한 buildMonthCompareInsight
+// 결과를 이 화면에서 다시 계산해(두 화면은 형제 화면이라 상태를 공유하지 않음,
+// monthA/monthB만 Settlement가 들고 있다가 넘겨줘서 두 화면 간 선택이 맞춰진다)
+// 캔바에서 매달 수작업으로 만들던 실적 보고서를 .pptx로 즉시 다운로드한다. 화면
+// 톤은 프로그램 전체와 통일되게 네이비/그레이 중심으로만 구성한다.
+function MonthlyPPTReportPanel({ rows = [], monthA: monthAProp, setMonthA: setMonthAProp, monthB: monthBProp, setMonthB: setMonthBProp, companyName = "" }) {
+  const monthsAvail = React.useMemo(() => {
+    return Array.from(new Set(rows.map((r) => (r.상차일 || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)))).sort();
+  }, [rows]);
+
+  const [monthAState, setMonthAState] = React.useState("");
+  const [monthBState, setMonthBState] = React.useState("");
+  const monthA = monthAProp !== undefined ? monthAProp : monthAState;
+  const setMonthA = setMonthAProp || setMonthAState;
+  const monthB = monthBProp !== undefined ? monthBProp : monthBState;
+  const setMonthB = setMonthBProp || setMonthBState;
+
+  React.useEffect(() => {
+    if (!monthsAvail.length) return;
+    setMonthA((prev) => (prev && monthsAvail.includes(prev)) ? prev : monthsAvail[Math.max(0, monthsAvail.length - 2)]);
+    setMonthB((prev) => (prev && monthsAvail.includes(prev)) ? prev : monthsAvail[monthsAvail.length - 1]);
+  }, [monthsAvail]);
+
+  const rowsA = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthA)), [rows, monthA]);
+  const rowsB = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthB)), [rows, monthB]);
+  const insight = React.useMemo(() => {
+    if (!monthA || !monthB) return null;
+    return buildMonthCompareInsight(rowsA, rowsB, monthA, monthB);
+  }, [rowsA, rowsB, monthA, monthB]);
+
+  const [pptTemplate, setPptTemplate] = React.useState(PPT_TEMPLATES[0].id);
+  const [pptAuthor, setPptAuthor] = React.useState("");
+  const [pptComments, setPptComments] = React.useState("");
+  const [pptBusy, setPptBusy] = React.useState(false);
+  const [pptError, setPptError] = React.useState("");
+  const [pptDone, setPptDone] = React.useState("");
+  const handleGeneratePPT = async () => {
+    if (!insight || pptBusy) return;
+    setPptBusy(true);
+    setPptError("");
+    setPptDone("");
+    try {
+      const fileName = await generateMonthlyReportPPT({
+        templateId: pptTemplate,
+        companyName,
+        monthA, monthB,
+        insight,
+        comments: pptComments,
+        author: pptAuthor,
+      });
+      setPptDone(fileName);
+    } catch (e) {
+      console.error("PPT 리포트 생성 오류:", e);
+      setPptError("PPT 생성 중 오류가 발생했습니다. 다시 시도해 주세요.");
+    } finally {
+      setPptBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
           <h3 className="text-[15px] font-bold text-white flex items-center gap-2">
             PPT 리포트 생성
             <span className="text-[10px] font-bold bg-white/10 text-white/80 border border-white/20 px-1.5 py-0.5 rounded">최고관리자 전용</span>
           </h3>
-          <p className="text-[11px] text-white/50 mt-0.5">위 비교분석 결과를 그대로 담은 {monthB} 실적 보고서(.pptx)를 캔바 없이 바로 만들어 다운로드합니다</p>
+          <p className="text-[11px] text-white/50 mt-0.5">두 달의 비교분석 결과를 그대로 담은 실적 보고서(.pptx)를 캔바 없이 바로 만들어 다운로드합니다</p>
         </div>
-        <div className="p-6 space-y-5">
+        <div className="flex items-center gap-2">
+          <CustomSelect
+            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
+            value={monthA}
+            onChange={(e) => setMonthA(e.target.value)}
+          >
+            {monthsAvail.map((m) => <option key={m} value={m} className="text-gray-900">{m}</option>)}
+          </CustomSelect>
+          <span className="text-white/60 text-[12px] font-semibold">vs</span>
+          <CustomSelect
+            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
+            value={monthB}
+            onChange={(e) => setMonthB(e.target.value)}
+          >
+            {monthsAvail.map((m) => <option key={m} value={m} className="text-gray-900">{m}</option>)}
+          </CustomSelect>
+        </div>
+      </div>
+
+      {!insight ? (
+        <div className="p-8 text-center text-[13px] text-gray-500">비교할 데이터가 부족합니다.</div>
+      ) : (
+        <div className="p-6 space-y-6">
           <div>
-            <div className="text-[12.5px] font-bold text-gray-700 mb-2">템플릿 선택</div>
+            <div className="text-[12.5px] font-bold text-gray-700 mb-2">템플릿</div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {PPT_TEMPLATES.map((tpl) => (
                 <button
                   key={tpl.id}
                   type="button"
                   onClick={() => setPptTemplate(tpl.id)}
-                  className={`text-left rounded-xl border-2 px-4 py-3 transition ${
-                    pptTemplate === tpl.id ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"
+                  className={`text-left rounded-lg border px-4 py-3 transition ${
+                    pptTemplate === tpl.id ? "border-[#1B2B4B] bg-gray-50" : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 mb-2">
-                    {tpl.swatches.map((c, i) => (
-                      <span key={i} className="w-4 h-4 rounded-full border border-black/10" style={{ background: `#${c}` }} />
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-gray-800">{tpl.name}</span>
+                    {pptTemplate === tpl.id && (
+                      <span className="text-[10px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded px-1.5 py-0.5">선택됨</span>
+                    )}
                   </div>
-                  <div className="text-[13px] font-bold text-gray-800">{tpl.name}</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">{tpl.desc}</div>
+                  <div className="text-[11px] text-gray-500 mt-1">{tpl.desc}</div>
                 </button>
               ))}
             </div>
@@ -40934,10 +40983,10 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
           </div>
 
           {pptError && (
-            <div className="text-[12.5px] text-rose-600 font-semibold bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{pptError}</div>
+            <div className="text-[12.5px] text-red-700 font-semibold bg-red-50 border border-red-200 rounded-lg px-3 py-2">{pptError}</div>
           )}
           {pptDone && !pptBusy && (
-            <div className="text-[12.5px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{pptDone} 다운로드가 완료되었습니다.</div>
+            <div className="text-[12.5px] text-gray-700 font-semibold bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">{pptDone} 다운로드가 완료되었습니다.</div>
           )}
 
           <button
@@ -40951,8 +41000,7 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
             {pptBusy ? "PPT 생성 중..." : "PPT 다운로드"}
           </button>
         </div>
-      </div>
-    )}
+      )}
     </div>
   );
 }
@@ -41381,20 +41429,49 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             { key: "accounting", label: "회계자료" },
             // ⭐ AI 월간비교분석 — 최고관리자 전용. 실제 LLM 호출 없이 매출·건수·평균단가·
             // 거래처·차종/톤수·특수일 비중을 규칙 기반으로 비교해서 "건수는 늘었는데 매출은
-            // 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는 통계 분석 엔진.
-            ...(role === "totalMaster" ? [{ key: "ai_compare", label: "AI 월간비교분석" }] : []),
+            // 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는 통계 분석 엔진. 마우스를
+            // 올리면 하위 메뉴로 "PPT 리포트 생성"(별도 화면)이 천천히 나타난다.
+            ...(role === "totalMaster" ? [{ key: "ai_compare", label: "AI 월간비교분석", hasSubmenu: true }] : []),
           ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
-                activeTab === tab.key
-                  ? "border-[#1B2B4B] text-[#1B2B4B]"
-                  : "border-transparent text-gray-500 hover:text-gray-600"
-              }`}
-            >
-              {tab.label}
-            </button>
+            tab.hasSubmenu ? (
+              <div key={tab.key} className="relative group">
+                <button
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-1 ${
+                    (activeTab === "ai_compare" || activeTab === "ppt_report")
+                      ? "border-[#1B2B4B] text-[#1B2B4B]"
+                      : "border-transparent text-gray-500 hover:text-gray-600"
+                  }`}
+                >
+                  {tab.label}
+                  <span className="text-[10px] text-gray-400">▾</span>
+                </button>
+                <div className="absolute left-0 top-full z-20 pt-1 opacity-0 invisible -translate-y-1 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
+                  <div className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[168px]">
+                    <button
+                      onClick={() => setActiveTab("ppt_report")}
+                      className={`w-full text-left px-4 py-2.5 text-[12.5px] font-semibold transition-colors ${
+                        activeTab === "ppt_report" ? "text-[#1B2B4B] bg-gray-50" : "text-gray-600 hover:bg-gray-50 hover:text-[#1B2B4B]"
+                      }`}
+                    >
+                      PPT 리포트 생성
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
+                  activeTab === tab.key
+                    ? "border-[#1B2B4B] text-[#1B2B4B]"
+                    : "border-transparent text-gray-500 hover:text-gray-600"
+                }`}
+              >
+                {tab.label}
+              </button>
+            )
           ))}
         </div>
         <div className="ml-auto">
@@ -41444,7 +41521,13 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       {/* ================= AI 월간비교분석 탭 (최고관리자 전용) ================= */}
       {activeTab === "ai_compare" && role === "totalMaster" && (
         <div className="px-8 py-6">
-          <MonthCompareInsight rows={rows} monthA={aiCompareMonthA} setMonthA={setAiCompareMonthA} monthB={aiCompareMonthB} setMonthB={setAiCompareMonthB} companyName={userCompany} />
+          <MonthCompareInsight rows={rows} monthA={aiCompareMonthA} setMonthA={setAiCompareMonthA} monthB={aiCompareMonthB} setMonthB={setAiCompareMonthB} />
+        </div>
+      )}
+      {/* ================= PPT 리포트 생성 (AI 월간비교분석 하위 메뉴, 최고관리자 전용) ================= */}
+      {activeTab === "ppt_report" && role === "totalMaster" && (
+        <div className="px-8 py-6">
+          <MonthlyPPTReportPanel rows={rows} monthA={aiCompareMonthA} setMonthA={setAiCompareMonthA} monthB={aiCompareMonthB} setMonthB={setAiCompareMonthB} companyName={userCompany} />
         </div>
       )}
 {/* ================= 매출 개요 탭 ================= */}
