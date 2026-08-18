@@ -1710,6 +1710,30 @@ const EDIT_REQUEST_FIELD_LABELS = {
   상차지담당자번호: "상차지 담당자 연락처", 하차지담당자번호: "하차지 담당자 연락처",
   전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
 };
+// ⭐ 매출관리(손익보고서/YearlySummaryChart)에서 "총 운송료"와 별도로 "순수 운송료"를
+// 구분해서 보여주는 기능 — 원래는 돌캐 전용으로 "후레쉬물류"/"채석강" 거래처명을
+// 코드에 직접 박아 판별했는데, 이 프로그램은 여러 운송사가 함께 쓰기 때문에 회사마다
+// 그 대상 거래처가 다를 수 있다. 그래서 거래처관리에서 거래처별로 체크하는
+// "순수매출제외" 플래그로 판별하도록 일반화한다. 아직 한 번도 체크박스를 저장한
+// 적 없는 기존 데이터(주로 돌캐)는 예전 하드코딩 이름으로 폴백해서 동작이
+// 그대로 유지되게 한다 — 거래처관리에서 체크박스를 명시적으로 켜거나 끄는 순간
+// 그 거래처는 폴백 대신 저장된 값을 따른다.
+const LEGACY_NET_REVENUE_EXCLUDED_NAMES = ["후레쉬물류", "채석강"];
+function isNetRevenueExcludedClient(name, clientsList) {
+  const n = String(name || "").trim();
+  if (!n) return false;
+  const found = (clientsList || []).find((c) => String(c.거래처명 || "").trim() === n);
+  if (found && typeof found.순수매출제외 === "boolean") return found.순수매출제외;
+  return LEGACY_NET_REVENUE_EXCLUDED_NAMES.some((x) => n.includes(x));
+}
+function getNetRevenueExcludedNames(clientsList) {
+  const names = (clientsList || [])
+    .filter((c) => isNetRevenueExcludedClient(c.거래처명, clientsList))
+    .map((c) => (c.거래처명 || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(names));
+}
+
 // 거래처/상하차지별로 "기사전달용" 복사 시 자동으로 함께 붙는 주의사항 문구.
 // 실제 값은 clients/places 문서의 기사전달주의사항 필드에 저장되며(오더메모와
 // 동일한 저장 구조 재사용), 여기서는 그 값이 아직 없을 때 편집 팝업에 채워줄
@@ -6166,6 +6190,7 @@ return (
               places={places}
               isViewer={isViewer}
               role={role}
+              userCompany={userCompany}
             />
           ) : (
             <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
@@ -39113,7 +39138,7 @@ function NewOrderPopup({
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
 
 // ===================== 손익보고서 컴포넌트 =====================
-function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false }) {
+function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isViewer = false }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = React.useState(currentYear);
   const [manualData, setManualData] = React.useState({});
@@ -39211,7 +39236,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
       const pay = String(r.지급방식 || "");
 
       // ── 매출 분류 ──
-      if (client.includes("후레쉬물류")) {
+      if (isNetRevenueExcludedClient(client, clients)) {
         addRow("rev_fresh", month, sale, 0);
       } else if (pay === "선불" || pay === "착불") {
         const cashAmt = r.__isFixed ? (r.실수수료 || 0) : Math.max(0, sale - cost);
@@ -39223,14 +39248,14 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
       // ── 매출원가(기사운임) 분류 ──
       if (bm === "인성") {
         addRow("cost_auto", month, 0, cost);
-      } else if (client.includes("후레쉬물류")) {
+      } else if (isNetRevenueExcludedClient(client, clients)) {
         addRow("cost_fresh", month, 0, cost);
       } else {
         addRow("cost_freight", month, 0, cost);
       }
     });
     return result;
-  }, [allRows, year]);
+  }, [allRows, year, clients]);
 
   const autoVal = (key, month, field = "sale") => {
     return (getAutoMonth[key] && getAutoMonth[key][month] && getAutoMonth[key][month][field]) || 0;
@@ -39585,6 +39610,11 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
     XLSX.writeFile(wbOut, `손익보고서_서식_${year}년.xlsx`);
   };
 
+  // ⭐ 거래처관리에서 "순수매출제외"로 체크한 거래처 — 하나도 없으면(대부분의
+  // 운송사) 이 구분 자체가 의미 없으므로 관련 행을 아예 숨긴다.
+  const excludedClientNames = getNetRevenueExcludedNames(clients);
+  const excludedLabel = excludedClientNames.join("·");
+
   return (
     <div className="px-8 py-6">
       {/* 헤더 */}
@@ -39621,7 +39651,9 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
             <SubHeader label="구분" />
             <DataRow label="화물주선 매출" rowKey="rev_freight" isAuto field="sale" indent={0} />
             <DataRow label="선착불 수수료" rowKey="rev_cash" isAuto field="sale" />
-            <DataRow label="후레쉬물류 매출" rowKey="rev_fresh" isAuto field="sale" />
+            {excludedClientNames.length > 0 && (
+              <DataRow label={`${excludedLabel} 매출`} rowKey="rev_fresh" isAuto field="sale" />
+            )}
             <DataRow label="기타 매출" rowKey="rev_etc" />
             <TotalRow label="매출액 합계" calcFn={totalRevenue} />
             <MomRow calcFn={totalRevenue} />
@@ -39631,7 +39663,9 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], isViewer = false 
             <SubHeader label="구분" />
             <DataRow label="화물주선 운반비" rowKey="cost_freight" isAuto field="cost" />
             <DataRow label="오토바이(인성) 운반비" rowKey="cost_auto" isAuto field="cost" />
-            <DataRow label="후레쉬물류 운반비" rowKey="cost_fresh" isAuto field="cost" />
+            {excludedClientNames.length > 0 && (
+              <DataRow label={`${excludedLabel} 운반비`} rowKey="cost_fresh" isAuto field="cost" />
+            )}
             <DataRow label="인건비" rowKey="cost_labor" />
             <TotalRow label="매출원가 합계" calcFn={totalCost} />
             <MomRow calcFn={totalCost} />
@@ -40737,7 +40771,22 @@ function MonthCompareInsight({ rows = [] }) {
 }
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
-function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role }) {
+function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "" }) {
+  // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
+  // 하드코딩하지 않고 회사관리(RevenueTargetSection)에서 설정한 값을 불러온다.
+  // 아직 설정한 적 없으면 0(미설정)으로 표시하고, "달성률" 계산은 0으로 처리한다.
+  const [revenueTarget, setRevenueTarget] = React.useState({ pureTarget: 0, excludedGrowthRate: 3 });
+  React.useEffect(() => {
+    if (!userCompany) return;
+    const unsub = onSnapshot(doc(db, "companySettings", userCompany.trim()), (snap) => {
+      const t = snap.data()?.매출목표 || {};
+      setRevenueTarget({
+        pureTarget: Number(t.순수매출목표) || 0,
+        excludedGrowthRate: t.제외거래처매출성장률 != null ? Number(t.제외거래처매출성장률) : 3,
+      });
+    });
+    return () => unsub();
+  }, [userCompany]);
 
   const [activeTab, setActiveTab] = React.useState("overview"); // overview | client_compare
   const [rangeStart, setRangeStart] = React.useState("2026-01");
@@ -40917,7 +40966,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
   const prevMonthRows = rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey));
 
-  const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !c.includes("후레쉬물류");
+  const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !isNetRevenueExcludedClient(c, clients);
   const firstAppearMap = new Map();
   rows.forEach((r) => {
     const c = r.거래처명 || "";
@@ -40940,8 +40989,11 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   });
 
   const won = (n) => `${(n || 0).toLocaleString()}원`;
-  const isFresh = (r) => String(r.거래처명 || "").includes("후레쉬물류");
-  const isExcludedClient = (name = "") => name.includes("후레쉬물류") || name.includes("채석강");
+  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients);
+  const isExcludedClient = (name = "") => isNetRevenueExcludedClient(name, clients);
+  const excludedClientNames = getNetRevenueExcludedNames(clients);
+  const excludedClientLabel = excludedClientNames.join("·");
+  const hasExcludedClients = excludedClientNames.length > 0;
 
   const stat = (list) => {
     const sale = sum(list, "청구운임");
@@ -41008,10 +41060,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   });
 
   const lastYearPure = stat(lastYearRows.filter((r) => !isFresh(r)));
-  const PURE_TARGET_2026 = 2098451820;
+  const PURE_TARGET_2026 = revenueTarget.pureTarget;
   const lastYearFresh = stat(lastYearRows.filter((r) => isFresh(r)));
   const yFresh = stat(yearRows.filter((r) => isFresh(r)));
-  const FRESH_GROWTH_RATE = 0.03;
+  const FRESH_GROWTH_RATE = (revenueTarget.excludedGrowthRate || 0) / 100;
   const FRESH_TARGET_2026 = Math.round(lastYearFresh.sale * (1 + FRESH_GROWTH_RATE));
   const achieveRate = (cur, target) => (target > 0 ? (cur / target) * 100 : 0);
   const baseYearSale = lastYearPure.sale;
@@ -41164,6 +41216,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         <ProfitLossReport
           dispatchData={dispatchData}
           fixedRows={fixedRows}
+          clients={clients}
           isViewer={isViewer}
         />
       )}
@@ -41205,27 +41258,31 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             </div>
             <div className="p-6 space-y-8">
 
-              {/* 순수 운송 매출 */}
+              {/* 순수 운송 매출 — 제외 거래처가 없으면 "총 운송료"와 완전히 같은 숫자라
+                  구분 의미가 없으므로 라벨만 "운송 매출"로 단순화한다. */}
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                <p className="text-sm font-semibold text-gray-800 mb-4">순수 운송 매출</p>
+                <p className="text-sm font-semibold text-gray-800 mb-4">{hasExcludedClients ? "순수 운송 매출" : "운송 매출"}</p>
                 <div className="grid grid-cols-4 gap-4 text-center">
                   <Metric label="작년" value={won(lastYearPure.sale)} />
-                  <Metric label="목표" value={won(PURE_TARGET_2026)} valueClass="text-indigo-700" />
+                  <Metric label="목표" value={PURE_TARGET_2026 > 0 ? won(PURE_TARGET_2026) : "미설정"} valueClass="text-indigo-700" />
                   <Metric label="현재" value={won(yPure.sale)} valueClass="text-gray-900" />
-                  <Metric label="달성률" value={`${achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
+                  <Metric label="달성률" value={PURE_TARGET_2026 > 0 ? `${achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%` : "—"} valueClass="text-indigo-800" />
                 </div>
               </div>
 
-              {/* 후레쉬 물류 매출 */}
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                <p className="text-sm font-semibold text-gray-700 mb-4">후레쉬 물류 매출</p>
-                <div className="grid grid-cols-4 gap-4 text-center">
-                  <Metric label="작년" value={won(lastYearFresh.sale)} />
-                  <Metric label="목표" value={won(FRESH_TARGET_2026)} valueClass="text-indigo-700" />
-                  <Metric label="현재" value={won(yFresh.sale)} valueClass="text-gray-900" />
-                  <Metric label="달성률" value={`${achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
+              {/* 제외 거래처 매출 — 거래처관리에서 "순수매출제외"로 체크한 거래처가
+                  하나라도 있을 때만 보여준다 (예전엔 "후레쉬 물류"로 고정돼있었음). */}
+              {hasExcludedClients && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+                  <p className="text-sm font-semibold text-gray-700 mb-4">{excludedClientLabel} 매출</p>
+                  <div className="grid grid-cols-4 gap-4 text-center">
+                    <Metric label="작년" value={won(lastYearFresh.sale)} />
+                    <Metric label="목표" value={won(FRESH_TARGET_2026)} valueClass="text-indigo-700" />
+                    <Metric label="현재" value={won(yFresh.sale)} valueClass="text-gray-900" />
+                    <Metric label="달성률" value={`${achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 구분선 */}
               <div className="flex items-center gap-3 pt-2">
@@ -41246,7 +41303,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           {/* ================= KPI – 총 운송료 ================= */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-3 flex items-center justify-between">
-              <h3 className="text-[14px] font-bold text-white">총 운송료 (후레쉬 포함)</h3>
+              <h3 className="text-[14px] font-bold text-white">{hasExcludedClients ? "총 운송료 (전체 거래처)" : "총 운송료"}</h3>
               <span className="text-[11px] text-white/40">배차 + 고정거래처</span>
             </div>
             <div className="p-6">
@@ -41282,44 +41339,47 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             </div>
           </div>
 
-          {/* ================= KPI – 순수 운송 ================= */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-3">
-              <h3 className="text-[14px] font-bold text-white">순수 운송료 (후레쉬 미포함)</h3>
-            </div>
-            <div className="p-6">
-              <table className="w-full text-[13px] border-collapse text-center">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="border p-2">구분</th>
-                    <th className="border p-2">매출</th>
-                    <th className="border p-2">운반비</th>
-                    <th className="border p-2">수익</th>
-                    <th className="border p-2">수익률</th>
-                    <th className="border p-2">전월대비</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ["일", dPure, null],
-                    ["월", mPure, "month"],
-                    ["년", yPure, null],
-                  ].map(([label, data, key], i) => (
-                    <tr key={i} className="font-semibold">
-                      <td className="border p-2 bg-gray-50">{label}</td>
-                      <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
-                      <td className="border p-2 text-gray-600">{won(data.driver)}</td>
-                      <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
-                      <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
-                      <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-500"}`}>
-                        {key ? rateText(vrPure[key]) : "—"}
-                      </td>
+          {/* ================= KPI – 순수 운송 =================
+              제외 거래처가 없으면 위 "총 운송료"와 완전히 같은 숫자라 통째로 숨긴다. */}
+          {hasExcludedClients && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="bg-[#1B2B4B] px-6 py-3">
+                <h3 className="text-[14px] font-bold text-white">{`순수 운송료 (${excludedClientLabel} 제외)`}</h3>
+              </div>
+              <div className="p-6">
+                <table className="w-full text-[13px] border-collapse text-center">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="border p-2">구분</th>
+                      <th className="border p-2">매출</th>
+                      <th className="border p-2">운반비</th>
+                      <th className="border p-2">수익</th>
+                      <th className="border p-2">수익률</th>
+                      <th className="border p-2">전월대비</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {[
+                      ["일", dPure, null],
+                      ["월", mPure, "month"],
+                      ["년", yPure, null],
+                    ].map(([label, data, key], i) => (
+                      <tr key={i} className="font-semibold">
+                        <td className="border p-2 bg-gray-50">{label}</td>
+                        <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
+                        <td className="border p-2 text-gray-600">{won(data.driver)}</td>
+                        <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
+                        <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
+                        <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-500"}`}>
+                          {key ? rateText(vrPure[key]) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           <SettlementClientAnalysis
             topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명))}
@@ -41341,6 +41401,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               year={selectedYear}
               setYear={setSelectedYear}
               onAI={(mode) => setAiMode(mode)}
+              clients={clients}
             />
 
             {/* 기간별 추이 */}
@@ -42137,9 +42198,12 @@ function AIPremiumInsight({ rows = [], targetMonth, forecast2026, yPure }) {
   );
 }
 
-function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
+function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [] }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const isFresh = (r) => String(r.거래처명 || "").includes("후레쉬물류");
+  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients);
+  const excludedClientNames = getNetRevenueExcludedNames(clients);
+  const excludedClientLabel = excludedClientNames.join("·");
+  const hasExcludedClients = excludedClientNames.length > 0;
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   const summary = months.map((m) => {
@@ -42180,7 +42244,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
           <h3 className="text-[15px] font-bold text-white">{year}년 월별 매출 · 수익 · 수익률 요약</h3>
-          <p className="text-[11px] text-white/50 mt-0.5">전체 / 순수 운송 / 후레쉬 물류 구분</p>
+          <p className="text-[11px] text-white/50 mt-0.5">{hasExcludedClients ? `전체 / 순수 운송 / ${excludedClientLabel} 구분` : "월별 매출·수익 요약"}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => onAI("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
@@ -42206,13 +42270,21 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
             <tr className="bg-gray-100 text-gray-700 text-[13px]">
               <th rowSpan={2} className="border p-2">월</th>
               <th colSpan={3} className="border p-2 bg-indigo-50">전체 매출</th>
-              <th colSpan={3} className="border p-2 bg-emerald-50">순수 운송 (후레쉬 제외)</th>
-              <th colSpan={3} className="border p-2 bg-rose-50">후레쉬 물류</th>
+              {hasExcludedClients && (
+                <>
+                  <th colSpan={3} className="border p-2 bg-emerald-50">{`순수 운송 (${excludedClientLabel} 제외)`}</th>
+                  <th colSpan={3} className="border p-2 bg-rose-50">{excludedClientLabel}</th>
+                </>
+              )}
             </tr>
             <tr className="bg-gray-50 text-gray-600 text-[11px]">
               <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
-              <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
-              <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
+              {hasExcludedClients && (
+                <>
+                  <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
+                  <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -42222,12 +42294,16 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
                 <td className="border p-2 text-indigo-600">{r.sale.toLocaleString()}원</td>
                 <td className="border p-2 text-emerald-600">{r.profit.toLocaleString()}원</td>
                 <td className="border p-2">{r.rate.toFixed(1)}%</td>
-                <td className="border p-2 text-indigo-600">{r.pureSale.toLocaleString()}원</td>
-                <td className="border p-2 text-emerald-600">{r.pureProfit.toLocaleString()}원</td>
-                <td className="border p-2">{r.pureRate.toFixed(1)}%</td>
-                <td className="border p-2 text-rose-600">{r.freshSale.toLocaleString()}원</td>
-                <td className="border p-2 text-rose-600">{r.freshProfit.toLocaleString()}원</td>
-                <td className="border p-2">{r.freshRate.toFixed(1)}%</td>
+                {hasExcludedClients && (
+                  <>
+                    <td className="border p-2 text-indigo-600">{r.pureSale.toLocaleString()}원</td>
+                    <td className="border p-2 text-emerald-600">{r.pureProfit.toLocaleString()}원</td>
+                    <td className="border p-2">{r.pureRate.toFixed(1)}%</td>
+                    <td className="border p-2 text-rose-600">{r.freshSale.toLocaleString()}원</td>
+                    <td className="border p-2 text-rose-600">{r.freshProfit.toLocaleString()}원</td>
+                    <td className="border p-2">{r.freshRate.toFixed(1)}%</td>
+                  </>
+                )}
               </tr>
             ))}
             <tr className="font-bold bg-gray-50">
@@ -42235,12 +42311,16 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
               <td className="border p-2 text-indigo-700">{total.sale.toLocaleString()}원</td>
               <td className="border p-2 text-emerald-700">{total.profit.toLocaleString()}원</td>
               <td className="border p-2">{total.sale ? ((total.profit / total.sale) * 100).toFixed(1) : "0.0"}%</td>
-              <td className="border p-2 text-indigo-700">{total.pureSale.toLocaleString()}원</td>
-              <td className="border p-2 text-emerald-700">{total.pureProfit.toLocaleString()}원</td>
-              <td className="border p-2">{total.pureSale ? ((total.pureProfit / total.pureSale) * 100).toFixed(1) : "0.0"}%</td>
-              <td className="border p-2 text-rose-600">{total.freshSale.toLocaleString()}원</td>
-              <td className="border p-2 text-rose-600">{total.freshProfit.toLocaleString()}원</td>
-              <td className="border p-2">{total.freshSale ? ((total.freshProfit / total.freshSale) * 100).toFixed(1) : "0.0"}%</td>
+              {hasExcludedClients && (
+                <>
+                  <td className="border p-2 text-indigo-700">{total.pureSale.toLocaleString()}원</td>
+                  <td className="border p-2 text-emerald-700">{total.pureProfit.toLocaleString()}원</td>
+                  <td className="border p-2">{total.pureSale ? ((total.pureProfit / total.pureSale) * 100).toFixed(1) : "0.0"}%</td>
+                  <td className="border p-2 text-rose-600">{total.freshSale.toLocaleString()}원</td>
+                  <td className="border p-2 text-rose-600">{total.freshProfit.toLocaleString()}원</td>
+                  <td className="border p-2">{total.freshSale ? ((total.freshProfit / total.freshSale) * 100).toFixed(1) : "0.0"}%</td>
+                </>
+              )}
             </tr>
           </tbody>
         </table>
@@ -51443,6 +51523,21 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       </button>
                     </div>
                   )}
+                  {/* ⭐ 월 단위로 합산 청구하는 거래처(예: 후레쉬물류처럼 매달 몰아서 입력하는
+                      대행 청구 건) 등을 매출관리의 "순수 운송료" 통계·신규/이탈 거래처
+                      리스트에서 제외할지 선택 — 운송사마다 이런 거래처가 다를 수 있어
+                      회사별로 직접 지정한다. */}
+                  <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div>
+                      <div className="text-[13px] font-semibold text-gray-700">순수 운송료 매출 통계에서 제외</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">월 단위로 합산 청구하는 거래처 등, 실제 배차 매출과 별도로 관리할 거래처를 매출관리의 "순수 운송료"와 신규/이탈 거래처 리스트에서 제외합니다</div>
+                    </div>
+                    <button type="button"
+                      onClick={() => setEditClientModal(p => ({ ...p, 순수매출제외: !p.순수매출제외 }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editClientModal.순수매출제외 ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editClientModal.순수매출제외 ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
 
                   {/* 파일/이미지 업로드 */}
                   <div className="col-span-2">
@@ -51988,6 +52083,88 @@ function PaymentDateRuleSection({ companyName }) {
             {DAYS_KO.map((d, i) => <option key={i} value={i}>{d}요일 입금</option>)}
           </select>
         </div>
+        {msg && <div className="text-[12px] font-medium text-emerald-600">{msg}</div>}
+        <button onClick={handleSave} disabled={saving}
+          className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
+          {saving ? "저장 중..." : "저장"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────── 연간 매출 목표 설정 섹션 ───────────
+// 매출관리(Settlement)의 "연간 목표 대비 실적" 카드에서 쓰는 목표 금액 — 예전엔
+// 돌캐 전용 숫자가 코드에 그대로 박혀있었는데, 회사마다 목표가 다르므로 회사관리에서
+// 직접 입력하게 한다. 순수 운송료는 금액을 직접 입력하고, 제외 거래처(거래처관리에서
+// "순수매출제외" 체크한 거래처) 매출은 작년 실적 대비 성장률(%)로 목표를 자동 계산한다.
+function RevenueTargetSection({ companyName }) {
+  const [target, setTarget] = React.useState(null);
+  const [loaded, setLoaded] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  const DEFAULT_TARGET = { 순수매출목표: 0, 제외거래처매출성장률: 3 };
+
+  React.useEffect(() => {
+    if (!companyName) return;
+    const unsub = onSnapshot(doc(db, "companySettings", companyName.trim()), (snap) => {
+      setTarget({ ...DEFAULT_TARGET, ...(snap.data()?.매출목표 || {}) });
+      setLoaded(true);
+    });
+    return () => unsub();
+  }, [companyName]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "companySettings", companyName.trim()), { 매출목표: target }, { merge: true });
+      setMsg("저장되었습니다.");
+      setTimeout(() => setMsg(""), 2500);
+    } catch (e) {
+      setMsg("저장 실패: " + e.message);
+    }
+    setSaving(false);
+  };
+
+  if (!loaded || !target) {
+    return (
+      <div>
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-4">연간 매출 목표</p>
+        <div className="text-[13px] text-gray-500">로딩 중...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">연간 매출 목표</p>
+      <p className="text-[12px] text-gray-500 mb-4 leading-relaxed">
+        매출관리 화면의 "연간 목표 대비 실적" 카드에서 달성률을 계산하는 데 쓰입니다. 미설정 시 "미설정"으로 표시됩니다.
+      </p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-gray-700 font-medium">순수 운송료 목표 (연간)</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <input type="number" min={0} value={target.순수매출목표 || ""}
+              placeholder="0"
+              onChange={e => setTarget(t => ({ ...t, 순수매출목표: Math.max(0, Number(e.target.value) || 0) }))}
+              className="w-32 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right focus:outline-none focus:border-[#1B2B4B]" />
+            <span className="text-[13px] text-gray-700 font-medium">원</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-gray-700 font-medium">제외 거래처 매출 성장률 (전년 대비)</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <input type="number" min={-100} max={1000} value={target.제외거래처매출성장률 ?? 3}
+              onChange={e => setTarget(t => ({ ...t, 제외거래처매출성장률: Number(e.target.value) || 0 }))}
+              className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right focus:outline-none focus:border-[#1B2B4B]" />
+            <span className="text-[13px] text-gray-700 font-medium">%</span>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-500 leading-relaxed">
+          "제외 거래처"는 거래처관리 수정 팝업에서 "순수 운송료 매출 통계에서 제외"를 체크한 거래처입니다. 체크된 거래처가 하나도 없으면 이 항목은 매출관리 화면에 표시되지 않습니다.
+        </p>
         {msg && <div className="text-[12px] font-medium text-emerald-600">{msg}</div>}
         <button onClick={handleSave} disabled={saving}
           className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-40">
@@ -53647,6 +53824,15 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <div className="max-w-[420px]">
               <PaymentDateRuleSection companyName={companyName} />
+            </div>
+          </div>
+        )}
+
+        {/* 연간 매출 목표 카드 */}
+        {isAdmin && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="max-w-[420px]">
+              <RevenueTargetSection companyName={companyName} />
             </div>
           </div>
         )}

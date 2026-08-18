@@ -5016,6 +5016,7 @@ setOpenMemo={setOpenMemo}
     fixedData={fixedClientRows}
     onBack={() => setPage("list")}
     cardVersionB={cardVersionB}
+    clients={clients}
   />
 )}
     {page === "form" && (
@@ -5336,7 +5337,19 @@ function SalesPinGate({ onVerified, cardVersionB = false }) {
   );
 }
 
-function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false }) {
+// ⭐ PC(DispatchApp)의 isNetRevenueExcludedClient와 동일 로직 — 거래처관리에서
+// "순수매출제외"로 체크한 거래처를 매출 통계에서 뺀다. 아직 체크박스를 저장한 적
+// 없는 기존 데이터(주로 돌캐의 "후레쉬물류")는 예전 하드코딩 이름으로 폴백한다.
+const LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE = ["후레쉬물류", "채석강"];
+function isNetRevenueExcludedClientMobile(name, clientsList) {
+  const n = String(name || "").trim();
+  if (!n) return false;
+  const found = (clientsList || []).find((c) => String(c.거래처명 || "").trim() === n);
+  if (found && typeof found.순수매출제외 === "boolean") return found.순수매출제외;
+  return LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE.some((x) => n.includes(x));
+}
+
+function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [] }) {
   const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
@@ -5353,7 +5366,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
     거래처명: r.거래처명 || r.업체명 || "",
   });
   const allFixed = fixedData.map(normalizeFixed).filter(r => r.상차일);
-  const allBase = [...data.filter(r => r.상차일 && !(r.거래처명||"").includes("후레쉬물류")), ...allFixed];
+  const allBase = [...data.filter(r => r.상차일 && !isNetRevenueExcludedClientMobile(r.거래처명, clients)), ...allFixed];
   const rows = allBase.filter(r => r.상차일.startsWith(month));
 
   const prevMonth = (() => { const d = new Date(month+"-01"); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7); })();
