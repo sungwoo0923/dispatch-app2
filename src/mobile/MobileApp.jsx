@@ -62,6 +62,23 @@ function buildShortUploadUrlMobile(orderId, token) {
   return `${window.location.origin}/u/${code}`;
 }
 
+// ⭐ 안내사항 수정 팝업이 "[업체명 주의사항]\n- " 기본 템플릿을 실제 입력값으로 미리
+// 채워두기 때문에(PC와 동일 구조), 사용자가 내용을 안 채우고 그대로 저장해도 값이
+// "존재"하게 된다. 헤더 줄과 빈 불릿(- 만 있는 줄)을 빼고 실제 글자가 없으면
+// "내용 없음"으로 취급해 복사에서 제외한다 — PC(DispatchApp)의 _hasRealDriverNotice와
+// 동일 로직.
+function _hasRealDriverNoticeMobile(text) {
+  const t = String(text || "");
+  if (!t.trim()) return false;
+  const stripped = t
+    .split("\n")
+    .filter((line) => !/^\s*\[.*주의사항\]\s*$/.test(line))
+    .join("\n")
+    .replace(/^[\s\-•·]+$/gm, "")
+    .trim();
+  return stripped.length > 0;
+}
+
 // 거래처/상하차지별 "기사전달용" 복사 시 자동으로 붙는 주의사항 — PC(DispatchApp)와
 // 동일하게 clients/places 문서의 기사전달주의사항 필드를 조회한다.
 async function findDriverNoticeMobile(name) {
@@ -74,7 +91,7 @@ async function findDriverNoticeMobile(name) {
       const placeSnap = await getDocs(query(collection(db, "places"), where("업체명", "==", n)));
       saved = (placeSnap.docs[0]?.data()?.기사전달주의사항 || "").trim();
     }
-    return saved;
+    return _hasRealDriverNoticeMobile(saved) ? saved : "";
   } catch { return ""; }
 }
 

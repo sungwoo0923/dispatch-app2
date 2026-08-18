@@ -646,6 +646,73 @@ function _scheduleContactLine(name, phone) {
   return `${n || "담당자"}${p ? ` (${formatPhone(p)})` : ""}`;
 }
 
+// ⭐ 스케줄표 "표시 항목"(청구운임/기사운임/상세정보) 다중선택 드롭다운 — 체크박스
+// 3개가 툴바에 나란히 떠서 복잡해 보이던 걸 버튼 하나로 접고, 열었을 때만 그 안에서
+// 체크선택/해제할 수 있게 한다. CustomDatePicker와 동일하게 fixed+portal로 띄워서
+// 모달의 overflow-hidden에 잘리지 않게 한다.
+function ScheduleItemsDropdown({ items, values, onToggle }) {
+  const [open, setOpen] = React.useState(false);
+  const [rect, setRect] = React.useState(null);
+  const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+
+  const updateRect = React.useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setRect({ left: r.left, top: r.bottom + 4 });
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    updateRect();
+    const close = () => setOpen(false);
+    const onDocDown = (e) => {
+      if (btnRef.current && btnRef.current.contains(e.target)) return;
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDocDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open, updateRect]);
+
+  const selected = items.filter((it) => values[it.key]);
+  const label = selected.length === 0 ? "표시 항목 선택 안 함"
+    : selected.length === items.length ? "표시 항목 전체"
+    : selected.map((it) => it.label).join(", ");
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={btnRef}
+        onClick={() => setOpen((v) => !v)}
+        className="border border-gray-300 rounded-lg px-2.5 py-1 text-[12px] font-semibold text-gray-700 bg-white hover:bg-gray-50 max-w-[220px] truncate text-left"
+      >
+        {label}
+      </button>
+      {open && rect && createPortal(
+        <div ref={menuRef} style={{ position: "fixed", left: rect.left, top: rect.top }}
+          className="z-[9999999] bg-white border border-gray-200 rounded-xl shadow-2xl p-2 w-[190px]">
+          {items.map((it) => (
+            <label key={it.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer select-none">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={!!values[it.key]} onChange={() => onToggle(it.key)} />
+              <span className="text-[12px] font-semibold text-gray-700">{it.label}</span>
+            </label>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const [groupBy, setGroupBy] = React.useState("date"); // "date" | "driver"
   const [showFareCharge, setShowFareCharge] = React.useState(false); // 청구운임 포함
@@ -954,20 +1021,21 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
               <button type="button" onClick={() => setSelectedDates(null)} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">전체보기</button>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-[12px] font-bold text-gray-500">표시 항목</span>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showFareCharge} onChange={() => setShowFareCharge(v => !v)} />
-              <span className="text-[12px] font-semibold text-gray-600">청구운임 포함</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showFareDriver} onChange={() => setShowFareDriver(v => !v)} />
-              <span className="text-[12px] font-semibold text-gray-600">기사운임 포함</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={showDetail} onChange={() => setShowDetail(v => !v)} />
-              <span className="text-[12px] font-semibold text-gray-600">상세정보 포함 (기사용)</span>
-            </label>
+            <ScheduleItemsDropdown
+              items={[
+                { key: "charge", label: "청구운임 포함" },
+                { key: "driver", label: "기사운임 포함" },
+                { key: "detail", label: "상세정보 포함 (기사용)" },
+              ]}
+              values={{ charge: showFareCharge, driver: showFareDriver, detail: showDetail }}
+              onToggle={(key) => {
+                if (key === "charge") setShowFareCharge((v) => !v);
+                else if (key === "driver") setShowFareDriver((v) => !v);
+                else setShowDetail((v) => !v);
+              }}
+            />
           </div>
         </div>
 
@@ -1651,6 +1719,23 @@ const defaultDriverNoticeTemplate = (name) => {
   const n = (name || "").trim();
   if (!n) return "";
   return `[${n} 주의사항]\n- `;
+};
+
+// ⭐ 위 기본 템플릿은 수정 팝업을 열면 실제 입력값(state)으로 미리 채워지기 때문에,
+// 사용자가 내용을 안 채우고 그대로 저장해도 "[업체명 주의사항]\n- " 그 자체가 값으로
+// 저장돼버린다. 그 상태에서 기사전달용 복사를 하면 빈 템플릿째로 끼어드는 문제가
+// 있어, 헤더 줄과 빈 불릿(- 만 있는 줄)을 제외하고 실제 글자가 하나도 없으면
+// "내용 없음"으로 취급한다.
+const _hasRealDriverNotice = (text) => {
+  const t = String(text || "");
+  if (!t.trim()) return false;
+  const stripped = t
+    .split("\n")
+    .filter((line) => !/^\s*\[.*주의사항\]\s*$/.test(line))
+    .join("\n")
+    .replace(/^[\s\-•·]+$/gm, "")
+    .trim();
+  return stripped.length > 0;
 };
 
 // 경유지 필드는 "경유상차목록"/"경유지_상차"/"경유지상차"처럼 여러 동의어 필드명으로 저장되고
@@ -17131,34 +17216,15 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
               <div className="font-bold text-[15px] text-[#1B2B4B] whitespace-nowrap">
                 첨부파일 <span className="text-[13px] font-normal text-gray-500">{loading ? "" : `${items.length}장`}</span>
               </div>
-              <div className="text-[12px] text-gray-500 mt-0.5 truncate max-w-[220px]">
+              <div className="text-[12px] text-gray-500 mt-0.5 truncate">
                 {row.상차지명} → {row.하차지명}{row.이름 ? ` · ${row.이름}` : ""}
               </div>
             </div>
           </div>
+          {/* ⭐ 버튼이 많아 헤더가 복잡해 보이던 문제 — 자주 안 쓰는 재업로드 허용은
+              하단 완료처리 영역으로 옮기고, 헤더에는 핵심 액션(파일추가/전체저장/
+              폴더열기/닫기)만 남겨 상/하차지명이 잘리지 않게 한다. */}
           <div className="flex items-center gap-2 shrink-0">
-            {!isViewer && lockState?.재업로드완료알림 === true && (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 text-white text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0 animate-pulse">
-                ✓ 기사가 재업로드를 완료했습니다
-              </span>
-            )}
-            {!isViewer && lockState?.업로드잠금 && lockState?.재업로드완료알림 !== true && (
-              isUnlockActive ? (
-                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg whitespace-nowrap shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  재업로드 대기중 · {fmtRemain(unlockRemainMs)}
-                </span>
-              ) : (
-                <button
-                  onClick={handleAllowReupload}
-                  disabled={unlocking}
-                  title="기사가 갖고 있는 기존 업로드 링크를 30분간 다시 열어줍니다"
-                  className="px-3 py-1.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50 whitespace-nowrap shrink-0"
-                >
-                  {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
-                </button>
-              )
-            )}
             {!isViewer && (
               <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer whitespace-nowrap shrink-0">
                 파일 추가
@@ -17180,7 +17246,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
               title="저장한 파일이 담긴 다운로드 폴더를 엽니다"
               className="px-3 py-1.5 bg-white border border-gray-300 text-gray-600 text-[12px] font-bold rounded-lg hover:bg-gray-50 transition whitespace-nowrap shrink-0"
             >
-              다운로드 폴더 열기
+              폴더 열기
             </button>
             <button onClick={onClose}
               className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-lg transition shrink-0">
@@ -17311,20 +17377,46 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
           )}
         </div>
 
-        {/* 완료 처리 푸터 */}
-        {onToggleViewed && (
-          <div className="border-t border-gray-100 px-5 py-3 bg-gray-50 flex items-center justify-between">
+        {/* 완료 처리 + 재업로드 허용 푸터 */}
+        {(onToggleViewed || (!isViewer && lockState?.업로드잠금)) && (
+          <div className="border-t border-gray-100 px-5 py-3 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-[12px] text-gray-500">파일 확인 여부를 수동으로 표시할 수 있습니다</span>
-            <button
-              onClick={onToggleViewed}
-              className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${
-                isViewed
-                  ? "bg-[#1B2B4B] text-white hover:bg-[#243a60]"
-                  : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              {isViewed ? "미완료" : "완료처리"}
-            </button>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {!isViewer && lockState?.재업로드완료알림 === true && (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 text-white text-[12px] font-bold rounded-lg whitespace-nowrap animate-pulse">
+                  ✓ 기사가 재업로드를 완료했습니다
+                </span>
+              )}
+              {!isViewer && lockState?.업로드잠금 && lockState?.재업로드완료알림 !== true && (
+                isUnlockActive ? (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg whitespace-nowrap">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    재업로드 대기중 · {fmtRemain(unlockRemainMs)}
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleAllowReupload}
+                    disabled={unlocking}
+                    title="기사가 갖고 있는 기존 업로드 링크를 30분간 다시 열어줍니다"
+                    className="px-3 py-1.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
+                  </button>
+                )
+              )}
+              {onToggleViewed && (
+                <button
+                  onClick={onToggleViewed}
+                  className={`px-4 py-2 rounded-lg text-[13px] font-bold transition whitespace-nowrap ${
+                    isViewed
+                      ? "bg-[#1B2B4B] text-white hover:bg-[#243a60]"
+                      : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {isViewed ? "미완료" : "완료처리"}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -20275,7 +20367,8 @@ const _findDriverNotice4d = (placeName) => {
   const n = (placeName || "").trim();
   if (!n) return "";
   const found = (mergedClients || []).find(c => rtNormalizeKey(c.업체명 || c.거래처명 || "") === rtNormalizeKey(n));
-  return (found?.기사전달주의사항 || "").trim();
+  const notice = (found?.기사전달주의사항 || "").trim();
+  return _hasRealDriverNotice(notice) ? notice : "";
 };
 const noticeBlock = [...new Set([_findDriverNotice4d(r.상차지명), _findDriverNotice4d(r.하차지명)].filter(Boolean))].join("\n\n");
 
@@ -31428,7 +31521,8 @@ const _findDriverNotice5d = (placeName) => {
   const n = (placeName || "").trim();
   if (!n) return "";
   const found = (mergedClients || []).find(c => dsNormalizeKey(c.업체명 || c.거래처명 || "") === dsNormalizeKey(n));
-  return (found?.기사전달주의사항 || "").trim();
+  const notice = (found?.기사전달주의사항 || "").trim();
+  return _hasRealDriverNotice(notice) ? notice : "";
 };
 const noticeBlock = [...new Set([_findDriverNotice5d(r.상차지명), _findDriverNotice5d(r.하차지명)].filter(Boolean))].join("\n\n");
 
@@ -40261,8 +40355,13 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     const driver = list.reduce((a, r) => a + toInt(r.기사운임), 0);
     const profit = sale - driver;
     const cnt = list.length;
+    // 지급방식 "손실"로 등록된 오더 — 청구(회수)는 못 하면서 기사운임은 나간, 순수
+    // 손실분만 집계한다. (청구운임이 일부라도 잡혀있으면 그만큼은 제외)
+    const lossRows = list.filter((r) => (r.지급방식 || "").trim() === "손실");
+    const lossCnt = lossRows.length;
+    const lossAmount = lossRows.reduce((a, r) => a + Math.max(0, toInt(r.기사운임) - toInt(r.청구운임)), 0);
     return {
-      sale, driver, profit, cnt,
+      sale, driver, profit, cnt, lossCnt, lossAmount,
       avgSale: cnt ? sale / cnt : 0,
       avgProfit: cnt ? profit / cnt : 0,
       rate: sale ? (profit / sale) * 100 : 0,
@@ -40414,7 +40513,85 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     if (s.length) report.push({ title: "차종·톤수별 매출 기여 분석", body: s.join(" ") });
   }
 
-  // 4) 특수일 및 요일 분포
+  // 4) 손실(무수익) 오더 분석 — 지급방식 "손실"로 등록된 오더(청구는 못 하면서
+  //    기사운임은 나간 건)가 늘었는지, 어느 거래처에서 주로 발생했는지 짚어준다.
+  {
+    const lossByClient = (list) => {
+      const map = new Map();
+      list.filter((r) => (r.지급방식 || "").trim() === "손실").forEach((r) => {
+        const k = r.거래처명 || "미지정";
+        const amt = Math.max(0, toInt(r.기사운임) - toInt(r.청구운임));
+        if (!map.has(k)) map.set(k, { amt: 0, cnt: 0 });
+        const o = map.get(k);
+        o.amt += amt; o.cnt += 1;
+      });
+      return map;
+    };
+    const lossA = lossByClient(rowsA);
+    const lossB = lossByClient(rowsB);
+    const lossKeys = new Set([...lossA.keys(), ...lossB.keys()]);
+    const lossTop = Array.from(lossKeys)
+      .map((c) => {
+        const a = lossA.get(c) || { amt: 0, cnt: 0 };
+        const b = lossB.get(c) || { amt: 0, cnt: 0 };
+        return { client: c, amtA: a.amt, amtB: b.amt, cntA: a.cnt, cntB: b.cnt };
+      })
+      .filter((t) => t.amtB > 0)
+      .sort((x, y) => y.amtB - x.amtB)
+      .slice(0, 3);
+
+    const s = [];
+    if (A.lossCnt > 0 || B.lossCnt > 0) {
+      s.push(`손실로 등록된 오더는 ${labelA} ${A.lossCnt}건(${won(A.lossAmount)})에서 ${labelB} ${B.lossCnt}건(${won(B.lossAmount)})으로 변화했습니다.`);
+      if (lossTop.length) {
+        s.push(`${labelB} 기준 손실 금액이 가장 큰 거래처는 ${lossTop.map((t) => `${t.client}(${won(t.amtB)}, ${t.cntB}건)`).join(", ")}입니다.`);
+      }
+    } else {
+      s.push(`${labelA}, ${labelB} 모두 손실로 등록된 오더는 없습니다.`);
+    }
+    report.push({ title: "손실(무수익) 오더 분석", body: s.join(" ") });
+  }
+
+  // 5) 거래처별 수익률 변화 (마진 스퀴즈 경고) — 매출 총액만으로는 안 보이는 위험 신호.
+  //    매출/건수는 유지·증가했는데 수익률(마진율)이 눈에 띄게 나빠진 거래처는 원가
+  //    상승이나 저마진 노선 비중 확대로 "겉보기엔 괜찮은데 실제로는 덜 남는" 상태일
+  //    수 있어, 단가 재협상이 필요한 후보를 먼저 짚어준다.
+  {
+    const marginByClient = (list) => {
+      const map = new Map();
+      list.forEach((r) => {
+        const k = r.거래처명 || "미지정";
+        if (!map.has(k)) map.set(k, { sale: 0, driver: 0, cnt: 0 });
+        const o = map.get(k);
+        o.sale += toInt(r.청구운임);
+        o.driver += toInt(r.기사운임);
+        o.cnt += 1;
+      });
+      return map;
+    };
+    const mA = marginByClient(rowsA);
+    const mB = marginByClient(rowsB);
+    const marginKeys = new Set([...mA.keys(), ...mB.keys()]);
+    const squeezed = Array.from(marginKeys)
+      .map((c) => {
+        const a = mA.get(c) || { sale: 0, driver: 0, cnt: 0 };
+        const b = mB.get(c) || { sale: 0, driver: 0, cnt: 0 };
+        const rateA = a.sale ? ((a.sale - a.driver) / a.sale) * 100 : null;
+        const rateB = b.sale ? ((b.sale - b.driver) / b.sale) * 100 : null;
+        return { client: c, rateA, rateB, cntA: a.cnt, cntB: b.cnt, saleA: a.sale, saleB: b.sale };
+      })
+      .filter((t) => t.cntB >= 3 && t.rateA != null && t.rateB != null)
+      .map((t) => ({ ...t, rateDelta: t.rateB - t.rateA }))
+      .filter((t) => t.rateDelta <= -5)
+      .sort((x, y) => x.rateDelta - y.rateDelta)
+      .slice(0, 3);
+    if (squeezed.length) {
+      const body = `매출 규모와 무관하게 수익률(마진)이 눈에 띄게 나빠진 거래처는 ${squeezed.map((t) => `${t.client}(${t.rateA.toFixed(1)}%→${t.rateB.toFixed(1)}%, 매출 ${won(t.saleA)}→${won(t.saleB)})`).join(", ")}입니다. 매출 자체는 유지·증가했더라도 기사운임(원가) 상승이나 저마진 노선 비중 확대로 실제 남는 이익은 줄고 있을 수 있어, 이 거래처들은 단가 재협상 우선순위로 검토해볼 만합니다.`;
+      report.push({ title: "거래처별 수익률 변화 (마진 스퀴즈 경고)", body });
+    }
+  }
+
+  // 6) 특수일 및 요일 분포
   {
     const s = [];
     if (specialStatA.cnt > 0 || specialStatB.cnt > 0) {
@@ -40473,6 +40650,8 @@ function MonthCompareInsight({ rows = [] }) {
     { label: "수익률", aText: `${insight.A.rate.toFixed(1)}%`, bText: `${insight.B.rate.toFixed(1)}%`, good: insight.B.rate >= insight.A.rate, deltaText: `${(insight.B.rate - insight.A.rate) >= 0 ? "+" : ""}${(insight.B.rate - insight.A.rate).toFixed(1)}%p` },
     { label: "오더 건수", aText: `${insight.A.cnt}건`, bText: `${insight.B.cnt}건`, good: insight.B.cnt >= insight.A.cnt, deltaText: `${(insight.B.cnt - insight.A.cnt) >= 0 ? "+" : ""}${insight.B.cnt - insight.A.cnt}건 (${pctStr(insight.A.cnt, insight.B.cnt)})` },
     { label: "평균단가/건", aText: won(insight.A.avgSale), bText: won(insight.B.avgSale), good: insight.B.avgSale >= insight.A.avgSale, deltaText: `${won(insight.B.avgSale - insight.A.avgSale)} (${pctStr(insight.A.avgSale, insight.B.avgSale)})` },
+    { label: "손실 건수", aText: `${insight.A.lossCnt}건`, bText: `${insight.B.lossCnt}건`, good: insight.B.lossCnt <= insight.A.lossCnt, deltaText: `${(insight.B.lossCnt - insight.A.lossCnt) >= 0 ? "+" : ""}${insight.B.lossCnt - insight.A.lossCnt}건` },
+    { label: "손실금액", aText: won(insight.A.lossAmount), bText: won(insight.B.lossAmount), good: insight.B.lossAmount <= insight.A.lossAmount, deltaText: `${won(insight.B.lossAmount - insight.A.lossAmount)}` },
   ] : [];
 
   return (
