@@ -1673,6 +1673,12 @@ function normalizeClient(row) {
     // 한다 — 이게 빠지면 매 저장마다 "기존 담당자 목록"을 못 읽어와서 새 담당자를
     // 추가하는 대신 항상 덮어써버리고, 선택 팝업도 뜨지 않는다.
     contacts: Array.isArray(row.contacts) ? row.contacts : undefined,
+    // ⭐ 순수매출제외: 매출관리에서 "순수 운송료"로 볼지 여부. true/false로 명시적으로
+    // 저장된 적 있는 거래처만 키를 포함시킨다 — 한 번도 건드린 적 없는(레거시) 거래처는
+    // 키 자체를 아예 안 만들어서(값이 undefined가 되지 않도록) Firestore 저장 시
+    // "undefined 필드" 오류가 나지 않게 하고, isNetRevenueExcludedClient의 이름 기반
+    // 폴백(후레쉬물류/채석강)이 계속 작동하게 한다.
+    ...(typeof row.순수매출제외 === "boolean" ? { 순수매출제외: row.순수매출제외 } : {}),
   };
 }
 function normalizeClients(arr) {
@@ -1698,6 +1704,7 @@ function normalizeClients(arr) {
       등급: c.등급 || "일반",
       팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
       contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
+      ...(typeof c.순수매출제외 === "boolean" ? { 순수매출제외: c.순수매출제외 } : {}),
     }));
 }
 // 화주사 수정요청 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
@@ -3403,6 +3410,7 @@ const markEditRequestSeen = async (order) => {
           if (client.기사전달주의사항 !== undefined) syncFields.기사전달주의사항 = client.기사전달주의사항;
           if (client.점심시작시간 !== undefined) syncFields.점심시작시간 = client.점심시작시간;
           if (client.점심종료시간 !== undefined) syncFields.점심종료시간 = client.점심종료시간;
+          if (client.순수매출제외 !== undefined) syncFields.순수매출제외 = client.순수매출제외;
           if (Object.keys(syncFields).length) {
             await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
           }
@@ -3580,6 +3588,14 @@ const upsertPlace = async (place) => {
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
       companyName: place.companyName || existingData?.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
+      // ⭐ 순수매출제외 — 명시적으로 true/false가 있을 때만 키를 만든다(기본거래처
+      // normalizeClient와 동일한 이유: 한 번도 안 건드린 거래처는 undefined 필드 저장
+      // 오류 없이 그대로 "미설정" 상태를 유지해야 이름 기반 폴백이 계속 동작한다).
+      ...(typeof place.순수매출제외 === "boolean"
+        ? { 순수매출제외: place.순수매출제외 }
+        : typeof existingData?.순수매출제외 === "boolean"
+          ? { 순수매출제외: existingData.순수매출제외 }
+          : {}),
     };
 
     await setDoc(ref, data, { merge: true });
@@ -3603,6 +3619,7 @@ const upsertPlace = async (place) => {
           점심시작시간: data.점심시작시간,
           점심종료시간: data.점심종료시간,
           팝업표시: data.팝업표시,
+          ...(data.순수매출제외 !== undefined ? { 순수매출제외: data.순수매출제외 } : {}),
         }, { merge: true }).catch(() => {});
       }
     } catch {}
@@ -39611,9 +39628,9 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isV
   };
 
   // ⭐ 거래처관리에서 "순수매출제외"로 체크한 거래처 — 하나도 없으면(대부분의
-  // 운송사) 이 구분 자체가 의미 없으므로 관련 행을 아예 숨긴다.
+  // 운송사) 이 구분 자체가 의미 없으므로 관련 행을 아예 숨긴다. 라벨은 실제
+  // 거래처명 대신 "제외 거래처"로 일반화해 표시한다.
   const excludedClientNames = getNetRevenueExcludedNames(clients);
-  const excludedLabel = excludedClientNames.join("·");
 
   return (
     <div className="px-8 py-6">
@@ -39652,7 +39669,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isV
             <DataRow label="화물주선 매출" rowKey="rev_freight" isAuto field="sale" indent={0} />
             <DataRow label="선착불 수수료" rowKey="rev_cash" isAuto field="sale" />
             {excludedClientNames.length > 0 && (
-              <DataRow label={`${excludedLabel} 매출`} rowKey="rev_fresh" isAuto field="sale" />
+              <DataRow label="제외 거래처 매출" rowKey="rev_fresh" isAuto field="sale" />
             )}
             <DataRow label="기타 매출" rowKey="rev_etc" />
             <TotalRow label="매출액 합계" calcFn={totalRevenue} />
@@ -39664,7 +39681,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isV
             <DataRow label="화물주선 운반비" rowKey="cost_freight" isAuto field="cost" />
             <DataRow label="오토바이(인성) 운반비" rowKey="cost_auto" isAuto field="cost" />
             {excludedClientNames.length > 0 && (
-              <DataRow label={`${excludedLabel} 운반비`} rowKey="cost_fresh" isAuto field="cost" />
+              <DataRow label="제외 거래처 운반비" rowKey="cost_fresh" isAuto field="cost" />
             )}
             <DataRow label="인건비" rowKey="cost_labor" />
             <TotalRow label="매출원가 합계" calcFn={totalCost} />
@@ -40992,7 +41009,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients);
   const isExcludedClient = (name = "") => isNetRevenueExcludedClient(name, clients);
   const excludedClientNames = getNetRevenueExcludedNames(clients);
-  const excludedClientLabel = excludedClientNames.join("·");
   const hasExcludedClients = excludedClientNames.length > 0;
 
   const stat = (list) => {
@@ -41274,7 +41290,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                   하나라도 있을 때만 보여준다 (예전엔 "후레쉬 물류"로 고정돼있었음). */}
               {hasExcludedClients && (
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                  <p className="text-sm font-semibold text-gray-700 mb-4">{excludedClientLabel} 매출</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-4">제외 거래처 매출</p>
                   <div className="grid grid-cols-4 gap-4 text-center">
                     <Metric label="작년" value={won(lastYearFresh.sale)} />
                     <Metric label="목표" value={won(FRESH_TARGET_2026)} valueClass="text-indigo-700" />
@@ -41344,7 +41360,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           {hasExcludedClients && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="bg-[#1B2B4B] px-6 py-3">
-                <h3 className="text-[14px] font-bold text-white">{`순수 운송료 (${excludedClientLabel} 제외)`}</h3>
+                <h3 className="text-[14px] font-bold text-white">순수 운송료 (제외 거래처 미포함)</h3>
               </div>
               <div className="p-6">
                 <table className="w-full text-[13px] border-collapse text-center">
@@ -42202,7 +42218,6 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [] }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients);
   const excludedClientNames = getNetRevenueExcludedNames(clients);
-  const excludedClientLabel = excludedClientNames.join("·");
   const hasExcludedClients = excludedClientNames.length > 0;
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -42244,7 +42259,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [] }) {
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
           <h3 className="text-[15px] font-bold text-white">{year}년 월별 매출 · 수익 · 수익률 요약</h3>
-          <p className="text-[11px] text-white/50 mt-0.5">{hasExcludedClients ? `전체 / 순수 운송 / ${excludedClientLabel} 구분` : "월별 매출·수익 요약"}</p>
+          <p className="text-[11px] text-white/50 mt-0.5">{hasExcludedClients ? "전체 / 순수 운송 / 제외 거래처 구분" : "월별 매출·수익 요약"}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => onAI("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
@@ -42272,8 +42287,8 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [] }) {
               <th colSpan={3} className="border p-2 bg-indigo-50">전체 매출</th>
               {hasExcludedClients && (
                 <>
-                  <th colSpan={3} className="border p-2 bg-emerald-50">{`순수 운송 (${excludedClientLabel} 제외)`}</th>
-                  <th colSpan={3} className="border p-2 bg-rose-50">{excludedClientLabel}</th>
+                  <th colSpan={3} className="border p-2 bg-emerald-50">순수 운송 (제외 거래처 미포함)</th>
+                  <th colSpan={3} className="border p-2 bg-rose-50">제외 거래처</th>
                 </>
               )}
             </tr>
@@ -50194,6 +50209,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       // 담당자가 2명 이상인 문서를 수정 팝업에서 저장할 때, 대표(주 담당자)를
       // 정확히 교체하려면 원본 contacts 배열이 필요해 별도로 보관해둔다
       _rawContacts: Array.isArray(d.contacts) ? d.contacts : [],
+      ...(typeof d.순수매출제외 === "boolean" ? { 순수매출제외: d.순수매출제외 } : {}),
     };
   };
 
@@ -51826,6 +51842,19 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </button>
                 </div>
               )}
+              {/* ⭐ 기본거래처와 동일한 플래그 — 같은 이름의 기본거래처가 있으면 저장 시
+                  자동으로 서로 동기화된다(upsertClient/upsertPlace). */}
+              <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                <div>
+                  <div className="text-[13px] font-semibold text-gray-700">순수 운송료 매출 통계에서 제외</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">월 단위로 합산 청구하는 거래처 등, 실제 배차 매출과 별도로 관리할 거래처를 매출관리의 "순수 운송료"와 신규/이탈 거래처 리스트에서 제외합니다. 같은 이름의 기본거래처가 있으면 자동으로 같이 켜지고 꺼집니다.</div>
+                </div>
+                <button type="button"
+                  onClick={() => setEditPlaceModal(p => ({ ...p, 순수매출제외: !p.순수매출제외 }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editPlaceModal.순수매출제외 ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editPlaceModal.순수매출제외 ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
             </div>
             <div className="px-6 pb-5 flex gap-3">
               <button onClick={() => setEditPlaceModal(null)}
