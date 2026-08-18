@@ -656,6 +656,32 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const captureRef = React.useRef(null);
   const driverRefs = React.useRef({});
 
+  // ⭐ 달력에서 특정 날짜만 골라 이미지/PDF로 저장 — 원본 rows에 실제 존재하는
+  // 날짜 전체를 먼저 뽑아두고(달력 다중선택의 모집단), 선택값이 전체와 같으면
+  // "필터 없음"으로 취급해 기존 동작(전체 표시)을 그대로 유지한다.
+  const allScheduleDates = React.useMemo(() => {
+    const set = new Set();
+    for (const r of rows || []) {
+      const wd = _parseWorkDates(r.근무일자목록);
+      const dates = wd.length > 1 ? wd : [r.상차일 || ""];
+      dates.forEach((d) => { if (d) set.add(d); });
+    }
+    return Array.from(set).sort();
+  }, [rows]);
+  const [selectedDates, setSelectedDates] = React.useState(null); // null = 전체(필터 없음)
+  React.useEffect(() => { setSelectedDates(null); }, [rows]);
+  const isDateFiltered = selectedDates != null;
+  const activeDates = isDateFiltered ? selectedDates : allScheduleDates;
+  const activeDateSet = React.useMemo(() => new Set(activeDates), [activeDates]);
+  const toggleScheduleDate = (d) => {
+    setSelectedDates((prev) => {
+      const base = prev != null ? prev : allScheduleDates;
+      const set = new Set(base);
+      if (set.has(d)) set.delete(d); else set.add(d);
+      return Array.from(set).sort();
+    });
+  };
+
   const dateGroups = React.useMemo(() => {
     const map = new Map();
     for (const r of rows || []) {
@@ -665,6 +691,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
       const parsedWorkDates = _parseWorkDates(r.근무일자목록);
       const workDates = parsedWorkDates.length > 1 ? parsedWorkDates : [r.상차일 || ""];
       for (const key of workDates) {
+        if (isDateFiltered && !activeDateSet.has(key)) continue;
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(r);
       }
@@ -675,7 +702,17 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
         date,
         list: [...list].sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""))),
       }));
-  }, [rows]);
+  }, [rows, isDateFiltered, activeDateSet]);
+
+  // 기사별 보기에도 같은 날짜 필터가 적용되도록, 필터링된 오더 목록을 별도로 뽑아둔다.
+  const filteredRows = React.useMemo(() => {
+    if (!isDateFiltered) return rows;
+    return (rows || []).filter((r) => {
+      const wd = _parseWorkDates(r.근무일자목록);
+      const dates = wd.length > 1 ? wd : [r.상차일 || ""];
+      return dates.some((d) => activeDateSet.has(d));
+    });
+  }, [rows, isDateFiltered, activeDateSet]);
 
   // ⭐ 복수근무일(묶음) 오더의 근무일자목록을 "9/2, 4~5, 7~11" 형태로 압축 요약.
   // 기사별 보기에서 13일치를 13줄로 늘어놓지 않고 한 줄로 보여주기 위함.
@@ -697,7 +734,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
 
   const driverGroups = React.useMemo(() => {
     const map = new Map();
-    for (const r of rows || []) {
+    for (const r of filteredRows || []) {
       const key = `${r.이름 || "기사 미배정"}|${r.차량번호 || ""}`;
       if (!map.has(key)) map.set(key, { name: r.이름 || "기사 미배정", phone: r.전화번호 || "", car: r.차량번호 || "", list: [] });
       map.get(key).list.push(r);
@@ -711,13 +748,13 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
         ),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows]);
+  }, [filteredRows]);
 
   const dateRangeLabel = React.useMemo(() => {
-    const dates = [...new Set((rows || []).map(r => r.상차일).filter(Boolean))].sort();
+    const dates = isDateFiltered ? [...activeDateSet].sort() : [...new Set((rows || []).map(r => r.상차일).filter(Boolean))].sort();
     if (!dates.length) return "";
     return dates.length === 1 ? _scheduleDateLabel(dates[0]) : `${_scheduleDateLabel(dates[0])} ~ ${_scheduleDateLabel(dates[dates.length - 1])}`;
-  }, [rows]);
+  }, [rows, isDateFiltered, activeDateSet]);
 
   if (!rows || rows.length === 0) return null;
 
@@ -876,7 +913,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[95vw] min-w-[720px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
-          <h3 className="text-white font-bold text-[15px]">스케줄표 미리보기 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+          <h3 className="text-white font-bold text-[15px]">스케줄표 미리보기 <span className="text-white/60 font-semibold text-[12px] ml-1">({filteredRows.length}건{isDateFiltered ? ` / 전체 ${rows.length}건` : ""})</span></h3>
           <div className="flex items-center gap-1.5">
             <button type="button" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}
               className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">−</button>
@@ -901,6 +938,21 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                 기사별
               </button>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-bold text-gray-500">표시 날짜</span>
+            <CustomDatePicker
+              value={allScheduleDates[0] || ""}
+              multiActive
+              workDates={activeDates}
+              onToggleWorkDate={toggleScheduleDate}
+              onClearWorkDates={() => setSelectedDates([])}
+              displayOverride={isDateFiltered ? `${activeDates.length}일 선택됨` : "전체 날짜"}
+              className="border border-gray-300 rounded-lg px-2.5 py-1 text-[12px] font-semibold text-gray-700 bg-white hover:bg-gray-50"
+            />
+            {isDateFiltered && (
+              <button type="button" onClick={() => setSelectedDates(null)} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">전체보기</button>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[12px] font-bold text-gray-500">표시 항목</span>
@@ -930,7 +982,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                 <div className="text-center">
                   <div className="text-[22px] font-extrabold text-[#1B2B4B] tracking-[6px]">배 차 스 케 줄 표</div>
                   <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
-                    {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {rows.length}건
+                    {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {filteredRows.length}건
                   </div>
                 </div>
               </div>
@@ -16894,6 +16946,22 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     targets.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
   };
 
+  // ✅ 다운로드 폴더 열기 — 브라우저 보안 정책상 웹페이지가 OS 탐색기를 직접 실행할
+  // 수는 없어서, 대신 File System Access API(Chrome/Edge)의 네이티브 폴더 선택창을
+  // 다운로드 폴더로 바로 띄운다. 저장 버튼으로 받은 파일이 실제로 어디 있는지
+  // 바로 확인할 수 있게 해주는 용도라 파일을 고르지 않고 닫아도 무방하다.
+  const openDownloadsFolder = async () => {
+    if (!window.showDirectoryPicker) {
+      alert("이 브라우저에서는 지원되지 않는 기능입니다.\n다운로드 완료 후 브라우저 다운로드 목록에서 '폴더에서 표시'를 이용해주세요.");
+      return;
+    }
+    try {
+      await window.showDirectoryPicker({ startIn: "downloads" });
+    } catch (e) {
+      // 사용자가 선택창을 취소한 경우(AbortError)는 정상 흐름이라 조용히 무시
+    }
+  };
+
   const handleCopy = async (item, id) => {
     const src = item.base64 || item.url;
     const tryImageCopy = async (blob) => {
@@ -17107,6 +17175,13 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
                 {zipLoading ? "압축중..." : `전체저장 (${items.length}장)`}
               </button>
             )}
+            <button
+              onClick={openDownloadsFolder}
+              title="저장한 파일이 담긴 다운로드 폴더를 엽니다"
+              className="px-3 py-1.5 bg-white border border-gray-300 text-gray-600 text-[12px] font-bold rounded-lg hover:bg-gray-50 transition whitespace-nowrap shrink-0"
+            >
+              다운로드 폴더 열기
+            </button>
             <button onClick={onClose}
               className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-lg transition shrink-0">
               ×
@@ -40216,7 +40291,10 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     .map((c) => {
       const a = clientA.get(c) || { sale: 0, cnt: 0 };
       const b = clientB.get(c) || { sale: 0, cnt: 0 };
-      return { client: c, saleA: a.sale, saleB: b.sale, delta: b.sale - a.sale, cntA: a.cnt, cntB: b.cnt };
+      return {
+        client: c, saleA: a.sale, saleB: b.sale, delta: b.sale - a.sale, cntA: a.cnt, cntB: b.cnt,
+        avgA: a.cnt ? a.sale / a.cnt : 0, avgB: b.cnt ? b.sale / b.cnt : 0,
+      };
     })
     .sort((x, y) => x.delta - y.delta);
   const topDecline = clientDeltas.filter((c) => c.delta < 0).slice(0, 5);
@@ -40258,12 +40336,6 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
   const saleDelta = B.sale - A.sale;
   const cntDelta = B.cnt - A.cnt;
   const rateDeltaP = B.rate - A.rate;
-  const tonShift = tonMix
-    .filter((t) => t.cntA >= 3 || t.cntB >= 3)
-    .map((t) => ({ ...t, shareDelta: t.shareB - t.shareA }))
-    .sort((x, y) => Math.abs(y.shareDelta) - Math.abs(x.shareDelta))
-    .filter((t) => Math.abs(t.shareDelta) >= 3)
-    .slice(0, 3);
   const weekendShareA = A.cnt ? (weekendA / A.cnt) * 100 : 0;
   const weekendShareB = B.cnt ? (weekendB / B.cnt) * 100 : 0;
 
@@ -40290,24 +40362,56 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     report.push({ title: "매출 및 수익성", body: s.join(" ") });
   }
 
-  // 2) 거래처 동향
+  // 2) 거래처 동향 — 매출 변화가 "건수 변화" 때문인지 "같은 거래처인데 건당 단가가
+  //    바뀐 것" 때문인지 구분해서 짚어준다 (단가가 15% 이상 바뀐 경우만 별도 언급).
+  const clientPriceNote = (c) => {
+    const pct = c.avgA ? ((c.avgB - c.avgA) / c.avgA) * 100 : 0;
+    if (c.avgA <= 0 || c.avgB <= 0 || Math.abs(pct) < 15) return "";
+    return `, 건당 평균단가 ${won(c.avgA)}→${won(c.avgB)}(${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)`;
+  };
   {
     const s = [];
     if (topDecline.length) {
-      s.push(`매출 감소에 가장 크게 기여한 거래처는 ${topDecline.map((c) => `${c.client}(${won(c.delta)}, ${c.cntA}건→${c.cntB}건)`).join(", ")}입니다.`);
+      s.push(`매출 감소에 가장 크게 기여한 거래처는 ${topDecline.map((c) => `${c.client}(${won(c.delta)}, ${c.cntA}건→${c.cntB}건${clientPriceNote(c)})`).join(", ")}입니다.`);
     }
     if (topGrowth.length) {
-      s.push(`반면 매출이 늘어난 거래처는 ${topGrowth.map((c) => `${c.client}(+${won(c.delta)}, ${c.cntA}건→${c.cntB}건)`).join(", ")}입니다.`);
+      s.push(`반면 매출이 늘어난 거래처는 ${topGrowth.map((c) => `${c.client}(+${won(c.delta)}, ${c.cntA}건→${c.cntB}건${clientPriceNote(c)})`).join(", ")}입니다.`);
     }
     if (s.length) report.push({ title: "거래처 동향", body: s.join(" ") });
   }
 
-  // 3) 차종/톤수 구성 변화 — 비중 변화가 큰 항목만
-  if (tonShift.length) {
-    const body = tonShift
-      .map((t) => `${t.ton}은 비중이 ${t.shareA.toFixed(1)}%에서 ${t.shareB.toFixed(1)}%로 ${t.shareDelta >= 0 ? "증가" : "감소"}(${t.shareDelta >= 0 ? "+" : ""}${t.shareDelta.toFixed(1)}%p)했고, 평균단가는 ${won(t.avgA)}에서 ${won(t.avgB)}로 변동했습니다`)
-      .join("; ") + ".";
-    report.push({ title: "차종·톤수 구성 변화", body });
+  // 3) 차종·톤수별 매출 기여 분석 — "건수는 늘었는데 왜 매출/평균단가가 기대만큼
+  //    안 늘었나"에 대한 핵심 답변. 카테고리별 매출증감을 물량효과(건수 변화 ×
+  //    직전월 단가)와 단가효과(같은 톤수 안에서 건당 단가 자체가 바뀐 몫)로 정확히
+  //    분해한다 — 두 효과의 합은 항상 그 카테고리의 실제 매출증감과 정확히 일치한다.
+  {
+    const tonImpact = tonMix
+      .filter((t) => t.cntA >= 3 || t.cntB >= 3) // 표본이 너무 적은 카테고리는 제외
+      .map((t) => {
+        const priceImpact = t.cntB * (t.avgB - t.avgA); // 같은 건수(B) 기준, 단가가 바뀐 몫
+        const volumeImpact = t.avgA * (t.cntB - t.cntA); // 직전월 단가(A) 기준, 건수가 바뀐 몫
+        return { ...t, priceImpact, volumeImpact };
+      });
+    const totalPriceImpact = tonImpact.reduce((a, t) => a + t.priceImpact, 0);
+    const totalVolumeImpact = tonImpact.reduce((a, t) => a + t.volumeImpact, 0);
+    const topPriceDown = [...tonImpact].filter((t) => t.priceImpact < -100000).sort((x, y) => x.priceImpact - y.priceImpact).slice(0, 3);
+    const topPriceUp = [...tonImpact].filter((t) => t.priceImpact > 100000).sort((x, y) => y.priceImpact - x.priceImpact).slice(0, 3);
+    const topVolUp = [...tonImpact].filter((t) => t.volumeImpact > 100000).sort((x, y) => y.volumeImpact - x.volumeImpact).slice(0, 3);
+
+    const s = [];
+    if (tonImpact.length && (Math.abs(totalPriceImpact) >= 100000 || Math.abs(totalVolumeImpact) >= 100000)) {
+      s.push(`차량 톤수 구성 기준으로 매출 증감(${won(saleDelta)})을 나눠보면, 건수 변화에 따른 물량효과는 ${won(totalVolumeImpact)}, 같은 톤수 안에서 건당 단가 자체가 바뀐 데 따른 단가효과는 ${won(totalPriceImpact)}입니다.`);
+    }
+    if (topPriceDown.length) {
+      s.push(`단가효과가 가장 크게 마이너스로 작용한 톤수는 ${topPriceDown.map((t) => `${t.ton}(${won(t.priceImpact)}, 건당 ${won(t.avgA)}→${won(t.avgB)}, ${t.cntA}건→${t.cntB}건)`).join(", ")}으로, 건수는 유지되거나 오히려 줄었는데도 건당 단가 하락 자체가 매출을 끌어내렸습니다.`);
+    }
+    if (topPriceUp.length) {
+      s.push(`반대로 ${topPriceUp.map((t) => `${t.ton}(+${won(t.priceImpact)}, 건당 ${won(t.avgA)}→${won(t.avgB)})`).join(", ")}은 건당 단가 자체가 오르며 매출을 끌어올렸습니다.`);
+    }
+    if (topVolUp.length && cntDelta > 0) {
+      s.push(`오더 건수 증가는 주로 ${topVolUp.map((t) => `${t.ton}(${t.cntA}건→${t.cntB}건)`).join(", ")}에서 나왔는데, 이 톤수들의 건당 단가는 대형차량보다 낮은 편이라 전체 건수가 늘어도 평균단가·매출 증가로는 온전히 이어지지 않는 구성비 변화가 함께 작용했습니다.`);
+    }
+    if (s.length) report.push({ title: "차종·톤수별 매출 기여 분석", body: s.join(" ") });
   }
 
   // 4) 특수일 및 요일 분포
