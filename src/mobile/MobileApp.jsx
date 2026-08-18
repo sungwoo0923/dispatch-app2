@@ -2215,6 +2215,7 @@ useEffect(() => {
         // ★ PC와 동일: 오더메모(등급/메모 안내 팝업용)·팝업표시(안내 팝업 노출 여부)
         오더메모: data.오더메모 || "",
         팝업표시: data.팝업표시 !== undefined ? data.팝업표시 : true,
+        ...(typeof data.순수매출제외 === "boolean" ? { 순수매출제외: data.순수매출제외 } : {}),
       };
     });
 
@@ -2257,6 +2258,7 @@ useEffect(() => {
         등급: d.등급 || "일반",
         오더메모: d.오더메모 || "",
         팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
+        ...(typeof d.순수매출제외 === "boolean" ? { 순수매출제외: d.순수매출제외 } : {}),
       }));
     setClients(list);
   });
@@ -5017,6 +5019,7 @@ setOpenMemo={setOpenMemo}
     onBack={() => setPage("list")}
     cardVersionB={cardVersionB}
     clients={clients}
+    places={places}
   />
 )}
     {page === "form" && (
@@ -5341,15 +5344,17 @@ function SalesPinGate({ onVerified, cardVersionB = false }) {
 // "순수매출제외"로 체크한 거래처를 매출 통계에서 뺀다. 아직 체크박스를 저장한 적
 // 없는 기존 데이터(주로 돌캐의 "후레쉬물류")는 예전 하드코딩 이름으로 폴백한다.
 const LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE = ["후레쉬물류", "채석강"];
-function isNetRevenueExcludedClientMobile(name, clientsList) {
+function isNetRevenueExcludedClientMobile(name, clientsList, placesList) {
   const n = String(name || "").trim();
   if (!n) return false;
-  const found = (clientsList || []).find((c) => String(c.거래처명 || "").trim() === n);
-  if (found && typeof found.순수매출제외 === "boolean") return found.순수매출제외;
+  const foundClient = (clientsList || []).find((c) => String(c.거래처명 || "").trim() === n);
+  if (foundClient && typeof foundClient.순수매출제외 === "boolean") return foundClient.순수매출제외;
+  const foundPlace = (placesList || []).find((p) => String(p.거래처명 || "").trim() === n);
+  if (foundPlace && typeof foundPlace.순수매출제외 === "boolean") return foundPlace.순수매출제외;
   return LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE.some((x) => n.includes(x));
 }
 
-function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [] }) {
+function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [], places = [] }) {
   const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
@@ -5366,7 +5371,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
     거래처명: r.거래처명 || r.업체명 || "",
   });
   const allFixed = fixedData.map(normalizeFixed).filter(r => r.상차일);
-  const allBase = [...data.filter(r => r.상차일 && !isNetRevenueExcludedClientMobile(r.거래처명, clients)), ...allFixed];
+  const allBase = [...data.filter(r => r.상차일 && !isNetRevenueExcludedClientMobile(r.거래처명, clients, places)), ...allFixed];
   const rows = allBase.filter(r => r.상차일.startsWith(month));
 
   const prevMonth = (() => { const d = new Date(month+"-01"); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7); })();
