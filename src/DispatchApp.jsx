@@ -1726,19 +1726,32 @@ const EDIT_REQUEST_FIELD_LABELS = {
 // 그대로 유지되게 한다 — 거래처관리에서 체크박스를 명시적으로 켜거나 끄는 순간
 // 그 거래처는 폴백 대신 저장된 값을 따른다.
 const LEGACY_NET_REVENUE_EXCLUDED_NAMES = ["후레쉬물류", "채석강"];
-function isNetRevenueExcludedClient(name, clientsList) {
+// ⭐ 오더의 거래처명이 항상 "기본거래처"에 똑같은 이름으로 등록되어 있는 건 아니다
+// (예: "채석강-더담"처럼 하차지거래처에만 그 이름으로 등록된 경우) — 그래서
+// 기본거래처에 정확히 일치하는 이름이 없으면 하차지거래처에서도 찾아본다. 예전
+// 하드코딩(레거시)은 이름에 "채석강"이 부분적으로만 들어가도 걸렸기 때문에(예:
+// "채석강-더담"도 "채석강"을 포함), 그 레거시를 실제로 끄려면 정확히 그 이름과
+// 일치하는 기본거래처 "또는" 하차지거래처 문서에 명시적으로 체크가 되어 있어야 한다.
+function isNetRevenueExcludedClient(name, clientsList, placesList) {
   const n = String(name || "").trim();
   if (!n) return false;
-  const found = (clientsList || []).find((c) => String(c.거래처명 || "").trim() === n);
-  if (found && typeof found.순수매출제외 === "boolean") return found.순수매출제외;
+  const foundClient = (clientsList || []).find((c) => String(c.거래처명 || "").trim() === n);
+  if (foundClient && typeof foundClient.순수매출제외 === "boolean") return foundClient.순수매출제외;
+  const foundPlace = (placesList || []).find((p) => String(p.업체명 || "").trim() === n);
+  if (foundPlace && typeof foundPlace.순수매출제외 === "boolean") return foundPlace.순수매출제외;
   return LEGACY_NET_REVENUE_EXCLUDED_NAMES.some((x) => n.includes(x));
 }
-function getNetRevenueExcludedNames(clientsList) {
-  const names = (clientsList || [])
-    .filter((c) => isNetRevenueExcludedClient(c.거래처명, clientsList))
-    .map((c) => (c.거래처명 || "").trim())
-    .filter(Boolean);
-  return Array.from(new Set(names));
+function getNetRevenueExcludedNames(clientsList, placesList) {
+  const names = new Set();
+  (clientsList || []).forEach((c) => {
+    const nm = (c.거래처명 || "").trim();
+    if (nm && isNetRevenueExcludedClient(nm, clientsList, placesList)) names.add(nm);
+  });
+  (placesList || []).forEach((p) => {
+    const nm = (p.업체명 || "").trim();
+    if (nm && isNetRevenueExcludedClient(nm, clientsList, placesList)) names.add(nm);
+  });
+  return Array.from(names);
 }
 
 // 거래처/상하차지별로 "기사전달용" 복사 시 자동으로 함께 붙는 주의사항 문구.
@@ -39155,7 +39168,7 @@ function NewOrderPopup({
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
 
 // ===================== 손익보고서 컴포넌트 =====================
-function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isViewer = false }) {
+function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], places = [], isViewer = false }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = React.useState(currentYear);
   const [manualData, setManualData] = React.useState({});
@@ -39253,7 +39266,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isV
       const pay = String(r.지급방식 || "");
 
       // ── 매출 분류 ──
-      if (isNetRevenueExcludedClient(client, clients)) {
+      if (isNetRevenueExcludedClient(client, clients, places)) {
         addRow("rev_fresh", month, sale, 0);
       } else if (pay === "선불" || pay === "착불") {
         const cashAmt = r.__isFixed ? (r.실수수료 || 0) : Math.max(0, sale - cost);
@@ -39265,14 +39278,14 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isV
       // ── 매출원가(기사운임) 분류 ──
       if (bm === "인성") {
         addRow("cost_auto", month, 0, cost);
-      } else if (isNetRevenueExcludedClient(client, clients)) {
+      } else if (isNetRevenueExcludedClient(client, clients, places)) {
         addRow("cost_fresh", month, 0, cost);
       } else {
         addRow("cost_freight", month, 0, cost);
       }
     });
     return result;
-  }, [allRows, year, clients]);
+  }, [allRows, year, clients, places]);
 
   const autoVal = (key, month, field = "sale") => {
     return (getAutoMonth[key] && getAutoMonth[key][month] && getAutoMonth[key][month][field]) || 0;
@@ -39630,7 +39643,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], isV
   // ⭐ 거래처관리에서 "순수매출제외"로 체크한 거래처 — 하나도 없으면(대부분의
   // 운송사) 이 구분 자체가 의미 없으므로 관련 행을 아예 숨긴다. 라벨은 실제
   // 거래처명 대신 "제외 거래처"로 일반화해 표시한다.
-  const excludedClientNames = getNetRevenueExcludedNames(clients);
+  const excludedClientNames = getNetRevenueExcludedNames(clients, places);
 
   return (
     <div className="px-8 py-6">
@@ -40983,7 +40996,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
   const prevMonthRows = rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey));
 
-  const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !isNetRevenueExcludedClient(c, clients);
+  const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !isNetRevenueExcludedClient(c, clients, places);
   const firstAppearMap = new Map();
   rows.forEach((r) => {
     const c = r.거래처명 || "";
@@ -41006,9 +41019,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   });
 
   const won = (n) => `${(n || 0).toLocaleString()}원`;
-  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients);
-  const isExcludedClient = (name = "") => isNetRevenueExcludedClient(name, clients);
-  const excludedClientNames = getNetRevenueExcludedNames(clients);
+  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients, places);
+  const isExcludedClient = (name = "") => isNetRevenueExcludedClient(name, clients, places);
+  const excludedClientNames = getNetRevenueExcludedNames(clients, places);
   const hasExcludedClients = excludedClientNames.length > 0;
 
   const stat = (list) => {
@@ -41233,6 +41246,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           dispatchData={dispatchData}
           fixedRows={fixedRows}
           clients={clients}
+          places={places}
           isViewer={isViewer}
         />
       )}
@@ -41418,6 +41432,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               setYear={setSelectedYear}
               onAI={(mode) => setAiMode(mode)}
               clients={clients}
+              places={places}
             />
 
             {/* 기간별 추이 */}
@@ -42214,10 +42229,10 @@ function AIPremiumInsight({ rows = [], targetMonth, forecast2026, yPure }) {
   );
 }
 
-function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [] }) {
+function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [], places = [] }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients);
-  const excludedClientNames = getNetRevenueExcludedNames(clients);
+  const isFresh = (r) => isNetRevenueExcludedClient(r.거래처명, clients, places);
+  const excludedClientNames = getNetRevenueExcludedNames(clients, places);
   const hasExcludedClients = excludedClientNames.length > 0;
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
