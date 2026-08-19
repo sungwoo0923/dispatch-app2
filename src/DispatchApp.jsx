@@ -40582,11 +40582,27 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     const lossRows = list.filter((r) => (r.지급방식 || "").trim() === "손실");
     const lossCnt = lossRows.length;
     const lossAmount = lossRows.reduce((a, r) => a + Math.max(0, toInt(r.기사운임) - toInt(r.청구운임)), 0);
+    // 총 운행대수 — 같은 차량(기사)이 여러 건을 뛴 경우, 오더 건수만큼이 아니라
+    // "실제로 몇 대가 굴렀는지"를 보고 싶은 것이므로 차량번호(있으면 최우선) 또는
+    // 기사명+연락처(차량번호 미기재 시 폴백) 기준으로 중복 제거한 고유 대수로 센다.
+    // 오더 10건을 기사 1명이 다 했다면 "1대가 10건을 운행"으로 집계된다 — 총
+    // 오더 건수는 별도 지표(오더 건수)로 이미 보여주고 있어 여기서는 겹치지 않는다.
+    const vehicleKeys = new Set();
+    list.forEach((r) => {
+      const car = (r.차량번호 || "").trim();
+      const name = (r.이름 || "").trim();
+      const phone = (r.전화번호 || "").trim();
+      if (!car && !name && !phone) return; // 배차 정보가 전혀 없는 오더는 집계에서 제외
+      vehicleKeys.add(car || `${name}|${phone}`);
+    });
+    const vehicleCnt = vehicleKeys.size;
     return {
       sale, driver, profit, cnt, lossCnt, lossAmount,
       avgSale: cnt ? sale / cnt : 0,
       avgProfit: cnt ? profit / cnt : 0,
       rate: sale ? (profit / sale) * 100 : 0,
+      vehicleCnt,
+      orderPerVehicle: vehicleCnt ? cnt / vehicleCnt : 0,
     };
   };
   const A = summarize(rowsA);
@@ -40925,6 +40941,30 @@ function renderInlineBold(text) {
       : <React.Fragment key={i}>{part}</React.Fragment>
   );
 }
+// report 문단은 PPT에도 그대로 쓰이는 하나의 완결된 문장 형태로 만들어두고,
+// 화면에 보여줄 때만 문장 단위로 잘라 체크리스트처럼 표시한다 — 긴 서술형
+// 문단을 한 덩어리로 읽는 것보다 "사실 하나당 한 줄"이 눈에 훨씬 잘 들어온다.
+function splitToFacts(text) {
+  return String(text || "")
+    .split(/(?<=[.!?])\s+(?=\S)/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+// 탭 메뉴는 폭이 좁아 원래 제목("차종·톤수별 매출 기여 분석" 등)을 그대로 쓰면
+// 줄바꿈이 지저분해진다. 탭에는 줄임 이름을, 내용 영역에는 원래 제목을 그대로 쓴다.
+const REPORT_TAB_SHORT_LABEL = {
+  "핵심 요약": "핵심 요약",
+  "매출 및 수익성": "매출·수익성",
+  "거래처 동향": "거래처 동향",
+  "차종·톤수별 매출 기여 분석": "차종·톤수 기여",
+  "손실(무수익) 오더 분석": "손실 오더",
+  "거래처별 수익률 변화 (마진 스퀴즈 경고)": "마진 스퀴즈",
+  "특수일 및 요일 분포": "특수일·요일",
+  "거래처 유지율 및 집중도": "유지율·집중도",
+};
+function reportTabLabel(title) {
+  return REPORT_TAB_SHORT_LABEL[title] || title;
+}
 
 // ⭐ monthA/monthB/setMonthA/setMonthB는 부모(Settlement)가 상태를 들고 있다가
 // 넘겨주는 controlled 방식이 기본이다 — 매출관리는 activeTab에 따라 이 탭을
@@ -41034,6 +41074,8 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
     { label: "수익", aText: won(insight.A.profit), bText: won(insight.B.profit), good: insight.B.profit >= insight.A.profit, deltaText: `${won(insight.B.profit - insight.A.profit)} (${pctStr(insight.A.profit, insight.B.profit)})` },
     { label: "수익률", aText: `${insight.A.rate.toFixed(1)}%`, bText: `${insight.B.rate.toFixed(1)}%`, good: insight.B.rate >= insight.A.rate, deltaText: `${(insight.B.rate - insight.A.rate) >= 0 ? "+" : ""}${(insight.B.rate - insight.A.rate).toFixed(1)}%p` },
     { label: "오더 건수", aText: `${insight.A.cnt}건`, bText: `${insight.B.cnt}건`, good: insight.B.cnt >= insight.A.cnt, deltaText: `${(insight.B.cnt - insight.A.cnt) >= 0 ? "+" : ""}${insight.B.cnt - insight.A.cnt}건 (${pctStr(insight.A.cnt, insight.B.cnt)})` },
+    { label: "총 운행대수", aText: `${insight.A.vehicleCnt}대`, bText: `${insight.B.vehicleCnt}대`, good: insight.B.vehicleCnt >= insight.A.vehicleCnt, deltaText: `${(insight.B.vehicleCnt - insight.A.vehicleCnt) >= 0 ? "+" : ""}${insight.B.vehicleCnt - insight.A.vehicleCnt}대 (${pctStr(insight.A.vehicleCnt, insight.B.vehicleCnt)})` },
+    { label: "차량당 평균 오더", aText: `${insight.A.orderPerVehicle.toFixed(1)}건`, bText: `${insight.B.orderPerVehicle.toFixed(1)}건`, good: insight.B.orderPerVehicle >= insight.A.orderPerVehicle, deltaText: `${(insight.B.orderPerVehicle - insight.A.orderPerVehicle) >= 0 ? "+" : ""}${(insight.B.orderPerVehicle - insight.A.orderPerVehicle).toFixed(1)}건` },
     { label: "평균단가/건", aText: won(insight.A.avgSale), bText: won(insight.B.avgSale), good: insight.B.avgSale >= insight.A.avgSale, deltaText: `${won(insight.B.avgSale - insight.A.avgSale)} (${pctStr(insight.A.avgSale, insight.B.avgSale)})` },
     { label: "손실 건수", aText: `${insight.A.lossCnt}건`, bText: `${insight.B.lossCnt}건`, good: insight.B.lossCnt <= insight.A.lossCnt, deltaText: `${(insight.B.lossCnt - insight.A.lossCnt) >= 0 ? "+" : ""}${insight.B.lossCnt - insight.A.lossCnt}건` },
     { label: "손실금액", aText: won(insight.A.lossAmount), bText: won(insight.B.lossAmount), good: insight.B.lossAmount <= insight.A.lossAmount, deltaText: `${won(insight.B.lossAmount - insight.A.lossAmount)}` },
@@ -41101,7 +41143,8 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
               탭으로 하나씩 골라보게 하고, "핵심 요약"만 탭 밖에 고정해 놓친다. */}
           <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-              {/* 좌: 비교분석 보고서 (탭) */}
+              {/* 좌: 비교분석 보고서 — 모바일 사이드메뉴 형식으로 왼쪽에 세로 탭을 두고,
+                  선택한 섹션만 오른쪽에 문장 단위 체크리스트로 보여준다. */}
               <div className="p-5">
                 <div className="pb-3 mb-4 border-b border-gray-200">
                   <div className="text-[11px] font-bold text-gray-400 tracking-widest">비교분석 보고서</div>
@@ -41114,27 +41157,41 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
                     {reportHighlight && (
                       <div className="mb-4 pb-4 border-b border-gray-200">
                         <div className="text-[10px] font-bold text-gray-400 tracking-widest mb-1.5">{reportHighlight.title}</div>
-                        <p className="text-[14px] font-bold text-[#1B2B4B] leading-[1.8]">{renderInlineBold(reportHighlight.body)}</p>
+                        <p className="text-[14.5px] font-bold text-[#1B2B4B] leading-[1.85]">{renderInlineBold(reportHighlight.body)}</p>
                       </div>
                     )}
                     {reportTabs.length > 0 && (
-                      <>
-                        <div className="flex flex-wrap gap-1.5 mb-4">
+                      <div className="flex gap-4 items-start">
+                        {/* 세로 탭 메뉴 */}
+                        <div className="flex flex-col gap-1 shrink-0 w-[108px]">
                           {reportTabs.map((sec, i) => (
                             <button
                               key={sec.title}
                               type="button"
                               onClick={() => setActiveReportTab(i)}
-                              className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition ${i === Math.min(activeReportTab, reportTabs.length - 1) ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                              className={`text-left px-2.5 py-2 rounded-md text-[12.5px] font-bold leading-[1.35] transition ${i === Math.min(activeReportTab, reportTabs.length - 1) ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                             >
-                              {sec.title}
+                              {reportTabLabel(sec.title)}
                             </button>
                           ))}
                         </div>
-                        {activeReportSec && (
-                          <p className="text-[13.5px] text-gray-700 leading-[1.9]">{renderInlineBold(activeReportSec.body)}</p>
-                        )}
-                      </>
+                        {/* 선택한 섹션 내용 — 서술형 문단 대신 문장 단위로 잘라 체크리스트처럼 표시 */}
+                        <div className="flex-1 min-w-0">
+                          {activeReportSec && (
+                            <>
+                              <h4 className="text-[13px] font-extrabold text-[#1B2B4B] mb-2.5 pb-1.5 border-b border-gray-100">{activeReportSec.title}</h4>
+                              <ul className="space-y-2.5">
+                                {splitToFacts(activeReportSec.body).map((fact, i) => (
+                                  <li key={i} className="flex gap-2 text-[14.5px] text-gray-700 leading-[1.7]">
+                                    <span className="text-[#1B2B4B] font-extrabold">·</span>
+                                    <span>{renderInlineBold(fact)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </>
                 )}
