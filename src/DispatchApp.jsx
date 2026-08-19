@@ -18685,6 +18685,10 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
   const [verifiedCounts, setVerifiedCounts] = React.useState({});
   const [countsLoading, setCountsLoading] = React.useState(false);
   const getCnt = (r) => verifiedCounts[r._id] ?? (r.attachCount || 0);
+  // 실제 첨부파일이 없어도 "다른 방법으로 서류를 확인했다"고 수동으로 표시해둔
+  // 오더(attachViewed)는 완료로 인정한다 — 그리드의 첨부 아이콘/첨부뷰어 하단
+  // "완료처리" 버튼과 동일한 기준을 여기서도 그대로 따른다.
+  const isDone = (r) => getCnt(r) > 0 || r.attachViewed === true;
 
   React.useEffect(() => {
     if (!results.length) { setVerifiedCounts({}); setCountsLoading(false); return; }
@@ -18737,8 +18741,8 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
 
   const sortedResults = React.useMemo(() => {
     const arr = [...results];
-    if (sortMode === "done") return arr.sort((a,b) => getCnt(b) - getCnt(a) || (a.상차일||"").localeCompare(b.상차일||""));
-    if (sortMode === "undone") return arr.sort((a,b) => getCnt(a) - getCnt(b) || (a.상차일||"").localeCompare(b.상차일||""));
+    if (sortMode === "done") return arr.sort((a,b) => (isDone(b) - isDone(a)) || (getCnt(b) - getCnt(a)) || (a.상차일||"").localeCompare(b.상차일||""));
+    if (sortMode === "undone") return arr.sort((a,b) => (isDone(a) - isDone(b)) || (getCnt(a) - getCnt(b)) || (a.상차일||"").localeCompare(b.상차일||""));
     return arr.sort((a,b) => (a.상차일||"").localeCompare(b.상차일||""));
   }, [results, sortMode, verifiedCounts]);
 
@@ -18838,7 +18842,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     </button>
   );
 
-  const doneCount = results.filter(r=>getCnt(r)>0).length;
+  const doneCount = results.filter(isDone).length;
   const undoneCount = results.length - doneCount;
 
   return (
@@ -18934,7 +18938,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
               <tbody>
                 {sortedResults.map(r => {
                   const cnt = getCnt(r);
-                  const done = cnt > 0;
+                  const done = isDone(r);
                   return (
                     <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-5 py-3.5 text-gray-800 font-medium whitespace-nowrap">{r.상차일 || "-"}</td>
@@ -18943,15 +18947,13 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                       <td className="px-5 py-3.5 text-gray-800">{r.하차지명 || "-"}</td>
                       <td className="px-5 py-3.5 text-center">
                         {done
-                          ? <span className="inline-block px-3 py-1 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold">{cnt}장 완료</span>
+                          ? <span className="inline-block px-3 py-1 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold">{cnt > 0 ? `${cnt}장 완료` : "확인완료"}</span>
                           : <span className="inline-block px-3 py-1 rounded-full bg-gray-200 text-gray-600 text-[13px] font-bold">미완료</span>}
                       </td>
                       <td className="px-5 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {done && (
-                            <button onClick={() => setViewRow(r)}
-                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-bold hover:bg-gray-100 transition">보기</button>
-                          )}
+                          <button onClick={() => setViewRow(r)}
+                            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-bold hover:bg-gray-100 transition">보기</button>
                           <button onClick={() => handleSend(r)}
                             className={`px-3 py-1.5 rounded-lg text-[13px] font-bold transition ${sendDone === r._id ? "bg-[#1B2B4B] text-white" : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
                             {sendDone === r._id ? "복사됨" : "즉시전송"}
@@ -18970,7 +18972,24 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
           <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold rounded-lg transition">닫기</button>
         </div>
       </div>
-      {viewRow && <AttachmentViewer row={viewRow} onClose={() => setViewRow(null)} db={db} isViewer={isViewer} />}
+      {viewRow && (
+        <AttachmentViewer
+          row={viewRow}
+          onClose={() => setViewRow(null)}
+          db={db}
+          isViewer={isViewer}
+          isViewed={viewRow.attachViewed === true}
+          onToggleViewed={() => {
+            const nextVal = !viewRow.attachViewed;
+            setResults(prev => prev.map(x => x._id === viewRow._id ? { ...x, attachViewed: nextVal } : x));
+            setViewRow(prev => prev ? { ...prev, attachViewed: nextVal } : prev);
+            const col = viewRow.__col || "orders";
+            updateDoc(doc(db, col, viewRow._id), { attachViewed: nextVal }).catch(() => {});
+            const mirror = attachMirrorTargetOf(viewRow);
+            if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { attachViewed: nextVal }).catch(() => {});
+          }}
+        />
+      )}
     </div>
   );
 }
