@@ -192,7 +192,7 @@ function FareCertModal({ row, companyName, onClose }) {
   );
 
   return (
-    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
@@ -602,7 +602,7 @@ function findDuplicateOrders(form, existingRows) {
 function DuplicateOrderModal({ matches, onCancel, onProceed }) {
   if (!matches || !matches.length) return null;
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999999] p-4" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999999] p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-5 py-4">
           <div className="text-white font-bold text-[14px]">중복 등록 확인</div>
@@ -977,7 +977,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[95vw] min-w-[720px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
@@ -1298,7 +1298,7 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6">
       {saving && (
         // ⚠️ 저장 중에는 뒤에 있는 표가 한 줄씩 바뀌는 게 비쳐 보이면 안 되므로
         // (완전히 다 끝나고 나서 한 번에 자연스럽게 보여야 함) 배경을 반투명이
@@ -1487,7 +1487,7 @@ function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6">
       {saving && (
         // ⚠️ 저장 중 뒤에 있는 표가 비쳐 보이지 않도록 완전히 불투명하게 가린다.
         <div className="fixed inset-0 z-[9999999] bg-gray-100 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
@@ -2277,11 +2277,15 @@ function ContactListEditor({ contacts, onChange }) {
 
 // 상/하차지명 라벨 옆 오더메모 아이콘 버튼 — 배차관리 등록 폼과 동일한 디자인을
 // 오더복사/수정 패널, 선택수정 패널에서도 재사용한다.
-function OrderMemoIconButton({ onClick, title = "오더메모" }) {
+// hasMemo가 true면(이 상/하차지에 등록된 오더메모가 있으면) 아이콘 색을 앰버로
+// 바꾸고 천천히 깜빡여서, 아이콘 모양만 봐서는 구분이 안 되던 문제를 해결한다.
+function OrderMemoIconButton({ onClick, title = "오더메모", hasMemo = false, size = 20 }) {
   return (
     <button type="button" tabIndex={-1} onClick={onClick}
-      className="text-[#1B2B4B] hover:opacity-70 transition" title={title}>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      className={`transition ${hasMemo ? "text-amber-500 hover:opacity-80" : "text-[#1B2B4B] hover:opacity-70"}`}
+      style={hasMemo ? { animation: "cancelSlowBlink 2.2s ease-in-out infinite" } : undefined}
+      title={hasMemo ? `${title} (등록됨)` : title}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 3v4a1 1 0 0 0 1 1h4" />
         <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
         <path d="M9 13h6" /><path d="M9 17h6" />
@@ -2317,7 +2321,7 @@ function OrderMemoModal({ type, name, memo, popupShow, notice, onCancel, onSave 
   // 기본 템플릿을 채워둔다 — 반찬단지는 기존 하드코딩 문구가 그대로 기본값이 된다.
   const [localNotice, setLocalNotice] = React.useState(notice !== undefined ? notice : defaultDriverNoticeTemplate(name));
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
       <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
           <div>
@@ -4072,7 +4076,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
     return `${lunch.start}~${lunch.end}${overlap ? " (상하차시간과 겹침)" : ""}`;
   };
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
       <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[92vw] min-w-[480px] max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
           <div>
@@ -6397,7 +6401,7 @@ return (
       </div>
       {/* ===== 홈 오더 미리보기 모달 ===== */}
       {homeClickedOrder && (
-        <div className="fixed inset-0 z-[99990] flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={() => setHomeClickedOrder(null)}>
+        <div className="fixed inset-0 z-[99990] flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
@@ -6635,7 +6639,7 @@ return (
 
 {/* ── 화주사 수정요청 승인/거절 팝업 (T161) ── */}
 {editReqPopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
         <h3 className="text-white font-bold text-[15px]">화주사 수정요청</h3>
@@ -9282,10 +9286,15 @@ function swapPickupDrop() {
       });
     };
 
+    // ⭐ 드롭다운에서 거래처를 선택하면 주소/담당자가 자동으로 채워지는데, 사용자가
+    // 그 이름을 다시 지우면(빈 값) 매칭되어 있던 주소/담당자 정보도 같이 초기화한다
+    // — 안 그러면 상차지명은 비어있는데 예전 거래처의 주소/담당자만 남아있는
+    // 어긋난 상태가 된다.
     const handlePickupName = (value) => {
       setForm((p) => ({
         ...p,
         상차지명: value,
+        ...(value.trim() === "" && { 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" }),
       }));
       setAutoPickMatched(false);
     };
@@ -9293,6 +9302,7 @@ function swapPickupDrop() {
       setForm((p) => ({
         ...p,
         하차지명: value,
+        ...(value.trim() === "" && { 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" }),
       }));
       setAutoDropMatched(false);
     };
@@ -9391,6 +9401,16 @@ const openOrderMemoEditor = (type) => {
     팝업표시: found?.팝업표시 !== undefined ? found.팝업표시 : true,
     notice: found?.기사전달주의사항 !== undefined ? found.기사전달주의사항 : defaultDriverNoticeTemplate(name),
   });
+};
+// ⭐ 오더메모 아이콘 색/깜빡임 표시용 — openOrderMemoEditor와 동일한 우선순위(이번
+// 오더에서 아직 저장 전인 값 → 매칭되는 거래처의 등록된 오더메모)로 확인한다.
+const hasOrderMemoFor = (type) => {
+  const name = (type === "pickup" ? form.상차지명 : form.하차지명 || "").trim();
+  if (!name) return false;
+  const pendingMemoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  if (form[pendingMemoKey] !== undefined) return !!String(form[pendingMemoKey] || "").trim();
+  const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
+  return !!String(found?.오더메모 || "").trim();
 };
 const saveOrderMemo = (memo, popupShow, notice) => {
   if (!orderMemoPopup) return;
@@ -12158,14 +12178,7 @@ const similar = placeList.filter(p => {
   <div className="relative">
     <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
   상차지 {reqStar}
-  <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("pickup")}
-    className="text-[#1B2B4B] hover:opacity-70 transition" title="상차지 오더메모">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-      <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
-      <path d="M9 13h6" /><path d="M9 17h6" />
-    </svg>
-  </button>
+  <OrderMemoIconButton onClick={() => openOrderMemoEditor("pickup")} title="상차지 오더메모" hasMemo={hasOrderMemoFor("pickup")} size={15} />
 </label>
 
     <input autoComplete="off"
@@ -12336,14 +12349,7 @@ className={`
 <div className="relative">
   <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-red-500 mb-1">
     하차지 {reqStar}
-    <button type="button" tabIndex={-1} onClick={() => openOrderMemoEditor("drop")}
-      className="text-[#1B2B4B] hover:opacity-70 transition" title="하차지 오더메모">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
-        <path d="M9 13h6" /><path d="M9 17h6" />
-      </svg>
-    </button>
+    <OrderMemoIconButton onClick={() => openOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasOrderMemoFor("drop")} size={15} />
   </label>
 
   <input autoComplete="off"
@@ -12890,7 +12896,7 @@ className={`
    =============================== */}
 {/* ================= 🤖 AI 추천 팝업 ================= */}
 {aiPopupOpen && aiRecommend && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAiPopupOpen(false)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl w-[520px] max-w-[94vw] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
 
       {/* 헤더 */}
@@ -14941,7 +14947,7 @@ className={`
 )}
 {/* 상/하차지 오더메모 보기·수정 팝업 */}
 {orderMemoPopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setOrderMemoPopup(null)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
@@ -15939,7 +15945,7 @@ setConfirmChange(null);
 
 {/* ================= 거래처 신규등록 팝업 ================= */}
 {newClientModalOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -16299,7 +16305,7 @@ setConfirmChange(null);
 )}
 {/* ⭐ 다목적지 단가표 조회 팝업 — 하차지명/주소가 일치하는 하차지의 모든 톤수 단가를 한번에 보여준다 */}
 {rateSheetLookupOpen && (
-  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setRateSheetLookupOpen(false)}>
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]">
     <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
@@ -17582,7 +17588,7 @@ function LiveLocationPopup({ row, onClose }) {
   })();
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
       <div className="bg-white rounded-2xl shadow-2xl w-[80vw] max-w-[860px] overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-5 flex items-center justify-between">
           <div>
@@ -17676,7 +17682,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
 
       {/* 뷰 팝업 */}
       {open && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-[480px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
@@ -18697,7 +18703,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
   const undoneCount = results.length - doneCount;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl flex flex-col" style={{width:"min(96vw, 900px)", maxHeight:"90vh"}} onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
@@ -19548,7 +19554,7 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
   const selectedPhones = candidates.filter(c => selected.has(`${c.이름}|${c.차량번호}`)).map(c => c.전화번호.replace(/[^\d]/g, ""));
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
       <div className="bg-white rounded-2xl shadow-2xl w-[840px] max-w-[95vw] max-h-[86vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between gap-3 shrink-0">
           <div className="min-w-0">
@@ -20164,6 +20170,16 @@ const checkWarningStatus = (name, type) => {
     setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
     setPanelMemoPopupC4(null);
   };
+  // ⭐ 오더메모 아이콘 색/깜빡임 표시용 — 이번 오더에서 아직 저장 전인 값이 있으면
+  // 그걸, 없으면 매칭되는 거래처의 등록된 오더메모를 확인한다(openPanelMemoC4와 동일 로직).
+  const hasPanelMemoC4 = (type) => {
+    const name = (type === "pickup" ? copyTarget?.상차지명 : copyTarget?.하차지명) || "";
+    if (!name.trim()) return false;
+    const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    if (copyTarget[memoKey] !== undefined) return !!String(copyTarget[memoKey] || "").trim();
+    const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
+    return !!String(found?.오더메모 || "").trim();
+  };
 
   // 선택수정 패널(editTarget) 오더메모 팝업
   const [panelMemoPopupE4, setPanelMemoPopupE4] = React.useState(null);
@@ -20187,6 +20203,14 @@ const checkWarningStatus = (name, type) => {
     const noticeKey = panelMemoPopupE4.type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
     setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
     setPanelMemoPopupE4(null);
+  };
+  const hasPanelMemoE4 = (type) => {
+    const name = (type === "pickup" ? editTarget?.상차지명 : editTarget?.하차지명) || "";
+    if (!name.trim()) return false;
+    const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+    if (editTarget[memoKey] !== undefined) return !!String(editTarget[memoKey] || "").trim();
+    const found = mergedClients.find(c => rtNormalizeKey(c.업체명 || "") === rtNormalizeKey(name));
+    return !!String(found?.오더메모 || "").trim();
   };
   // ==========================
   // 🔵 선택수정 거래처 자동완성 상태 (추가)
@@ -23822,7 +23846,7 @@ const head = isDark
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
 {orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} lunchByName={lunchByName} />}
 {addrPopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4">
         <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
@@ -23837,7 +23861,7 @@ const head = isDark
   </div>
 )}
 {cargoPopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setCargoPopup(null)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4">
         <h3 className="text-white font-bold text-[15px]">화물내용 전체보기</h3>
@@ -23863,7 +23887,7 @@ const head = isDark
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
 {newClientModalOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setNewClientModalOpen(false)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
     <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -24765,7 +24789,7 @@ checkWarningStatus(c.거래처명, "거래처");
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
-      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("pickup")} /></span>}>
+      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("pickup")} hasMemo={hasPanelMemoC4("pickup")} /></span>}>
         <div className="relative">
           <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -24773,7 +24797,7 @@ checkWarningStatus(c.거래처명, "거래처");
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
-              setCopyTarget(p=>({...p, 상차지명:v}));
+              setCopyTarget(p=>({...p, 상차지명:v, ...(v.trim() === "" && { 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" })}));
               setCopyPlaceType("pickup");
 
               const list = filterEditPlaces(v);
@@ -24959,7 +24983,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <option value="크레인">크레인</option>
   </CustomSelect>
 </Field>
-      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("drop")} /></span>}>
+      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("drop")} hasMemo={hasPanelMemoC4("drop")} /></span>}>
         <div className="relative">
           <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -24967,7 +24991,7 @@ checkWarningStatus(c.거래처명, "거래처");
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
-              setCopyTarget(p=>({...p, 하차지명:v}));
+              setCopyTarget(p=>({...p, 하차지명:v, ...(v.trim() === "" && { 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" })}));
               setCopyPlaceType("drop");
 
               const list = filterEditPlaces(v);
@@ -25891,7 +25915,7 @@ value={copyTarget?.화물수량 || ""}
             <div className="p-6 space-y-4 overflow-y-auto text-[14px]">
             {/* ⭐ 다목적지 단가표 조회 팝업 (3파트와 동일) */}
             {rateSheetLookupOpen4 && (
-              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setRateSheetLookupOpen4(false)}>
+              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]">
                 <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
                     <div>
@@ -26490,7 +26514,7 @@ value={copyTarget?.화물수량 || ""}
             {/* ------------------------------------------------ */}
             {/* ===================== 상차지 ===================== */}
             <div className="mb-3 relative">
-              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("pickup")} /></label>
+              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("pickup")} hasMemo={hasPanelMemoE4("pickup")} /></label>
               <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
                 disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
@@ -26658,7 +26682,7 @@ value={copyTarget?.화물수량 || ""}
 
             {/* ===================== 하차지 ===================== */}
             <div className="mb-3 relative">
-              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("drop")} /></label>
+              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE4("drop")} hasMemo={hasPanelMemoE4("drop")} /></label>
 
               <input autoComplete="off"
                 className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
@@ -27918,7 +27942,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
 
       {/* ===== 오더복사수정패널 기사정보: 동일 차량번호 기사 여러명 선택 팝업 (PART 4) ===== */}
       {copyDriverPick && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setCopyDriverPick(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden border" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
               <div>
@@ -28580,7 +28604,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           { type: "driver", label: "기사 전달용", desc: "운행 정보 + 업로드 링크 포함", primary: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/></svg> },
         ];
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setCopyModalOpen(false)}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
             <div className="bg-white w-full max-w-md rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-center pt-3 pb-2"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
               <div className="px-5 pb-3 border-b border-gray-100">
@@ -28690,7 +28714,7 @@ setConfirmChange(null);
         </div>
       )}
       {editReqPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
               <h3 className="text-white font-bold text-[15px]">{editReqPopup.수정요청 ? "화주사 수정요청" : "화주사 수정 내역"}</h3>
@@ -28743,7 +28767,7 @@ setConfirmChange(null);
         </div>
       )}
       {cancelReqPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setCancelReqPopup(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-gradient-to-br from-red-500 to-red-800 px-6 py-4 shrink-0">
               <h3 className="text-white font-bold text-[15px]">화주사 배차취소 요청</h3>
@@ -29296,7 +29320,7 @@ setConfirmChange(null);
 )}
       {/* ===================== 정렬/필터 설정 팝업 ===================== */}
       {sortModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]" onClick={()=>setSortModalOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
           <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
               <h3 className="text-white font-bold text-[15px]">정렬 / 필터 설정</h3>
@@ -29600,7 +29624,7 @@ function MemoIconCell({ text = "", urgency = "" }) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -29655,7 +29679,7 @@ function NoteIconCell({ value = "", onSave }) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]" onClick={() => { setOpen(false); setEditing(false); }}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -30872,6 +30896,14 @@ const savePanelMemoC5 = (memo, show, notice) => {
   setCopyTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
   setPanelMemoPopupC5(null);
 };
+const hasPanelMemoC5 = (type) => {
+  const name = (type === "pickup" ? copyTarget?.상차지명 : copyTarget?.하차지명) || "";
+  if (!name.trim()) return false;
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  if (copyTarget[memoKey] !== undefined) return !!String(copyTarget[memoKey] || "").trim();
+  const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
+  return !!String(found?.오더메모 || "").trim();
+};
 
 // 선택수정 패널(editTarget) 오더메모 팝업
 const [panelMemoPopupE5, setPanelMemoPopupE5] = React.useState(null);
@@ -30895,6 +30927,14 @@ const savePanelMemoE5 = (memo, show, notice) => {
   const noticeKey = panelMemoPopupE5.type === "pickup" ? "상차지기사전달주의사항" : "하차지기사전달주의사항";
   setEditTarget(p => ({ ...p, [memoKey]: memo, [showKey]: show, [noticeKey]: notice }));
   setPanelMemoPopupE5(null);
+};
+const hasPanelMemoE5 = (type) => {
+  const name = (type === "pickup" ? editTarget?.상차지명 : editTarget?.하차지명) || "";
+  if (!name.trim()) return false;
+  const memoKey = type === "pickup" ? "상차지오더메모" : "하차지오더메모";
+  if (editTarget[memoKey] !== undefined) return !!String(editTarget[memoKey] || "").trim();
+  const found = mergedClients.find(c => dsNormalizeKey(c.업체명 || "") === dsNormalizeKey(name));
+  return !!String(found?.오더메모 || "").trim();
 };
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
@@ -33064,7 +33104,7 @@ return (
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
 {newClientModalOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setNewClientModalOpen(false)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
     <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -34278,7 +34318,7 @@ return (
 
             {/* ================= 상차지명 ================= */}
             <div className="mb-3 relative">
-              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("pickup")} /></label>
+              <label className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("pickup")} hasMemo={hasPanelMemoE5("pickup")} /></label>
               <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.상차지명 || ""}
@@ -34451,7 +34491,7 @@ return (
 
             {/* ================= 하차지명 ================= */}
             <div className="mb-3 relative">
-              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("drop")} /></label>
+              <label className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoE5("drop")} hasMemo={hasPanelMemoE5("drop")} /></label>
               <input autoComplete="off"
                 className="border p-2 rounded w-full"
                 value={editTarget.하차지명 || ""}
@@ -35636,7 +35676,7 @@ setCopyTarget(prev=>({
 </Field>
 
       {/* 🔥 상차지명 자동완성 */}
-      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("pickup")} /></span>}>
+      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("pickup")} hasMemo={hasPanelMemoC5("pickup")} /></span>}>
         <div className="relative">
           <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -35644,7 +35684,7 @@ setCopyTarget(prev=>({
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
-              setCopyTarget(p=>({...p, 상차지명:v}));
+              setCopyTarget(p=>({...p, 상차지명:v, ...(v.trim() === "" && { 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" })}));
               setCopyPlaceType("pickup");
 
               const list = rankPlaces(filterPlaces(v), v);
@@ -35813,7 +35853,7 @@ setCopyPlaceOptions(list);
     <option value="크레인">크레인</option>
   </CustomSelect>
 </Field>
-      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} /></span>}>
+      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} hasMemo={hasPanelMemoC5("drop")} /></span>}>
         <div className="relative">
           <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
@@ -35821,7 +35861,7 @@ setCopyPlaceOptions(list);
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
-              setCopyTarget(p=>({...p, 하차지명:v}));
+              setCopyTarget(p=>({...p, 하차지명:v, ...(v.trim() === "" && { 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" })}));
               setCopyPlaceType("drop");
 
               const list = rankPlaces(filterPlaces(v), v);
@@ -36640,7 +36680,7 @@ setCopyPlaceOptions(list);
 )}
       {/* ⭐ 다목적지 단가표 조회 팝업 (3파트와 동일) */}
       {rateSheetLookupOpen5 && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setRateSheetLookupOpen5(false)}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]">
           <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
@@ -37349,7 +37389,7 @@ setCopyPlaceOptions(list);
         <OptimalMatchModal row={optimalMatchRow5} dispatchData={dispatchData} companyName={userCompany} onClose={() => setOptimalMatchRow5(null)} />
       )}
       {editReqPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setEditReqPopup(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
               <h3 className="text-white font-bold text-[15px]">{editReqPopup.수정요청 ? "화주사 수정요청" : "화주사 수정 내역"}</h3>
@@ -37402,7 +37442,7 @@ setCopyPlaceOptions(list);
         </div>
       )}
       {cancelReqPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setCancelReqPopup(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-gradient-to-br from-red-500 to-red-800 px-6 py-4 shrink-0">
               <h3 className="text-white font-bold text-[15px]">화주사 배차취소 요청</h3>
@@ -37507,7 +37547,7 @@ setCopyPlaceOptions(list);
       )}
       
       {sortModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]" onClick={()=>setSortModalOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
           <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
               <h3 className="text-white font-bold text-[15px]">정렬 / 필터 설정</h3>
@@ -37568,7 +37608,7 @@ setCopyPlaceOptions(list);
       )}
 {/* ===== 오더복사수정패널 기사정보: 동일 차량번호 기사 여러명 선택 팝업 (PART 5) ===== */}
       {copyDriverPick && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setCopyDriverPick(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden border" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
               <div>
@@ -37628,7 +37668,7 @@ setCopyPlaceOptions(list);
       )}
       {/* ===================== 일마감 모달 ===================== */}
 {dailyCloseOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setDailyCloseOpen(false)}>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
       {/* 헤더 */}
@@ -39773,7 +39813,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
 
       {/* ── 엑셀 업로드 미리보기 모달 ── */}
       {importPreview && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setImportPreview(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
@@ -40375,7 +40415,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
       {/* 입금 처리 모달 */}
       {arModal && (
-        <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4" onClick={() => setArModal(null)}>
+        <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">입금 처리</div>
             <div className="text-[12px] text-gray-500 mb-4">{arModal}</div>
@@ -40403,7 +40443,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
       {/* 지급 처리 모달 */}
       {apModal && (
-        <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4" onClick={() => setApModal(null)}>
+        <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">지급 처리</div>
             <div className="text-[12px] text-gray-500 mb-4">{apModal}</div>
@@ -43851,7 +43891,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
       {/* ================= 거래처 신규등록 팝업 ================= */}
       {newClientModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]" onClick={() => setNewClientModalOpen(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
             onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -46624,7 +46664,7 @@ const handleBatchSettle = async (targetStatus) => {
           )}
           {/* ★ 오더 상세 팝업 */}
           {orderPopup && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setOrderPopup(null)}>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
               <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 {/* 헤더 */}
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
@@ -47111,7 +47151,7 @@ const handleBatchSettle = async (targetStatus) => {
 {/* 이메일 발송 모달 */}
           {/* 예약메일함 */}
           {scheduledEmailListOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setScheduledEmailListOpen(false)}>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
               <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
                   <div>
@@ -48161,7 +48201,7 @@ const handleBatchSettle = async (targetStatus) => {
           {/* ★ 입금 매칭 결과 팝업 */}
 
           {bankMatchResult && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setBankMatchResult(null)}>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
               <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 {/* 헤더 */}
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
@@ -48808,7 +48848,7 @@ const handleBatchSettle = async (targetStatus) => {
     </div>
     {/* 보낸메일함 일괄 삭제 확인 팝업 */}
     {bulkDeleteConfirm && (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setBulkDeleteConfirm(false)}>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
         <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
           <div className="bg-red-600 px-6 py-4 flex items-center gap-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
@@ -48839,7 +48879,7 @@ const handleBatchSettle = async (targetStatus) => {
     )}
     {/* 발송이력 삭제 확인 팝업 */}
     {deleteLogConfirm && (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setDeleteLogConfirm(null)}>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
         <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
           <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
@@ -49907,7 +49947,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 
       {/* 신규 등록 팝업 */}
       {showAddForm && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowAddForm(false)}>
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <h3 className="text-white font-bold text-[15px]">신규 기사 등록</h3>
@@ -50253,7 +50293,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 
       {/* ===== 기사정리 팝업 ===== */}
       {cleanupOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50" onClick={() => setCleanupOpen(false)}>
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
@@ -51257,7 +51297,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 신규 등록 팝업 */}
           {showNewPlaceForm && (
-            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowNewPlaceForm(false)}>
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
                   <h3 className="text-white font-bold text-[15px]">신규 하차지 등록</h3>
@@ -51400,7 +51440,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           )}
 
           {placeDupOpen && (
-  <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setPlaceDupOpen(false)}>
+  <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
     <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
         <h3 className="text-white font-bold text-[15px]">하차지거래처 중복정리</h3>
@@ -51674,7 +51714,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 신규등록 팝업 */}
           {showNewClientModal && (
-            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowNewClientModal(false)}>
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
                   <h3 className="text-white font-bold text-[15px]">신규 기본 거래처 등록</h3>
@@ -51913,7 +51953,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 메모 더보기 팝업 */}
           {memoPopup !== null && (
-            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setMemoPopup(null)}>
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
                   <h3 className="text-white font-bold text-[15px]">메모</h3>
@@ -53935,7 +53975,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
       {/* 수정 요청 결과 알림 팝업 */}
       {resolvedNotice && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]" onClick={dismissNotice}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4">
               <h3 className="text-white font-bold text-[15px]">회사 정보 수정 요청 결과</h3>
@@ -54155,7 +54195,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
       {/* 계좌 확인 팝업 */}
       {bankConfirmOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]" onClick={() => setBankConfirmOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4">
               <h3 className="text-white font-bold text-[15px]">계좌 정보 확인</h3>
@@ -54196,7 +54236,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
       {/* 수정 요청 모달 */}
       {editModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]" onClick={() => setEditModalOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
