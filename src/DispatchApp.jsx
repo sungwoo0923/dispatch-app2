@@ -29,7 +29,7 @@ import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, is
 import FreightRateInquiry from "./FreightRateInquiry";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
-import { estimateDistanceFare } from "./tmapFareCalc";
+import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
@@ -2277,19 +2277,26 @@ function ContactListEditor({ contacts, onChange }) {
 
 // 상/하차지명 라벨 옆 오더메모 아이콘 버튼 — 배차관리 등록 폼과 동일한 디자인을
 // 오더복사/수정 패널, 선택수정 패널에서도 재사용한다.
-// hasMemo가 true면(이 상/하차지에 등록된 오더메모가 있으면) 아이콘 색을 앰버로
-// 바꾸고 천천히 깜빡여서, 아이콘 모양만 봐서는 구분이 안 되던 문제를 해결한다.
-function OrderMemoIconButton({ onClick, title = "오더메모", hasMemo = false, size = 20 }) {
+// hasMemo가 true면(이 상/하차지에 등록된 오더메모가 있으면) 아이콘 자체를 앰버
+// 색으로 확실히 바꾸고, 거기에 더해 우측 상단에 작은 점 배지를 얹어 천천히
+// 깜빡이게 한다 — 색 변화 하나만으로는(특히 아이콘이 작을 때) 구분이 잘 안
+// 되던 문제라, "색이 다르다" + "깜빡이는 배지가 있다" 두 가지 신호를 같이 준다.
+function OrderMemoIconButton({ onClick, title = "오더메모", hasMemo = false, size = 24 }) {
   return (
     <button type="button" tabIndex={-1} onClick={onClick}
-      className={`transition ${hasMemo ? "text-amber-500 hover:opacity-80" : "text-[#1B2B4B] hover:opacity-70"}`}
-      style={hasMemo ? { animation: "cancelSlowBlink 2.2s ease-in-out infinite" } : undefined}
+      className={`relative inline-flex transition ${hasMemo ? "text-amber-600 hover:opacity-80" : "text-[#1B2B4B] hover:opacity-70"}`}
       title={hasMemo ? `${title} (등록됨)` : title}>
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 3v4a1 1 0 0 0 1 1h4" />
         <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
         <path d="M9 13h6" /><path d="M9 17h6" />
       </svg>
+      {hasMemo && (
+        <span
+          className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 border-2 border-white"
+          style={{ animation: "cancelSlowBlink 1.6s ease-in-out infinite" }}
+        />
+      )}
     </button>
   );
 }
@@ -12178,7 +12185,7 @@ const similar = placeList.filter(p => {
   <div className="relative">
     <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
   상차지 {reqStar}
-  <OrderMemoIconButton onClick={() => openOrderMemoEditor("pickup")} title="상차지 오더메모" hasMemo={hasOrderMemoFor("pickup")} size={15} />
+  <OrderMemoIconButton onClick={() => openOrderMemoEditor("pickup")} title="상차지 오더메모" hasMemo={hasOrderMemoFor("pickup")} size={20} />
 </label>
 
     <input autoComplete="off"
@@ -12349,7 +12356,7 @@ className={`
 <div className="relative">
   <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-red-500 mb-1">
     하차지 {reqStar}
-    <OrderMemoIconButton onClick={() => openOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasOrderMemoFor("drop")} size={15} />
+    <OrderMemoIconButton onClick={() => openOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasOrderMemoFor("drop")} size={20} />
   </label>
 
   <input autoComplete="off"
@@ -40478,6 +40485,80 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 // "건수는 늘었는데 매출은 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는
 // 통계 분석 엔진. rowsA/rowsB는 이미 배차완료로 필터링된 오더 배열(Settlement의
 // `rows`에서 월별로 잘라서 넘긴다).
+// ⭐ 월간 이동거리 분석 — 오더에는 이동거리가 저장되어 있지 않아, 상/하차지 주소를
+// 지오코딩(위경도 변환)한 뒤 직선거리에 실제 도로 보정계수(estimateDistanceFare와
+// 동일하게 1.25배)를 적용한 추정값을 사용한다. 같은 주소를 매번 다시 지오코딩하면
+// 느리고 API 호출도 낭비이므로, localStorage에 주소→위경도 캐시를 영구 저장해
+// 두 번째 조회부터는 즉시 계산되게 한다.
+const DIST_GEOCODE_CACHE_KEY = "dispatchGeocodeCacheV1";
+function loadDistGeocodeCache() {
+  try {
+    const raw = localStorage.getItem(DIST_GEOCODE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+function saveDistGeocodeCache(cache) {
+  try {
+    localStorage.setItem(DIST_GEOCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // 저장 실패(용량 초과 등)는 무시 — 다음 세션에 다시 계산될 뿐 기능에는 지장 없음
+  }
+}
+// 단/중/장거리 구간 기준(편도 km) — 국내 화물운송 통상 기준으로 임의 설정.
+const DIST_BUCKETS = [
+  { key: "short", label: "단거리 (50km 미만)", test: (km) => km < 50 },
+  { key: "medium", label: "중거리 (50~150km)", test: (km) => km >= 50 && km < 150 },
+  { key: "long", label: "장거리 (150km 이상)", test: (km) => km >= 150 },
+];
+async function estimateOrderRoadKm(pickupAddr, dropAddr, cache) {
+  const pk = (pickupAddr || "").trim();
+  const dk = (dropAddr || "").trim();
+  if (!pk || !dk) return null;
+  const getPt = async (addr) => {
+    if (cache[addr]) return cache[addr];
+    const pt = await geocodeAddress(addr);
+    if (pt) cache[addr] = pt;
+    return pt;
+  };
+  const [from, to] = await Promise.all([getPt(pk), getPt(dk)]);
+  if (!from || !to) return null;
+  return haversineKm(from.lat, from.lon, to.lat, to.lon) * 1.25;
+}
+// list(해당 월 오더 목록)의 이동거리를 계산해 단/중/장거리 구간별 건수·총거리를 집계한다.
+// 동시에 너무 많은 지오코딩 요청을 보내지 않도록 동시 실행 수를 제한한다.
+async function computeMonthlyDistanceStats(list, cache) {
+  const items = list.filter((r) => (r.상차지주소 || "").trim() && (r.하차지주소 || "").trim());
+  const kms = [];
+  const CONCURRENCY = 8;
+  let idx = 0;
+  const worker = async () => {
+    while (idx < items.length) {
+      const r = items[idx++];
+      try {
+        const km = await estimateOrderRoadKm(r.상차지주소, r.하차지주소, cache);
+        if (Number.isFinite(km)) kms.push(km);
+      } catch {
+        // 개별 주소 지오코딩 실패는 그냥 표본에서 제외하고 계속 진행
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
+  const totalKm = kms.reduce((a, k) => a + k, 0);
+  const buckets = DIST_BUCKETS.map((b) => {
+    const inBucket = kms.filter(b.test);
+    return { key: b.key, label: b.label, cnt: inBucket.length, totalKm: inBucket.reduce((a, k) => a + k, 0) };
+  });
+  return {
+    sampleCnt: kms.length,
+    totalOrderCnt: list.length,
+    avgKm: kms.length ? totalKm / kms.length : 0,
+    totalKm,
+    buckets,
+  };
+}
+
 function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   const won = (n) => `${Math.round(n).toLocaleString()}원`;
@@ -40790,6 +40871,52 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
     return buildMonthCompareInsight(rowsA, rowsB, monthA, monthB);
   }, [rowsA, rowsB, monthA, monthB]);
 
+  // ⭐ 월간 이동거리 분석 — 주소 지오코딩이 필요한 비동기 작업이라 buildMonthCompareInsight
+  // (동기 함수)와 분리해서 별도로 계산한다. 지오코딩 결과는 캐시에 담아뒀다가 컴포넌트가
+  // 언마운트돼도 localStorage에 남겨, 다음에 같은 주소를 또 조회할 때는 즉시 계산되게 한다.
+  const geocodeCacheRef = React.useRef(null);
+  if (geocodeCacheRef.current === null) geocodeCacheRef.current = loadDistGeocodeCache();
+  const [distStats, setDistStats] = React.useState(null);
+  const [distLoading, setDistLoading] = React.useState(false);
+  const [distError, setDistError] = React.useState("");
+
+  React.useEffect(() => {
+    if (!monthA || !monthB) return;
+    let cancelled = false;
+    setDistLoading(true);
+    setDistError("");
+    (async () => {
+      try {
+        const [dA, dB] = await Promise.all([
+          computeMonthlyDistanceStats(rowsA, geocodeCacheRef.current),
+          computeMonthlyDistanceStats(rowsB, geocodeCacheRef.current),
+        ]);
+        saveDistGeocodeCache(geocodeCacheRef.current);
+        if (!cancelled) setDistStats({ A: dA, B: dB });
+      } catch (e) {
+        console.error("월간 이동거리 분석 오류:", e);
+        if (!cancelled) setDistError("거리 데이터를 불러오는 중 오류가 발생했습니다.");
+      } finally {
+        if (!cancelled) setDistLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [rowsA, rowsB, monthA, monthB]);
+
+  const distNarrative = React.useMemo(() => {
+    if (!distStats) return "";
+    const { A: dA, B: dB } = distStats;
+    const bucketText = (d) => d.buckets.map((b) => `${b.label} ${b.cnt}건(총 ${Math.round(b.totalKm).toLocaleString()}km)`).join(", ");
+    const parts = [];
+    parts.push(`${monthB} 오더의 건당 평균 이동거리는 ${dB.avgKm.toFixed(1)}km로, ${monthA}(${dA.avgKm.toFixed(1)}km) 대비 ${pctStr(dA.avgKm, dB.avgKm)} 변동했습니다.`);
+    parts.push(`${monthA} 구간 분포는 ${bucketText(dA)}이며, 총 이동거리는 ${Math.round(dA.totalKm).toLocaleString()}km입니다.`);
+    parts.push(`${monthB} 구간 분포는 ${bucketText(dB)}이며, 총 이동거리는 ${Math.round(dB.totalKm).toLocaleString()}km입니다.`);
+    if (dA.sampleCnt < dA.totalOrderCnt || dB.sampleCnt < dB.totalOrderCnt) {
+      parts.push(`(주소 정보가 없거나 위치 확인에 실패한 오더는 집계에서 제외했습니다 — ${monthA} ${dA.sampleCnt}/${dA.totalOrderCnt}건, ${monthB} ${dB.sampleCnt}/${dB.totalOrderCnt}건 반영)`);
+    }
+    return parts.join(" ");
+  }, [distStats, monthA, monthB]);
+
   const kpiRows = insight ? [
     { label: "매출", aText: won(insight.A.sale), bText: won(insight.B.sale), good: insight.B.sale >= insight.A.sale, deltaText: `${won(insight.B.sale - insight.A.sale)} (${pctStr(insight.A.sale, insight.B.sale)})` },
     { label: "수익", aText: won(insight.A.profit), bText: won(insight.B.profit), good: insight.B.profit >= insight.A.profit, deltaText: `${won(insight.B.profit - insight.A.profit)} (${pctStr(insight.A.profit, insight.B.profit)})` },
@@ -40873,6 +41000,61 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
                     <p className="text-[13px] text-gray-700 leading-[1.9]">{sec.body}</p>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* 월간 이동거리 분석 — 상/하차지 주소 기반 추정 거리(직선거리×1.25 보정)로
+              단/중/장거리 구간별 건수·총거리를 비교. 지오코딩이 필요해 비동기로 계산된다. */}
+          <div className="border border-gray-200 rounded-xl p-6 bg-white">
+            <div className="pb-4 mb-5 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <div className="text-[11px] font-bold text-gray-400 tracking-widest">이동거리 분석</div>
+                <div className="text-[16px] font-extrabold text-[#1B2B4B] mt-0.5">{monthA} vs {monthB} 단/중/장거리 비교</div>
+              </div>
+              <span className="text-[10px] text-gray-400">상/하차지 주소 기반 추정거리(직선거리 보정) · 등록된 오더에는 실제 이동거리가 저장되지 않아 근사치입니다</span>
+            </div>
+            {distLoading ? (
+              <p className="text-[13px] text-gray-500">거래처 주소를 기반으로 이동거리를 계산하는 중입니다…</p>
+            ) : distError ? (
+              <p className="text-[13px] text-rose-600">{distError}</p>
+            ) : !distStats ? (
+              <p className="text-[13px] text-gray-500">비교할 데이터가 부족합니다.</p>
+            ) : (
+              <div className="space-y-5">
+                <p className="text-[13px] text-gray-700 leading-[1.9]">{distNarrative}</p>
+                <table className="w-full text-[13px] border-collapse text-center">
+                  <thead>
+                    <tr className="bg-gray-100 text-gray-700">
+                      <th className="border p-2">구분</th>
+                      <th className="border p-2">{monthA}</th>
+                      <th className="border p-2">{monthB}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="hover:bg-gray-50">
+                      <td className="border p-2 font-semibold text-gray-700">건당 평균 이동거리</td>
+                      <td className="border p-2 text-gray-600">{distStats.A.avgKm.toFixed(1)}km</td>
+                      <td className="border p-2 font-bold text-gray-900">{distStats.B.avgKm.toFixed(1)}km</td>
+                    </tr>
+                    <tr className="hover:bg-gray-50">
+                      <td className="border p-2 font-semibold text-gray-700">총 이동거리</td>
+                      <td className="border p-2 text-gray-600">{Math.round(distStats.A.totalKm).toLocaleString()}km</td>
+                      <td className="border p-2 font-bold text-gray-900">{Math.round(distStats.B.totalKm).toLocaleString()}km</td>
+                    </tr>
+                    {DIST_BUCKETS.map((b) => {
+                      const bA = distStats.A.buckets.find((x) => x.key === b.key);
+                      const bB = distStats.B.buckets.find((x) => x.key === b.key);
+                      return (
+                        <tr key={b.key} className="hover:bg-gray-50">
+                          <td className="border p-2 font-semibold text-gray-700">{b.label}</td>
+                          <td className="border p-2 text-gray-600">{bA.cnt}건 / {Math.round(bA.totalKm).toLocaleString()}km</td>
+                          <td className="border p-2 font-bold text-gray-900">{bB.cnt}건 / {Math.round(bB.totalKm).toLocaleString()}km</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
