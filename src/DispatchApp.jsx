@@ -40529,8 +40529,9 @@ async function estimateOrderRoadKm(pickupAddr, dropAddr, cache) {
 // list(해당 월 오더 목록)의 이동거리를 계산해 단/중/장거리 구간별 건수·총거리를 집계한다.
 // 동시에 너무 많은 지오코딩 요청을 보내지 않도록 동시 실행 수를 제한한다.
 async function computeMonthlyDistanceStats(list, cache) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   const items = list.filter((r) => (r.상차지주소 || "").trim() && (r.하차지주소 || "").trim());
-  const kms = [];
+  const samples = []; // { km, sale } — km당 단가(운송 효율) 분석을 위해 매출도 함께 담아둔다
   const CONCURRENCY = 8;
   let idx = 0;
   const worker = async () => {
@@ -40538,23 +40539,26 @@ async function computeMonthlyDistanceStats(list, cache) {
       const r = items[idx++];
       try {
         const km = await estimateOrderRoadKm(r.상차지주소, r.하차지주소, cache);
-        if (Number.isFinite(km)) kms.push(km);
+        if (Number.isFinite(km)) samples.push({ km, sale: toInt(r.청구운임) });
       } catch {
         // 개별 주소 지오코딩 실패는 그냥 표본에서 제외하고 계속 진행
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
-  const totalKm = kms.reduce((a, k) => a + k, 0);
+  const totalKm = samples.reduce((a, s) => a + s.km, 0);
+  const totalSale = samples.reduce((a, s) => a + s.sale, 0);
   const buckets = DIST_BUCKETS.map((b) => {
-    const inBucket = kms.filter(b.test);
-    return { key: b.key, label: b.label, cnt: inBucket.length, totalKm: inBucket.reduce((a, k) => a + k, 0) };
+    const inBucket = samples.filter((s) => b.test(s.km));
+    const bTotalKm = inBucket.reduce((a, s) => a + s.km, 0);
+    return { key: b.key, label: b.label, cnt: inBucket.length, totalKm: bTotalKm };
   });
   return {
-    sampleCnt: kms.length,
+    sampleCnt: samples.length,
     totalOrderCnt: list.length,
-    avgKm: kms.length ? totalKm / kms.length : 0,
+    avgKm: samples.length ? totalKm / samples.length : 0,
     totalKm,
+    wonPerKm: totalKm ? totalSale / totalKm : 0,
     buckets,
   };
 }
@@ -40873,6 +40877,36 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     if (s.length) report.push({ title: "특수일 및 요일 분포", body: s.join(" ") });
   }
 
+  // 7) 거래처 유지율 및 집중도 — 매출 변화가 "기존 거래처의 단가·물량 변화" 때문인지
+  //    "거래처 구성 자체가 바뀐 것"(신규 유입/이탈) 때문인지 나눠서 보여주고, 상위
+  //    거래처에 매출이 얼마나 쏠려 있는지(집중도)도 함께 짚어 리스크를 드러낸다.
+  {
+    const retained = clientDeltas.filter((c) => c.cntA > 0 && c.cntB > 0);
+    const churned = clientDeltas.filter((c) => c.cntA > 0 && c.cntB === 0);
+    const newClients = clientDeltas.filter((c) => c.cntA === 0 && c.cntB > 0);
+    const churnedSale = churned.reduce((a, c) => a + c.saleA, 0);
+    const newSale = newClients.reduce((a, c) => a + c.saleB, 0);
+    const retainedSaleB = retained.reduce((a, c) => a + c.saleB, 0);
+
+    const top5Sum = (map) => Array.from(map.values()).sort((x, y) => y.sale - x.sale).slice(0, 5).reduce((a, v) => a + v.sale, 0);
+    const concShareA = A.sale ? (top5Sum(clientA) / A.sale) * 100 : 0;
+    const concShareB = B.sale ? (top5Sum(clientB) / B.sale) * 100 : 0;
+
+    const s = [];
+    s.push(`${labelB} 거래처 구성은 계속거래 ${retained.length}곳(매출 ${won(retainedSaleB)}), 신규 ${newClients.length}곳(매출 ${won(newSale)}), 이탈 ${churned.length}곳(${labelA} 매출 기준 ${won(churnedSale)})입니다.`);
+    if (Math.abs(newSale - churnedSale) >= 500000) {
+      s.push(newSale >= churnedSale
+        ? `신규 유입 매출이 이탈 매출보다 ${won(newSale - churnedSale)} 더 많아, 거래처 순증 효과가 매출에 긍정적으로 작용했습니다.`
+        : `이탈 매출이 신규 유입 매출보다 ${won(churnedSale - newSale)} 더 많아, 거래처 이탈이 매출 감소에 영향을 줬습니다.`);
+    }
+    if (Math.abs(concShareA - concShareB) >= 3) {
+      s.push(`상위 5개 거래처 매출 비중은 ${concShareA.toFixed(1)}%에서 ${concShareB.toFixed(1)}%로 변화했습니다. ${concShareB > concShareA ? "**특정 거래처에 대한 매출 의존도가 높아지고 있어, 해당 거래처 이탈 시 매출 타격이 커질 수 있습니다.**" : "소수 거래처 의존도가 낮아지며 매출 구조가 분산되고 있습니다."}`);
+    } else {
+      s.push(`상위 5개 거래처 매출 비중은 ${concShareB.toFixed(1)}% 수준으로 큰 변화 없이 유지되었습니다.`);
+    }
+    report.push({ title: "거래처 유지율 및 집중도", body: s.join(" ") });
+  }
+
   return { A, B, clientDeltas, topDecline, topGrowth, tonMix, specialStatA, specialStatB, report };
 }
 // pctStr()이 반환하는 "+12.3%" 형태 문자열에서 다시 숫자만 뽑아 비교용으로 쓴다.
@@ -40962,19 +40996,38 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
     return () => { cancelled = true; };
   }, [rowsA, rowsB, monthA, monthB]);
 
-  const distNarrative = React.useMemo(() => {
+  // 한 줄 핵심 헤드라인만 굵게 보여주고, 나머지 수치는 아래 표로 정리한다(문단을
+  // 길게 늘어놓으면 좁은 우측 칸에서 글씨가 작아지고 읽기 어려워지는 문제가 있었음).
+  const distHeadline = React.useMemo(() => {
     if (!distStats) return "";
     const { A: dA, B: dB } = distStats;
-    const bucketText = (d) => d.buckets.map((b) => `${b.label} ${b.cnt}건(총 ${Math.round(b.totalKm).toLocaleString()}km)`).join(", ");
-    const parts = [];
-    parts.push(`${monthB} 오더의 건당 평균 이동거리는 ${dB.avgKm.toFixed(1)}km로, ${monthA}(${dA.avgKm.toFixed(1)}km) 대비 ${pctStr(dA.avgKm, dB.avgKm)} 변동했습니다.`);
-    parts.push(`${monthA} 구간 분포는 ${bucketText(dA)}이며, 총 이동거리는 ${Math.round(dA.totalKm).toLocaleString()}km입니다.`);
-    parts.push(`${monthB} 구간 분포는 ${bucketText(dB)}이며, 총 이동거리는 ${Math.round(dB.totalKm).toLocaleString()}km입니다.`);
-    if (dA.sampleCnt < dA.totalOrderCnt || dB.sampleCnt < dB.totalOrderCnt) {
-      parts.push(`(주소 정보가 없거나 위치 확인에 실패한 오더는 집계에서 제외했습니다 — ${monthA} ${dA.sampleCnt}/${dA.totalOrderCnt}건, ${monthB} ${dB.sampleCnt}/${dB.totalOrderCnt}건 반영)`);
-    }
-    return parts.join(" ");
+    return `건당 평균 이동거리는 ${monthA} ${dA.avgKm.toFixed(1)}km → ${monthB} ${dB.avgKm.toFixed(1)}km로 ${pctStr(dA.avgKm, dB.avgKm)} 변동했습니다.`;
   }, [distStats, monthA, monthB]);
+
+  const distKpiRows = React.useMemo(() => {
+    if (!distStats) return [];
+    const { A: dA, B: dB } = distStats;
+    const rows = [
+      { label: "건당 평균 이동거리", aText: `${dA.avgKm.toFixed(1)}km`, bText: `${dB.avgKm.toFixed(1)}km` },
+      { label: "총 이동거리", aText: `${Math.round(dA.totalKm).toLocaleString()}km`, bText: `${Math.round(dB.totalKm).toLocaleString()}km` },
+      { label: "km당 평균단가", aText: `${Math.round(dA.wonPerKm).toLocaleString()}원`, bText: `${Math.round(dB.wonPerKm).toLocaleString()}원` },
+    ];
+    DIST_BUCKETS.forEach((b) => {
+      const bA = dA.buckets.find((x) => x.key === b.key);
+      const bB = dB.buckets.find((x) => x.key === b.key);
+      rows.push({ label: b.label, aText: `${bA.cnt}건 · ${Math.round(bA.totalKm).toLocaleString()}km`, bText: `${bB.cnt}건 · ${Math.round(bB.totalKm).toLocaleString()}km` });
+    });
+    return rows;
+  }, [distStats]);
+
+  // 왼쪽 "비교분석 보고서"는 섹션이 많아 한 번에 다 펼치면 스크롤이 길어지므로
+  // 탭으로 하나씩 골라보게 한다. "핵심 요약"만은 놓치면 안 되는 헤드라인이라
+  // 탭 밖에 항상 보이게 고정해둔다.
+  const [activeReportTab, setActiveReportTab] = React.useState(0);
+  React.useEffect(() => { setActiveReportTab(0); }, [monthA, monthB]);
+  const reportHighlight = insight?.report.find((s) => s.highlight) || null;
+  const reportTabs = insight?.report.filter((s) => !s.highlight) || [];
+  const activeReportSec = reportTabs[Math.min(activeReportTab, Math.max(0, reportTabs.length - 1))];
 
   const kpiRows = insight ? [
     { label: "매출", aText: won(insight.A.sale), bText: won(insight.B.sale), good: insight.B.sale >= insight.A.sale, deltaText: `${won(insight.B.sale - insight.A.sale)} (${pctStr(insight.A.sale, insight.B.sale)})` },
@@ -41043,12 +41096,12 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
             </tbody>
           </table>
 
-          {/* AI 분석 보고서 + 이동거리 분석 — 예전엔 두 카드로 위아래 나열해 스크롤이
-              길어지고 산만해 보였다. 하나의 카드 안에 좌(비교분석 보고서)/우(이동거리
-              분석) 2단으로 배치해 한눈에 비교되도록 통합했다. */}
+          {/* AI 분석 보고서 + 이동거리 분석 — 한 카드 안에 좌(비교분석 보고서)/우(이동거리
+              분석) 2단으로 배치. 좌측은 섹션이 많아 한 번에 다 펼치면 산만해 보이므로
+              탭으로 하나씩 골라보게 하고, "핵심 요약"만 탭 밖에 고정해 놓친다. */}
           <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-              {/* 좌: 비교분석 보고서 */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+              {/* 좌: 비교분석 보고서 (탭) */}
               <div className="p-5">
                 <div className="pb-3 mb-4 border-b border-gray-200">
                   <div className="text-[11px] font-bold text-gray-400 tracking-widest">비교분석 보고서</div>
@@ -41057,26 +41110,39 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
                 {insight.report.length === 0 ? (
                   <p className="text-[13px] text-gray-500">두 달 사이 매출·건수·거래처 구성에서 뚜렷한 변화가 발견되지 않았습니다.</p>
                 ) : (
-                  <div className="space-y-4">
-                    {insight.report.map((sec, i) => (
-                      sec.highlight ? (
-                        <div key={i} className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
-                          <div className="text-[10px] font-bold text-amber-700 tracking-widest mb-1">{sec.title}</div>
-                          <p className="text-[13.5px] text-[#1B2B4B] leading-[1.8]">{renderInlineBold(sec.body)}</p>
+                  <>
+                    {reportHighlight && (
+                      <div className="mb-4 pb-4 border-b border-gray-200">
+                        <div className="text-[10px] font-bold text-gray-400 tracking-widest mb-1.5">{reportHighlight.title}</div>
+                        <p className="text-[14px] font-bold text-[#1B2B4B] leading-[1.8]">{renderInlineBold(reportHighlight.body)}</p>
+                      </div>
+                    )}
+                    {reportTabs.length > 0 && (
+                      <>
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                          {reportTabs.map((sec, i) => (
+                            <button
+                              key={sec.title}
+                              type="button"
+                              onClick={() => setActiveReportTab(i)}
+                              className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition ${i === Math.min(activeReportTab, reportTabs.length - 1) ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                            >
+                              {sec.title}
+                            </button>
+                          ))}
                         </div>
-                      ) : (
-                        <div key={i}>
-                          <h4 className="text-[12.5px] font-extrabold text-[#1B2B4B] mb-1 pb-1 border-b border-gray-100">{sec.title}</h4>
-                          <p className="text-[12.5px] text-gray-700 leading-[1.75]">{renderInlineBold(sec.body)}</p>
-                        </div>
-                      )
-                    ))}
-                  </div>
+                        {activeReportSec && (
+                          <p className="text-[13.5px] text-gray-700 leading-[1.9]">{renderInlineBold(activeReportSec.body)}</p>
+                        )}
+                      </>
+                    )}
+                  </>
                 )}
               </div>
 
               {/* 우: 월간 이동거리 분석 — 상/하차지 주소 기반 추정 거리(직선거리×1.25 보정)로
-                  단/중/장거리 구간별 건수·총거리를 비교. 지오코딩이 필요해 비동기로 계산된다. */}
+                  단/중/장거리 구간별 건수·총거리·km당 단가를 비교. 지오코딩이 필요해
+                  비동기로 계산된다. */}
               <div className="p-5">
                 <div className="pb-3 mb-4 border-b border-gray-200">
                   <div className="text-[11px] font-bold text-gray-400 tracking-widest">이동거리 분석</div>
@@ -41090,40 +41156,29 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
                 ) : !distStats ? (
                   <p className="text-[13px] text-gray-500">비교할 데이터가 부족합니다.</p>
                 ) : (
-                  <div className="space-y-3">
-                    <p className="text-[12.5px] text-gray-700 leading-[1.75]">{distNarrative}</p>
-                    <table className="w-full text-[12px] border-collapse text-center">
+                  <div className="space-y-4">
+                    <p className="text-[13.5px] font-bold text-[#1B2B4B] leading-[1.8]">{distHeadline}</p>
+                    <table className="w-full text-[13px] border-collapse text-center">
                       <thead>
                         <tr className="bg-gray-100 text-gray-700">
-                          <th className="border p-1.5">구분</th>
-                          <th className="border p-1.5">{monthA}</th>
-                          <th className="border p-1.5">{monthB}</th>
+                          <th className="border p-2">구분</th>
+                          <th className="border p-2">{monthA}</th>
+                          <th className="border p-2">{monthB}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="hover:bg-gray-50">
-                          <td className="border p-1.5 font-semibold text-gray-700">평균거리</td>
-                          <td className="border p-1.5 text-gray-600">{distStats.A.avgKm.toFixed(1)}km</td>
-                          <td className="border p-1.5 font-bold text-gray-900">{distStats.B.avgKm.toFixed(1)}km</td>
-                        </tr>
-                        <tr className="hover:bg-gray-50">
-                          <td className="border p-1.5 font-semibold text-gray-700">총 이동거리</td>
-                          <td className="border p-1.5 text-gray-600">{Math.round(distStats.A.totalKm).toLocaleString()}km</td>
-                          <td className="border p-1.5 font-bold text-gray-900">{Math.round(distStats.B.totalKm).toLocaleString()}km</td>
-                        </tr>
-                        {DIST_BUCKETS.map((b) => {
-                          const bA = distStats.A.buckets.find((x) => x.key === b.key);
-                          const bB = distStats.B.buckets.find((x) => x.key === b.key);
-                          return (
-                            <tr key={b.key} className="hover:bg-gray-50">
-                              <td className="border p-1.5 font-semibold text-gray-700">{b.label}</td>
-                              <td className="border p-1.5 text-gray-600">{bA.cnt}건 / {Math.round(bA.totalKm).toLocaleString()}km</td>
-                              <td className="border p-1.5 font-bold text-gray-900">{bB.cnt}건 / {Math.round(bB.totalKm).toLocaleString()}km</td>
-                            </tr>
-                          );
-                        })}
+                        {distKpiRows.map((row) => (
+                          <tr key={row.label} className="hover:bg-gray-50">
+                            <td className="border p-2 font-semibold text-gray-700">{row.label}</td>
+                            <td className="border p-2 text-gray-600">{row.aText}</td>
+                            <td className="border p-2 font-bold text-gray-900">{row.bText}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
+                    {(distStats.A.sampleCnt < distStats.A.totalOrderCnt || distStats.B.sampleCnt < distStats.B.totalOrderCnt) && (
+                      <p className="text-[11px] text-gray-400 leading-[1.6]">주소 정보가 없거나 위치 확인에 실패한 오더는 집계에서 제외했습니다 — {monthA} {distStats.A.sampleCnt}/{distStats.A.totalOrderCnt}건, {monthB} {distStats.B.sampleCnt}/{distStats.B.totalOrderCnt}건 반영</p>
+                    )}
                   </div>
                 )}
               </div>
