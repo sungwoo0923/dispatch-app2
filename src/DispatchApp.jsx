@@ -40656,7 +40656,55 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
   const weekendShareA = A.cnt ? (weekendA / A.cnt) * 100 : 0;
   const weekendShareB = B.cnt ? (weekendB / B.cnt) * 100 : 0;
 
+  // ⭐ 핵심 요약 — "건수는 늘었는데 매출은 줄었다"류의 역설은 알고 보면 특정 거래처
+  // 1곳(또는 소수)이 한 달에만 일시적으로 발생했다가 사라진 게 원인인 경우가 많다.
+  // 이런 거래처는 "거래처 동향" 문단 속에 다른 여러 거래처와 나란히 나열되면 눈에
+  // 잘 띄지 않으므로, 매출 증감을 가장 크게 설명하는 단일 요인을 찾아 report 맨
+  // 앞에 굵은 글씨 헤드라인으로 별도 배치한다.
+  let headline = "";
+  if (saleDelta !== 0 && clientDeltas.length) {
+    const byAbs = [...clientDeltas].sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+    const top = byAbs[0];
+    const topShare = Math.abs(top.delta) / Math.abs(saleDelta);
+
+    const vanished = clientDeltas.filter((c) => c.cntA > 0 && c.cntB === 0);
+    const appeared = clientDeltas.filter((c) => c.cntA === 0 && c.cntB > 0);
+    const netOneOff = appeared.reduce((a, c) => a + c.saleB, 0) - vanished.reduce((a, c) => a + c.saleA, 0);
+    const oneOffShare = Math.abs(netOneOff) / Math.abs(saleDelta);
+
+    if (topShare >= 0.3) {
+      const isVanished = top.cntA > 0 && top.cntB === 0;
+      const isAppeared = top.cntA === 0 && top.cntB > 0;
+      const dirWord = top.delta < 0 ? "감소" : "증가";
+      const shareText = topShare >= 1
+        ? `전체 매출 변동폭(${won(saleDelta)})보다도 커서, 다른 거래처들의 증감은 서로 상쇄되었습니다`
+        : `전체 매출 변동(${won(saleDelta)})의 약 ${(topShare * 100).toFixed(0)}%를 차지합니다`;
+      let cause;
+      if (isVanished) cause = `${labelA}에만 일시적으로 발생했던 거래처로, ${labelB}에는 오더가 전혀 없었습니다`;
+      else if (isAppeared) cause = `${labelB}에 새로 발생한 거래처로, ${labelA}에는 오더가 없었습니다`;
+      else cause = `${labelA} ${top.cntA}건 → ${labelB} ${top.cntB}건으로 거래 규모 자체가 바뀌었습니다`;
+      headline = `**${labelB} 매출 ${dirWord}의 가장 큰 단일 요인은 '${top.client}' 거래처(${won(top.delta)})입니다.** 이 거래처는 ${shareText} — ${cause}.`;
+      if (cntDelta > 0 && saleDelta < 0) {
+        headline += ` 오더 건수는 늘었는데 매출이 줄어든 것도, 건당 단가 하락보다 이 거래처 하나의 변화가 더 크게 작용했을 가능성이 큽니다.`;
+      }
+    } else if (oneOffShare >= 0.3 && (vanished.length || appeared.length)) {
+      const parts = [];
+      if (vanished.length) {
+        const sumV = vanished.reduce((a, c) => a + c.saleA, 0);
+        const topV = [...vanished].sort((x, y) => y.saleA - x.saleA).slice(0, 3);
+        parts.push(`${labelA}에만 발생하고 ${labelB}에는 없었던 거래처 ${vanished.length}곳(합계 ${won(sumV)}) — 대표적으로 ${topV.map((c) => `${c.client}(${won(c.saleA)})`).join(", ")}`);
+      }
+      if (appeared.length) {
+        const sumA = appeared.reduce((a, c) => a + c.saleB, 0);
+        const topA = [...appeared].sort((x, y) => y.saleB - x.saleB).slice(0, 3);
+        parts.push(`${labelB}에 새로 발생한 거래처 ${appeared.length}곳(합계 ${won(sumA)}) — 대표적으로 ${topA.map((c) => `${c.client}(${won(c.saleB)})`).join(", ")}`);
+      }
+      headline = `**${labelA}·${labelB} 매출 차이의 상당 부분은 두 달 모두 거래하지 않은 '일시적 거래처'가 원인입니다.** ${parts.join(", ")}.`;
+    }
+  }
+
   const report = [];
+  if (headline) report.push({ title: "핵심 요약", body: headline, highlight: true });
 
   // 1) 매출 및 수익성 — 요청의 핵심 질문(건수는 늘었는데 매출이 왜 줄었나)에 대한 직접 답변. 항상 포함.
   {
@@ -40832,6 +40880,17 @@ function pctStrToNum(s) {
   const n = parseFloat(String(s).replace(/[^\d.-]/g, ""));
   return isNaN(n) ? 0 : n;
 }
+// report 문단 텍스트 안에 **강조할 부분** 처럼 마크다운식 볼드 표시를 심어두면
+// 화면에 굵은 글씨로 렌더링해준다. 보고서 문장이 길다 보니 결정적인 숫자/원인이
+// 문단 속에 묻혀 놓치기 쉬운데, 이 헬퍼로 핵심 문장만 눈에 띄게 강조할 수 있다.
+function renderInlineBold(text) {
+  const parts = String(text || "").split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={i} className="font-extrabold">{part.slice(2, -2)}</strong>
+      : <React.Fragment key={i}>{part}</React.Fragment>
+  );
+}
 
 // ⭐ monthA/monthB/setMonthA/setMonthB는 부모(Settlement)가 상태를 들고 있다가
 // 넘겨주는 controlled 방식이 기본이다 — 매출관리는 activeTab에 따라 이 탭을
@@ -40984,79 +41043,91 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
             </tbody>
           </table>
 
-          {/* AI 분석 보고서 — 테마별 카드로 흩어놓지 않고, 하나의 보고서 문서처럼 이어지는 형식 */}
-          <div className="border border-gray-200 rounded-xl p-6 bg-white">
-            <div className="pb-4 mb-5 border-b border-gray-200">
-              <div className="text-[11px] font-bold text-gray-400 tracking-widest">비교분석 보고서</div>
-              <div className="text-[16px] font-extrabold text-[#1B2B4B] mt-0.5">{monthA} vs {monthB} 매출 비교분석</div>
-            </div>
-            {insight.report.length === 0 ? (
-              <p className="text-[13px] text-gray-500">두 달 사이 매출·건수·거래처 구성에서 뚜렷한 변화가 발견되지 않았습니다.</p>
-            ) : (
-              <div className="space-y-5">
-                {insight.report.map((sec, i) => (
-                  <div key={i}>
-                    <h4 className="text-[13px] font-extrabold text-[#1B2B4B] mb-1.5 pb-1 border-b border-gray-100">{sec.title}</h4>
-                    <p className="text-[13px] text-gray-700 leading-[1.9]">{sec.body}</p>
+          {/* AI 분석 보고서 + 이동거리 분석 — 예전엔 두 카드로 위아래 나열해 스크롤이
+              길어지고 산만해 보였다. 하나의 카드 안에 좌(비교분석 보고서)/우(이동거리
+              분석) 2단으로 배치해 한눈에 비교되도록 통합했다. */}
+          <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+              {/* 좌: 비교분석 보고서 */}
+              <div className="p-5">
+                <div className="pb-3 mb-4 border-b border-gray-200">
+                  <div className="text-[11px] font-bold text-gray-400 tracking-widest">비교분석 보고서</div>
+                  <div className="text-[15px] font-extrabold text-[#1B2B4B] mt-0.5">{monthA} vs {monthB} 매출 비교분석</div>
+                </div>
+                {insight.report.length === 0 ? (
+                  <p className="text-[13px] text-gray-500">두 달 사이 매출·건수·거래처 구성에서 뚜렷한 변화가 발견되지 않았습니다.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {insight.report.map((sec, i) => (
+                      sec.highlight ? (
+                        <div key={i} className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                          <div className="text-[10px] font-bold text-amber-700 tracking-widest mb-1">{sec.title}</div>
+                          <p className="text-[13.5px] text-[#1B2B4B] leading-[1.8]">{renderInlineBold(sec.body)}</p>
+                        </div>
+                      ) : (
+                        <div key={i}>
+                          <h4 className="text-[12.5px] font-extrabold text-[#1B2B4B] mb-1 pb-1 border-b border-gray-100">{sec.title}</h4>
+                          <p className="text-[12.5px] text-gray-700 leading-[1.75]">{renderInlineBold(sec.body)}</p>
+                        </div>
+                      )
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
 
-          {/* 월간 이동거리 분석 — 상/하차지 주소 기반 추정 거리(직선거리×1.25 보정)로
-              단/중/장거리 구간별 건수·총거리를 비교. 지오코딩이 필요해 비동기로 계산된다. */}
-          <div className="border border-gray-200 rounded-xl p-6 bg-white">
-            <div className="pb-4 mb-5 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="text-[11px] font-bold text-gray-400 tracking-widest">이동거리 분석</div>
-                <div className="text-[16px] font-extrabold text-[#1B2B4B] mt-0.5">{monthA} vs {monthB} 단/중/장거리 비교</div>
-              </div>
-              <span className="text-[10px] text-gray-400">상/하차지 주소 기반 추정거리(직선거리 보정) · 등록된 오더에는 실제 이동거리가 저장되지 않아 근사치입니다</span>
-            </div>
-            {distLoading ? (
-              <p className="text-[13px] text-gray-500">거래처 주소를 기반으로 이동거리를 계산하는 중입니다…</p>
-            ) : distError ? (
-              <p className="text-[13px] text-rose-600">{distError}</p>
-            ) : !distStats ? (
-              <p className="text-[13px] text-gray-500">비교할 데이터가 부족합니다.</p>
-            ) : (
-              <div className="space-y-5">
-                <p className="text-[13px] text-gray-700 leading-[1.9]">{distNarrative}</p>
-                <table className="w-full text-[13px] border-collapse text-center">
-                  <thead>
-                    <tr className="bg-gray-100 text-gray-700">
-                      <th className="border p-2">구분</th>
-                      <th className="border p-2">{monthA}</th>
-                      <th className="border p-2">{monthB}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border p-2 font-semibold text-gray-700">건당 평균 이동거리</td>
-                      <td className="border p-2 text-gray-600">{distStats.A.avgKm.toFixed(1)}km</td>
-                      <td className="border p-2 font-bold text-gray-900">{distStats.B.avgKm.toFixed(1)}km</td>
-                    </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border p-2 font-semibold text-gray-700">총 이동거리</td>
-                      <td className="border p-2 text-gray-600">{Math.round(distStats.A.totalKm).toLocaleString()}km</td>
-                      <td className="border p-2 font-bold text-gray-900">{Math.round(distStats.B.totalKm).toLocaleString()}km</td>
-                    </tr>
-                    {DIST_BUCKETS.map((b) => {
-                      const bA = distStats.A.buckets.find((x) => x.key === b.key);
-                      const bB = distStats.B.buckets.find((x) => x.key === b.key);
-                      return (
-                        <tr key={b.key} className="hover:bg-gray-50">
-                          <td className="border p-2 font-semibold text-gray-700">{b.label}</td>
-                          <td className="border p-2 text-gray-600">{bA.cnt}건 / {Math.round(bA.totalKm).toLocaleString()}km</td>
-                          <td className="border p-2 font-bold text-gray-900">{bB.cnt}건 / {Math.round(bB.totalKm).toLocaleString()}km</td>
+              {/* 우: 월간 이동거리 분석 — 상/하차지 주소 기반 추정 거리(직선거리×1.25 보정)로
+                  단/중/장거리 구간별 건수·총거리를 비교. 지오코딩이 필요해 비동기로 계산된다. */}
+              <div className="p-5">
+                <div className="pb-3 mb-4 border-b border-gray-200">
+                  <div className="text-[11px] font-bold text-gray-400 tracking-widest">이동거리 분석</div>
+                  <div className="text-[15px] font-extrabold text-[#1B2B4B] mt-0.5">단/중/장거리 비교</div>
+                  <div className="text-[10px] text-gray-400 mt-1">상/하차지 주소 기반 추정거리(직선거리 보정) · 저장된 실측값이 아닌 근사치입니다</div>
+                </div>
+                {distLoading ? (
+                  <p className="text-[13px] text-gray-500">거래처 주소를 기반으로 이동거리를 계산하는 중입니다…</p>
+                ) : distError ? (
+                  <p className="text-[13px] text-rose-600">{distError}</p>
+                ) : !distStats ? (
+                  <p className="text-[13px] text-gray-500">비교할 데이터가 부족합니다.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-[12.5px] text-gray-700 leading-[1.75]">{distNarrative}</p>
+                    <table className="w-full text-[12px] border-collapse text-center">
+                      <thead>
+                        <tr className="bg-gray-100 text-gray-700">
+                          <th className="border p-1.5">구분</th>
+                          <th className="border p-1.5">{monthA}</th>
+                          <th className="border p-1.5">{monthB}</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        <tr className="hover:bg-gray-50">
+                          <td className="border p-1.5 font-semibold text-gray-700">평균거리</td>
+                          <td className="border p-1.5 text-gray-600">{distStats.A.avgKm.toFixed(1)}km</td>
+                          <td className="border p-1.5 font-bold text-gray-900">{distStats.B.avgKm.toFixed(1)}km</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50">
+                          <td className="border p-1.5 font-semibold text-gray-700">총 이동거리</td>
+                          <td className="border p-1.5 text-gray-600">{Math.round(distStats.A.totalKm).toLocaleString()}km</td>
+                          <td className="border p-1.5 font-bold text-gray-900">{Math.round(distStats.B.totalKm).toLocaleString()}km</td>
+                        </tr>
+                        {DIST_BUCKETS.map((b) => {
+                          const bA = distStats.A.buckets.find((x) => x.key === b.key);
+                          const bB = distStats.B.buckets.find((x) => x.key === b.key);
+                          return (
+                            <tr key={b.key} className="hover:bg-gray-50">
+                              <td className="border p-1.5 font-semibold text-gray-700">{b.label}</td>
+                              <td className="border p-1.5 text-gray-600">{bA.cnt}건 / {Math.round(bA.totalKm).toLocaleString()}km</td>
+                              <td className="border p-1.5 font-bold text-gray-900">{bB.cnt}건 / {Math.round(bB.totalKm).toLocaleString()}km</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
