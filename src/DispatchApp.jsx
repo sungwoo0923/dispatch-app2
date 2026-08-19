@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
+import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
@@ -2131,6 +2132,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getCountFromServer,
   increment,
   limit,
   onSnapshot,
@@ -16962,6 +16964,35 @@ function InlineEditCell({ value, placeholder, onSave }) {
     </div>
   );
 }
+// ⭐ 첨부파일을 저장(다운로드)할 때 파일명을 "날짜(YYYYMMDD)거래처명_하차지명" 형식으로
+// 통일한다. 예: 2026-05-04 / 거래처 "우리찬" / 하차지 "씨제이동탄" → "20260504우리찬_씨제이동탄".
+// 한 오더에 사진이 여러 장이면 뒤에 "-2","-3"처럼 순번을 붙여 구분하고, 확장자는
+// 원본 파일명 또는 data URL의 MIME 타입에서 유추한다. 오더 관련 첨부파일을 저장하는
+// 모든 지점(AttachmentViewer 개별/전체저장, 첨부현황 전체저장)에서 공통으로 사용한다.
+function attachFileExt(item) {
+  const fromName = (item?.name || "").match(/\.([a-zA-Z0-9]+)$/);
+  if (fromName) return fromName[1].toLowerCase();
+  const src = item?.base64 || item?.url || "";
+  const m = src.match(/^data:(image\/\w+|application\/pdf)/);
+  if (m) return m[1] === "application/pdf" ? "pdf" : (m[1].split("/")[1] || "jpg");
+  return "jpg";
+}
+function buildAttachFileName(row, item, index = 0, total = 1) {
+  const dateStr = (row?.상차일 || "").replace(/-/g, "");
+  const client = (row?.거래처명 || "").trim();
+  const drop = (row?.하차지명 || "").trim();
+  const base = `${dateStr}${client}${client && drop ? "_" : ""}${drop}`.trim() || "첨부파일";
+  const seq = total > 1 ? `-${index + 1}` : "";
+  return `${base}${seq}.${attachFileExt(item)}`;
+}
+// 원본 오더 ↔ 화주사 전송 카피 사이에 첨부가 어느 한쪽에만 반영돼 attachCount가
+// 서로 어긋나는 경우가 있어(AttachmentViewer의 getMirrorTarget과 동일 로직),
+// 첨부현황 화면에서 실제 상태를 검증할 때도 짝 문서를 함께 확인한다.
+function attachMirrorTargetOf(row) {
+  if (row?._transmittedOrderId) return { col: "orders", id: row._transmittedOrderId };
+  if (row?.originCol && row?.originId) return { col: row.originCol, id: row.originId };
+  return null;
+}
 // ── 첨부파일 뷰어 컴포넌트 ──
 // ── 첨부파일 뷰어 컴포넌트 ──
 function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer = false }) {
@@ -17076,6 +17107,15 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     } catch (e) { console.error("rotate:", e); }
   };
 
+  // ✅ 서명 이미지는 저장 파일명 규칙(날짜/거래처_하차지) 대상에서 제외 — 첨부 "장수"에도
+  // 포함되지 않는 별도 항목이라 순번이 섞이면 오히려 혼란스럽다.
+  const isSignatureItem = (item) => item?.source === "driver_signature" || item?.name === "서명.png";
+  const downloadTargets = items.filter(item => !isSignatureItem(item));
+  const downloadFileName = (item) => {
+    const idx = downloadTargets.indexOf(item);
+    return idx >= 0 ? buildAttachFileName(row, item, idx, downloadTargets.length) : (item.name || "attachment.jpg");
+  };
+
   const downloadRotated = (item) => {
     const rot = getRotation(item.id);
     if (!rot) { handleDownload(item); return; }
@@ -17091,7 +17131,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
       ctx.drawImage(img, -w / 2, -h / 2);
       const a = document.createElement("a");
       a.href = canvas.toDataURL("image/jpeg", 0.92);
-      a.download = item.name || "attachment.jpg";
+      a.download = downloadFileName(item);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     };
     img.src = item.base64 || item.url;
@@ -17113,16 +17153,14 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
   const handleDownload = (item) => {
     const a = document.createElement("a");
     a.href = item.base64 || item.url;
-    a.download = item.name || "attachment.jpg";
+    a.download = downloadFileName(item);
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
   // ✅ 전체 개별 다운로드 (서명 이미지는 제외)
-  const isSignatureItem = (item) => item?.source === "driver_signature" || item?.name === "서명.png";
   const handleDownloadAll = () => {
-    const targets = items.filter(item => !isSignatureItem(item));
-    if (!targets.length) return;
-    targets.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
+    if (!downloadTargets.length) return;
+    downloadTargets.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
   };
 
   // ✅ 다운로드 폴더 열기 — 브라우저 보안 정책상 웹페이지가 OS 탐색기를 직접 실행할
@@ -18622,7 +18660,7 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
   );
 }
 
-function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, companyName = "" }) {
+function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, companyName = "", isViewer = false }) {
   const [clientQ, setClientQ] = React.useState(initialClient || "");
   const [searched, setSearched] = React.useState(false);
   const now = new Date();
@@ -18638,6 +18676,48 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
   React.useEffect(() => {
     if (open && initialClient) setClientQ(initialClient);
   }, [open, initialClient]);
+
+  // ⭐ 첨부 상태 실시간 검증 — 그리드에 보이는 attachCount(캐시된 필드)와 이 화면이
+  // 신뢰하는 값이 어긋나 "그리드는 완료인데 여기는 미완료"로 보이는 문제가 있었다.
+  // 검색 결과에 대해 실제 attachments 서브컬렉션 개수(+ 원본/전송카피 짝 문서)를
+  // 직접 세어 확인하고, 캐시 값이 실제와 다르면 그 자리에서 문서에도 보정 반영해
+  // 다음부터는 그리드/첨부현황이 항상 같은 값을 보도록 만든다.
+  const [verifiedCounts, setVerifiedCounts] = React.useState({});
+  const [countsLoading, setCountsLoading] = React.useState(false);
+  const getCnt = (r) => verifiedCounts[r._id] ?? (r.attachCount || 0);
+
+  React.useEffect(() => {
+    if (!results.length) { setVerifiedCounts({}); setCountsLoading(false); return; }
+    let cancelled = false;
+    setCountsLoading(true);
+    (async () => {
+      const entries = await Promise.all(results.map(async (r) => {
+        try {
+          const col = r.__col || "orders";
+          const localSnap = await getCountFromServer(collection(db, col, r._id, "attachments"));
+          let count = localSnap.data().count;
+          const mirror = attachMirrorTargetOf(r);
+          if (mirror) {
+            const mirrorSnap = await getCountFromServer(collection(db, mirror.col, mirror.id, "attachments"));
+            count = Math.max(count, mirrorSnap.data().count);
+          }
+          if (count !== (r.attachCount || 0)) {
+            updateDoc(doc(db, col, r._id), { attachCount: count }).catch(() => {});
+          }
+          return [r._id, count];
+        } catch {
+          return [r._id, r.attachCount || 0];
+        }
+      }));
+      if (!cancelled) { setVerifiedCounts(Object.fromEntries(entries)); setCountsLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [results]);
+
+  // 전체저장(zip) 진행 상태 — 아래 handleSaveAllZip에서 사용. 훅은 조건부 return
+  // 이전에 선언해야 하므로(Rules of Hooks) 여기 미리 선언해둔다.
+  const [bulkSaving, setBulkSaving] = React.useState(false);
+  const [bulkProgress, setBulkProgress] = React.useState("");
 
   if (!open) return null;
 
@@ -18657,10 +18737,62 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
 
   const sortedResults = React.useMemo(() => {
     const arr = [...results];
-    if (sortMode === "done") return arr.sort((a,b) => (b.attachCount||0) - (a.attachCount||0) || (a.상차일||"").localeCompare(b.상차일||""));
-    if (sortMode === "undone") return arr.sort((a,b) => (a.attachCount||0) - (b.attachCount||0) || (a.상차일||"").localeCompare(b.상차일||""));
+    if (sortMode === "done") return arr.sort((a,b) => getCnt(b) - getCnt(a) || (a.상차일||"").localeCompare(b.상차일||""));
+    if (sortMode === "undone") return arr.sort((a,b) => getCnt(a) - getCnt(b) || (a.상차일||"").localeCompare(b.상차일||""));
     return arr.sort((a,b) => (a.상차일||"").localeCompare(b.상차일||""));
-  }, [results, sortMode]);
+  }, [results, sortMode, verifiedCounts]);
+
+  // ⭐ 전체저장 — 검색된 오더들 중 첨부가 있는 오더 전체의 사진을, 오더마다
+  // 개별 다운로드하는 대신 파일명 규칙(날짜거래처명_하차지명)을 적용해 압축파일
+  // 하나로 묶어 저장한다. 오더 수가 많을 때 브라우저가 다중 다운로드를 막는
+  // 문제도 자연스럽게 피할 수 있다.
+  const handleSaveAllZip = async () => {
+    if (bulkSaving) return;
+    const targets = sortedResults.filter(r => getCnt(r) > 0);
+    if (!targets.length) { alert("저장할 첨부파일이 없습니다."); return; }
+    setBulkSaving(true);
+    try {
+      const zip = new JSZip();
+      const usedNames = new Set();
+      for (let i = 0; i < targets.length; i++) {
+        const r = targets[i];
+        setBulkProgress(`${i + 1}/${targets.length}건 처리 중...`);
+        const col = r.__col || "orders";
+        let items = [];
+        try {
+          const snap = await getDocs(collection(db, col, r._id, "attachments"));
+          items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch { continue; }
+        // 서명 이미지는 업무서류가 아니라 전체저장 대상에서 제외
+        items = items.filter(it => !(it?.source === "driver_signature" || it?.name === "서명.png"));
+        items.forEach((item, idx) => {
+          const src = item.base64 || item.url;
+          if (!src || !src.startsWith("data:")) return;
+          const name = buildAttachFileName(r, item, idx, items.length);
+          // 같은 날짜·거래처·하차지 조합의 오더가 여러 건이면 파일명이 겹칠 수
+          // 있어, zip 안에서 중복되면 뒤에 순번을 하나 더 붙여 구분한다.
+          let finalName = name, dupIdx = 1;
+          while (usedNames.has(finalName)) { dupIdx++; finalName = name.replace(/(\.[^.]+)$/, `_${dupIdx}$1`); }
+          usedNames.add(finalName);
+          zip.file(finalName, src.split(",")[1], { base64: true });
+        });
+      }
+      if (!usedNames.size) { alert("저장할 첨부파일이 없습니다."); return; }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      const label = clientQ.trim() || "전체";
+      a.download = `첨부파일_${label}_${dateFrom}~${dateTo}.zip`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      console.error("전체저장 실패:", e);
+      alert("전체저장 중 오류가 발생했습니다: " + e.message);
+    } finally {
+      setBulkSaving(false);
+      setBulkProgress("");
+    }
+  };
 
   const handleSend = (r) => {
     const dateStr = (() => {
@@ -18706,12 +18838,15 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     </button>
   );
 
-  const doneCount = results.filter(r=>(r.attachCount||0)>0).length;
+  const doneCount = results.filter(r=>getCnt(r)>0).length;
   const undoneCount = results.length - doneCount;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl flex flex-col" style={{width:"min(96vw, 900px)", maxHeight:"90vh"}} onClick={e => e.stopPropagation()}>
+      {/* 컬럼(날짜/거래처/상차지/하차지/첨부 상태/처리) 6개가 900px 안에 다 안 들어가
+          가로 스크롤이 생기고 "처리" 열이 잘려 보이던 문제 — 좌우 스크롤 대신 팝업
+          자체를 내용에 맞게 넓혔다. */}
+      <div className="bg-white rounded-2xl shadow-2xl flex flex-col" style={{width:"min(96vw, 1200px)", maxHeight:"90vh"}} onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
           <div className="font-bold text-[17px] text-[#1B2B4B]">첨부현황</div>
@@ -18756,18 +18891,27 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
             <button onClick={handleSearch} className="px-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-lg hover:opacity-90 transition">조회</button>
           </div>
         </div>
-        {/* 결과 헤더 (정렬) */}
+        {/* 결과 헤더 (정렬 + 전체저장) */}
         {searched && results.length > 0 && (
-          <div className="px-6 py-3 border-b border-gray-200 shrink-0 flex items-center justify-between bg-white">
+          <div className="px-6 py-3 border-b border-gray-200 shrink-0 flex items-center justify-between bg-white flex-wrap gap-2">
             <div className="text-[13px] font-semibold text-gray-600">
               총 <span className="font-bold text-gray-900">{results.length}</span>건 &nbsp;·&nbsp;
               완료 <span className="font-bold text-[#1B2B4B]">{doneCount}</span>건 &nbsp;·&nbsp;
               미완료 <span className="font-bold text-gray-500">{undoneCount}</span>건
+              {countsLoading && <span className="ml-2 text-[11px] text-gray-400">첨부 상태 확인 중...</span>}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               {sortBtn("date", "날짜순")}
               {sortBtn("done", "완료순")}
               {sortBtn("undone", "미완료순")}
+              <button
+                onClick={handleSaveAllZip}
+                disabled={bulkSaving || doneCount === 0}
+                title="첨부가 있는 오더 전체를 날짜/거래처명_하차지명 파일명으로 압축해 저장합니다"
+                className="px-3 py-1.5 text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {bulkSaving ? (bulkProgress || "저장 중...") : "전체저장"}
+              </button>
             </div>
           </div>
         )}
@@ -18789,7 +18933,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
               </thead>
               <tbody>
                 {sortedResults.map(r => {
-                  const cnt = r.attachCount || 0;
+                  const cnt = getCnt(r);
                   const done = cnt > 0;
                   return (
                     <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -23890,6 +24034,7 @@ const head = isDark
     dispatchData={dispatchData}
     db={db}
     companyName={userCompany}
+    isViewer={isViewer}
   />
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
@@ -33107,6 +33252,7 @@ return (
     dispatchData={dispatchData}
     db={db}
     companyName={userCompany}
+    isViewer={isViewer}
   />
 )}
 {/* ================= 거래처 신규등록 팝업 ================= */}
