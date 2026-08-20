@@ -292,7 +292,7 @@ function _scheduleDateLabel(d) {
    이름은 CustomDatePicker의 달력과 동일하게 한 줄(줄바꿈 없이)로 표시한다.
    덤으로 실시간 디지털 시계를 헤더에 넣어 데스크 시계처럼도 쓸 수 있게 했다.
 --------------------------------------------------*/
-function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate }) {
+function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate, footer }) {
   const pad2 = (n) => String(n).padStart(2, "0");
   const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
   const parseValidDate = (s) => {
@@ -544,6 +544,13 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
           </div>
         </div>
       </div>
+      {/* footer가 주어지면(예: 근무일 수정 팝업의 취소/저장 버튼) 달력과 같은 카드
+          안에, 구분선만 두고 붙여서 보여준다 — 굳이 카드를 따로 나눌 필요가 없다. */}
+      {footer && (
+        <div className="border-t border-gray-100 px-4 py-3 flex justify-end gap-2 shrink-0">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }
@@ -561,13 +568,22 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
   // 묶음이었던 오더)만 다중선택 모드로 열고, 그 외(보통의 상차일~하차일 구간)는
   // 3파트 등록폼과 동일하게 "상/하차일 각각 클릭" 모드로 연다 — 다중선택은
   // 아래 "묶음(다중선택)" 버튼을 눌러야만 켜진다.
-  const [multiMode, setMultiMode] = React.useState(initWorkDates.length > 1);
+  // ⭐ 근무일자목록 길이만으로 판단하면, 예전 버그로 인해 데이터가 남아있는
+  // 오더를 열었을 때 사용자가 누르지도 않았는데 묶음 모드로 켜져버릴 수 있다.
+  // 이 팝업/패널로 저장한 오더는 항상 복수근무일 플래그를 명시적으로 함께
+  // 저장하므로(true/false), 그 값이 있으면 그것을 최우선으로 따르고, 아예
+  // 없는(과거 데이터) 경우에만 근무일자목록 길이로 추정한다.
+  const initMulti = row?.복수근무일 === true ? true
+    : row?.복수근무일 === false ? false
+    : initWorkDates.length > 1;
+  const [multiMode, setMultiMode] = React.useState(initMulti);
   const [pickupDate, setPickupDate] = React.useState(row?.상차일 || "");
   const [dropDate, setDropDate] = React.useState(row?.하차일 || "");
   const [workDates, setWorkDates] = React.useState(
     initWorkDates.length > 0 ? initWorkDates : (row?.상차일 ? [row.상차일] : [])
   );
   const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
 
   const toggleWorkDate = (dateStr) => {
     if (!dateStr) return;
@@ -579,7 +595,22 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
   };
 
   const handleSave = async () => {
+    setSaveError("");
+    if (!multiMode && isReversedDateOrder(pickupDate, dropDate)) {
+      setSaveError(REVERSED_DATE_ORDER_MSG);
+      return;
+    }
     setSaving(true);
+    // ⚠️ 네트워크/서버 문제로 저장 응답이 영영 오지 않으면 "저장 중..."에 갇혀
+    // 아무 안내 없이 멈춰있던 문제가 있었다 — 20초 안에 끝나지 않으면 타임아웃
+    // 처리로 버튼을 되돌리고 오류를 보여준다(실제 저장은 나중에 성공할 수도
+    // 있으니, 팝업은 닫지 않고 다시 시도하게 한다).
+    let timedOut = false;
+    const timer = window.setTimeout(() => {
+      timedOut = true;
+      setSaving(false);
+      setSaveError("저장이 지연되고 있습니다. 네트워크 상태를 확인 후 다시 시도해주세요.");
+    }, 20000);
     try {
       if (multiMode) {
         if (workDates.length === 0) return;
@@ -601,8 +632,12 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
           복수근무일: false,
         });
       }
+    } catch (e) {
+      if (!timedOut) setSaveError("저장에 실패했습니다. 다시 시도해주세요.");
+      console.error(e);
     } finally {
-      setSaving(false);
+      window.clearTimeout(timer);
+      if (!timedOut) setSaving(false);
     }
   };
 
@@ -635,18 +670,21 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
           dropDate={multiMode ? (workDates[workDates.length - 1] || "") : dropDate}
           onPickupChange={setPickupDate}
           onDropChange={setDropDate}
+          footer={<>
+            {saveError && (
+              <span className="flex-1 self-center text-[12px] font-bold text-rose-600">{saveError}</span>
+            )}
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">취소</button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !canSave}
+              className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] disabled:opacity-40"
+            >
+              {saving ? "저장 중..." : "저장"}
+            </button>
+          </>}
         />
-        <div className="bg-white rounded-2xl shadow-md border border-gray-200 px-4 py-3 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">취소</button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !canSave}
-            className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] disabled:opacity-40"
-          >
-            {saving ? "저장 중..." : "저장"}
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -679,6 +717,16 @@ function _parseWorkDates(v) {
   }
   return [];
 }
+
+// 🚫 하차일이 상차일보다 빠른 "역순" 날짜 지정을 막는 공용 검사 헬퍼.
+// 상차일/하차일이 둘 다 있을 때만 비교하고(하나라도 비어있으면 통과), 문자열
+// 비교로 충분한 YYYY-MM-DD 형식을 그대로 사용한다. 상/하차일을 다루는 모든
+// 위치(3파트 등록폼, 4/5파트 인라인수정, 오더복사/수정 패널, 근무일 수정 팝업,
+// 모바일)에서 저장 직전 이 함수로 검사해야 한다.
+function isReversedDateOrder(pickup, drop) {
+  return !!pickup && !!drop && String(drop) < String(pickup);
+}
+const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습니다. 날짜를 다시 확인해주세요.";
 
 // ⭐ 오늘/미래 날짜에 완전히 동일한 오더가 이미 등록돼 있는지 확인한다. 저장을
 // 막는 하드 체크가 아니라, 여러 담당자가 같은 오더를 모르고 중복 등록하는 것을
@@ -2135,6 +2183,12 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
 // (모듈 최상위 스코프 — RealtimeStatus/DispatchStatus/UnassignedStatus 등 여러 하위
 // 컴포넌트의 "복사 등록" 버튼에서 공통으로 호출되므로 approvedShippers를 인자로 받는다.)
 const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) => {
+  const _pickup = copyTarget.상차일 || todayStr();
+  const _drop = copyTarget.하차일 || todayStr();
+  if (isReversedDateOrder(_pickup, _drop)) {
+    window.alert(REVERSED_DATE_ORDER_MSG);
+    return false;
+  }
   const newId = crypto.randomUUID();
   const payload = {
     ...copyTarget,
@@ -2143,9 +2197,12 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     // 복사/수정 패널에서 상차일/하차일을 수정했다면 그 값을 그대로 존중한다 — 무조건
     // 오늘 날짜로 덮어쓰면 사용자가 다른 날짜로 바꿔서 등록해도 조용히 오늘로 저장되어
     // 화주사(연동 사본)와 운송사 원본이 모두 의도한 날짜와 다르게 등록되는 문제가 있었다.
-    상차일: copyTarget.상차일 || todayStr(),
-    하차일: copyTarget.하차일 || todayStr(),
+    상차일: _pickup,
+    하차일: _drop,
     등록일: todayStr(),
+    // 복사 등록도 "새로 등록"하는 행위이므로, 원본이 모바일에서 만들어졌더라도
+    // 이 복사본은 지금 실제로 등록하는 기기(PC) 기준으로 다시 표시한다.
+    등록기기: "PC",
     createdAt: Date.now(),
     updatedAt: Date.now(),
     배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
@@ -3049,12 +3106,21 @@ const sixMonthsAgo = getSixMonthsAgo();
   }, [user, userCompany, role]);
 
 const addDispatch = async (record) => {
+  // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
+  if (isReversedDateOrder(record?.상차일, record?.하차일)) {
+    window.alert(REVERSED_DATE_ORDER_MSG);
+    return false;
+  }
+
   const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
 
   const cleanRecord = stripUndefinedDeep({
     ...record,
     _id,
     작성자: auth.currentUser?.email || "",
+    // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기 —
+    // 이미 값이 있으면(예: 복사 등록으로 원본 값을 이어받은 경우) 덮어쓰지 않는다.
+    등록기기: record?.등록기기 || "PC",
     // 등록과 동시에 차량번호까지 포함되어 생성되는 경우(기사 정보 포함 등록 등)에도 완료시각을 남긴다
     ...(String(record?.차량번호 || "").trim() && !record?.배차완료일시 ? { 배차완료일시: Date.now() } : {}),
     // ⭐ "배차한시간"(등록일 hover 툴팁)이 표시하는 필드는 배차완료일시가 아니라
@@ -3129,6 +3195,7 @@ const patchDispatch = async (_id, patch) => {
   delete patch.createdTime;
 
   // ★ 메모리 캐시에서 먼저 찾기 (getDoc 완전 제거 → 딜레이 없음)
+  // (역순 날짜 검증은 prev를 구한 다음, 최신 상/하차일 기준으로 아래에서 수행한다)
   // 두 캐시를 매번 새 배열로 합치면(스프레드) 호출마다 N+M 크기 배열을 새로 할당/복사하게
   // 되어, 오더가 많은 회사에서는 전달상태 등 단순 토글 하나에도 매번 그 비용이 들어 렉으로
   // 느껴졌다 — 배열을 합치지 않고 각 캐시에서 순서대로 찾는다(첫 번째에서 찾으면 두 번째는
@@ -3149,6 +3216,17 @@ const patchDispatch = async (_id, patch) => {
     }
     if (!snap.exists()) { console.error("❌ 문서 없음", _id); return; }
     prev = snap.data();
+  }
+
+  // 🚫 하차일이 상차일보다 빠른 역순 저장 방지 — 이 함수를 거치는 모든 수정
+  // (4/5파트 인라인수정, 오더복사/수정 패널, 근무일 수정 팝업 등)에 공통 적용된다.
+  {
+    const effPickup = "상차일" in patch ? patch.상차일 : prev?.상차일;
+    const effDrop = "하차일" in patch ? patch.하차일 : prev?.하차일;
+    if (isReversedDateOrder(effPickup, effDrop)) {
+      window.alert(REVERSED_DATE_ORDER_MSG);
+      return false;
+    }
   }
 
   // ★ UI 즉시 반영 (optimistic update — Firestore 응답 기다리지 않음)
@@ -10691,6 +10769,16 @@ const _dOrderMemo = form.하차지오더메모, _dOrderMemoShow = form.하차지
 
 // ★ 오더 병렬 저장 (순차→병렬로 속도 개선)
 const saveCount = multiCount > 1 ? multiCount : 1;
+// 🚫 하차일이 상차일보다 빠른 역순 등록 방지 — 다중등록(오더별 개별 날짜)까지
+// 전부 미리 검사하고, 하나라도 역순이면 아무것도 저장하지 않는다.
+for (let i = 0; i < saveCount; i++) {
+  const dChk = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
+  const ddChk = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dChk);
+  if (isReversedDateOrder(dChk, ddChk)) {
+    showAlert(REVERSED_DATE_ORDER_MSG);
+    return;
+  }
+}
 await Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
   const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
@@ -19661,6 +19749,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
       <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
       <div>배차한시간: <span className="text-purple-300">{r.배차확정일시 ? formatKstDateTime(getDispatchConfirmedMs(r)) : "-"}</span></div>
       <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
+      <div>등록기기: <span className="text-orange-300">{r.등록기기 || "-"}</span></div>
     </>}
   />
 </td>
@@ -24557,7 +24646,8 @@ const head = isDark
     companyName={userCompany}
     onClose={() => setWorkDatesEditRow(null)}
     onSave={async (patch) => {
-      await patchDispatch(workDatesEditRow._id, patch);
+      const ok = await patchDispatch(workDatesEditRow._id, patch);
+      if (ok === false) return; // 역순 날짜 등 검증 실패 — 모달을 유지해 다시 고르게 한다
       setRows(prev => prev.map(x => x._id === workDatesEditRow._id ? { ...x, ...patch } : x));
       setWorkDatesEditRow(null);
     }}
@@ -25262,6 +25352,10 @@ const head = isDark
       showAlert("수정할 오더 ID가 없습니다.");
       return;
     }
+    if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) {
+      showAlert(REVERSED_DATE_ORDER_MSG);
+      return;
+    }
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있으므로 그대로 사용
     const finalCargo = copyTarget.화물내용 || "";
@@ -25318,7 +25412,8 @@ flashRow(savedId);
       showAlert("복사할 데이터가 없습니다.");
       return;
     }
-    await submitCopyOrderPC(copyTarget, approvedShippers);
+    const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
+    if (ok === false) return;
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
@@ -25507,8 +25602,17 @@ checkWarningStatus(c.거래처명, "거래처");
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
           multiSelect
-          multiActive={!!copyTarget?.복수근무일 || _parseWorkDates(copyTarget?.근무일자목록).length > 1}
-          onToggleMulti={() => setCopyTarget(p => ({ ...p, 복수근무일: !p?.복수근무일 }))}
+          multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+          onToggleMulti={() => setCopyTarget(p => {
+            const curMulti = p?.복수근무일 === true ? true : p?.복수근무일 === false ? false : _parseWorkDates(p?.근무일자목록).length > 1;
+            if (curMulti) {
+              // 묶음 끄기 — 근무일자목록을 비워서, 다음에 다시 열어도 과거 데이터로
+              // 묶음 모드가 저절로 켜지지 않게 한다.
+              return { ...p, 복수근무일: false, 근무일자목록: [] };
+            }
+            const seed = _parseWorkDates(p?.근무일자목록);
+            return { ...p, 복수근무일: true, 근무일자목록: seed.length > 0 ? seed : (p?.상차일 ? [p.상차일] : []) };
+          })}
           workDates={_parseWorkDates(copyTarget?.근무일자목록)}
           onToggleWorkDate={(dateStr) => {
             if (!dateStr) return;
@@ -25519,7 +25623,7 @@ checkWarningStatus(c.거래처명, "거래처");
               return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
             });
           }}
-          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [] }))}
+          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
           displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
         />
       </Field>
@@ -33202,6 +33306,16 @@ if (first) {
 
     if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
 
+    // 🚫 역순 날짜(하차일 < 상차일) 검사 — 하나라도 있으면 전체 저장을 막는다.
+    const reversedId = ids.find(id => {
+      const orig = filtered.find(r => getId(r) === id) || dispatchData.find(r => getId(r) === id);
+      const p = edited[id] || {};
+      const pickup = "상차일" in p ? p.상차일 : orig?.상차일;
+      const drop = "하차일" in p ? p.하차일 : orig?.하차일;
+      return isReversedDateOrder(pickup, drop);
+    });
+    if (reversedId) return showAlert(REVERSED_DATE_ORDER_MSG);
+
  // ================================
     //   수정완료 → 저장 로직 (백그라운드)
     // ================================
@@ -33882,7 +33996,8 @@ return (
     onClose={() => setWorkDatesEditRow(null)}
     onSave={async (patch) => {
       const wid = getId(workDatesEditRow);
-      await patchDispatch(wid, patch);
+      const ok = await patchDispatch(wid, patch);
+      if (ok === false) return; // 역순 날짜 등 검증 실패 — 모달을 유지해 다시 고르게 한다
       setLocalOverrides(prev => ({ ...prev, [wid]: { ...(prev[wid] || {}), ...patch } }));
       setWorkDatesEditRow(null);
     }}
@@ -34477,6 +34592,7 @@ return (
       <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
       <div>배차한시간: <span className="text-purple-300">{row.배차확정일시 ? _fmtKst(row.배차확정일시) : "-"}</span></div>
       <div>등록자: <span className="text-blue-300">{_creatorLabel(row, userNameMap)}</span></div>
+      <div>등록기기: <span className="text-orange-300">{row.등록기기 || "-"}</span></div>
     </>}
   />
 </td>
@@ -36242,6 +36358,10 @@ return (
       showAlert("수정할 오더 ID가 없습니다.");
       return;
     }
+    if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) {
+      showAlert(REVERSED_DATE_ORDER_MSG);
+      return;
+    }
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있음
     const finalCargo = copyTarget.화물내용 || "";
@@ -36299,7 +36419,8 @@ return (
       return;
     }
 
-    await submitCopyOrderPC(copyTarget, approvedShippers);
+    const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
+    if (ok === false) return;
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
@@ -36490,8 +36611,17 @@ setCopyTarget(prev=>({
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
           multiSelect
-          multiActive={!!copyTarget?.복수근무일 || _parseWorkDates(copyTarget?.근무일자목록).length > 1}
-          onToggleMulti={() => setCopyTarget(p => ({ ...p, 복수근무일: !p?.복수근무일 }))}
+          multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+          onToggleMulti={() => setCopyTarget(p => {
+            const curMulti = p?.복수근무일 === true ? true : p?.복수근무일 === false ? false : _parseWorkDates(p?.근무일자목록).length > 1;
+            if (curMulti) {
+              // 묶음 끄기 — 근무일자목록을 비워서, 다음에 다시 열어도 과거 데이터로
+              // 묶음 모드가 저절로 켜지지 않게 한다.
+              return { ...p, 복수근무일: false, 근무일자목록: [] };
+            }
+            const seed = _parseWorkDates(p?.근무일자목록);
+            return { ...p, 복수근무일: true, 근무일자목록: seed.length > 0 ? seed : (p?.상차일 ? [p.상차일] : []) };
+          })}
           workDates={_parseWorkDates(copyTarget?.근무일자목록)}
           onToggleWorkDate={(dateStr) => {
             if (!dateStr) return;
@@ -36502,7 +36632,7 @@ setCopyTarget(prev=>({
               return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
             });
           }}
-          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [] }))}
+          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
           displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
         />
       </Field>
@@ -39660,7 +39790,7 @@ function NewOrderPopup({
 
   const saveOrder = async () => {
     try {
-      await addDispatch({
+      const ok = await addDispatch({
         ...newOrder,
         차량톤수: toTonUnit(newOrder.차량톤수),
         메모중요도: "일반",
@@ -39676,6 +39806,7 @@ function NewOrderPopup({
         업체전달일시: null,
         업체전달방법: null,
       });
+      if (ok === false) return; // 역순 날짜 등 검증 실패 — addDispatch가 이미 안내를 띄웠다
 
 
       showAlert("신규 오더가 등록되었습니다.");
@@ -45299,9 +45430,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
                       if (!copyTarget?._id) { showToast("수정할 오더 ID가 없습니다.", "err"); return; }
+                      if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) { showToast(REVERSED_DATE_ORDER_MSG, "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
-                      await patchDispatch(copyTarget._id, payload);
+                      const ok = await patchDispatch(copyTarget._id, payload);
+                      if (ok === false) return;
                       showToast("오더 수정 완료");
                       setCopyPanelOpen(false);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
@@ -45316,7 +45449,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
+                      const ok = await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
+                      if (ok === false) return;
                       showToast("복사 등록 완료");
                       setCopyPanelOpen(false);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
@@ -45414,8 +45548,17 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </>}>
                         <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           multiSelect
-                          multiActive={!!copyTarget?.복수근무일 || _parseWorkDates(copyTarget?.근무일자목록).length > 1}
-                          onToggleMulti={() => setCopyTarget(p => ({ ...p, 복수근무일: !p?.복수근무일 }))}
+                          multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+                          onToggleMulti={() => setCopyTarget(p => {
+            const curMulti = p?.복수근무일 === true ? true : p?.복수근무일 === false ? false : _parseWorkDates(p?.근무일자목록).length > 1;
+            if (curMulti) {
+              // 묶음 끄기 — 근무일자목록을 비워서, 다음에 다시 열어도 과거 데이터로
+              // 묶음 모드가 저절로 켜지지 않게 한다.
+              return { ...p, 복수근무일: false, 근무일자목록: [] };
+            }
+            const seed = _parseWorkDates(p?.근무일자목록);
+            return { ...p, 복수근무일: true, 근무일자목록: seed.length > 0 ? seed : (p?.상차일 ? [p.상차일] : []) };
+          })}
                           workDates={_parseWorkDates(copyTarget?.근무일자목록)}
                           onToggleWorkDate={(dateStr) => {
                             if (!dateStr) return;
@@ -45426,7 +45569,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                               return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
                             });
                           }}
-                          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [] }))}
+                          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
                           displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
                         />
                       </Field>

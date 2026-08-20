@@ -70,6 +70,13 @@ function _parseWorkDates(v) {
   return [];
 }
 
+// 🚫 하차일이 상차일보다 빠른 "역순" 날짜 지정을 막는 공용 검사 헬퍼 — PC(DispatchApp)의
+// isReversedDateOrder와 동일 로직. 상/하차일을 저장하는 모든 위치에서 저장 직전 검사한다.
+function isReversedDateOrder(pickup, drop) {
+  return !!pickup && !!drop && String(drop) < String(pickup);
+}
+const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습니다. 날짜를 다시 확인해주세요.";
+
 // 기사전달용 업로드 링크 단축 — PC(DispatchApp)의 buildShortUploadUrl과 동일한 규칙으로
 // /u/{code}를 발급한다(code는 토큰에서 파생되어 재복사해도 항상 같은 링크).
 function buildShortUploadUrlMobile(orderId, token) {
@@ -3192,6 +3199,16 @@ const groupedByDate = useMemo(() => {
     // 🔹 신규 등록 — PC 배차관리와 동일하게 수량(multiCount)만큼 등록하고,
     // "날짜 개별 설정"이 켜져 있으면 건별로 지정한 상/하차일을 사용한다.
     const saveCount = multiCount > 1 ? multiCount : 1;
+    // 🚫 하차일이 상차일보다 빠른 역순 등록 방지 — 날짜 개별 설정(다중등록)까지 전부
+    // 미리 검사하고, 하나라도 역순이면 아무것도 저장하지 않는다.
+    for (let ci = 0; ci < saveCount; ci++) {
+      const dChk = (useSeparateDates && orderDates[ci]) ? orderDates[ci] : docData.상차일;
+      const ddChk = (useSeparateDates && orderDropDates[ci]) ? orderDropDates[ci] : (docData.하차일 || dChk);
+      if (isReversedDateOrder(dChk, ddChk)) {
+        alert(REVERSED_DATE_ORDER_MSG);
+        return;
+      }
+    }
     try {
       const saveOne = async (i) => {
         const dateForOrder = (useSeparateDates && orderDates[i]) ? orderDates[i] : docData.상차일;
@@ -3204,6 +3221,8 @@ const groupedByDate = useMemo(() => {
           id: "",     // 임시
           등록일: today,
           createdAt: serverTimestamp(),
+          // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기
+          등록기기: rowData.등록기기 || "모바일",
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp() } : {}),
@@ -3639,6 +3658,10 @@ const deleteSingleOrder = async (order) => {
     const today = todayKST();
     const 상차일 = simple.상차일 || today;
     const 하차일 = simple.하차일 || 상차일;
+    // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
+    if (isReversedDateOrder(상차일, 하차일)) {
+      return { ok: false, error: REVERSED_DATE_ORDER_MSG };
+    }
 
     const docData = {
       거래처명: simple.거래처명 || "",
@@ -3699,6 +3722,7 @@ const deleteSingleOrder = async (order) => {
         id: "",
         등록일: today,
         createdAt: serverTimestamp(),
+        등록기기: "모바일",
       });
 
       await updateDoc(doc(db, collName, ref.id), {
