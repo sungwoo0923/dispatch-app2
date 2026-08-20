@@ -19794,19 +19794,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
               묶음 {rWorkDates.length}일
             </span>
           )}
-          {/* ⭐ 일정 변경 시 묶음(다중근무일)을 다시 골라야 하는데 상차일 칸 하나만
-              바꿀 방법이 없다는 피드백으로, 근무일 전체를 다시 고를 수 있는 달력
-              편집 버튼을 추가한다. */}
-          <button
-            type="button"
-            title="근무일 수정(다중선택)"
-            onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow?.(r); }}
-            className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
-            </svg>
-          </button>
         </>
       );
     })()}
@@ -34795,21 +34782,6 @@ return (
         >
           묶음 {rowWorkDates.length}일
         </span>
-      )}
-      {/* ⭐ 일정 변경 시 묶음(다중근무일)을 다시 골라야 하는데 상차일 칸 하나만
-          바꿀 방법이 없다는 피드백으로, 근무일 전체를 다시 고를 수 있는 달력
-          편집 버튼을 추가한다. */}
-      {key === "상차일" && (
-        <button
-          type="button"
-          title="근무일 수정(다중선택)"
-          onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow(row); }}
-          className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
-          </svg>
-        </button>
       )}
     </span>
   );
