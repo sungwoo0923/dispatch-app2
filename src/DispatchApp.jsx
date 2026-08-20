@@ -728,6 +728,14 @@ function isReversedDateOrder(pickup, drop) {
 }
 const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습니다. 날짜를 다시 확인해주세요.";
 
+// ⭐ addDispatch/patchDispatch/submitCopyOrderPC 등은 컴포넌트 바깥(또는 DispatchApp의
+// showAlert가 아직 선언되기 전)에 정의돼 있어 앱의 CustomAlert 상태(alertMsg)에 직접
+// 접근할 수 없다. 그래도 브라우저 기본 alert() 대신 프로그램과 동일한 스타일의 팝업을
+// 띄우기 위한 간단한 브릿지 — DispatchApp이 렌더링되면서 실제 showAlert로 교체되고,
+// 그 전(아주 짧은 초기 순간)까지는 안전하게 window.alert로 대체(폴백)한다.
+let _globalShowAlert = (msg) => window.alert(msg);
+function globalShowAlert(msg) { _globalShowAlert(msg); }
+
 // ⭐ 오늘/미래 날짜에 완전히 동일한 오더가 이미 등록돼 있는지 확인한다. 저장을
 // 막는 하드 체크가 아니라, 여러 담당자가 같은 오더를 모르고 중복 등록하는 것을
 // 막기 위한 안내용 알림에 쓰인다(PC/모바일 공용 로직 — 두 파일에 각각 둔다).
@@ -2186,7 +2194,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   const _pickup = copyTarget.상차일 || todayStr();
   const _drop = copyTarget.하차일 || todayStr();
   if (isReversedDateOrder(_pickup, _drop)) {
-    window.alert(REVERSED_DATE_ORDER_MSG);
+    globalShowAlert(REVERSED_DATE_ORDER_MSG);
     return false;
   }
   const newId = crypto.randomUUID();
@@ -3108,7 +3116,7 @@ const sixMonthsAgo = getSixMonthsAgo();
 const addDispatch = async (record) => {
   // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
   if (isReversedDateOrder(record?.상차일, record?.하차일)) {
-    window.alert(REVERSED_DATE_ORDER_MSG);
+    globalShowAlert(REVERSED_DATE_ORDER_MSG);
     return false;
   }
 
@@ -3220,11 +3228,16 @@ const patchDispatch = async (_id, patch) => {
 
   // 🚫 하차일이 상차일보다 빠른 역순 저장 방지 — 이 함수를 거치는 모든 수정
   // (4/5파트 인라인수정, 오더복사/수정 패널, 근무일 수정 팝업 등)에 공통 적용된다.
-  {
+  // ⚠️ 반드시 "이번 patch가 실제로 상차일/하차일을 바꾸려 할 때"만 검사해야 한다 —
+  // 과거에 잘못 저장된(이 검증이 생기기 전) 레거시 데이터가 이미 역순인 채로 남아있는
+  // 오더는 흔한데, 배차확정일시 소급 보정처럼 날짜와 무관한 백그라운드 패치까지 여기
+  // 걸려버리면 관련 없는 오더 수만큼 window.alert가 연속으로 뜨면서 화면이 통째로
+  // 멈춰버린다(alert는 동기 호출이라 확인을 누를 때까지 스크립트 실행이 막힌다).
+  if ("상차일" in patch || "하차일" in patch) {
     const effPickup = "상차일" in patch ? patch.상차일 : prev?.상차일;
     const effDrop = "하차일" in patch ? patch.하차일 : prev?.하차일;
     if (isReversedDateOrder(effPickup, effDrop)) {
-      window.alert(REVERSED_DATE_ORDER_MSG);
+      globalShowAlert(REVERSED_DATE_ORDER_MSG);
       return false;
     }
   }
@@ -6088,6 +6101,9 @@ const [alertMsg, setAlertMsg] = useState(null);
 // 알림을 "확인"한 뒤에만 그 팝업이 나타나도록 하기 위한 콜백 저장소.
 const alertThenRef = React.useRef(null);
 const showAlert = (msg, then) => { alertThenRef.current = then || null; setAlertMsg(msg); };
+// addDispatch/patchDispatch 등 컴포넌트 바깥에 정의된 함수도 이 화면과 동일한 스타일의
+// CustomAlert를 띄울 수 있도록, 렌더될 때마다 최신 showAlert를 전역 브릿지에 연결한다.
+_globalShowAlert = showAlert;
 const closeAlert = () => {
   setAlertMsg(null);
   const cb = alertThenRef.current;
