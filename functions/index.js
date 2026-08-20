@@ -1,8 +1,13 @@
-import * as functions from "firebase-functions";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
-import fetch from "node-fetch";
+// ⚠️ ESM(import/export) 대신 CommonJS(require/exports)로 작성한다 — 여러
+// 사용자 환경(Node 버전·firebase-tools 버전 조합)에서 ESM 함수 코드베이스를
+// "require(esm)" 방식으로 동기 로드하려다 실패하는 사례(Functions codebase
+// could not be analyzed successfully)가 있어, 어떤 환경에서도 안정적으로
+// 동작하는 CommonJS로 통일한다.
+const functions = require("firebase-functions");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
+const fetch = require("node-fetch");
 
 initializeApp();
 
@@ -23,7 +28,7 @@ async function getAllTokens() {
 /* ==============================
    🔔 신규 오더 알림
 ============================== */
-export const notifyNewDispatch =
+exports.notifyNewDispatch =
   functions.firestore
     .document("{col}/{dispatchId}")
     .onCreate(async (snap, context) => {
@@ -55,7 +60,7 @@ export const notifyNewDispatch =
 /* ==============================
    🚚 배차완료 알림
 ============================== */
-export const notifyDispatchDone =
+exports.notifyDispatchDone =
   functions.firestore
     .document("{col}/{dispatchId}")
     .onUpdate(async (change, context) => {
@@ -90,7 +95,7 @@ export const notifyDispatchDone =
 /* ==============================
    ⛽ 유가 API Proxy
 ============================== */
-export const fuel = functions.https.onRequest(async (req, res) => {
+exports.fuel = functions.https.onRequest(async (req, res) => {
   const area = req.query.area || "01";
   const key = "F251130200";
   const endpoints = [
@@ -153,7 +158,7 @@ function normalizeTimeToHHMM(t) {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
-export const notifyUnassignedUrgent = functions.pubsub
+exports.notifyUnassignedUrgent = functions.pubsub
   .schedule("every 5 minutes")
   .timeZone("Asia/Seoul")
   .onRun(async () => {
@@ -231,7 +236,7 @@ export const notifyUnassignedUrgent = functions.pubsub
    사용자가 "잠금"을 걸어두지 않은(잠금 !== true) 파일만 삭제한다.
    잠긴 파일은 아무리 오래돼도 이 정리에서 제외된다.
 ============================== */
-export const cleanupOldAttachments = functions.pubsub
+exports.cleanupOldAttachments = functions.pubsub
   .schedule("every 24 hours")
   .onRun(async () => {
     const cutoff = new Date();
