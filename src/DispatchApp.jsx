@@ -4487,6 +4487,42 @@ export {
 
 
 // ===================== FloatingCalculator =====================
+// 파렛트 종류별 규격·자체무게 — "RUN박성우충괄팀장님의 메시지" 기준표를 그대로 반영.
+// EL14처럼 무게가 범위로 안내된 경우 kg은 계산용 평균값을 쓰고 kgLabel에 원래
+// 범위 문구를 별도로 남긴다.
+const PALLET_SPEC_TABLE = [
+  { code: "N11",  w: 1100, d: 1100, h: 150, kg: 19.5 },
+  { code: "N12",  w: 1200, d: 1000, h: 150, kg: 20 },
+  { code: "N15",  w: 1460, d: 1130, h: 150, kg: 27.5 },
+  { code: "P11",  w: 1100, d: 1100, h: 150, kg: 26 },
+  { code: "P13",  w: 1300, d: 1100, h: 150, kg: 25 },
+  { code: "P14",  w: 1350, d: 1100, h: 150, kg: 32 },
+  { code: "PA11", w: 1100, d: 800,  h: 150, kg: 18 },
+  { code: "L14",  w: 1437, d: 1127, h: 140, kg: 20 },
+  { code: "EL14", w: 1440, d: 1130, h: 150, kg: 26.5, kgLabel: "25.5~27.5 kg" },
+  { code: "EL15", w: 1500, d: 1500, h: 150, kg: 32 },
+  { code: "EL18", w: 1800, d: 1600, h: 150, kg: 58 },
+  { code: "EL20", w: 1960, d: 1960, h: 150, kg: 68.5 },
+  { code: "N48",  w: 1219, d: 1016, h: 150, kg: 23.8, note: "코스트코" },
+  { code: "W09",  w: 1100, d: 900,  h: 120, kg: 22 },
+  { code: "WT11", w: 1100, d: 1100, h: 144, kg: 45 },
+  { code: "WT12", w: 1200, d: 1000, h: 144, kg: 45 },
+  { code: "WT13", w: 1300, d: 1100, h: 144, kg: 51 },
+  { code: "C95",  w: 950,  d: 950,  h: 130, kg: 23 },
+];
+
+// 프로그램 전체 톤에 맞춘 단색 트럭 아이콘 — 알록달록한 이모지(🚚) 대신 사용.
+function TruckIcon({ size = 18, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="7" width="13" height="10" rx="1" />
+      <path d="M14 10h4l3.5 3.5V17H14z" />
+      <circle cx="6" cy="19" r="1.6" />
+      <circle cx="17.5" cy="19" r="1.6" />
+    </svg>
+  );
+}
+
 const LOAD_VEHICLES = [
   { name: "다마스",  l: 170,  w: 120,  h: 110, maxKg: 300   },
   { name: "라보",    l: 200,  w: 145,  h: 130, maxKg: 500   },
@@ -4548,7 +4584,7 @@ function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
         )}
       </div>
       <div style={{ fontSize: 10, color: "#475569", marginTop: 4, textAlign: "center" }}>
-        🔵 {neededOnFloor}칸 × {layers}단 = {neededOnFloor * layers}p 사용 │ ⬜ 여유 {cap1 - neededOnFloor}칸
+        사용 {neededOnFloor}칸 × {layers}단 = {neededOnFloor * layers}p · 여유 {cap1 - neededOnFloor}칸
       </div>
     </div>
   );
@@ -4568,6 +4604,7 @@ function FloatingCalculator({ onClose }) {
 
   // loading calculator state
   const [loadMode, setLoadMode] = React.useState("pallet");
+  const [palInputMode, setPalInputMode] = React.useState("manual"); // "manual" | "type" — 직접입력 vs 파렛종류 선택
   const [palW, setPalW] = React.useState("1100");
   const [palD, setPalD] = React.useState("1100");
   const [palQty, setPalQty] = React.useState("");
@@ -4580,6 +4617,12 @@ function FloatingCalculator({ onClose }) {
   const [boxH, setBoxH] = React.useState("");
   const [boxQty, setBoxQty] = React.useState("");
   const [boxResults, setBoxResults] = React.useState(null);
+
+  // 파렛 종류 선택 모드 — 파렛트 규격표(PALLET_SPEC_TABLE)에서 종류를 고르고
+  // 수량만 입력하면 총 무게와 "몇 톤부터 상차 가능한지"를 바로 계산해준다.
+  const [palTypeCode, setPalTypeCode] = React.useState(PALLET_SPEC_TABLE[0].code);
+  const [palTypeQty, setPalTypeQty] = React.useState("");
+  const [palTypeResult, setPalTypeResult] = React.useState(null);
 
   const round = (n) => Math.round(n * 1e10) / 1e10;
   const calcResult = (a, b, o) => {
@@ -4685,7 +4728,7 @@ function FloatingCalculator({ onClose }) {
   const colorsMap = {
     func: { bg: "#e5e7eb", color: "#374151" },
     op:   { bg: "#1B2B4B", color: "white" },
-    eq:   { bg: "#2563eb", color: "white" },
+    eq:   { bg: "#1B2B4B", color: "white" },
     num:  { bg: "#f3f4f6", color: "#111827" },
   };
 
@@ -4746,27 +4789,44 @@ function FloatingCalculator({ onClose }) {
     setBoxResults({ results, qty, bw, bd, bh });
   };
 
+  // 파렛 종류 선택 조회 — 규격표에서 고른 파렛트의 실제 mm 규격·자체무게로 총
+  // 무게를 구하고, 그 무게와 개수를 모두 감당하는(중량 여유 + 적재칸 충분) 가장
+  // 작은 차량을 LOAD_VEHICLES 순서(작은 차→큰 차)대로 찾아 "OO부터 상차 가능"으로 안내한다.
+  const handlePalTypeSearch = () => {
+    const spec = PALLET_SPEC_TABLE.find(p => p.code === palTypeCode);
+    const qty = parseInt(palTypeQty, 10) || 0;
+    if (!spec || qty <= 0) { setPalTypeResult(null); return; }
+    const totalKg = round(spec.kg * qty);
+    const fitVeh = LOAD_VEHICLES.find(veh => {
+      const fit = calcPalletFit(veh, spec.w, spec.d);
+      return fit.cols * fit.rows >= qty && totalKg <= veh.maxKg;
+    });
+    setPalTypeResult({ spec, qty, totalKg, fitVeh: fitVeh || null });
+  };
+
   const inpSt = { width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 14, outline: "none", boxSizing: "border-box" };
   const lblSt = { fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 3, display: "block" };
 
   return (
     <div style={{
       position: "fixed", bottom: 148, right: 24, zIndex: 99999,
-      width: tab === "load" ? 340 : 280,
+      // ⭐ 적재/톤수 탭 내용(파렛 규격 입력·차량 목록 등)이 좁은 폭에 눌려 잘 안
+      // 보인다는 피드백으로 탭별 폭을 전반적으로 넓히고, 글씨 크기도 함께 키웠다.
+      width: tab === "load" ? 460 : tab === "ton" ? 360 : 300,
       background: "white", borderRadius: 20,
       boxShadow: "0 20px 60px rgba(0,0,0,0.22)",
       border: "1px solid #e2e8f0",
       fontFamily: "'Noto Sans KR', sans-serif",
-      maxHeight: "82vh", display: "flex", flexDirection: "column", overflow: "hidden",
+      maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
       {/* 탭 헤더 */}
-      <div style={{ background: "#1B2B4B", padding: "9px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+      <div style={{ background: "#1B2B4B", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ display: "flex", gap: 4 }}>
           {[["calc","계산기"],["ton","톤수"],["load","적재"]].map(([t,l]) => (
-            <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? "rgba(255,255,255,0.2)" : "none", border: "none", color: "white", fontWeight: tab === t ? 700 : 400, fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 6 }}>{l}</button>
+            <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? "rgba(255,255,255,0.2)" : "none", border: "none", color: "white", fontWeight: tab === t ? 700 : 400, fontSize: 13, cursor: "pointer", padding: "4px 10px", borderRadius: 6 }}>{l}</button>
           ))}
         </div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
       </div>
 
       {/* 스크롤 본문 */}
@@ -4799,38 +4859,38 @@ function FloatingCalculator({ onClose }) {
 
         {/* ── 톤수 계산 탭 ── */}
         {tab === "ton" && (
-          <div style={{ padding: 16 }}>
-            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ padding: 20 }}>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
               총 파렛 수와 총 톤수를 입력하고<br/>계산할 파렛 수를 입력하면 톤수가 나옵니다.
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 파렛 수</div>
-                  <input autoComplete="off" type="number" min="0" placeholder="예: 27" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palTotal} onChange={e => setPalTotal(e.target.value)} />
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 5 }}>총 파렛 수</div>
+                  <input autoComplete="off" type="number" min="0" placeholder="예: 27" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" }} value={palTotal} onChange={e => setPalTotal(e.target.value)} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 톤수</div>
-                  <input autoComplete="off" type="number" min="0" step="0.01" placeholder="예: 12" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={tonTotal} onChange={e => setTonTotal(e.target.value)} />
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 5 }}>총 톤수</div>
+                  <input autoComplete="off" type="number" min="0" step="0.01" placeholder="예: 12" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" }} value={tonTotal} onChange={e => setTonTotal(e.target.value)} />
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>계산할 파렛 수</div>
-                <input autoComplete="off" type="number" min="0" placeholder="예: 16" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palPart} onChange={e => setPalPart(e.target.value)} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 5 }}>계산할 파렛 수</div>
+                <input autoComplete="off" type="number" min="0" placeholder="예: 16" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" }} value={palPart} onChange={e => setPalPart(e.target.value)} />
               </div>
-              <div style={{ background: tonResult !== null ? "#f0f9ff" : "#f8fafc", border: `1px solid ${tonResult !== null ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+              <div style={{ background: tonResult !== null ? "#1B2B4B" : "#f8fafc", border: `1px solid ${tonResult !== null ? "#1B2B4B" : "#e2e8f0"}`, borderRadius: 12, padding: "16px 14px", textAlign: "center" }}>
                 {tonResult !== null ? (
                   <>
-                    <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>{palPart}파렛 = </div>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#1B2B4B" }}>{tonResult}<span style={{ fontSize: 14, fontWeight: 500, marginLeft: 4 }}>톤</span></div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>({palTotal}p / {tonTotal}t 기준)</div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 5 }}>{palPart}파렛 = </div>
+                    <div style={{ fontSize: 34, fontWeight: 700, color: "white" }}>{tonResult}<span style={{ fontSize: 15, fontWeight: 500, marginLeft: 4 }}>톤</span></div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 5 }}>({palTotal}p / {tonTotal}t 기준)</div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 13, color: "#94a3b8" }}>위 값을 입력하세요</div>
+                  <div style={{ fontSize: 14, color: "#94a3b8" }}>위 값을 입력하세요</div>
                 )}
               </div>
               <button onClick={() => { setPalTotal(""); setTonTotal(""); setPalPart(""); }}
-                style={{ width: "100%", padding: "8px", background: "#f1f5f9", border: "none", borderRadius: 8, fontSize: 13, color: "#64748b", cursor: "pointer", fontWeight: 600 }}>
+                style={{ width: "100%", padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 9, fontSize: 14, color: "#64748b", cursor: "pointer", fontWeight: 600 }}>
                 초기화
               </button>
             </div>
@@ -4839,127 +4899,188 @@ function FloatingCalculator({ onClose }) {
 
         {/* ── 적재 계산 탭 ── */}
         {tab === "load" && (
-          <div style={{ padding: 12 }}>
+          <div style={{ padding: 16 }}>
             {/* 서브탭 */}
-            <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#f1f5f9", borderRadius: 8, padding: 3 }}>
+            <div style={{ display: "flex", gap: 4, marginBottom: 14, background: "#f1f5f9", borderRadius: 9, padding: 3 }}>
               {[["pallet","파렛트"],["box","박스"]].map(([m,l]) => (
-                <button key={m} onClick={() => setLoadMode(m)} style={{ flex: 1, padding: "5px 0", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: loadMode === m ? 700 : 400, background: loadMode === m ? "white" : "transparent", color: loadMode === m ? "#1B2B4B" : "#64748b", boxShadow: loadMode === m ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>{l}</button>
+                <button key={m} onClick={() => setLoadMode(m)} style={{ flex: 1, padding: "7px 0", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: loadMode === m ? 700 : 400, background: loadMode === m ? "white" : "transparent", color: loadMode === m ? "#1B2B4B" : "#64748b", boxShadow: loadMode === m ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>{l}</button>
               ))}
             </div>
 
             {/* ── 파렛트 모드 ── */}
             {loadMode === "pallet" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ background: "#eff6ff", borderRadius: 8, padding: "7px 10px", fontSize: 12, color: "#2563eb", lineHeight: 1.5 }}>
-                  파렛트 크기(mm)·수량을 입력 후 조회. 차량 클릭 시 배치도 확인.
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* 직접입력 / 파렛종류선택 서브 토글 */}
+                <div style={{ display: "flex", gap: 4, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: 3 }}>
+                  {[["manual","직접입력"],["type","파렛종류 선택"]].map(([m,l]) => (
+                    <button key={m} onClick={() => setPalInputMode(m)} style={{ flex: 1, padding: "6px 0", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12.5, fontWeight: palInputMode === m ? 700 : 400, background: palInputMode === m ? "#1B2B4B" : "transparent", color: palInputMode === m ? "white" : "#64748b" }}>{l}</button>
+                  ))}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "end" }}>
-                  <div><label style={lblSt}>가로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palW} onChange={e => setPalW(e.target.value)} /></div>
-                  <div style={{ paddingBottom: 8, color: "#94a3b8", fontSize: 14, fontWeight: 700, textAlign: "center" }}>×</div>
-                  <div><label style={lblSt}>세로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palD} onChange={e => setPalD(e.target.value)} /></div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                  <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="16" style={inpSt} value={palQty} onChange={e => setPalQty(e.target.value)} /></div>
+
+                {palInputMode === "manual" ? (<>
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "9px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
+                    파렛트 크기(mm)·수량을 입력 후 조회. 차량을 클릭하면 배치도를 볼 수 있습니다.
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 6, alignItems: "end" }}>
+                    <div><label style={lblSt}>가로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palW} onChange={e => setPalW(e.target.value)} /></div>
+                    <div style={{ paddingBottom: 9, color: "#94a3b8", fontSize: 15, fontWeight: 700, textAlign: "center" }}>×</div>
+                    <div><label style={lblSt}>세로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palD} onChange={e => setPalD(e.target.value)} /></div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                    <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="16" style={inpSt} value={palQty} onChange={e => setPalQty(e.target.value)} /></div>
+                    <div>
+                      <label style={lblSt}>단수</label>
+                      <select style={inpSt} value={palLayers} onChange={e => setPalLayers(e.target.value)}>
+                        {[1,2,3].map(n => <option key={n} value={n}>{n}단</option>)}
+                      </select>
+                    </div>
+                    <div><label style={lblSt}>kg/파렛</label><input autoComplete="off" type="number" min="0" placeholder="선택" style={inpSt} value={palKg} onChange={e => setPalKg(e.target.value)} /></div>
+                  </div>
+                  <button onClick={handlePalletSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+
+                  {palResults && (
+                    <div>
+                      <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 7, fontWeight: 600 }}>
+                        {palResults.pw}×{palResults.pd}mm · {palResults.qty}개 · {palResults.layers}단
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        {palResults.results.map((item, i) => {
+                          const needed = palResults.qty;
+                          const capOk = item.capTotal >= needed && needed > 0;
+                          const ok = capOk && item.weightOk;
+                          const partial = item.cap1 > 0 && !capOk && item.capTotal > 0;
+                          const selected = palSelected === i;
+                          const st = needed === 0
+                            ? `최대 ${item.capTotal}개 (${item.cols}열×${item.rows}행)`
+                            : ok
+                            ? `적재가능 · ${item.capTotal}개`
+                            : partial
+                            ? `${item.capTotal}개까지 가능 · ${needed - item.capTotal}개 부족`
+                            : !item.weightOk
+                            ? "중량초과"
+                            : "적재불가";
+                          const warn = needed > 0 && !ok;
+                          const style = selected
+                            ? { bg: "#eef1f6", bc: "#1B2B4B", tc: "#1B2B4B" }
+                            : ok
+                            ? { bg: "#1B2B4B", bc: "#1B2B4B", tc: "white" }
+                            : warn
+                            ? { bg: "white", bc: "#fda4af", tc: "#be123c" }
+                            : { bg: "#f1f5f9", bc: "#e2e8f0", tc: "#94a3b8" };
+                          return (
+                            <div key={i} onClick={() => setPalSelected(selected ? null : i)}
+                              style={{ padding: "9px 12px", background: style.bg, border: `1px solid ${style.bc}`, borderRadius: 9, cursor: "pointer", transition: "all 0.15s" }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <span style={{ fontSize: 13.5, fontWeight: 700, color: ok ? "white" : selected ? "#1B2B4B" : "#374151" }}>{item.veh.name}</span>
+                                <span style={{ fontSize: 11, color: ok ? "rgba(255,255,255,0.65)" : "#94a3b8" }}>{(item.veh.l/100).toFixed(1)}m × {(item.veh.w/100).toFixed(1)}m</span>
+                              </div>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: style.tc, marginTop: 3 }}>{st}</div>
+                              {!item.weightOk && palKg && needed > 0 && (
+                                <div style={{ fontSize: 11, color: "#be123c", marginTop: 2 }}>
+                                  {(parseFloat(palKg)*needed).toLocaleString()}kg &gt; 최대 {item.veh.maxKg.toLocaleString()}kg
+                                </div>
+                              )}
+                              {ok && item.rotated && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 2 }}>회전 배치로 최적화됨</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {palSelected !== null && palResults.results[palSelected] && (
+                        <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px" }}>
+                          <PalletDiagram item={palResults.results[palSelected]} qty={palResults.qty} layers={palResults.layers} palW_mm={palResults.pw} palD_mm={palResults.pd} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>) : (<>
+                  {/* ── 파렛종류 선택 모드 ── */}
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "9px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
+                    파렛 종류와 수량을 고르면 총 무게와 몇 톤부터 상차 가능한지 바로 계산합니다.
+                  </div>
                   <div>
-                    <label style={lblSt}>단수</label>
-                    <select style={inpSt} value={palLayers} onChange={e => setPalLayers(e.target.value)}>
-                      {[1,2,3].map(n => <option key={n} value={n}>{n}단</option>)}
+                    <label style={lblSt}>파렛 종류</label>
+                    <select style={inpSt} value={palTypeCode} onChange={e => { setPalTypeCode(e.target.value); setPalTypeResult(null); }}>
+                      {PALLET_SPEC_TABLE.map(p => (
+                        <option key={p.code} value={p.code}>
+                          {p.code} ({p.w.toLocaleString()}×{p.d.toLocaleString()}×{p.h}mm · {p.kgLabel || `${p.kg}kg`}{p.note ? ` · ${p.note}` : ""})
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  <div><label style={lblSt}>kg/파렛</label><input autoComplete="off" type="number" min="0" placeholder="선택" style={inpSt} value={palKg} onChange={e => setPalKg(e.target.value)} /></div>
-                </div>
-                <button onClick={handlePalletSearch} style={{ width: "100%", padding: "9px", background: "#1B2B4B", border: "none", borderRadius: 8, fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+                  <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="예: 2" style={inpSt} value={palTypeQty} onChange={e => setPalTypeQty(e.target.value)} /></div>
+                  <button onClick={handlePalTypeSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
 
-                {palResults && (
-                  <div>
-                    <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontWeight: 600 }}>
-                      {palResults.pw}×{palResults.pd}mm · {palResults.qty}개 · {palResults.layers}단
-                    </div>
-                    {palResults.results.map((item, i) => {
-                      const needed = palResults.qty;
-                      const ok = item.capTotal >= needed && needed > 0;
-                      const partial = item.cap1 > 0 && !ok && item.capTotal > 0;
-                      const bg = palSelected === i ? "#dbeafe" : ok ? "#f0fdf4" : partial ? "#fff7ed" : "#fef2f2";
-                      const bc = palSelected === i ? "#3b82f6" : ok ? "#86efac" : partial ? "#fed7aa" : "#fecaca";
-                      const sc = ok ? "#15803d" : partial ? "#c2410c" : "#9f1239";
-                      const st = needed === 0
-                        ? `최대 ${item.capTotal}개 (${item.cols}열×${item.rows}행)`
-                        : ok
-                        ? `✅ ${item.capTotal}개 적재 가능`
-                        : partial
-                        ? `⚠️ ${item.capTotal}개만 가능 (${needed - item.capTotal}개 부족)`
-                        : `❌ 적재 불가`;
-                      return (
-                        <div key={i} onClick={() => setPalSelected(palSelected === i ? null : i)}
-                          style={{ padding: "6px 8px", marginBottom: 3, background: bg, border: `1px solid ${bc}`, borderRadius: 7, cursor: "pointer", transition: "all 0.15s" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{item.veh.name}</span>
-                            <span style={{ fontSize: 10, color: "#6b7280" }}>{(item.veh.l/100).toFixed(1)}m × {(item.veh.w/100).toFixed(1)}m</span>
-                          </div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: sc, marginTop: 2 }}>{st}</div>
-                          {!item.weightOk && palKg && <div style={{ fontSize: 10, color: "#b91c1c", marginTop: 1 }}>⚖️ 중량초과 ({(parseFloat(palKg)*needed).toLocaleString()}kg &gt; {item.veh.maxKg.toLocaleString()}kg)</div>}
-                          {ok && item.rotated && <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 1 }}>↺ 회전 배치로 최적화됨</div>}
-                        </div>
-                      );
-                    })}
-                    {palSelected !== null && palResults.results[palSelected] && (
-                      <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px" }}>
-                        <PalletDiagram item={palResults.results[palSelected]} qty={palResults.qty} layers={palResults.layers} palW_mm={palResults.pw} palD_mm={palResults.pd} />
+                  {palTypeResult && (
+                    <div style={{ background: "#1B2B4B", borderRadius: 12, padding: "16px 14px", textAlign: "center" }}>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>
+                        {palTypeResult.spec.code} {palTypeResult.qty}장 · 총 {palTypeResult.totalKg.toLocaleString()}kg
                       </div>
-                    )}
-                  </div>
-                )}
+                      {palTypeResult.fitVeh ? (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                          <TruckIcon size={22} color="white" />
+                          <span style={{ fontSize: 22, fontWeight: 700, color: "white" }}>{palTypeResult.fitVeh.name}부터 상차 가능</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#fda4af" }}>적재 가능한 차량이 없습니다 (중량 또는 수량 초과)</div>
+                      )}
+                    </div>
+                  )}
+                </>)}
               </div>
             )}
 
             {/* ── 박스 모드 ── */}
             {loadMode === "box" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ background: "#fdf4ff", borderRadius: 8, padding: "7px 10px", fontSize: 12, color: "#7c3aed", lineHeight: 1.5 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "9px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
                   박스 크기(cm)와 수량을 입력하면 차량별 최대 적재 개수를 계산합니다.
                 </div>
                 <div>
                   <label style={lblSt}>박스 크기 (cm) — 가로 × 세로 × 높이</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", gap: 3, alignItems: "center" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", gap: 4, alignItems: "center" }}>
                     <input autoComplete="off" type="number" min="0" placeholder="가로" style={inpSt} value={boxW} onChange={e => setBoxW(e.target.value)} />
-                    <span style={{ color: "#94a3b8", fontSize: 11, textAlign: "center" }}>×</span>
+                    <span style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>×</span>
                     <input autoComplete="off" type="number" min="0" placeholder="세로" style={inpSt} value={boxD} onChange={e => setBoxD(e.target.value)} />
-                    <span style={{ color: "#94a3b8", fontSize: 11, textAlign: "center" }}>×</span>
+                    <span style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>×</span>
                     <input autoComplete="off" type="number" min="0" placeholder="높이" style={inpSt} value={boxH} onChange={e => setBoxH(e.target.value)} />
                   </div>
                 </div>
                 <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="예: 200" style={inpSt} value={boxQty} onChange={e => setBoxQty(e.target.value)} /></div>
-                <button onClick={handleBoxSearch} style={{ width: "100%", padding: "9px", background: "#7c3aed", border: "none", borderRadius: 8, fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+                <button onClick={handleBoxSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
 
                 {boxResults && (
                   <div>
-                    <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontWeight: 600 }}>
+                    <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 7, fontWeight: 600 }}>
                       {boxResults.bw}×{boxResults.bd}×{boxResults.bh}cm 박스 {boxResults.qty || "?"}개
                     </div>
-                    {boxResults.results.map((item, i) => {
-                      const needed = boxResults.qty;
-                      const ok = item.cap >= needed && needed > 0;
-                      const partial = item.cap > 0 && !ok;
-                      const bg = ok ? "#f0fdf4" : partial ? "#fff7ed" : "#fef2f2";
-                      const bc = ok ? "#86efac" : partial ? "#fed7aa" : "#fecaca";
-                      const sc = ok ? "#15803d" : partial ? "#c2410c" : "#9f1239";
-                      const st = needed === 0
-                        ? `최대 ${item.cap.toLocaleString()}개`
-                        : ok
-                        ? `✅ ${item.cap.toLocaleString()}개 가능`
-                        : item.cap > 0
-                        ? `⚠️ ${item.cap.toLocaleString()}개만 가능`
-                        : `❌ 적재 불가`;
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", marginBottom: 3, background: bg, border: `1px solid ${bc}`, borderRadius: 7 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", minWidth: 52 }}>{item.veh.name}</div>
-                          <div style={{ fontSize: 10, color: "#6b7280", flex: 1, paddingLeft: 4 }}>{(item.veh.l/100).toFixed(1)}×{(item.veh.w/100).toFixed(1)}×{(item.veh.h/100).toFixed(1)}m</div>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: sc, textAlign: "right" }}>{st}</div>
-                        </div>
-                      );
-                    })}
-                    <div style={{ marginTop: 8, background: "#fdf4ff", border: "1px solid #e9d5ff", borderRadius: 8, padding: "7px 10px", fontSize: 10, color: "#6b21a8", lineHeight: 1.5 }}>
-                      ℹ️ 실제 적재량은 박스 방향, 완충재, 무게 제한에 따라 다를 수 있습니다.
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      {boxResults.results.map((item, i) => {
+                        const needed = boxResults.qty;
+                        const ok = item.cap >= needed && needed > 0;
+                        const partial = item.cap > 0 && !ok;
+                        const st = needed === 0
+                          ? `최대 ${item.cap.toLocaleString()}개`
+                          : ok
+                          ? `가능 · ${item.cap.toLocaleString()}개`
+                          : partial
+                          ? `${item.cap.toLocaleString()}개까지 가능`
+                          : "적재불가";
+                        const style = ok
+                          ? { bg: "#1B2B4B", bc: "#1B2B4B", tc: "white" }
+                          : partial
+                          ? { bg: "white", bc: "#fda4af", tc: "#be123c" }
+                          : { bg: "#f1f5f9", bc: "#e2e8f0", tc: "#94a3b8" };
+                        return (
+                          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: style.bg, border: `1px solid ${style.bc}`, borderRadius: 9 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: ok ? "white" : "#374151", minWidth: 56 }}>{item.veh.name}</div>
+                            <div style={{ fontSize: 11, color: ok ? "rgba(255,255,255,0.65)" : "#94a3b8", flex: 1, paddingLeft: 6 }}>{(item.veh.l/100).toFixed(1)}×{(item.veh.w/100).toFixed(1)}×{(item.veh.h/100).toFixed(1)}m</div>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: style.tc, textAlign: "right" }}>{st}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "8px 12px", fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
+                      실제 적재량은 박스 방향, 완충재, 무게 제한에 따라 달라질 수 있습니다.
                     </div>
                   </div>
                 )}
@@ -7056,6 +7177,7 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
+      const [vehicleSpecTab, setVehicleSpecTab] = React.useState("vehicle"); // "vehicle" | "pallet"
 const [confirmOpen, setConfirmOpen] = React.useState(false);
 const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
@@ -12642,11 +12764,12 @@ className={`
     onClick={(e) => {
       e.preventDefault();
       e.stopPropagation();
+      setVehicleSpecTab("vehicle");
       setVehicleSpecOpen(true);
     }}
    className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
   >
-    차량제원
+    차량·파렛
   </button>
 </div>
 
@@ -13865,7 +13988,7 @@ className={`
     <div className="bg-white rounded-xl shadow-xl p-6 w-[900px] max-h-[85vh] overflow-auto">
 
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold">차량 제원표</h2>
+        <h2 className="text-lg font-bold">차량·파렛 제원표</h2>
         <button
           onClick={() => setVehicleSpecOpen(false)}
           className="text-gray-500 hover:text-black text-lg"
@@ -13874,6 +13997,21 @@ className={`
         </button>
       </div>
 
+      {/* 차량제원 / 파렛트제원 탭 */}
+      <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
+        {[["vehicle","차량제원"],["pallet","파렛트제원"]].map(([t,l]) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setVehicleSpecTab(t)}
+            className={`px-4 py-1.5 rounded-md text-[13px] font-bold transition ${vehicleSpecTab === t ? "bg-[#1B2B4B] text-white" : "text-gray-500 hover:text-[#1B2B4B]"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {vehicleSpecTab === "vehicle" && (<>
       {/* ================= 퀵 차량 ================= */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-2">
@@ -13992,6 +14130,34 @@ className={`
   </table>
 </div>
       </div>
+      </>)}
+
+      {vehicleSpecTab === "pallet" && (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-semibold text-sm">파렛트 제원표</h3>
+            <span className="text-xs text-gray-500">규격(가로×세로×높이) · 자체무게</span>
+          </div>
+          <table className="w-full text-sm border border-gray-300">
+            <thead className="bg-blue-50 text-blue-900">
+              <tr>
+                <th className="border px-2 py-1">파렛트</th>
+                <th className="border px-2 py-1">규격 (가로×세로×높이)</th>
+                <th className="border px-2 py-1">자체 무게</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PALLET_SPEC_TABLE.map(p => (
+                <tr key={p.code}>
+                  <td className="border px-2 py-1 text-center font-semibold">{p.code}{p.note ? ` (${p.note})` : ""}</td>
+                  <td className="border px-2 py-1 text-center">{p.w.toLocaleString()} × {p.d.toLocaleString()} × {p.h} mm</td>
+                  <td className="border px-2 py-1 text-center">{p.kgLabel || `${p.kg} kg`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
     </div>
   </div>
