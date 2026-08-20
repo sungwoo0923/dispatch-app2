@@ -292,7 +292,7 @@ function _scheduleDateLabel(d) {
    이름은 CustomDatePicker의 달력과 동일하게 한 줄(줄바꿈 없이)로 표시한다.
    덤으로 실시간 디지털 시계를 헤더에 넣어 데스크 시계처럼도 쓸 수 있게 했다.
 --------------------------------------------------*/
-function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate }) {
+function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate, footer }) {
   const pad2 = (n) => String(n).padStart(2, "0");
   const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
   const parseValidDate = (s) => {
@@ -405,7 +405,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
             선택하는 중이라는 안내와 선택 개수/전체해제 버튼을 보여준다. */}
         {multiMode ? (
           <div className="rounded-xl py-2.5 px-3 bg-black text-white text-[12px] font-bold flex items-center justify-between shrink-0">
-            <span>📅 근무일을 클릭해 선택/해제하세요{sortedWorkDates.length ? ` (${sortedWorkDates.length}일 선택됨)` : ""}</span>
+            <span>근무일을 클릭해 선택/해제하세요{sortedWorkDates.length ? ` (${sortedWorkDates.length}일 선택됨)` : ""}</span>
             {sortedWorkDates.length > 0 && (
               <button type="button"
                 onClick={() => sortedWorkDates.forEach(d => onToggleWorkDate?.(d))}
@@ -475,7 +475,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
                 <button key={i} type="button"
                   title={[holidayName, leaveTitle].filter(Boolean).join(" · ") || undefined}
                   onClick={() => handlePick(dateStr)}
-                  className={`min-h-[84px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
+                  className={`min-h-[72px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
                     isMarked ? (multiMode ? "bg-black" : "bg-[#1B2B4B]") :
                     isToday ? "border-2 border-[#1B2B4B]" :
                     "hover:bg-gray-100"
@@ -544,6 +544,148 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
           </div>
         </div>
       </div>
+      {/* footer가 주어지면(예: 근무일 수정 팝업의 취소/저장 버튼) 달력과 같은 카드
+          안에, 구분선만 두고 붙여서 보여준다 — 굳이 카드를 따로 나눌 필요가 없다. */}
+      {footer && (
+        <div className="border-t border-gray-100 px-4 py-3 flex justify-end gap-2 shrink-0">
+          {footer}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ⭐ 복수근무일(묶음) 오더 수정 팝업 — 등록할 때 쓰던 OrderCalendarPanel(multiMode)을
+// 그대로 재사용해서, 이미 등록된 오더도 근무일을 다시 골라 수정할 수 있게 한다.
+// 4파트(실시간배차현황)/5파트(배차현황)/모바일에서 공용으로 쓴다. 저장하면
+// 근무일자목록 + 상차일(최솟값)/하차일(최댓값)을 함께 patchDispatch한다.
+function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
+  const initWorkDates = _parseWorkDates(row?.근무일자목록);
+  // ⭐ "상차일 하나 + 하차일 하나"를 그냥 순서대로 고른 것과, "근무일을 여러 날 따로
+  // 골라 묶음으로 등록"하는 것은 서로 다른 조작이다. 기존엔 이 팝업이 무조건
+  // 다중선택(근무일자목록) 모드였어서, 상차일·하차일을 하나씩만 골라도 "묶음 2일"로
+  // 저장돼버리는 버그가 있었다. 실제로 근무일자목록이 2건 이상이었던 오더(이미
+  // 묶음이었던 오더)만 다중선택 모드로 열고, 그 외(보통의 상차일~하차일 구간)는
+  // 3파트 등록폼과 동일하게 "상/하차일 각각 클릭" 모드로 연다 — 다중선택은
+  // 아래 "묶음(다중선택)" 버튼을 눌러야만 켜진다.
+  // ⭐ 근무일자목록 길이만으로 판단하면, 예전 버그로 인해 데이터가 남아있는
+  // 오더를 열었을 때 사용자가 누르지도 않았는데 묶음 모드로 켜져버릴 수 있다.
+  // 이 팝업/패널로 저장한 오더는 항상 복수근무일 플래그를 명시적으로 함께
+  // 저장하므로(true/false), 그 값이 있으면 그것을 최우선으로 따르고, 아예
+  // 없는(과거 데이터) 경우에만 근무일자목록 길이로 추정한다.
+  const initMulti = row?.복수근무일 === true ? true
+    : row?.복수근무일 === false ? false
+    : initWorkDates.length > 1;
+  const [multiMode, setMultiMode] = React.useState(initMulti);
+  const [pickupDate, setPickupDate] = React.useState(row?.상차일 || "");
+  const [dropDate, setDropDate] = React.useState(row?.하차일 || "");
+  const [workDates, setWorkDates] = React.useState(
+    initWorkDates.length > 0 ? initWorkDates : (row?.상차일 ? [row.상차일] : [])
+  );
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
+
+  const toggleWorkDate = (dateStr) => {
+    if (!dateStr) return;
+    setWorkDates(prev => {
+      const set = new Set(prev);
+      if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+      return Array.from(set).sort();
+    });
+  };
+
+  const handleSave = async () => {
+    setSaveError("");
+    if (!multiMode && isReversedDateOrder(pickupDate, dropDate)) {
+      setSaveError(REVERSED_DATE_ORDER_MSG);
+      return;
+    }
+    setSaving(true);
+    // ⚠️ 네트워크/서버 문제로 저장 응답이 영영 오지 않으면 "저장 중..."에 갇혀
+    // 아무 안내 없이 멈춰있던 문제가 있었다 — 20초 안에 끝나지 않으면 타임아웃
+    // 처리로 버튼을 되돌리고 오류를 보여준다(실제 저장은 나중에 성공할 수도
+    // 있으니, 팝업은 닫지 않고 다시 시도하게 한다).
+    let timedOut = false;
+    const timer = window.setTimeout(() => {
+      timedOut = true;
+      setSaving(false);
+      setSaveError("저장이 지연되고 있습니다. 네트워크 상태를 확인 후 다시 시도해주세요.");
+    }, 20000);
+    try {
+      if (multiMode) {
+        if (workDates.length === 0) return;
+        const sorted = [...workDates].sort();
+        await onSave({
+          근무일자목록: sorted,
+          상차일: sorted[0],
+          하차일: sorted[sorted.length - 1],
+          복수근무일: true,
+        });
+      } else {
+        if (!pickupDate || !dropDate) return;
+        // 묶음이 아닌 보통 구간으로 저장 — 예전에 묶음이었다가 여기서 다시 일반
+        // 구간으로 바꾼 경우까지 대비해 근무일자목록/복수근무일도 함께 비운다.
+        await onSave({
+          상차일: pickupDate,
+          하차일: dropDate,
+          근무일자목록: [],
+          복수근무일: false,
+        });
+      }
+    } catch (e) {
+      if (!timedOut) setSaveError("저장에 실패했습니다. 다시 시도해주세요.");
+      console.error(e);
+    } finally {
+      window.clearTimeout(timer);
+      if (!timedOut) setSaving(false);
+    }
+  };
+
+  const canSave = multiMode ? workDates.length > 0 : (!!pickupDate && !!dropDate);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[999999]" onClick={onClose}>
+      <div className="w-[620px] max-w-[94vw] flex flex-col gap-2" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-[14px] font-bold text-white">
+            {multiMode ? "근무일 수정(묶음)" : "상/하차일 수정"}{row?.거래처명 ? ` · ${row.거래처명}` : ""}
+          </h3>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMultiMode(v => !v)}
+              className={`text-[12px] font-bold px-2.5 py-1 rounded-lg transition ${multiMode ? "bg-black text-white" : "bg-white/15 text-white hover:bg-white/25"}`}
+            >
+              묶음(다중선택){multiMode ? " 켜짐" : ""}
+            </button>
+            <button type="button" onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+          </div>
+        </div>
+        <OrderCalendarPanel
+          companyName={companyName}
+          multiMode={multiMode}
+          workDates={workDates}
+          onToggleWorkDate={toggleWorkDate}
+          pickupDate={multiMode ? (workDates[0] || "") : pickupDate}
+          dropDate={multiMode ? (workDates[workDates.length - 1] || "") : dropDate}
+          onPickupChange={setPickupDate}
+          onDropChange={setDropDate}
+          footer={<>
+            {saveError && (
+              <span className="flex-1 self-center text-[12px] font-bold text-rose-600">{saveError}</span>
+            )}
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">취소</button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !canSave}
+              className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] disabled:opacity-40"
+            >
+              {saving ? "저장 중..." : "저장"}
+            </button>
+          </>}
+        />
+      </div>
     </div>
   );
 }
@@ -575,6 +717,24 @@ function _parseWorkDates(v) {
   }
   return [];
 }
+
+// 🚫 하차일이 상차일보다 빠른 "역순" 날짜 지정을 막는 공용 검사 헬퍼.
+// 상차일/하차일이 둘 다 있을 때만 비교하고(하나라도 비어있으면 통과), 문자열
+// 비교로 충분한 YYYY-MM-DD 형식을 그대로 사용한다. 상/하차일을 다루는 모든
+// 위치(3파트 등록폼, 4/5파트 인라인수정, 오더복사/수정 패널, 근무일 수정 팝업,
+// 모바일)에서 저장 직전 이 함수로 검사해야 한다.
+function isReversedDateOrder(pickup, drop) {
+  return !!pickup && !!drop && String(drop) < String(pickup);
+}
+const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습니다. 날짜를 다시 확인해주세요.";
+
+// ⭐ addDispatch/patchDispatch/submitCopyOrderPC 등은 컴포넌트 바깥(또는 DispatchApp의
+// showAlert가 아직 선언되기 전)에 정의돼 있어 앱의 CustomAlert 상태(alertMsg)에 직접
+// 접근할 수 없다. 그래도 브라우저 기본 alert() 대신 프로그램과 동일한 스타일의 팝업을
+// 띄우기 위한 간단한 브릿지 — DispatchApp이 렌더링되면서 실제 showAlert로 교체되고,
+// 그 전(아주 짧은 초기 순간)까지는 안전하게 window.alert로 대체(폴백)한다.
+let _globalShowAlert = (msg) => window.alert(msg);
+function globalShowAlert(msg) { _globalShowAlert(msg); }
 
 // ⭐ 오늘/미래 날짜에 완전히 동일한 오더가 이미 등록돼 있는지 확인한다. 저장을
 // 막는 하드 체크가 아니라, 여러 담당자가 같은 오더를 모르고 중복 등록하는 것을
@@ -2031,6 +2191,12 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
 // (모듈 최상위 스코프 — RealtimeStatus/DispatchStatus/UnassignedStatus 등 여러 하위
 // 컴포넌트의 "복사 등록" 버튼에서 공통으로 호출되므로 approvedShippers를 인자로 받는다.)
 const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) => {
+  const _pickup = copyTarget.상차일 || todayStr();
+  const _drop = copyTarget.하차일 || todayStr();
+  if (isReversedDateOrder(_pickup, _drop)) {
+    globalShowAlert(REVERSED_DATE_ORDER_MSG);
+    return false;
+  }
   const newId = crypto.randomUUID();
   const payload = {
     ...copyTarget,
@@ -2039,9 +2205,12 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     // 복사/수정 패널에서 상차일/하차일을 수정했다면 그 값을 그대로 존중한다 — 무조건
     // 오늘 날짜로 덮어쓰면 사용자가 다른 날짜로 바꿔서 등록해도 조용히 오늘로 저장되어
     // 화주사(연동 사본)와 운송사 원본이 모두 의도한 날짜와 다르게 등록되는 문제가 있었다.
-    상차일: copyTarget.상차일 || todayStr(),
-    하차일: copyTarget.하차일 || todayStr(),
+    상차일: _pickup,
+    하차일: _drop,
     등록일: todayStr(),
+    // 복사 등록도 "새로 등록"하는 행위이므로, 원본이 모바일에서 만들어졌더라도
+    // 이 복사본은 지금 실제로 등록하는 기기(PC) 기준으로 다시 표시한다.
+    등록기기: "PC",
     createdAt: Date.now(),
     updatedAt: Date.now(),
     배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
@@ -2945,14 +3114,29 @@ const sixMonthsAgo = getSixMonthsAgo();
   }, [user, userCompany, role]);
 
 const addDispatch = async (record) => {
+  // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
+  if (isReversedDateOrder(record?.상차일, record?.하차일)) {
+    globalShowAlert(REVERSED_DATE_ORDER_MSG);
+    return false;
+  }
+
   const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
 
   const cleanRecord = stripUndefinedDeep({
     ...record,
     _id,
     작성자: auth.currentUser?.email || "",
+    // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기 —
+    // 이미 값이 있으면(예: 복사 등록으로 원본 값을 이어받은 경우) 덮어쓰지 않는다.
+    등록기기: record?.등록기기 || "PC",
     // 등록과 동시에 차량번호까지 포함되어 생성되는 경우(기사 정보 포함 등록 등)에도 완료시각을 남긴다
     ...(String(record?.차량번호 || "").trim() && !record?.배차완료일시 ? { 배차완료일시: Date.now() } : {}),
+    // ⭐ "배차한시간"(등록일 hover 툴팁)이 표시하는 필드는 배차완료일시가 아니라
+    // 배차확정일시다. patchDispatch는 배차중→배차완료 전환 때 이걸 찍어주지만,
+    // 처음부터 기사 정보를 포함해 등록되는 오더(오더복사/스마트검색 등으로 즉시
+    // 배차완료 상태로 만들어지는 경우)는 patchDispatch를 거치지 않아 이 필드가
+    // 영영 비어있었다 — "배차한시간이 전부 다 안 나온다"는 신고의 원인.
+    ...(record?.배차상태 === "배차완료" && !record?.배차확정일시 ? { 배차확정일시: serverTimestamp() } : {}),
   });
 
   await setDoc(
@@ -3019,6 +3203,7 @@ const patchDispatch = async (_id, patch) => {
   delete patch.createdTime;
 
   // ★ 메모리 캐시에서 먼저 찾기 (getDoc 완전 제거 → 딜레이 없음)
+  // (역순 날짜 검증은 prev를 구한 다음, 최신 상/하차일 기준으로 아래에서 수행한다)
   // 두 캐시를 매번 새 배열로 합치면(스프레드) 호출마다 N+M 크기 배열을 새로 할당/복사하게
   // 되어, 오더가 많은 회사에서는 전달상태 등 단순 토글 하나에도 매번 그 비용이 들어 렉으로
   // 느껴졌다 — 배열을 합치지 않고 각 캐시에서 순서대로 찾는다(첫 번째에서 찾으면 두 번째는
@@ -3039,6 +3224,22 @@ const patchDispatch = async (_id, patch) => {
     }
     if (!snap.exists()) { console.error("❌ 문서 없음", _id); return; }
     prev = snap.data();
+  }
+
+  // 🚫 하차일이 상차일보다 빠른 역순 저장 방지 — 이 함수를 거치는 모든 수정
+  // (4/5파트 인라인수정, 오더복사/수정 패널, 근무일 수정 팝업 등)에 공통 적용된다.
+  // ⚠️ 반드시 "이번 patch가 실제로 상차일/하차일을 바꾸려 할 때"만 검사해야 한다 —
+  // 과거에 잘못 저장된(이 검증이 생기기 전) 레거시 데이터가 이미 역순인 채로 남아있는
+  // 오더는 흔한데, 배차확정일시 소급 보정처럼 날짜와 무관한 백그라운드 패치까지 여기
+  // 걸려버리면 관련 없는 오더 수만큼 window.alert가 연속으로 뜨면서 화면이 통째로
+  // 멈춰버린다(alert는 동기 호출이라 확인을 누를 때까지 스크립트 실행이 막힌다).
+  if ("상차일" in patch || "하차일" in patch) {
+    const effPickup = "상차일" in patch ? patch.상차일 : prev?.상차일;
+    const effDrop = "하차일" in patch ? patch.하차일 : prev?.하차일;
+    if (isReversedDateOrder(effPickup, effDrop)) {
+      globalShowAlert(REVERSED_DATE_ORDER_MSG);
+      return false;
+    }
   }
 
   // ★ UI 즉시 반영 (optimistic update — Firestore 응답 기다리지 않음)
@@ -4487,18 +4688,210 @@ export {
 
 
 // ===================== FloatingCalculator =====================
+// 사용자가 제공한 "톤수별 차량 규격표" 원본(구분/적재함 길이/폭 참고/실무상 명칭)을
+// 차량제원 팝업의 "카고 차량 제원표"에 그대로 표시하기 위한 원본 그대로의 데이터.
+// LOAD_VEHICLES(계산기용, cm 단위로 환산)와 별개로 이 표는 원본 문구(범위 표기 등)를
+// 그대로 보여주는 용도라 값을 가공하지 않는다.
+// l(적재함 길이)·w(폭)는 cm, maxKg는 kg — LOAD_VEHICLES와 동일한 값을 그대로 들고 있어
+// "최대 적재 중량/최대 적재 파렛"을 표에서 자동 계산할 수 있게 한다(calcPalletFit 참고).
+// 관리자가 더블클릭으로 수정하면 이 값들이 override로 대체된다(specOverrides).
+const CARGO_VEHICLE_SPEC_TABLE = [
+  { ton: "1톤",    category: "일반",        bedLength: "2.7~2.85m",   widthRef: "약 1.6m",       name: "1톤",                     l: 278,  w: 160, maxKg: 1100  },
+  { ton: "",        category: "장축",        bedLength: "3.0~3.1m",    widthRef: "약 1.6m",       name: "1톤 장축",               l: 305,  w: 160, maxKg: 1150  },
+  { ton: "1.4톤",  category: "일반",        bedLength: "2.9~3.1m",    widthRef: "약 1.6~1.7m",   name: "1.4톤",                   l: 300,  w: 165, maxKg: 1550  },
+  { ton: "",        category: "장축",        bedLength: "3.4m 전후",   widthRef: "약 1.7m",       name: "1.4톤 장축",             l: 340,  w: 170, maxKg: 1600  },
+  { ton: "2.5톤",  category: "일반",        bedLength: "4.2~4.3m",    widthRef: "약 1.8m",       name: "2.5톤",                   l: 425,  w: 180, maxKg: 2750  },
+  { ton: "3.5톤",  category: "일반",        bedLength: "4.5~4.9m",    widthRef: "약 2.05m",      name: "3.5톤",                   l: 470,  w: 205, maxKg: 3850  },
+  { ton: "",        category: "장축/초장축", bedLength: "5.0~5.5m 전후", widthRef: "약 2.05~2.3m", name: "3.5톤 장축",           l: 525,  w: 218, maxKg: 4000  },
+  { ton: "",        category: "와이드/광폭", bedLength: "5.2~6.2m",    widthRef: "2.3m 전후",     name: "3.5톤 와이드",           l: 570,  w: 230, maxKg: 4000  },
+  { ton: "5톤",    category: "일반",        bedLength: "6.2~6.3m",    widthRef: "2.15~2.3m",     name: "5톤",                     l: 625,  w: 223, maxKg: 5500  },
+  { ton: "",        category: "장축/플러스", bedLength: "6.7~7.3m",    widthRef: "약 2.3m",       name: "5톤 플러스",             l: 700,  w: 230, maxKg: 5800  },
+  { ton: "",        category: "축차/플러스축", bedLength: "7.3~8.5m",  widthRef: "약 2.3~2.4m",   name: "5톤 축",                 l: 790,  w: 235, maxKg: 7500  },
+  { ton: "",        category: "초장축/특장", bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "5톤/5.5톤/8.5톤 증톤 등", l: 960,  w: 240, maxKg: 8500  },
+  { ton: "8톤",    category: "일반/장축",   bedLength: "7.3~8m 전후", widthRef: "약 2.35m",      name: "8톤",                     l: 765,  w: 235, maxKg: 8800  },
+  { ton: "",        category: "장축/특장",   bedLength: "8~9m대",      widthRef: "약 2.4m",       name: "8톤 특장",               l: 850,  w: 240, maxKg: 9200  },
+  { ton: "9.5톤",  category: "일반/장축",   bedLength: "8~9.5m 전후", widthRef: "약 2.35~2.4m",  name: "9.5톤",                   l: 875,  w: 238, maxKg: 10500 },
+  { ton: "11톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "11톤",                    l: 900,  w: 235, maxKg: 12000 },
+  { ton: "",        category: "장축",        bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "11톤 장축",              l: 960,  w: 240, maxKg: 12700 },
+  { ton: "",        category: "초장축/후축", bedLength: "10.2m 전후", widthRef: "2.4m 전후",     name: "11톤 후축",              l: 1020, w: 240, maxKg: 14500 },
+  { ton: "14톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "14톤",                    l: 900,  w: 235, maxKg: 15400 },
+  { ton: "",        category: "장축/후축",   bedLength: "9.6~10.2m",  widthRef: "약 2.4m",       name: "14톤 후축",              l: 990,  w: 240, maxKg: 18200 },
+  { ton: "18톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "18톤",                    l: 1010, w: 240, maxKg: 19800 },
+  { ton: "22톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "22톤",                    l: 1010, w: 240, maxKg: 24200 },
+  { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤",                    l: 1010, w: 240, maxKg: 27500 },
+  { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라",         l: 1200, w: 240, maxKg: 27500 },
+  { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등",           l: 1200, w: 240, maxKg: 32000 },
+];
+
+// 파렛트가 적재함에 가로/세로 어느 방향으로 놓여야 더 많이 실리는지 계산 — 계산기
+// (FloatingCalculator)와 차량제원표(최대 적재 파렛 자동계산)에서 공용으로 쓴다.
+function calcPalletFit(veh, pw_mm, pd_mm) {
+  const pw = pw_mm / 10; const pd = pd_mm / 10;
+  if (pw <= 0 || pd <= 0) return { cols: 0, rows: 0, rotated: false };
+  const o1c = Math.floor(veh.w / pw); const o1r = Math.floor(veh.l / pd);
+  const o2c = Math.floor(veh.w / pd); const o2r = Math.floor(veh.l / pw);
+  if (o1c * o1r >= o2c * o2r) return { cols: o1c, rows: o1r, rotated: false };
+  return { cols: o2c, rows: o2r, rotated: true };
+}
+// 차량제원표에 "최대 적재 파렛"을 자동 표시할 때 기준으로 삼는 규격 — N11(1100×1100)이
+// 현장에서 가장 흔히 쓰이는 표준 파렛트라 이 규격 기준으로 계산한다.
+function maxN11PalletCount(veh) {
+  if (!veh || !veh.l || !veh.w) return 0;
+  const fit = calcPalletFit(veh, 1100, 1100);
+  return fit.cols * fit.rows;
+}
+// 관리자가 더블클릭으로 수정한 값(override)을 기본 행에 덮어씌워 화면에 보여줄
+// 최종 값을 만든다. 길이/폭이 override되면 표시 텍스트(bedLength/widthRef)도
+// "X.XXm" 형태의 단일 값으로 바뀐다(원본의 범위 표기는 override 전까지만 유지).
+function applySpecOverride(base, ov) {
+  if (!ov) return base;
+  const l = ov.l ?? base.l;
+  const w = ov.w ?? base.w;
+  const maxKg = ov.maxKg ?? base.maxKg;
+  return {
+    ...base,
+    ton: ov.ton ?? base.ton,
+    category: ov.category ?? base.category,
+    name: ov.name ?? base.name,
+    l, w, maxKg,
+    bedLength: ov.l != null ? `${(l / 100).toFixed(2)}m` : base.bedLength,
+    widthRef: ov.w != null ? `${(w / 100).toFixed(2)}m` : base.widthRef,
+  };
+}
+
+// 차량제원표(카고/윙바디) 더블클릭 수정 팝업 — 관리자~최고관리자 전용. 길이/폭/최대중량을
+// 고치면 최대 적재 파렛은 calcPalletFit 기준으로 자동 재계산되어 별도 입력칸이 없다.
+function VehicleSpecEditModal({ initial, onSave, onCancel, onReset, hasOverride }) {
+  const [ton, setTon] = React.useState(initial.ton || "");
+  const [category, setCategory] = React.useState(initial.category || "");
+  const [name, setName] = React.useState(initial.name || "");
+  const [lengthM, setLengthM] = React.useState(initial.l ? (initial.l / 100).toFixed(2) : "");
+  const [widthM, setWidthM] = React.useState(initial.w ? (initial.w / 100).toFixed(2) : "");
+  const [maxT, setMaxT] = React.useState(initial.maxKg ? (initial.maxKg / 1000).toFixed(1) : "");
+
+  const inpSt = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]";
+  const lblSt = "text-[11px] font-bold text-gray-500 mb-1 block";
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-[380px]">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-base font-bold">차량 제원 수정</h3>
+          <button onClick={onCancel} className="text-gray-500 hover:text-black text-lg">✕</button>
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={lblSt}>톤수</label><input className={inpSt} value={ton} onChange={e => setTon(e.target.value)} /></div>
+            <div><label className={lblSt}>구분</label><input className={inpSt} value={category} onChange={e => setCategory(e.target.value)} /></div>
+          </div>
+          <div><label className={lblSt}>실무상 명칭</label><input className={inpSt} value={name} onChange={e => setName(e.target.value)} /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={lblSt}>적재함 길이 (m)</label><input type="number" step="0.01" className={inpSt} value={lengthM} onChange={e => setLengthM(e.target.value)} /></div>
+            <div><label className={lblSt}>폭 (m)</label><input type="number" step="0.01" className={inpSt} value={widthM} onChange={e => setWidthM(e.target.value)} /></div>
+          </div>
+          <div><label className={lblSt}>최대 적재 중량 (t)</label><input type="number" step="0.1" className={inpSt} value={maxT} onChange={e => setMaxT(e.target.value)} /></div>
+          <div className="text-[11px] text-gray-500 leading-relaxed bg-gray-50 rounded-lg px-3 py-2">
+            최대 적재 파렛(N11 1100×1100 기준)은 길이·폭 값으로 자동 계산되어 표시됩니다.
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-5">
+          {hasOverride && (
+            <button onClick={onReset} className="px-3 py-2 rounded-lg text-[12px] font-bold text-rose-600 border border-rose-200 hover:bg-rose-50">원본으로 복원</button>
+          )}
+          <div className="flex-1" />
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">취소</button>
+          <button
+            onClick={() => onSave({
+              ton: ton.trim(), category: category.trim(), name: name.trim(),
+              l: Math.round(parseFloat(lengthM) * 100) || initial.l,
+              w: Math.round(parseFloat(widthM) * 100) || initial.w,
+              maxKg: Math.round(parseFloat(maxT) * 1000) || initial.maxKg,
+            })}
+            className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60]"
+          >저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 파렛트 종류별 규격·자체무게 — "RUN박성우충괄팀장님의 메시지" 기준표를 그대로 반영.
+// EL14처럼 무게가 범위로 안내된 경우 kg은 계산용 평균값을 쓰고 kgLabel에 원래
+// 범위 문구를 별도로 남긴다.
+const PALLET_SPEC_TABLE = [
+  { code: "N11",  w: 1100, d: 1100, h: 150, kg: 19.5 },
+  { code: "N12",  w: 1200, d: 1000, h: 150, kg: 20 },
+  { code: "N15",  w: 1460, d: 1130, h: 150, kg: 27.5 },
+  { code: "P11",  w: 1100, d: 1100, h: 150, kg: 26 },
+  { code: "P13",  w: 1300, d: 1100, h: 150, kg: 25 },
+  { code: "P14",  w: 1350, d: 1100, h: 150, kg: 32 },
+  { code: "PA11", w: 1100, d: 800,  h: 150, kg: 18 },
+  { code: "L14",  w: 1437, d: 1127, h: 140, kg: 20 },
+  { code: "EL14", w: 1440, d: 1130, h: 150, kg: 26.5, kgLabel: "25.5~27.5 kg" },
+  { code: "EL15", w: 1500, d: 1500, h: 150, kg: 32 },
+  { code: "EL18", w: 1800, d: 1600, h: 150, kg: 58 },
+  { code: "EL20", w: 1960, d: 1960, h: 150, kg: 68.5 },
+  { code: "N48",  w: 1219, d: 1016, h: 150, kg: 23.8, note: "코스트코" },
+  { code: "W09",  w: 1100, d: 900,  h: 120, kg: 22 },
+  { code: "WT11", w: 1100, d: 1100, h: 144, kg: 45 },
+  { code: "WT12", w: 1200, d: 1000, h: 144, kg: 45 },
+  { code: "WT13", w: 1300, d: 1100, h: 144, kg: 51 },
+  { code: "C95",  w: 950,  d: 950,  h: 130, kg: 23 },
+];
+
+// 프로그램 전체 톤에 맞춘 단색 트럭 아이콘 — 알록달록한 이모지(🚚) 대신 사용.
+function TruckIcon({ size = 18, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="7" width="13" height="10" rx="1" />
+      <path d="M14 10h4l3.5 3.5V17H14z" />
+      <circle cx="6" cy="19" r="1.6" />
+      <circle cx="17.5" cy="19" r="1.6" />
+    </svg>
+  );
+}
+
+// 사용자가 제공한 톤수별 차량 규격표(구분/적재함 길이/폭 참고/실무상 명칭) 기준으로
+// 재작성. 장축·초장축·축차·특장 등 세부 구분까지 각각 별도 차량으로 등록해야
+// "5톤 초장축이면 16파렛이 실리는데 계산기는 11톤부터라고 한다" 같은 오차가
+// 안 생긴다. 적재함 길이/폭이 범위로 안내된 값은 중간값을 cm로 환산해서 쓰고,
+// 자체 무게(maxKg)는 원표에 없어 톤수 표기 그대로(1톤=1,000kg 등)를 적용했다.
+// 높이(h)도 원표에 없는 값이라 인접 톤수 실측치를 참고해 추정한 값이다.
+// 최대 적재 중량(maxKg) 산정 기준 — 예전엔 전부 "톤수 그대로"(예: 5톤=5,000kg)였는데
+// 실제로는 (1) 도로교통법상 적재중량의 110%까지는 허용되고(=5톤도 실제 5,500kg까지는
+// 정상 범주), (2) 같은 톤수라도 축이 추가된 축차/후축 차량은 축이 없는 일반 차량보다
+// 훨씬 더 실을 수 있다(적재함이 길어서가 아니라 차량 자체 등록중량이 다름). 그래서
+// 구분(일반/장축/축차 등)별로 아래 배율을 적용해 차등을 뒀다 — 일반 ×1.1, 장축·와이드
+// 처럼 축은 그대로에 적재함만 긴 경우 ×1.15, 축차/후축처럼 축이 추가된 경우 ×1.4~1.5,
+// 5톤 초장축(특장)은 원표(엑셀)에 적힌 "5.5톤/8.5톤 증톤 등"의 상한을 그대로 반영했다.
 const LOAD_VEHICLES = [
-  { name: "다마스",  l: 170,  w: 120,  h: 110, maxKg: 300   },
-  { name: "라보",    l: 200,  w: 145,  h: 130, maxKg: 500   },
-  { name: "1톤",     l: 250,  w: 162,  h: 170, maxKg: 1000  },
-  { name: "1.4톤",   l: 280,  w: 170,  h: 180, maxKg: 1400  },
-  { name: "2.5톤",   l: 420,  w: 183,  h: 190, maxKg: 2500  },
-  { name: "3.5톤",   l: 500,  w: 200,  h: 190, maxKg: 3500  },
-  { name: "5톤",     l: 620,  w: 220,  h: 200, maxKg: 5000  },
-  { name: "5톤 축",  l: 720,  w: 220,  h: 200, maxKg: 5000  },
-  { name: "8톤",     l: 800,  w: 225,  h: 210, maxKg: 8000  },
-  { name: "11톤",    l: 960,  w: 230,  h: 210, maxKg: 11000 },
-  { name: "25톤",    l: 1360, w: 240,  h: 240, maxKg: 25000 },
+  { name: "다마스",       l: 170,  w: 120, h: 110, maxKg: 300   },
+  { name: "라보",         l: 200,  w: 145, h: 130, maxKg: 500   },
+  { name: "1톤",          l: 278,  w: 160, h: 170, maxKg: 1100  },
+  { name: "1톤 장축",     l: 305,  w: 160, h: 170, maxKg: 1150  },
+  { name: "1.4톤",        l: 300,  w: 165, h: 180, maxKg: 1550  },
+  { name: "1.4톤 장축",   l: 340,  w: 170, h: 180, maxKg: 1600  },
+  { name: "2.5톤",        l: 425,  w: 180, h: 190, maxKg: 2750  },
+  { name: "3.5톤",        l: 470,  w: 205, h: 190, maxKg: 3850  },
+  { name: "3.5톤 장축",   l: 525,  w: 218, h: 190, maxKg: 4000  },
+  { name: "3.5톤 와이드", l: 570,  w: 230, h: 190, maxKg: 4000  },
+  { name: "5톤",          l: 625,  w: 223, h: 200, maxKg: 5500  },
+  { name: "5톤 플러스",   l: 700,  w: 230, h: 200, maxKg: 5800  },
+  { name: "5톤 축",       l: 790,  w: 235, h: 200, maxKg: 7500  },
+  { name: "5톤 초장축",   l: 960,  w: 240, h: 200, maxKg: 8500  },
+  { name: "8톤",          l: 765,  w: 235, h: 210, maxKg: 8800  },
+  { name: "8톤 특장",     l: 850,  w: 240, h: 210, maxKg: 9200  },
+  { name: "9.5톤",        l: 875,  w: 238, h: 210, maxKg: 10500 },
+  { name: "11톤",         l: 900,  w: 235, h: 210, maxKg: 12000 },
+  { name: "11톤 장축",    l: 960,  w: 240, h: 210, maxKg: 12700 },
+  { name: "11톤 후축",    l: 1020, w: 240, h: 210, maxKg: 14500 },
+  { name: "14톤",         l: 900,  w: 235, h: 220, maxKg: 15400 },
+  { name: "14톤 후축",    l: 990,  w: 240, h: 220, maxKg: 18200 },
+  { name: "18톤",         l: 1010, w: 240, h: 230, maxKg: 19800 },
+  { name: "22톤",         l: 1010, w: 240, h: 230, maxKg: 24200 },
+  { name: "25톤",         l: 1010, w: 240, h: 240, maxKg: 27500 },
+  { name: "추레라",       l: 1200, w: 240, h: 240, maxKg: 27500 },
+  { name: "추레라 특장",  l: 1200, w: 240, h: 240, maxKg: 32000 },
 ];
 
 function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
@@ -4548,7 +4941,7 @@ function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
         )}
       </div>
       <div style={{ fontSize: 10, color: "#475569", marginTop: 4, textAlign: "center" }}>
-        🔵 {neededOnFloor}칸 × {layers}단 = {neededOnFloor * layers}p 사용 │ ⬜ 여유 {cap1 - neededOnFloor}칸
+        사용 {neededOnFloor}칸 × {layers}단 = {neededOnFloor * layers}p · 여유 {cap1 - neededOnFloor}칸
       </div>
     </div>
   );
@@ -4568,6 +4961,7 @@ function FloatingCalculator({ onClose }) {
 
   // loading calculator state
   const [loadMode, setLoadMode] = React.useState("pallet");
+  const [palInputMode, setPalInputMode] = React.useState("manual"); // "manual" | "type" — 직접입력 vs 파렛종류 선택
   const [palW, setPalW] = React.useState("1100");
   const [palD, setPalD] = React.useState("1100");
   const [palQty, setPalQty] = React.useState("");
@@ -4580,6 +4974,12 @@ function FloatingCalculator({ onClose }) {
   const [boxH, setBoxH] = React.useState("");
   const [boxQty, setBoxQty] = React.useState("");
   const [boxResults, setBoxResults] = React.useState(null);
+
+  // 파렛 종류 선택 모드 — 파렛트 규격표(PALLET_SPEC_TABLE)에서 종류를 고르고
+  // 수량만 입력하면 총 무게와 "몇 톤부터 상차 가능한지"를 바로 계산해준다.
+  const [palTypeCode, setPalTypeCode] = React.useState(PALLET_SPEC_TABLE[0].code);
+  const [palTypeQty, setPalTypeQty] = React.useState("");
+  const [palTypeResult, setPalTypeResult] = React.useState(null);
 
   const round = (n) => Math.round(n * 1e10) / 1e10;
   const calcResult = (a, b, o) => {
@@ -4685,7 +5085,7 @@ function FloatingCalculator({ onClose }) {
   const colorsMap = {
     func: { bg: "#e5e7eb", color: "#374151" },
     op:   { bg: "#1B2B4B", color: "white" },
-    eq:   { bg: "#2563eb", color: "white" },
+    eq:   { bg: "#1B2B4B", color: "white" },
     num:  { bg: "#f3f4f6", color: "#111827" },
   };
 
@@ -4746,27 +5146,44 @@ function FloatingCalculator({ onClose }) {
     setBoxResults({ results, qty, bw, bd, bh });
   };
 
+  // 파렛 종류 선택 조회 — 규격표에서 고른 파렛트의 실제 mm 규격·자체무게로 총
+  // 무게를 구하고, 그 무게와 개수를 모두 감당하는(중량 여유 + 적재칸 충분) 가장
+  // 작은 차량을 LOAD_VEHICLES 순서(작은 차→큰 차)대로 찾아 "OO부터 상차 가능"으로 안내한다.
+  const handlePalTypeSearch = () => {
+    const spec = PALLET_SPEC_TABLE.find(p => p.code === palTypeCode);
+    const qty = parseInt(palTypeQty, 10) || 0;
+    if (!spec || qty <= 0) { setPalTypeResult(null); return; }
+    const totalKg = round(spec.kg * qty);
+    const fitVeh = LOAD_VEHICLES.find(veh => {
+      const fit = calcPalletFit(veh, spec.w, spec.d);
+      return fit.cols * fit.rows >= qty && totalKg <= veh.maxKg;
+    });
+    setPalTypeResult({ spec, qty, totalKg, fitVeh: fitVeh || null });
+  };
+
   const inpSt = { width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 14, outline: "none", boxSizing: "border-box" };
   const lblSt = { fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 3, display: "block" };
 
   return (
     <div style={{
       position: "fixed", bottom: 148, right: 24, zIndex: 99999,
-      width: tab === "load" ? 340 : 280,
+      // ⭐ 적재/톤수 탭 내용(파렛 규격 입력·차량 목록 등)이 좁은 폭에 눌려 잘 안
+      // 보인다는 피드백으로 탭별 폭을 전반적으로 넓히고, 글씨 크기도 함께 키웠다.
+      width: tab === "load" ? 460 : tab === "ton" ? 360 : 300,
       background: "white", borderRadius: 20,
       boxShadow: "0 20px 60px rgba(0,0,0,0.22)",
       border: "1px solid #e2e8f0",
       fontFamily: "'Noto Sans KR', sans-serif",
-      maxHeight: "82vh", display: "flex", flexDirection: "column", overflow: "hidden",
+      maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
       {/* 탭 헤더 */}
-      <div style={{ background: "#1B2B4B", padding: "9px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+      <div style={{ background: "#1B2B4B", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ display: "flex", gap: 4 }}>
           {[["calc","계산기"],["ton","톤수"],["load","적재"]].map(([t,l]) => (
-            <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? "rgba(255,255,255,0.2)" : "none", border: "none", color: "white", fontWeight: tab === t ? 700 : 400, fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 6 }}>{l}</button>
+            <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? "rgba(255,255,255,0.2)" : "none", border: "none", color: "white", fontWeight: tab === t ? 700 : 400, fontSize: 13, cursor: "pointer", padding: "4px 10px", borderRadius: 6 }}>{l}</button>
           ))}
         </div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
       </div>
 
       {/* 스크롤 본문 */}
@@ -4799,38 +5216,38 @@ function FloatingCalculator({ onClose }) {
 
         {/* ── 톤수 계산 탭 ── */}
         {tab === "ton" && (
-          <div style={{ padding: 16 }}>
-            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ padding: 20 }}>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
               총 파렛 수와 총 톤수를 입력하고<br/>계산할 파렛 수를 입력하면 톤수가 나옵니다.
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 파렛 수</div>
-                  <input autoComplete="off" type="number" min="0" placeholder="예: 27" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palTotal} onChange={e => setPalTotal(e.target.value)} />
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 5 }}>총 파렛 수</div>
+                  <input autoComplete="off" type="number" min="0" placeholder="예: 27" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" }} value={palTotal} onChange={e => setPalTotal(e.target.value)} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 톤수</div>
-                  <input autoComplete="off" type="number" min="0" step="0.01" placeholder="예: 12" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={tonTotal} onChange={e => setTonTotal(e.target.value)} />
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 5 }}>총 톤수</div>
+                  <input autoComplete="off" type="number" min="0" step="0.01" placeholder="예: 12" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" }} value={tonTotal} onChange={e => setTonTotal(e.target.value)} />
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>계산할 파렛 수</div>
-                <input autoComplete="off" type="number" min="0" placeholder="예: 16" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }} value={palPart} onChange={e => setPalPart(e.target.value)} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 5 }}>계산할 파렛 수</div>
+                <input autoComplete="off" type="number" min="0" placeholder="예: 16" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" }} value={palPart} onChange={e => setPalPart(e.target.value)} />
               </div>
-              <div style={{ background: tonResult !== null ? "#f0f9ff" : "#f8fafc", border: `1px solid ${tonResult !== null ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+              <div style={{ background: tonResult !== null ? "#1B2B4B" : "#f8fafc", border: `1px solid ${tonResult !== null ? "#1B2B4B" : "#e2e8f0"}`, borderRadius: 12, padding: "16px 14px", textAlign: "center" }}>
                 {tonResult !== null ? (
                   <>
-                    <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>{palPart}파렛 = </div>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#1B2B4B" }}>{tonResult}<span style={{ fontSize: 14, fontWeight: 500, marginLeft: 4 }}>톤</span></div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>({palTotal}p / {tonTotal}t 기준)</div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 5 }}>{palPart}파렛 = </div>
+                    <div style={{ fontSize: 34, fontWeight: 700, color: "white" }}>{tonResult}<span style={{ fontSize: 15, fontWeight: 500, marginLeft: 4 }}>톤</span></div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 5 }}>({palTotal}p / {tonTotal}t 기준)</div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 13, color: "#94a3b8" }}>위 값을 입력하세요</div>
+                  <div style={{ fontSize: 14, color: "#94a3b8" }}>위 값을 입력하세요</div>
                 )}
               </div>
               <button onClick={() => { setPalTotal(""); setTonTotal(""); setPalPart(""); }}
-                style={{ width: "100%", padding: "8px", background: "#f1f5f9", border: "none", borderRadius: 8, fontSize: 13, color: "#64748b", cursor: "pointer", fontWeight: 600 }}>
+                style={{ width: "100%", padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 9, fontSize: 14, color: "#64748b", cursor: "pointer", fontWeight: 600 }}>
                 초기화
               </button>
             </div>
@@ -4839,127 +5256,198 @@ function FloatingCalculator({ onClose }) {
 
         {/* ── 적재 계산 탭 ── */}
         {tab === "load" && (
-          <div style={{ padding: 12 }}>
+          <div style={{ padding: 16 }}>
             {/* 서브탭 */}
-            <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#f1f5f9", borderRadius: 8, padding: 3 }}>
+            <div style={{ display: "flex", gap: 4, marginBottom: 14, background: "#f1f5f9", borderRadius: 9, padding: 3 }}>
               {[["pallet","파렛트"],["box","박스"]].map(([m,l]) => (
-                <button key={m} onClick={() => setLoadMode(m)} style={{ flex: 1, padding: "5px 0", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: loadMode === m ? 700 : 400, background: loadMode === m ? "white" : "transparent", color: loadMode === m ? "#1B2B4B" : "#64748b", boxShadow: loadMode === m ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>{l}</button>
+                <button key={m} onClick={() => setLoadMode(m)} style={{ flex: 1, padding: "7px 0", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: loadMode === m ? 700 : 400, background: loadMode === m ? "white" : "transparent", color: loadMode === m ? "#1B2B4B" : "#64748b", boxShadow: loadMode === m ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>{l}</button>
               ))}
             </div>
 
             {/* ── 파렛트 모드 ── */}
             {loadMode === "pallet" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ background: "#eff6ff", borderRadius: 8, padding: "7px 10px", fontSize: 12, color: "#2563eb", lineHeight: 1.5 }}>
-                  파렛트 크기(mm)·수량을 입력 후 조회. 차량 클릭 시 배치도 확인.
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* 직접입력 / 파렛종류선택 서브 토글 */}
+                <div style={{ display: "flex", gap: 4, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: 3 }}>
+                  {[["manual","직접입력"],["type","파렛종류 선택"]].map(([m,l]) => (
+                    <button key={m} onClick={() => setPalInputMode(m)} style={{ flex: 1, padding: "6px 0", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12.5, fontWeight: palInputMode === m ? 700 : 400, background: palInputMode === m ? "#1B2B4B" : "transparent", color: palInputMode === m ? "white" : "#64748b" }}>{l}</button>
+                  ))}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "end" }}>
-                  <div><label style={lblSt}>가로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palW} onChange={e => setPalW(e.target.value)} /></div>
-                  <div style={{ paddingBottom: 8, color: "#94a3b8", fontSize: 14, fontWeight: 700, textAlign: "center" }}>×</div>
-                  <div><label style={lblSt}>세로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palD} onChange={e => setPalD(e.target.value)} /></div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                  <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="16" style={inpSt} value={palQty} onChange={e => setPalQty(e.target.value)} /></div>
+
+                {palInputMode === "manual" ? (<>
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "9px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
+                    파렛트 크기(mm)·수량을 입력 후 조회. 차량을 클릭하면 배치도를 볼 수 있습니다.
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 6, alignItems: "end" }}>
+                    <div><label style={lblSt}>가로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palW} onChange={e => setPalW(e.target.value)} /></div>
+                    <div style={{ paddingBottom: 9, color: "#94a3b8", fontSize: 15, fontWeight: 700, textAlign: "center" }}>×</div>
+                    <div><label style={lblSt}>세로 (mm)</label><input autoComplete="off" type="number" min="0" placeholder="1100" style={inpSt} value={palD} onChange={e => setPalD(e.target.value)} /></div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                    <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="16" style={inpSt} value={palQty} onChange={e => setPalQty(e.target.value)} /></div>
+                    <div>
+                      <label style={lblSt}>단수</label>
+                      <select style={inpSt} value={palLayers} onChange={e => setPalLayers(e.target.value)}>
+                        {[1,2,3].map(n => <option key={n} value={n}>{n}단</option>)}
+                      </select>
+                    </div>
+                    <div><label style={lblSt}>kg/파렛</label><input autoComplete="off" type="number" min="0" placeholder="선택" style={inpSt} value={palKg} onChange={e => setPalKg(e.target.value)} /></div>
+                  </div>
+                  <button onClick={handlePalletSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+
+                  {palResults && (
+                    <div>
+                      <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 7, fontWeight: 600 }}>
+                        {palResults.pw}×{palResults.pd}mm · {palResults.qty}개 · {palResults.layers}단
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        {palResults.results.map((item, i) => {
+                          const needed = palResults.qty;
+                          const capOk = item.capTotal >= needed && needed > 0;
+                          const ok = capOk && item.weightOk;
+                          const partial = item.cap1 > 0 && !capOk && item.capTotal > 0;
+                          const selected = palSelected === i;
+                          const st = needed === 0
+                            ? `최대 ${item.capTotal}개 (${item.cols}열×${item.rows}행)`
+                            : ok
+                            ? `적재가능 · ${item.capTotal}개`
+                            : partial
+                            ? `${item.capTotal}개까지 가능 · ${needed - item.capTotal}개 부족`
+                            : !item.weightOk
+                            ? "중량초과"
+                            : "적재불가";
+                          const warn = needed > 0 && !ok;
+                          const style = selected
+                            ? { bg: "#eef1f6", bc: "#1B2B4B", tc: "#1B2B4B" }
+                            : ok
+                            ? { bg: "#1B2B4B", bc: "#1B2B4B", tc: "white" }
+                            : warn
+                            ? { bg: "white", bc: "#fda4af", tc: "#be123c" }
+                            : { bg: "#f1f5f9", bc: "#e2e8f0", tc: "#94a3b8" };
+                          return (
+                            <div key={i} onClick={() => setPalSelected(selected ? null : i)}
+                              style={{ padding: "9px 12px", background: style.bg, border: `1px solid ${style.bc}`, borderRadius: 9, cursor: "pointer", transition: "all 0.15s" }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <span style={{ fontSize: 13.5, fontWeight: 700, color: ok ? "white" : selected ? "#1B2B4B" : "#374151" }}>{item.veh.name}</span>
+                                <span style={{ fontSize: 11, color: ok ? "rgba(255,255,255,0.65)" : "#94a3b8" }}>{(item.veh.l/100).toFixed(1)}m × {(item.veh.w/100).toFixed(1)}m</span>
+                              </div>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: style.tc, marginTop: 3 }}>{st}</div>
+                              {!item.weightOk && palKg && needed > 0 && (
+                                <div style={{ fontSize: 11, color: "#be123c", marginTop: 2 }}>
+                                  {(parseFloat(palKg)*needed).toLocaleString()}kg &gt; 최대 {item.veh.maxKg.toLocaleString()}kg
+                                </div>
+                              )}
+                              {ok && item.rotated && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 2 }}>회전 배치로 최적화됨</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {palSelected !== null && palResults.results[palSelected] && (
+                        <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px" }}>
+                          <PalletDiagram item={palResults.results[palSelected]} qty={palResults.qty} layers={palResults.layers} palW_mm={palResults.pw} palD_mm={palResults.pd} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>) : (<>
+                  {/* ── 파렛종류 선택 모드 ── */}
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "9px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
+                    파렛 종류와 수량을 고르면 총 무게와 몇 톤부터 상차 가능한지 바로 계산합니다.
+                  </div>
                   <div>
-                    <label style={lblSt}>단수</label>
-                    <select style={inpSt} value={palLayers} onChange={e => setPalLayers(e.target.value)}>
-                      {[1,2,3].map(n => <option key={n} value={n}>{n}단</option>)}
+                    <label style={lblSt}>파렛 종류</label>
+                    <select style={inpSt} value={palTypeCode} onChange={e => { setPalTypeCode(e.target.value); setPalTypeResult(null); }}>
+                      {PALLET_SPEC_TABLE.map(p => (
+                        <option key={p.code} value={p.code}>
+                          {p.code} ({p.w.toLocaleString()}×{p.d.toLocaleString()}×{p.h}mm · {p.kgLabel || `${p.kg}kg`}{p.note ? ` · ${p.note}` : ""})
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  <div><label style={lblSt}>kg/파렛</label><input autoComplete="off" type="number" min="0" placeholder="선택" style={inpSt} value={palKg} onChange={e => setPalKg(e.target.value)} /></div>
-                </div>
-                <button onClick={handlePalletSearch} style={{ width: "100%", padding: "9px", background: "#1B2B4B", border: "none", borderRadius: 8, fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+                  <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="예: 2" style={inpSt} value={palTypeQty} onChange={e => setPalTypeQty(e.target.value)} /></div>
+                  <button onClick={handlePalTypeSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
 
-                {palResults && (
-                  <div>
-                    <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontWeight: 600 }}>
-                      {palResults.pw}×{palResults.pd}mm · {palResults.qty}개 · {palResults.layers}단
-                    </div>
-                    {palResults.results.map((item, i) => {
-                      const needed = palResults.qty;
-                      const ok = item.capTotal >= needed && needed > 0;
-                      const partial = item.cap1 > 0 && !ok && item.capTotal > 0;
-                      const bg = palSelected === i ? "#dbeafe" : ok ? "#f0fdf4" : partial ? "#fff7ed" : "#fef2f2";
-                      const bc = palSelected === i ? "#3b82f6" : ok ? "#86efac" : partial ? "#fed7aa" : "#fecaca";
-                      const sc = ok ? "#15803d" : partial ? "#c2410c" : "#9f1239";
-                      const st = needed === 0
-                        ? `최대 ${item.capTotal}개 (${item.cols}열×${item.rows}행)`
-                        : ok
-                        ? `✅ ${item.capTotal}개 적재 가능`
-                        : partial
-                        ? `⚠️ ${item.capTotal}개만 가능 (${needed - item.capTotal}개 부족)`
-                        : `❌ 적재 불가`;
-                      return (
-                        <div key={i} onClick={() => setPalSelected(palSelected === i ? null : i)}
-                          style={{ padding: "6px 8px", marginBottom: 3, background: bg, border: `1px solid ${bc}`, borderRadius: 7, cursor: "pointer", transition: "all 0.15s" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{item.veh.name}</span>
-                            <span style={{ fontSize: 10, color: "#6b7280" }}>{(item.veh.l/100).toFixed(1)}m × {(item.veh.w/100).toFixed(1)}m</span>
-                          </div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: sc, marginTop: 2 }}>{st}</div>
-                          {!item.weightOk && palKg && <div style={{ fontSize: 10, color: "#b91c1c", marginTop: 1 }}>⚖️ 중량초과 ({(parseFloat(palKg)*needed).toLocaleString()}kg &gt; {item.veh.maxKg.toLocaleString()}kg)</div>}
-                          {ok && item.rotated && <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 1 }}>↺ 회전 배치로 최적화됨</div>}
-                        </div>
-                      );
-                    })}
-                    {palSelected !== null && palResults.results[palSelected] && (
-                      <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px" }}>
-                        <PalletDiagram item={palResults.results[palSelected]} qty={palResults.qty} layers={palResults.layers} palW_mm={palResults.pw} palD_mm={palResults.pd} />
+                  {palTypeResult && (
+                    <div style={{ background: "#1B2B4B", borderRadius: 12, padding: "16px 14px", textAlign: "center" }}>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>
+                        {palTypeResult.spec.code} {palTypeResult.qty}장 · 총 {palTypeResult.totalKg.toLocaleString()}kg
                       </div>
-                    )}
-                  </div>
-                )}
+                      {palTypeResult.fitVeh ? (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                          <TruckIcon size={22} color="white" />
+                          <span style={{ fontSize: 20, fontWeight: 700, color: "white" }}>
+                            {(() => {
+                              // "5톤 초장축" → "5톤(9.6M) 초장축부터 상차 가능" 처럼 톤수 뒤에
+                              // 실측 길이(m)를 끼워 넣어 몇 미터 차량인지 바로 보이게 한다.
+                              const v = palTypeResult.fitVeh;
+                              const m = v.name.match(/^(\S+)(\s+.+)?$/);
+                              const prefix = m ? m[1] : v.name;
+                              const suffix = m && m[2] ? m[2] : "";
+                              return `${prefix}(${(v.l / 100).toFixed(1)}M)${suffix}부터 상차 가능`;
+                            })()}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#fda4af" }}>적재 가능한 차량이 없습니다 (중량 또는 수량 초과)</div>
+                      )}
+                    </div>
+                  )}
+                </>)}
               </div>
             )}
 
             {/* ── 박스 모드 ── */}
             {loadMode === "box" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ background: "#fdf4ff", borderRadius: 8, padding: "7px 10px", fontSize: 12, color: "#7c3aed", lineHeight: 1.5 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "9px 12px", fontSize: 12.5, color: "#475569", lineHeight: 1.6 }}>
                   박스 크기(cm)와 수량을 입력하면 차량별 최대 적재 개수를 계산합니다.
                 </div>
                 <div>
                   <label style={lblSt}>박스 크기 (cm) — 가로 × 세로 × 높이</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", gap: 3, alignItems: "center" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", gap: 4, alignItems: "center" }}>
                     <input autoComplete="off" type="number" min="0" placeholder="가로" style={inpSt} value={boxW} onChange={e => setBoxW(e.target.value)} />
-                    <span style={{ color: "#94a3b8", fontSize: 11, textAlign: "center" }}>×</span>
+                    <span style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>×</span>
                     <input autoComplete="off" type="number" min="0" placeholder="세로" style={inpSt} value={boxD} onChange={e => setBoxD(e.target.value)} />
-                    <span style={{ color: "#94a3b8", fontSize: 11, textAlign: "center" }}>×</span>
+                    <span style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>×</span>
                     <input autoComplete="off" type="number" min="0" placeholder="높이" style={inpSt} value={boxH} onChange={e => setBoxH(e.target.value)} />
                   </div>
                 </div>
                 <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="예: 200" style={inpSt} value={boxQty} onChange={e => setBoxQty(e.target.value)} /></div>
-                <button onClick={handleBoxSearch} style={{ width: "100%", padding: "9px", background: "#7c3aed", border: "none", borderRadius: 8, fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+                <button onClick={handleBoxSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
 
                 {boxResults && (
                   <div>
-                    <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontWeight: 600 }}>
+                    <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 7, fontWeight: 600 }}>
                       {boxResults.bw}×{boxResults.bd}×{boxResults.bh}cm 박스 {boxResults.qty || "?"}개
                     </div>
-                    {boxResults.results.map((item, i) => {
-                      const needed = boxResults.qty;
-                      const ok = item.cap >= needed && needed > 0;
-                      const partial = item.cap > 0 && !ok;
-                      const bg = ok ? "#f0fdf4" : partial ? "#fff7ed" : "#fef2f2";
-                      const bc = ok ? "#86efac" : partial ? "#fed7aa" : "#fecaca";
-                      const sc = ok ? "#15803d" : partial ? "#c2410c" : "#9f1239";
-                      const st = needed === 0
-                        ? `최대 ${item.cap.toLocaleString()}개`
-                        : ok
-                        ? `✅ ${item.cap.toLocaleString()}개 가능`
-                        : item.cap > 0
-                        ? `⚠️ ${item.cap.toLocaleString()}개만 가능`
-                        : `❌ 적재 불가`;
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", marginBottom: 3, background: bg, border: `1px solid ${bc}`, borderRadius: 7 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", minWidth: 52 }}>{item.veh.name}</div>
-                          <div style={{ fontSize: 10, color: "#6b7280", flex: 1, paddingLeft: 4 }}>{(item.veh.l/100).toFixed(1)}×{(item.veh.w/100).toFixed(1)}×{(item.veh.h/100).toFixed(1)}m</div>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: sc, textAlign: "right" }}>{st}</div>
-                        </div>
-                      );
-                    })}
-                    <div style={{ marginTop: 8, background: "#fdf4ff", border: "1px solid #e9d5ff", borderRadius: 8, padding: "7px 10px", fontSize: 10, color: "#6b21a8", lineHeight: 1.5 }}>
-                      ℹ️ 실제 적재량은 박스 방향, 완충재, 무게 제한에 따라 다를 수 있습니다.
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      {boxResults.results.map((item, i) => {
+                        const needed = boxResults.qty;
+                        const ok = item.cap >= needed && needed > 0;
+                        const partial = item.cap > 0 && !ok;
+                        const st = needed === 0
+                          ? `최대 ${item.cap.toLocaleString()}개`
+                          : ok
+                          ? `가능 · ${item.cap.toLocaleString()}개`
+                          : partial
+                          ? `${item.cap.toLocaleString()}개까지 가능`
+                          : "적재불가";
+                        const style = ok
+                          ? { bg: "#1B2B4B", bc: "#1B2B4B", tc: "white" }
+                          : partial
+                          ? { bg: "white", bc: "#fda4af", tc: "#be123c" }
+                          : { bg: "#f1f5f9", bc: "#e2e8f0", tc: "#94a3b8" };
+                        return (
+                          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: style.bg, border: `1px solid ${style.bc}`, borderRadius: 9 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: ok ? "white" : "#374151", minWidth: 56 }}>{item.veh.name}</div>
+                            <div style={{ fontSize: 11, color: ok ? "rgba(255,255,255,0.65)" : "#94a3b8", flex: 1, paddingLeft: 6 }}>{(item.veh.l/100).toFixed(1)}×{(item.veh.w/100).toFixed(1)}×{(item.veh.h/100).toFixed(1)}m</div>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: style.tc, textAlign: "right" }}>{st}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 9, padding: "8px 12px", fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
+                      실제 적재량은 박스 방향, 완충재, 무게 제한에 따라 달라질 수 있습니다.
                     </div>
                   </div>
                 )}
@@ -5613,6 +6101,9 @@ const [alertMsg, setAlertMsg] = useState(null);
 // 알림을 "확인"한 뒤에만 그 팝업이 나타나도록 하기 위한 콜백 저장소.
 const alertThenRef = React.useRef(null);
 const showAlert = (msg, then) => { alertThenRef.current = then || null; setAlertMsg(msg); };
+// addDispatch/patchDispatch 등 컴포넌트 바깥에 정의된 함수도 이 화면과 동일한 스타일의
+// CustomAlert를 띄울 수 있도록, 렌더될 때마다 최신 showAlert를 전역 브릿지에 연결한다.
+_globalShowAlert = showAlert;
 const closeAlert = () => {
   setAlertMsg(null);
   const cb = alertThenRef.current;
@@ -7056,6 +7547,46 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
+      const [vehicleSpecTab, setVehicleSpecTab] = React.useState("vehicle"); // "vehicle" | "pallet"
+      // 차량제원표 관리자 수정(더블클릭) — 카고/윙바디 표를 회사별로 독립적으로 override.
+      const [specOverrides, setSpecOverrides] = React.useState({ cargo: {}, wing: {} });
+      const [vehicleSpecEdit, setVehicleSpecEdit] = React.useState(null); // { table: "cargo"|"wing", index }
+      React.useEffect(() => {
+        if (!vehicleSpecOpen || !userCompany) return;
+        let alive = true;
+        getDoc(doc(db, "companySettings", userCompany.trim())).then(snap => {
+          if (!alive) return;
+          const data = snap.data()?.차량제원표수정 || {};
+          setSpecOverrides({ cargo: data.cargo || {}, wing: data.wing || {} });
+        }).catch(() => {});
+        return () => { alive = false; };
+      }, [vehicleSpecOpen, userCompany]);
+      const saveVehicleSpecEdit = async (values) => {
+        if (!vehicleSpecEdit) return;
+        const { table, index } = vehicleSpecEdit;
+        const nextOverrides = { ...specOverrides, [table]: { ...specOverrides[table], [index]: values } };
+        setSpecOverrides(nextOverrides);
+        setVehicleSpecEdit(null);
+        try {
+          await setDoc(doc(db, "companySettings", userCompany.trim()), { 차량제원표수정: nextOverrides }, { merge: true });
+        } catch (e) {
+          sflowToast("저장 실패: " + e.message, "cancel");
+        }
+      };
+      const resetVehicleSpecEdit = async () => {
+        if (!vehicleSpecEdit) return;
+        const { table, index } = vehicleSpecEdit;
+        const nextTable = { ...specOverrides[table] };
+        delete nextTable[index];
+        const nextOverrides = { ...specOverrides, [table]: nextTable };
+        setSpecOverrides(nextOverrides);
+        setVehicleSpecEdit(null);
+        try {
+          await setDoc(doc(db, "companySettings", userCompany.trim()), { 차량제원표수정: nextOverrides }, { merge: true });
+        } catch (e) {
+          sflowToast("저장 실패: " + e.message, "cancel");
+        }
+      };
 const [confirmOpen, setConfirmOpen] = React.useState(false);
 const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
@@ -10254,6 +10785,16 @@ const _dOrderMemo = form.하차지오더메모, _dOrderMemoShow = form.하차지
 
 // ★ 오더 병렬 저장 (순차→병렬로 속도 개선)
 const saveCount = multiCount > 1 ? multiCount : 1;
+// 🚫 하차일이 상차일보다 빠른 역순 등록 방지 — 다중등록(오더별 개별 날짜)까지
+// 전부 미리 검사하고, 하나라도 역순이면 아무것도 저장하지 않는다.
+for (let i = 0; i < saveCount; i++) {
+  const dChk = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
+  const ddChk = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dChk);
+  if (isReversedDateOrder(dChk, ddChk)) {
+    showAlert(REVERSED_DATE_ORDER_MSG);
+    return;
+  }
+}
 await Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
   const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
@@ -12642,11 +13183,12 @@ className={`
     onClick={(e) => {
       e.preventDefault();
       e.stopPropagation();
+      setVehicleSpecTab("vehicle");
       setVehicleSpecOpen(true);
     }}
    className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
   >
-    차량제원
+    차량·파렛
   </button>
 </div>
 
@@ -13860,12 +14402,66 @@ className={`
 </div>
 
 {/* ================= 차량 제원표 모달 ================= */}
-{vehicleSpecOpen && (
+{vehicleSpecOpen && (() => {
+  // 관리자 override를 반영한 최종 표시값. 카고/윙바디는 원본 데이터는 같지만
+  // 회사에서 각각 따로 고쳐 쓸 수 있게 override는 테이블별로 독립적으로 관리한다.
+  const cargoRows = CARGO_VEHICLE_SPEC_TABLE.map((v, i) => applySpecOverride(v, specOverrides.cargo[i]));
+  const wingRows = CARGO_VEHICLE_SPEC_TABLE.map((v, i) => applySpecOverride(v, specOverrides.wing[i]));
+  // 차량제원표 더블클릭 수정은 관리자~최고관리자 전용 — 위쪽의 isAdmin은 조회전용(isViewer)도
+  // 함께 true가 되는 별개 용도라 여기서는 role만으로 다시 엄격하게 판별한다.
+  const canEditVehicleSpec = role === "admin" || role === "totalMaster";
+
+  const SpecTable = ({ title, note, rows, tableKey }) => (
+    <div>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="font-semibold text-sm">{title}</h3>
+        <span className="text-xs text-gray-500">{note}{canEditVehicleSpec ? " · 행을 더블클릭하면 수정할 수 있습니다" : ""}</span>
+      </div>
+      <table className="w-full text-sm border border-gray-300">
+        <thead className="bg-blue-50 text-blue-900">
+          <tr>
+            <th className="border px-2 py-1">톤수</th>
+            <th className="border px-2 py-1">구분</th>
+            <th className="border px-2 py-1">적재함 길이</th>
+            <th className="border px-2 py-1">폭 참고</th>
+            <th className="border px-2 py-1">실무상 명칭</th>
+            <th className="border px-2 py-1">최대 적재 중량</th>
+            <th className="border px-2 py-1">최대 적재 파렛</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((v, i) => (
+            <tr
+              key={i}
+              onDoubleClick={() => { if (canEditVehicleSpec) setVehicleSpecEdit({ table: tableKey, index: i }); }}
+              className={canEditVehicleSpec ? "cursor-pointer hover:bg-amber-50 transition" : ""}
+              title={canEditVehicleSpec ? "더블클릭하여 수정" : undefined}
+            >
+              <td className="border px-2 py-1 text-center font-semibold">{v.ton}</td>
+              <td className="border px-2 py-1 text-center">{v.category}</td>
+              <td className="border px-2 py-1 text-center">{v.bedLength}</td>
+              <td className="border px-2 py-1 text-center">{v.widthRef}</td>
+              <td className="border px-2 py-1 text-center">{v.name}</td>
+              <td className="border px-2 py-1 text-center">{(v.maxKg / 1000).toLocaleString()} t</td>
+              <td className="border px-2 py-1 text-center">{maxN11PalletCount(v)}개</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const editingBase = vehicleSpecEdit
+    ? (vehicleSpecEdit.table === "cargo" ? cargoRows : wingRows)[vehicleSpecEdit.index]
+    : null;
+
+  return (
+  <>
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-    <div className="bg-white rounded-xl shadow-xl p-6 w-[900px] max-h-[85vh] overflow-auto">
+    <div className="bg-white rounded-xl shadow-xl p-6 w-[1180px] max-w-[95vw] max-h-[85vh] overflow-auto">
 
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold">차량 제원표</h2>
+        <h2 className="text-lg font-bold">차량·파렛 제원표</h2>
         <button
           onClick={() => setVehicleSpecOpen(false)}
           className="text-gray-500 hover:text-black text-lg"
@@ -13874,6 +14470,21 @@ className={`
         </button>
       </div>
 
+      {/* 차량제원 / 파렛트제원 탭 */}
+      <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
+        {[["vehicle","차량제원"],["pallet","파렛트제원"]].map(([t,l]) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setVehicleSpecTab(t)}
+            className={`px-4 py-1.5 rounded-md text-[13px] font-bold transition ${vehicleSpecTab === t ? "bg-[#1B2B4B] text-white" : "text-gray-500 hover:text-[#1B2B4B]"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {vehicleSpecTab === "vehicle" && (<>
       {/* ================= 퀵 차량 ================= */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-2">
@@ -13924,78 +14535,58 @@ className={`
       </div>
 
       {/* ================= 카고 차량 ================= */}
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="font-semibold text-sm">카고 차량 제원표</h3>
-          <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
-        </div>
-
-        <table className="w-full text-sm border border-gray-300">
-          <thead className="bg-blue-50 text-blue-900">
-            <tr>
-              <th className="border px-2 py-1">차량톤수</th>
-              <th className="border px-2 py-1">길이 (mm)</th>
-              <th className="border px-2 py-1">너비 (mm)</th>
-              <th className="border px-2 py-1">높이 (mm)</th>
-              <th className="border px-2 py-1">최대 적재 중량</th>
-              <th className="border px-2 py-1">최대 적재 파렛</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2~3개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3~4개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">6개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">11톤</td><td className="border px-2 py-1 text-center">9,100</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">11톤축</td><td className="border px-2 py-1 text-center">9,600</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">18톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">20 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">25톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">트레일러</td><td className="border px-2 py-1 text-center">12,000</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-          </tbody>
-        </table>
-        {/* ================= 윙바디 차량 ================= */}
-<div className="mt-8">
-  <div className="flex justify-between items-center mb-2">
-    <h3 className="font-semibold text-sm">윙바디 차량 제원표</h3>
-    <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
-  </div>
-
-  <table className="w-full text-sm border border-gray-300">
-    <thead className="bg-blue-50 text-blue-900">
-      <tr>
-        <th className="border px-2 py-1">차량톤수</th>
-        <th className="border px-2 py-1">길이 (mm)</th>
-        <th className="border px-2 py-1">너비 (mm)</th>
-        <th className="border px-2 py-1">높이 (mm)</th>
-        <th className="border px-2 py-1">최대 적재 중량</th>
-        <th className="border px-2 py-1">최대 적재 파렛</th>
-      </tr>
-    </thead>
-
-    <tbody>
-      <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2~3개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3~4개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">6개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">8,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">11톤</td><td className="border px-2 py-1 text-center">9,600</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">11톤축</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">18톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">20 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">25톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-    </tbody>
-  </table>
-</div>
+      <div className="mb-8">
+        <SpecTable title="카고 차량 제원표" note="톤수별 적재함 길이·폭 참고 기준" rows={cargoRows} tableKey="cargo" />
       </div>
+
+      {/* ================= 윙바디 차량 ================= */}
+      <div>
+        <SpecTable title="윙바디 차량 제원표" note="톤수별 적재함 길이·폭 참고 기준" rows={wingRows} tableKey="wing" />
+      </div>
+      </>)}
+
+      {vehicleSpecTab === "pallet" && (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-semibold text-sm">파렛트 제원표</h3>
+            <span className="text-xs text-gray-500">규격(가로×세로×높이) · 자체무게</span>
+          </div>
+          <table className="w-full text-sm border border-gray-300">
+            <thead className="bg-blue-50 text-blue-900">
+              <tr>
+                <th className="border px-2 py-1">파렛트</th>
+                <th className="border px-2 py-1">규격 (가로×세로×높이)</th>
+                <th className="border px-2 py-1">자체 무게</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PALLET_SPEC_TABLE.map(p => (
+                <tr key={p.code}>
+                  <td className="border px-2 py-1 text-center font-semibold">{p.code}{p.note ? ` (${p.note})` : ""}</td>
+                  <td className="border px-2 py-1 text-center">{p.w.toLocaleString()} × {p.d.toLocaleString()} × {p.h} mm</td>
+                  <td className="border px-2 py-1 text-center">{p.kgLabel || `${p.kg} kg`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
     </div>
   </div>
-)}
+
+  {vehicleSpecEdit && editingBase && (
+    <VehicleSpecEditModal
+      initial={editingBase}
+      hasOverride={!!(specOverrides[vehicleSpecEdit.table] && specOverrides[vehicleSpecEdit.table][vehicleSpecEdit.index])}
+      onCancel={() => setVehicleSpecEdit(null)}
+      onSave={saveVehicleSpecEdit}
+      onReset={resetVehicleSpecEdit}
+    />
+  )}
+  </>
+  );
+})()}
     {/* 버튼 */}
   <div className="col-span-8 flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
     <button
@@ -18444,7 +19035,10 @@ function _fmtKst(v) {
   return ms ? new Date(ms).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "-";
 }
 function _creatorLabel(r, userNameMap) {
-  const raw = r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "";
+  // ⭐ 작성자(auth.currentUser?.email)는 addDispatch가 예외 없이 모든 오더에 항상 남기는
+  // 필드라, myRealName 로딩 타이밍 문제로 등록자명/createdByName이 비어있거나 예전
+  // 형식이라 매칭이 안 되는 오래된 오더도 여기로 폴백하면 이름 해석이 훨씬 더 잘 된다.
+  const raw = r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || r?.작성자 || "";
   if (!raw) return "-";
   const resolved = userNameMap?.get(raw) || userNameMap?.get(String(raw).trim().toLowerCase());
   return resolved || raw;
@@ -19064,7 +19658,7 @@ function RealtimeRowBase({
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
-  flashRow, setAttachViewer, setLiveLocViewer, setDeliveryConfirm,
+  flashRow, setAttachViewer, setLiveLocViewer, setDeliveryConfirm, setWorkDatesEditRow,
 }) {
   const sale = toInt(editedForRow?.청구운임 ?? r.청구운임);
   const drv = toInt(editedForRow?.기사운임 ?? r.기사운임);
@@ -19171,6 +19765,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
       <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
       <div>배차한시간: <span className="text-purple-300">{r.배차확정일시 ? formatKstDateTime(getDispatchConfirmedMs(r)) : "-"}</span></div>
       <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
+      <div>등록기기: <span className="text-orange-300">{r.등록기기 || "-"}</span></div>
     </>}
   />
 </td>
@@ -19193,6 +19788,19 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
               묶음 {rWorkDates.length}일
             </span>
           )}
+          {/* ⭐ 일정 변경 시 묶음(다중근무일)을 다시 골라야 하는데 상차일 칸 하나만
+              바꿀 방법이 없다는 피드백으로, 근무일 전체를 다시 고를 수 있는 달력
+              편집 버튼을 추가한다. */}
+          <button
+            type="button"
+            title="근무일 수정(다중선택)"
+            onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow?.(r); }}
+            className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </button>
         </>
       );
     })()}
@@ -19463,7 +20071,10 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
                       {(r.attachCount || 0) > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                        <span
+                          className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none"
+                          style={!r.attachViewed ? { animation: "cancelSlowBlink 1.6s ease-in-out infinite" } : undefined}
+                        >
                           {r.attachCount}
                         </span>
                       )}
@@ -19857,10 +20468,13 @@ const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [c
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
 const [userNameMap, setUserNameMap] = React.useState(new Map());
+// ⚠️ 예전엔 getDocs 1회성 조회였는데, 그 한 번의 조회가 (네트워크 순간 오류 등으로)
+// 실패하면 catch가 조용히 삼켜버려서 등록자 칸이 이후 계속 계정ID로만 표시되는
+// 버그가 있었다("탭 갔다왔더니 이름이 ID로 바뀜" — 메뉴 이동으로 컴포넌트가
+// 재마운트될 때마다 이 조회가 다시 실패할 수 있었음). onSnapshot 실시간 구독으로
+// 바꿔서 최초 실패해도 다음 스냅샷에서 자동 복구되게 한다.
 React.useEffect(() => {
-  let cancelled = false;
-  getDocs(collection(db, "users")).then(snap => {
-    if (cancelled) return;
+  const unsub = onSnapshot(collection(db, "users"), (snap) => {
     const map = new Map();
     snap.docs.forEach(d => {
       const data = d.data() || {};
@@ -19870,9 +20484,27 @@ React.useEffect(() => {
       if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
     });
     setUserNameMap(map);
-  }).catch(() => {});
-  return () => { cancelled = true; };
+  }, () => {});
+  return () => unsub();
 }, []);
+
+// ⭐ 배차확정일시 소급 보정 — "배차한시간이 항상 -로 보인다"는 신고의 원인은,
+// 이 필드를 등록/배차 즉시 남기도록 고치기 전까지는 아예 기록되지 않았기
+// 때문이다. 이미 배차완료 상태인데 이 필드가 없는 오더를 화면에서 발견하면,
+// 같은 목적으로 이미 쓰이던 배차완료일시(없으면 지금 시각)로 한 번만 채워
+// 넣어 자동으로 복구한다(세션당 같은 오더는 1회만 시도, 한 번에 과도하게
+// 쓰지 않도록 상한을 둔다).
+const backfilledConfirmRef = React.useRef(new Set());
+React.useEffect(() => {
+  const candidates = (dispatchData || []).filter(r =>
+    r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+  ).slice(0, 200);
+  if (!candidates.length) return;
+  candidates.forEach(r => {
+    backfilledConfirmRef.current.add(r._id);
+    patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+  });
+}, [dispatchData]);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
@@ -20995,6 +21627,9 @@ const getDispatchConfirmedMs = (r) => toMs(r?.배차확정일시);
 // 이메일/계정아이디만 저장돼 있는 경우(과거 오더, 또는 실명이 아직 반영 안 된
 // 등록 경로), userNameMap(uid/이메일 → users/{uid}.name)으로 실명을 다시 찾아준다.
 const getCreatorLabel = (r, userNameMap) => {
+  // ⭐ 작성자(auth.currentUser?.email)는 addDispatch가 예외 없이 모든 오더에 항상 남기는
+  // 필드라, myRealName 로딩 타이밍 문제로 등록자명/createdByName이 비어있거나 예전
+  // 형식이라 매칭이 안 되는 오래된 오더도 여기로 폴백하면 이름 해석이 훨씬 더 잘 된다.
   const raw =
     r?.등록자명 ||
     r?.createdByName ||
@@ -21002,6 +21637,7 @@ const getCreatorLabel = (r, userNameMap) => {
     r?.createdByEmail ||
     r?.createdBy ||
     r?.createdByUid ||
+    r?.작성자 ||
     "";
   if (!raw) return "-";
   const resolved = userNameMap?.get(raw) || userNameMap?.get(String(raw).trim().toLowerCase());
@@ -21274,6 +21910,7 @@ const [editStopType, setEditStopType] = React.useState("pickup");
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
 // 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
 // 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
 const [copyPanelStyle, setCopyPanelStyle] = React.useState(() => {
@@ -21767,6 +22404,7 @@ const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
   const [liveLocViewer, setLiveLocViewer] = React.useState(null); // 실시간 위치 팝업이 열린 행
   const [orderInfoRow4, setOrderInfoRow4] = React.useState(null);
+  const [workDatesEditRow, setWorkDatesEditRow] = React.useState(null); // 근무일(묶음) 수정 팝업이 열린 행
   // ------------------------
 // Firestore → rows 반영
 // ------------------------
@@ -23749,16 +24387,19 @@ const handleCloseFileUpload = async (e) => {
   // true로 넘긴다(emphCls 대신 적용). 그 외 모든 호출은 기존과 동일하게 동작한다.
   const editableInput = (key, val, rowId, redOverride = false) => {
     const emphClsFinal = redOverride ? "font-extrabold text-red-600" : emphCls;
+    // ⭐ 상차일은 바로 옆 등록일(밑줄만 있고 굵기 없음)과 구분이 잘 안 간다는 피드백으로
+    // 다른 emphKeys보다 글씨를 한 단계 더 키운다.
+    const clsFor = (k) => (k === "상차일" || k === "하차일") ? `${emphClsFinal} text-[15.5px]` : emphClsFinal;
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
     //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
-    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
+    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={clsFor(key)}>{val}</span> : val;
 
     // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
     if (
       !canEdit(key, rowId) &&
       !["차량종류", "지급방식", "배차방식"].includes(key)
     ) {
-      return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
+      return emphKeys.includes(key) ? <span className={clsFor(key)}>{val}</span> : val;
     }
 
     if (key === "상차일" || key === "하차일") {
@@ -24015,6 +24656,30 @@ const head = isDark
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
 {orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} lunchByName={lunchByName} />}
+{workDatesEditRow && (
+  <WorkDatesEditModal
+    row={workDatesEditRow}
+    companyName={userCompany}
+    onClose={() => setWorkDatesEditRow(null)}
+    onSave={async (patch) => {
+      const ok = await patchDispatch(workDatesEditRow._id, patch);
+      if (ok === false) return; // 역순 날짜 등 검증 실패 — 모달을 유지해 다시 고르게 한다
+      setRows(prev => prev.map(x => x._id === workDatesEditRow._id ? { ...x, ...patch } : x));
+      setWorkDatesEditRow(null);
+    }}
+  />
+)}
+{copyPanelWorkDatesOpen && (
+  <WorkDatesEditModal
+    row={copyTarget}
+    companyName={userCompany}
+    onClose={() => setCopyPanelWorkDatesOpen(false)}
+    onSave={async (patch) => {
+      setCopyTarget(p => ({ ...p, ...patch }));
+      setCopyPanelWorkDatesOpen(false);
+    }}
+  />
+)}
 {addrPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -24540,6 +25205,7 @@ const head = isDark
                 setAttachViewer={setAttachViewer}
                 setLiveLocViewer={setLiveLocViewer}
                 setDeliveryConfirm={setDeliveryConfirm}
+                setWorkDatesEditRow={setWorkDatesEditRow}
               />
             ))}
           </tbody>
@@ -24702,6 +25368,10 @@ const head = isDark
       showAlert("수정할 오더 ID가 없습니다.");
       return;
     }
+    if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) {
+      showAlert(REVERSED_DATE_ORDER_MSG);
+      return;
+    }
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있으므로 그대로 사용
     const finalCargo = copyTarget.화물내용 || "";
@@ -24758,7 +25428,8 @@ flashRow(savedId);
       showAlert("복사할 데이터가 없습니다.");
       return;
     }
-    await submitCopyOrderPC(copyTarget, approvedShippers);
+    const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
+    if (ok === false) return;
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
@@ -24926,12 +25597,50 @@ checkWarningStatus(c.거래처명, "거래처");
     {/* 상차 */}
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-      <Field label="상차일">
+      <Field label={<>
+        상차일
+        {/* ⭐ 묶음(다중근무일) 오더는 상차일 한 칸만 바꿔서는 일정 전체를 옮길 수 없다는
+            피드백으로, 근무일 전체를 다시 고를 수 있는 달력 편집 버튼을 추가한다. */}
+        <button
+          type="button"
+          title="근무일 수정(다중선택)"
+          onClick={(e) => { e.stopPropagation(); setCopyPanelWorkDatesOpen(true); }}
+          className="w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
+      </>}>
         <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
+          multiSelect
+          multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+          onToggleMulti={() => setCopyTarget(p => {
+            const curMulti = p?.복수근무일 === true ? true : p?.복수근무일 === false ? false : _parseWorkDates(p?.근무일자목록).length > 1;
+            if (curMulti) {
+              // 묶음 끄기 — 근무일자목록을 비워서, 다음에 다시 열어도 과거 데이터로
+              // 묶음 모드가 저절로 켜지지 않게 한다.
+              return { ...p, 복수근무일: false, 근무일자목록: [] };
+            }
+            const seed = _parseWorkDates(p?.근무일자목록);
+            return { ...p, 복수근무일: true, 근무일자목록: seed.length > 0 ? seed : (p?.상차일 ? [p.상차일] : []) };
+          })}
+          workDates={_parseWorkDates(copyTarget?.근무일자목록)}
+          onToggleWorkDate={(dateStr) => {
+            if (!dateStr) return;
+            setCopyTarget(p => {
+              const set = new Set(_parseWorkDates(p?.근무일자목록));
+              if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+              const sorted = Array.from(set).sort();
+              return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
+            });
+          }}
+          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
+          displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
         />
       </Field>
 
@@ -25470,7 +26179,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <option value="냉장탑">냉장탑</option>
         <option value="냉동탑">냉동탑</option>
         <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동</option>
+        <option value="냉동윙">냉동윙</option>
         <option value="냉장/냉동탑">냉장/냉동탑</option>
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="리프트">리프트</option>
@@ -29982,10 +30691,13 @@ const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [c
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
 const [userNameMap, setUserNameMap] = React.useState(new Map());
+// ⚠️ 예전엔 getDocs 1회성 조회였는데, 그 한 번의 조회가 (네트워크 순간 오류 등으로)
+// 실패하면 catch가 조용히 삼켜버려서 등록자 칸이 이후 계속 계정ID로만 표시되는
+// 버그가 있었다("탭 갔다왔더니 이름이 ID로 바뀜" — 메뉴 이동으로 컴포넌트가
+// 재마운트될 때마다 이 조회가 다시 실패할 수 있었음). onSnapshot 실시간 구독으로
+// 바꿔서 최초 실패해도 다음 스냅샷에서 자동 복구되게 한다.
 React.useEffect(() => {
-  let cancelled = false;
-  getDocs(collection(db, "users")).then(snap => {
-    if (cancelled) return;
+  const unsub = onSnapshot(collection(db, "users"), (snap) => {
     const map = new Map();
     snap.docs.forEach(d => {
       const data = d.data() || {};
@@ -29995,9 +30707,27 @@ React.useEffect(() => {
       if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
     });
     setUserNameMap(map);
-  }).catch(() => {});
-  return () => { cancelled = true; };
+  }, () => {});
+  return () => unsub();
 }, []);
+
+// ⭐ 배차확정일시 소급 보정 — "배차한시간이 항상 -로 보인다"는 신고의 원인은,
+// 이 필드를 등록/배차 즉시 남기도록 고치기 전까지는 아예 기록되지 않았기
+// 때문이다. 이미 배차완료 상태인데 이 필드가 없는 오더를 화면에서 발견하면,
+// 같은 목적으로 이미 쓰이던 배차완료일시(없으면 지금 시각)로 한 번만 채워
+// 넣어 자동으로 복구한다(세션당 같은 오더는 1회만 시도, 한 번에 과도하게
+// 쓰지 않도록 상한을 둔다).
+const backfilledConfirmRef = React.useRef(new Set());
+React.useEffect(() => {
+  const candidates = (dispatchData || []).filter(r =>
+    r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+  ).slice(0, 200);
+  if (!candidates.length) return;
+  candidates.forEach(r => {
+    backfilledConfirmRef.current.add(r._id);
+    patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+  });
+}, [dispatchData]);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
@@ -30225,6 +30955,7 @@ const [alertMsg, setAlertMsg] = React.useState(null);
 const [attachViewer, setAttachViewer] = React.useState(null);
 const [liveLocViewer, setLiveLocViewer] = React.useState(null);
 const [orderInfoRow5, setOrderInfoRow5] = React.useState(null);
+const [workDatesEditRow, setWorkDatesEditRow] = React.useState(null); // 근무일(묶음) 수정 팝업이 열린 행
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
@@ -30940,6 +31671,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
 // 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
 // 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
 const [copyPanelStyle, setCopyPanelStyle] = React.useState(() => {
@@ -32590,6 +33322,16 @@ if (first) {
 
     if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
 
+    // 🚫 역순 날짜(하차일 < 상차일) 검사 — 하나라도 있으면 전체 저장을 막는다.
+    const reversedId = ids.find(id => {
+      const orig = filtered.find(r => getId(r) === id) || dispatchData.find(r => getId(r) === id);
+      const p = edited[id] || {};
+      const pickup = "상차일" in p ? p.상차일 : orig?.상차일;
+      const drop = "하차일" in p ? p.하차일 : orig?.하차일;
+      return isReversedDateOrder(pickup, drop);
+    });
+    if (reversedId) return showAlert(REVERSED_DATE_ORDER_MSG);
+
  // ================================
     //   수정완료 → 저장 로직 (백그라운드)
     // ================================
@@ -33263,6 +34005,31 @@ return (
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
 {orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} lunchByName={lunchByName} />}
+{workDatesEditRow && (
+  <WorkDatesEditModal
+    row={workDatesEditRow}
+    companyName={userCompany}
+    onClose={() => setWorkDatesEditRow(null)}
+    onSave={async (patch) => {
+      const wid = getId(workDatesEditRow);
+      const ok = await patchDispatch(wid, patch);
+      if (ok === false) return; // 역순 날짜 등 검증 실패 — 모달을 유지해 다시 고르게 한다
+      setLocalOverrides(prev => ({ ...prev, [wid]: { ...(prev[wid] || {}), ...patch } }));
+      setWorkDatesEditRow(null);
+    }}
+  />
+)}
+{copyPanelWorkDatesOpen && (
+  <WorkDatesEditModal
+    row={copyTarget}
+    companyName={userCompany}
+    onClose={() => setCopyPanelWorkDatesOpen(false)}
+    onSave={async (patch) => {
+      setCopyTarget(p => ({ ...p, ...patch }));
+      setCopyPanelWorkDatesOpen(false);
+    }}
+  />
+)}
 {attachStatusDSOpen && (
   <AttachStatusPanel
     open={attachStatusDSOpen}
@@ -33841,6 +34608,7 @@ return (
       <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
       <div>배차한시간: <span className="text-purple-300">{row.배차확정일시 ? _fmtKst(row.배차확정일시) : "-"}</span></div>
       <div>등록자: <span className="text-blue-300">{_creatorLabel(row, userNameMap)}</span></div>
+      <div>등록기기: <span className="text-orange-300">{row.등록기기 || "-"}</span></div>
     </>}
   />
 </td>
@@ -33975,7 +34743,8 @@ return (
   const isMultiWork = rowWorkDates.length > 1;
   return (
     <span className="inline-flex items-center gap-1">
-      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"}`}>{row[key] || ""}</span>
+      {/* ⭐ 상차일은 바로 옆 등록일과 구분이 잘 안 간다는 피드백으로 하차일보다 한 단계 더 키운다. */}
+      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"} text-[15.5px]`}>{row[key] || ""}</span>
       {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
           오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. 클릭하면 전체
           근무일 목록을 볼 수 있게 오더정보(우클릭 메뉴)로 유도하는 툴팁을 붙인다. */}
@@ -33986,6 +34755,21 @@ return (
         >
           묶음 {rowWorkDates.length}일
         </span>
+      )}
+      {/* ⭐ 일정 변경 시 묶음(다중근무일)을 다시 골라야 하는데 상차일 칸 하나만
+          바꿀 방법이 없다는 피드백으로, 근무일 전체를 다시 고를 수 있는 달력
+          편집 버튼을 추가한다. */}
+      {key === "상차일" && (
+        <button
+          type="button"
+          title="근무일 수정(다중선택)"
+          onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow(row); }}
+          className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
       )}
     </span>
   );
@@ -34152,7 +34936,10 @@ return (
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
                       {(row.attachCount || 0) > 0 && (
-                       <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                       <span
+                         className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none"
+                         style={!row.attachViewed ? { animation: "cancelSlowBlink 1.6s ease-in-out infinite" } : undefined}
+                       >
                           {row.attachCount}
                         </span>
                       )}
@@ -34894,7 +35681,7 @@ return (
         <option value="냉장탑">냉장탑</option>
         <option value="냉동탑">냉동탑</option>
         <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동</option>
+        <option value="냉동윙">냉동윙</option>
         <option value="냉장/냉동탑">냉장/냉동탑</option>
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="리프트">리프트</option>
@@ -35587,6 +36374,10 @@ return (
       showAlert("수정할 오더 ID가 없습니다.");
       return;
     }
+    if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) {
+      showAlert(REVERSED_DATE_ORDER_MSG);
+      return;
+    }
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있음
     const finalCargo = copyTarget.화물내용 || "";
@@ -35644,7 +36435,8 @@ return (
       return;
     }
 
-    await submitCopyOrderPC(copyTarget, approvedShippers);
+    const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
+    if (ok === false) return;
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
@@ -35814,12 +36606,50 @@ setCopyTarget(prev=>({
     {/* 상차 */}
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-      <Field label="상차일">
+      <Field label={<>
+        상차일
+        {/* ⭐ 묶음(다중근무일) 오더는 상차일 한 칸만 바꿔서는 일정 전체를 옮길 수 없다는
+            피드백으로, 근무일 전체를 다시 고를 수 있는 달력 편집 버튼을 추가한다. */}
+        <button
+          type="button"
+          title="근무일 수정(다중선택)"
+          onClick={(e) => { e.stopPropagation(); setCopyPanelWorkDatesOpen(true); }}
+          className="w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
+      </>}>
         <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
+          multiSelect
+          multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+          onToggleMulti={() => setCopyTarget(p => {
+            const curMulti = p?.복수근무일 === true ? true : p?.복수근무일 === false ? false : _parseWorkDates(p?.근무일자목록).length > 1;
+            if (curMulti) {
+              // 묶음 끄기 — 근무일자목록을 비워서, 다음에 다시 열어도 과거 데이터로
+              // 묶음 모드가 저절로 켜지지 않게 한다.
+              return { ...p, 복수근무일: false, 근무일자목록: [] };
+            }
+            const seed = _parseWorkDates(p?.근무일자목록);
+            return { ...p, 복수근무일: true, 근무일자목록: seed.length > 0 ? seed : (p?.상차일 ? [p.상차일] : []) };
+          })}
+          workDates={_parseWorkDates(copyTarget?.근무일자목록)}
+          onToggleWorkDate={(dateStr) => {
+            if (!dateStr) return;
+            setCopyTarget(p => {
+              const set = new Set(_parseWorkDates(p?.근무일자목록));
+              if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+              const sorted = Array.from(set).sort();
+              return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
+            });
+          }}
+          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
+          displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
         />
       </Field>
 
@@ -36331,7 +37161,7 @@ setCopyPlaceOptions(list);
         <option value="냉장탑">냉장탑</option>
         <option value="냉동탑">냉동탑</option>
         <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동</option>
+        <option value="냉동윙">냉동윙</option>
         <option value="냉장/냉동탑">냉장/냉동탑</option>
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="리프트">리프트</option>
@@ -38976,7 +39806,7 @@ function NewOrderPopup({
 
   const saveOrder = async () => {
     try {
-      await addDispatch({
+      const ok = await addDispatch({
         ...newOrder,
         차량톤수: toTonUnit(newOrder.차량톤수),
         메모중요도: "일반",
@@ -38992,6 +39822,7 @@ function NewOrderPopup({
         업체전달일시: null,
         업체전달방법: null,
       });
+      if (ok === false) return; // 역순 날짜 등 검증 실패 — addDispatch가 이미 안내를 띄웠다
 
 
       showAlert("신규 오더가 등록되었습니다.");
@@ -43700,6 +44531,7 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [selectedOrder, setSelectedOrder] = React.useState(null);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
   const [copyTarget, setCopyTarget] = React.useState(null);
+  const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
   const [clientDropdown, setClientDropdown] = React.useState([]);
   const [clientDropdownOpen, setClientDropdownOpen] = React.useState(false);
   const [clientActiveIdx, setClientActiveIdx] = React.useState(0);
@@ -44585,6 +45417,17 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   </div>
 )}
 
+      {copyPanelWorkDatesOpen && (
+        <WorkDatesEditModal
+          row={copyTarget}
+          companyName={localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || ""}
+          onClose={() => setCopyPanelWorkDatesOpen(false)}
+          onSave={async (patch) => {
+            setCopyTarget(p => ({ ...p, ...patch }));
+            setCopyPanelWorkDatesOpen(false);
+          }}
+        />
+      )}
       {/* 오더 복사/수정 패널 */}
       {copyPanelOpen && copyTarget && (
         <div className="fixed inset-0 z-[99999]">
@@ -44603,9 +45446,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
                       if (!copyTarget?._id) { showToast("수정할 오더 ID가 없습니다.", "err"); return; }
+                      if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) { showToast(REVERSED_DATE_ORDER_MSG, "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
-                      await patchDispatch(copyTarget._id, payload);
+                      const ok = await patchDispatch(copyTarget._id, payload);
+                      if (ok === false) return;
                       showToast("오더 수정 완료");
                       setCopyPanelOpen(false);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
@@ -44620,7 +45465,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
+                      const ok = await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
+                      if (ok === false) return;
                       showToast("복사 등록 완료");
                       setCopyPanelOpen(false);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
@@ -44703,8 +45549,45 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     {/* 상차 */}
                     <div className="space-y-4">
                       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-                      <Field label="상차일">
-                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      <Field label={<>
+                        상차일
+                        <button
+                          type="button"
+                          title="근무일 수정(다중선택)"
+                          onClick={(e) => { e.stopPropagation(); setCopyPanelWorkDatesOpen(true); }}
+                          className="w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+                          </svg>
+                        </button>
+                      </>}>
+                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
+                          multiSelect
+                          multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+                          onToggleMulti={() => setCopyTarget(p => {
+            const curMulti = p?.복수근무일 === true ? true : p?.복수근무일 === false ? false : _parseWorkDates(p?.근무일자목록).length > 1;
+            if (curMulti) {
+              // 묶음 끄기 — 근무일자목록을 비워서, 다음에 다시 열어도 과거 데이터로
+              // 묶음 모드가 저절로 켜지지 않게 한다.
+              return { ...p, 복수근무일: false, 근무일자목록: [] };
+            }
+            const seed = _parseWorkDates(p?.근무일자목록);
+            return { ...p, 복수근무일: true, 근무일자목록: seed.length > 0 ? seed : (p?.상차일 ? [p.상차일] : []) };
+          })}
+                          workDates={_parseWorkDates(copyTarget?.근무일자목록)}
+                          onToggleWorkDate={(dateStr) => {
+                            if (!dateStr) return;
+                            setCopyTarget(p => {
+                              const set = new Set(_parseWorkDates(p?.근무일자목록));
+                              if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+                              const sorted = Array.from(set).sort();
+                              return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
+                            });
+                          }}
+                          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
+                          displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
+                        />
                       </Field>
                        <Field label="상차시간">
                         <TimeAmPmPicker
