@@ -601,16 +601,18 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
       return;
     }
     setSaving(true);
-    // ⚠️ 네트워크/서버 문제로 저장 응답이 영영 오지 않으면 "저장 중..."에 갇혀
-    // 아무 안내 없이 멈춰있던 문제가 있었다 — 20초 안에 끝나지 않으면 타임아웃
-    // 처리로 버튼을 되돌리고 오류를 보여준다(실제 저장은 나중에 성공할 수도
-    // 있으니, 팝업은 닫지 않고 다시 시도하게 한다).
+    // ⚠️ 저장 응답이 영영 오지 않으면 "저장 중..."에 갇혀 아무 안내 없이 멈춰있던
+    // 문제가 있었다 — 일정 시간 안에 끝나지 않으면 타임아웃 처리로 버튼을 되돌리고
+    // 오류를 보여준다(실제 저장은 나중에 성공할 수도 있으니, 팝업은 닫지 않고
+    // 다시 시도하게 한다). "네트워크 문제"로 단정하지 않는다 — patchDispatch는
+    // knownPrev(이 행 데이터)를 넘겨받아 캐시/서버 조회 없이 즉시 진행하므로,
+    // 정상적인 상황이라면 이 타임아웃은 사실상 걸릴 일이 없어야 한다.
     let timedOut = false;
     const timer = window.setTimeout(() => {
       timedOut = true;
       setSaving(false);
-      setSaveError("저장이 지연되고 있습니다. 네트워크 상태를 확인 후 다시 시도해주세요.");
-    }, 20000);
+      setSaveError("저장이 지연되고 있습니다. 잠시 후 다시 시도해주세요.");
+    }, 8000);
     try {
       if (multiMode) {
         if (workDates.length === 0) return;
@@ -3176,7 +3178,7 @@ const addDispatch = async (record) => {
     );
   };
 
-const patchDispatch = async (_id, patch) => {
+const patchDispatch = async (_id, patch, knownPrev) => {
   if (!_id) return;
 
   // 🚫 블랙 기사 / 메모 기사 차량번호 입력 시 경고
@@ -3208,14 +3210,18 @@ const patchDispatch = async (_id, patch) => {
   // 되어, 오더가 많은 회사에서는 전달상태 등 단순 토글 하나에도 매번 그 비용이 들어 렉으로
   // 느껴졌다 — 배열을 합치지 않고 각 캐시에서 순서대로 찾는다(첫 번째에서 찾으면 두 번째는
   // 아예 스캔하지 않는다).
-  const cached = ordersCache.find(d => d._id === _id) || dispatchCache.find(d => d._id === _id);
+  // ⭐ 호출하는 쪽이 이미 화면에 그려진 행 데이터(row)를 들고 있는 경우(근무일 수정
+  // 팝업, 오더복사/수정 패널 등) knownPrev로 넘겨주면, 오더가 많은 회사에서 실시간
+  // 캐시가 아직 그 문서를 못 담고 있는 드문 순간에도 getDoc 왕복 없이 바로 저장한다 —
+  // 실사이트에서 "저장이 지연되고 있습니다" 타임아웃까지 걸리던 지연의 유력한 원인.
+  const cached = knownPrev || ordersCache.find(d => d._id === _id) || dispatchCache.find(d => d._id === _id);
 
   let ref, prev;
   if (cached) {
     ref = doc(db, cached.__col || "dispatch", _id);
     prev = cached;
   } else {
-    // fallback: getDoc (캐시에 없을 때만)
+    // fallback: getDoc (캐시에도 knownPrev에도 없을 때만)
     ref = doc(db, "dispatch", _id);
     let snap = await getDoc(ref);
     if (!snap.exists()) {
@@ -20495,16 +20501,33 @@ React.useEffect(() => {
 // 넣어 자동으로 복구한다(세션당 같은 오더는 1회만 시도, 한 번에 과도하게
 // 쓰지 않도록 상한을 둔다).
 const backfilledConfirmRef = React.useRef(new Set());
+const backfillDispatchDataRef = React.useRef(dispatchData);
+React.useEffect(() => { backfillDispatchDataRef.current = dispatchData; }, [dispatchData]);
 React.useEffect(() => {
-  const candidates = (dispatchData || []).filter(r =>
-    r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
-  ).slice(0, 200);
-  if (!candidates.length) return;
-  candidates.forEach(r => {
-    backfilledConfirmRef.current.add(r._id);
-    patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
-  });
-}, [dispatchData]);
+  // ⚠️ 예전엔 dispatchData가 바뀔 때마다 최대 200건을 한꺼번에 patchDispatch로
+  // 몰아 쐈다 — 실서비스처럼 과거 데이터가 많은 회사에서는 페이지를 열 때마다
+  // 수백 건짜리 쓰기가 한꺼번에 몰리고, 그 dispatchData 변경이 다시 이 effect를
+  // 재실행시켜(의존성이 dispatchData였음) 다음 배치가 또 몰리는 식으로 계속
+  // 이어지면서, 정작 사용자가 지금 막 배차 확정한 오더의 쓰기까지 뒤로 밀리거나
+  // 유실되는(새로고침하면 배차중으로 되돌아가 보이는) 원인이 될 수 있었다.
+  // → 화면 진입 시 딱 한 번만 시작해서, 아주 소량씩(2건) 여유 간격(5초)으로
+  // 천천히 흘려보내고, 세션당 상한(40건)을 둔다.
+  let cancelled = false;
+  const SESSION_CAP = 40;
+  const tick = () => {
+    if (cancelled) return;
+    if (backfilledConfirmRef.current.size >= SESSION_CAP) return;
+    const candidates = (backfillDispatchDataRef.current || []).filter(r =>
+      r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+    ).slice(0, 2);
+    candidates.forEach(r => {
+      backfilledConfirmRef.current.add(r._id);
+      patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+    });
+  };
+  const timer = setInterval(tick, 5000);
+  return () => { cancelled = true; clearInterval(timer); };
+}, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
@@ -24662,7 +24685,7 @@ const head = isDark
     companyName={userCompany}
     onClose={() => setWorkDatesEditRow(null)}
     onSave={async (patch) => {
-      const ok = await patchDispatch(workDatesEditRow._id, patch);
+      const ok = await patchDispatch(workDatesEditRow._id, patch, workDatesEditRow);
       if (ok === false) return; // 역순 날짜 등 검증 실패 — 모달을 유지해 다시 고르게 한다
       setRows(prev => prev.map(x => x._id === workDatesEditRow._id ? { ...x, ...patch } : x));
       setWorkDatesEditRow(null);
@@ -30718,16 +30741,33 @@ React.useEffect(() => {
 // 넣어 자동으로 복구한다(세션당 같은 오더는 1회만 시도, 한 번에 과도하게
 // 쓰지 않도록 상한을 둔다).
 const backfilledConfirmRef = React.useRef(new Set());
+const backfillDispatchDataRef = React.useRef(dispatchData);
+React.useEffect(() => { backfillDispatchDataRef.current = dispatchData; }, [dispatchData]);
 React.useEffect(() => {
-  const candidates = (dispatchData || []).filter(r =>
-    r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
-  ).slice(0, 200);
-  if (!candidates.length) return;
-  candidates.forEach(r => {
-    backfilledConfirmRef.current.add(r._id);
-    patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
-  });
-}, [dispatchData]);
+  // ⚠️ 예전엔 dispatchData가 바뀔 때마다 최대 200건을 한꺼번에 patchDispatch로
+  // 몰아 쐈다 — 실서비스처럼 과거 데이터가 많은 회사에서는 페이지를 열 때마다
+  // 수백 건짜리 쓰기가 한꺼번에 몰리고, 그 dispatchData 변경이 다시 이 effect를
+  // 재실행시켜(의존성이 dispatchData였음) 다음 배치가 또 몰리는 식으로 계속
+  // 이어지면서, 정작 사용자가 지금 막 배차 확정한 오더의 쓰기까지 뒤로 밀리거나
+  // 유실되는(새로고침하면 배차중으로 되돌아가 보이는) 원인이 될 수 있었다.
+  // → 화면 진입 시 딱 한 번만 시작해서, 아주 소량씩(2건) 여유 간격(5초)으로
+  // 천천히 흘려보내고, 세션당 상한(40건)을 둔다.
+  let cancelled = false;
+  const SESSION_CAP = 40;
+  const tick = () => {
+    if (cancelled) return;
+    if (backfilledConfirmRef.current.size >= SESSION_CAP) return;
+    const candidates = (backfillDispatchDataRef.current || []).filter(r =>
+      r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+    ).slice(0, 2);
+    candidates.forEach(r => {
+      backfilledConfirmRef.current.add(r._id);
+      patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+    });
+  };
+  const timer = setInterval(tick, 5000);
+  return () => { cancelled = true; clearInterval(timer); };
+}, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
@@ -34012,7 +34052,7 @@ return (
     onClose={() => setWorkDatesEditRow(null)}
     onSave={async (patch) => {
       const wid = getId(workDatesEditRow);
-      const ok = await patchDispatch(wid, patch);
+      const ok = await patchDispatch(wid, patch, workDatesEditRow);
       if (ok === false) return; // 역순 날짜 등 검증 실패 — 모달을 유지해 다시 고르게 한다
       setLocalOverrides(prev => ({ ...prev, [wid]: { ...(prev[wid] || {}), ...patch } }));
       setWorkDatesEditRow(null);
