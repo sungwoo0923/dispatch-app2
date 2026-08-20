@@ -129,6 +129,103 @@ export const fuel = functions.https.onRequest(async (req, res) => {
 });
 
 /* ==============================
+   ⏰ 미배차 임박 자동 알림
+   — 5분마다 실행. 상차 30분 전까지 배차중(기사 미배정)인 오더를 찾아,
+   등록한 담당자에게 자동으로 푸시알림을 보낸다. 문자(SMS)는 이 프로젝트에
+   유료 SMS 게이트웨이 연동이 없어(모든 "문자보내기"가 sms: 링크로 휴대폰
+   문자 앱을 열어주기만 하는 방식) 서버에서 자동으로 보낼 수 없다 — 대신
+   이미 갖춰져 있는 FCM 푸시알림으로 구현한다. 같은 오더에 중복 발송하지
+   않도록 urgentPushSentAt을 찍어 마킹해둔다.
+============================== */
+function normalizeTimeToHHMM(t) {
+  if (!t) return "";
+  let s = String(t).trim();
+  s = s.replace("시 ", ":").replace("시", ":").replace("분", "");
+  if (/:\s*$/.test(s)) s += "00";
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s.padStart(5, "0");
+  const m = s.match(/(오전|오후)\s*(\d{1,2}):?(\d{2})?/);
+  if (!m) return "";
+  let [, ampm, hh, mm] = m;
+  mm = mm ?? "00";
+  hh = parseInt(hh, 10);
+  if (ampm === "오후" && hh < 12) hh += 12;
+  if (ampm === "오전" && hh === 12) hh = 0;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
+export const notifyUnassignedUrgent = functions.pubsub
+  .schedule("every 5 minutes")
+  .timeZone("Asia/Seoul")
+  .onRun(async () => {
+    const nowMs = Date.now();
+    const nowKst = new Date(nowMs + 9 * 60 * 60 * 1000);
+    const todayStr = nowKst.toISOString().slice(0, 10);
+
+    // users 컬렉션은 작아서 매 실행마다 전부 불러와 이메일/uid → fcmToken 맵을 만든다
+    // (PC의 userNameMap 조회와 동일한 방식 — 오더별로 매번 쿼리하지 않는다).
+    const usersSnap = await db.collection("users").get();
+    const tokenByKey = new Map();
+    usersSnap.docs.forEach((d) => {
+      const data = d.data() || {};
+      if (!data.fcmToken) return;
+      tokenByKey.set(d.id, data.fcmToken);
+      if (data.email) tokenByKey.set(String(data.email).trim().toLowerCase(), data.fcmToken);
+    });
+
+    let sent = 0;
+    for (const col of ["dispatch", "orders"]) {
+      let snap;
+      try {
+        snap = await db.collection(col)
+          .where("배차상태", "==", "배차중")
+          .where("상차일", "==", todayStr)
+          .get();
+      } catch (e) {
+        console.warn(`⏰ ${col} 조회 실패:`, e?.message || e);
+        continue;
+      }
+
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
+        if (data.urgentPushSentAt) continue; // 이미 이 오더는 알림을 보냈음
+
+        const t24 = normalizeTimeToHHMM(data["상차시간"]);
+        if (!t24) continue;
+        const dt = new Date(`${data["상차일"]}T${t24}:00+09:00`);
+        const diffMin = (dt.getTime() - nowMs) / 60000;
+        if (diffMin <= 0 || diffMin > 30) continue; // 30분 이내로 임박한 것만
+
+        const creatorRaw =
+          data["등록자명"] || data["createdByName"] || data["등록자"] ||
+          data["createdByEmail"] || data["createdBy"] || data["작성자"] || "";
+        if (!creatorRaw) continue;
+
+        const token = tokenByKey.get(creatorRaw) || tokenByKey.get(String(creatorRaw).trim().toLowerCase());
+        if (!token) continue;
+
+        try {
+          await messaging.send({
+            token,
+            notification: {
+              title: "⏰ 미배차 임박",
+              body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} (${data["상차시간"] || ""} 상차 예정, 아직 미배차)`,
+            },
+            android: { priority: "high" },
+            apns: { payload: { aps: { sound: "default" } } },
+          });
+          sent++;
+        } catch (e) {
+          console.warn("⏰ 미배차 임박 알림 발송 실패:", e?.message || e);
+        }
+
+        await docSnap.ref.update({ urgentPushSentAt: FieldValue.serverTimestamp() }).catch(() => {});
+      }
+    }
+
+    console.log(`⏰ 미배차 임박 자동 알림 체크 완료 (발송 ${sent}건)`);
+  });
+
+/* ==============================
    🗑️ 첨부파일 6개월 경과 자동삭제
    — 매일 실행되며, 등록(createdAt) 후 6개월이 지난 첨부파일 중
    사용자가 "잠금"을 걸어두지 않은(잠금 !== true) 파일만 삭제한다.

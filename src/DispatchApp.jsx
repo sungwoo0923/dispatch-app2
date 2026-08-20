@@ -553,11 +553,20 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
 // 4파트(실시간배차현황)/5파트(배차현황)/모바일에서 공용으로 쓴다. 저장하면
 // 근무일자목록 + 상차일(최솟값)/하차일(최댓값)을 함께 patchDispatch한다.
 function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
-  const [workDates, setWorkDates] = React.useState(() => {
-    const wd = _parseWorkDates(row?.근무일자목록);
-    if (wd.length > 0) return wd;
-    return row?.상차일 ? [row.상차일] : [];
-  });
+  const initWorkDates = _parseWorkDates(row?.근무일자목록);
+  // ⭐ "상차일 하나 + 하차일 하나"를 그냥 순서대로 고른 것과, "근무일을 여러 날 따로
+  // 골라 묶음으로 등록"하는 것은 서로 다른 조작이다. 기존엔 이 팝업이 무조건
+  // 다중선택(근무일자목록) 모드였어서, 상차일·하차일을 하나씩만 골라도 "묶음 2일"로
+  // 저장돼버리는 버그가 있었다. 실제로 근무일자목록이 2건 이상이었던 오더(이미
+  // 묶음이었던 오더)만 다중선택 모드로 열고, 그 외(보통의 상차일~하차일 구간)는
+  // 3파트 등록폼과 동일하게 "상/하차일 각각 클릭" 모드로 연다 — 다중선택은
+  // 아래 "묶음(다중선택)" 버튼을 눌러야만 켜진다.
+  const [multiMode, setMultiMode] = React.useState(initWorkDates.length > 1);
+  const [pickupDate, setPickupDate] = React.useState(row?.상차일 || "");
+  const [dropDate, setDropDate] = React.useState(row?.하차일 || "");
+  const [workDates, setWorkDates] = React.useState(
+    initWorkDates.length > 0 ? initWorkDates : (row?.상차일 ? [row.상차일] : [])
+  );
   const [saving, setSaving] = React.useState(false);
 
   const toggleWorkDate = (dateStr) => {
@@ -570,43 +579,69 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
   };
 
   const handleSave = async () => {
-    if (workDates.length === 0) return;
     setSaving(true);
-    const sorted = [...workDates].sort();
     try {
-      await onSave({
-        근무일자목록: sorted,
-        상차일: sorted[0],
-        하차일: sorted[sorted.length - 1],
-      });
+      if (multiMode) {
+        if (workDates.length === 0) return;
+        const sorted = [...workDates].sort();
+        await onSave({
+          근무일자목록: sorted,
+          상차일: sorted[0],
+          하차일: sorted[sorted.length - 1],
+          복수근무일: true,
+        });
+      } else {
+        if (!pickupDate || !dropDate) return;
+        // 묶음이 아닌 보통 구간으로 저장 — 예전에 묶음이었다가 여기서 다시 일반
+        // 구간으로 바꾼 경우까지 대비해 근무일자목록/복수근무일도 함께 비운다.
+        await onSave({
+          상차일: pickupDate,
+          하차일: dropDate,
+          근무일자목록: [],
+          복수근무일: false,
+        });
+      }
     } finally {
       setSaving(false);
     }
   };
+
+  const canSave = multiMode ? workDates.length > 0 : (!!pickupDate && !!dropDate);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[999999]" onClick={onClose}>
       <div className="w-[620px] max-w-[94vw] flex flex-col gap-2" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-1">
           <h3 className="text-[14px] font-bold text-white">
-            근무일 수정{row?.거래처명 ? ` · ${row.거래처명}` : ""}
+            {multiMode ? "근무일 수정(묶음)" : "상/하차일 수정"}{row?.거래처명 ? ` · ${row.거래처명}` : ""}
           </h3>
-          <button type="button" onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMultiMode(v => !v)}
+              className={`text-[12px] font-bold px-2.5 py-1 rounded-lg transition ${multiMode ? "bg-black text-white" : "bg-white/15 text-white hover:bg-white/25"}`}
+            >
+              묶음(다중선택){multiMode ? " 켜짐" : ""}
+            </button>
+            <button type="button" onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+          </div>
         </div>
         <OrderCalendarPanel
           companyName={companyName}
-          multiMode={true}
+          multiMode={multiMode}
           workDates={workDates}
           onToggleWorkDate={toggleWorkDate}
-          pickupDate={workDates[0] || ""}
-          dropDate={workDates[workDates.length - 1] || ""}
+          pickupDate={multiMode ? (workDates[0] || "") : pickupDate}
+          dropDate={multiMode ? (workDates[workDates.length - 1] || "") : dropDate}
+          onPickupChange={setPickupDate}
+          onDropChange={setDropDate}
         />
         <div className="bg-white rounded-2xl shadow-md border border-gray-200 px-4 py-3 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">취소</button>
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || workDates.length === 0}
+            disabled={saving || !canSave}
             className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] disabled:opacity-40"
           >
             {saving ? "저장 중..." : "저장"}
@@ -18896,7 +18931,10 @@ function _fmtKst(v) {
   return ms ? new Date(ms).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "-";
 }
 function _creatorLabel(r, userNameMap) {
-  const raw = r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "";
+  // ⭐ 작성자(auth.currentUser?.email)는 addDispatch가 예외 없이 모든 오더에 항상 남기는
+  // 필드라, myRealName 로딩 타이밍 문제로 등록자명/createdByName이 비어있거나 예전
+  // 형식이라 매칭이 안 되는 오래된 오더도 여기로 폴백하면 이름 해석이 훨씬 더 잘 된다.
+  const raw = r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || r?.작성자 || "";
   if (!raw) return "-";
   const resolved = userNameMap?.get(raw) || userNameMap?.get(String(raw).trim().toLowerCase());
   return resolved || raw;
@@ -20345,6 +20383,24 @@ React.useEffect(() => {
   return () => unsub();
 }, []);
 
+// ⭐ 배차확정일시 소급 보정 — "배차한시간이 항상 -로 보인다"는 신고의 원인은,
+// 이 필드를 등록/배차 즉시 남기도록 고치기 전까지는 아예 기록되지 않았기
+// 때문이다. 이미 배차완료 상태인데 이 필드가 없는 오더를 화면에서 발견하면,
+// 같은 목적으로 이미 쓰이던 배차완료일시(없으면 지금 시각)로 한 번만 채워
+// 넣어 자동으로 복구한다(세션당 같은 오더는 1회만 시도, 한 번에 과도하게
+// 쓰지 않도록 상한을 둔다).
+const backfilledConfirmRef = React.useRef(new Set());
+React.useEffect(() => {
+  const candidates = (dispatchData || []).filter(r =>
+    r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+  ).slice(0, 200);
+  if (!candidates.length) return;
+  candidates.forEach(r => {
+    backfilledConfirmRef.current.add(r._id);
+    patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+  });
+}, [dispatchData]);
+
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
 // 기존 거래처와 주소가 다르면 그냥 덮어쓰지 않고 "새 주소로 업데이트 / 기존 주소
@@ -21466,6 +21522,9 @@ const getDispatchConfirmedMs = (r) => toMs(r?.배차확정일시);
 // 이메일/계정아이디만 저장돼 있는 경우(과거 오더, 또는 실명이 아직 반영 안 된
 // 등록 경로), userNameMap(uid/이메일 → users/{uid}.name)으로 실명을 다시 찾아준다.
 const getCreatorLabel = (r, userNameMap) => {
+  // ⭐ 작성자(auth.currentUser?.email)는 addDispatch가 예외 없이 모든 오더에 항상 남기는
+  // 필드라, myRealName 로딩 타이밍 문제로 등록자명/createdByName이 비어있거나 예전
+  // 형식이라 매칭이 안 되는 오래된 오더도 여기로 폴백하면 이름 해석이 훨씬 더 잘 된다.
   const raw =
     r?.등록자명 ||
     r?.createdByName ||
@@ -21473,6 +21532,7 @@ const getCreatorLabel = (r, userNameMap) => {
     r?.createdByEmail ||
     r?.createdBy ||
     r?.createdByUid ||
+    r?.작성자 ||
     "";
   if (!raw) return "-";
   const resolved = userNameMap?.get(raw) || userNameMap?.get(String(raw).trim().toLowerCase());
@@ -30530,6 +30590,24 @@ React.useEffect(() => {
   }, () => {});
   return () => unsub();
 }, []);
+
+// ⭐ 배차확정일시 소급 보정 — "배차한시간이 항상 -로 보인다"는 신고의 원인은,
+// 이 필드를 등록/배차 즉시 남기도록 고치기 전까지는 아예 기록되지 않았기
+// 때문이다. 이미 배차완료 상태인데 이 필드가 없는 오더를 화면에서 발견하면,
+// 같은 목적으로 이미 쓰이던 배차완료일시(없으면 지금 시각)로 한 번만 채워
+// 넣어 자동으로 복구한다(세션당 같은 오더는 1회만 시도, 한 번에 과도하게
+// 쓰지 않도록 상한을 둔다).
+const backfilledConfirmRef = React.useRef(new Set());
+React.useEffect(() => {
+  const candidates = (dispatchData || []).filter(r =>
+    r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+  ).slice(0, 200);
+  if (!candidates.length) return;
+  candidates.forEach(r => {
+    backfilledConfirmRef.current.add(r._id);
+    patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+  });
+}, [dispatchData]);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
 // 선택수정/오더복사 수정패널에서 상/하차지 주소를 바꿔 저장할 때, 같은 업체명의
