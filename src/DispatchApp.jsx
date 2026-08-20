@@ -4491,33 +4491,128 @@ export {
 // 차량제원 팝업의 "카고 차량 제원표"에 그대로 표시하기 위한 원본 그대로의 데이터.
 // LOAD_VEHICLES(계산기용, cm 단위로 환산)와 별개로 이 표는 원본 문구(범위 표기 등)를
 // 그대로 보여주는 용도라 값을 가공하지 않는다.
+// l(적재함 길이)·w(폭)는 cm, maxKg는 kg — LOAD_VEHICLES와 동일한 값을 그대로 들고 있어
+// "최대 적재 중량/최대 적재 파렛"을 표에서 자동 계산할 수 있게 한다(calcPalletFit 참고).
+// 관리자가 더블클릭으로 수정하면 이 값들이 override로 대체된다(specOverrides).
 const CARGO_VEHICLE_SPEC_TABLE = [
-  { ton: "1톤",    category: "일반",        bedLength: "2.7~2.85m",   widthRef: "약 1.6m",       name: "1톤" },
-  { ton: "",        category: "장축",        bedLength: "3.0~3.1m",    widthRef: "약 1.6m",       name: "1톤 장축" },
-  { ton: "1.4톤",  category: "일반",        bedLength: "2.9~3.1m",    widthRef: "약 1.6~1.7m",   name: "1.4톤" },
-  { ton: "",        category: "장축",        bedLength: "3.4m 전후",   widthRef: "약 1.7m",       name: "1.4톤 장축" },
-  { ton: "2.5톤",  category: "일반",        bedLength: "4.2~4.3m",    widthRef: "약 1.8m",       name: "2.5톤" },
-  { ton: "3.5톤",  category: "일반",        bedLength: "4.5~4.9m",    widthRef: "약 2.05m",      name: "3.5톤" },
-  { ton: "",        category: "장축/초장축", bedLength: "5.0~5.5m 전후", widthRef: "약 2.05~2.3m", name: "3.5톤 장축" },
-  { ton: "",        category: "와이드/광폭", bedLength: "5.2~6.2m",    widthRef: "2.3m 전후",     name: "3.5톤 와이드" },
-  { ton: "5톤",    category: "일반",        bedLength: "6.2~6.3m",    widthRef: "2.15~2.3m",     name: "5톤" },
-  { ton: "",        category: "장축/플러스", bedLength: "6.7~7.3m",    widthRef: "약 2.3m",       name: "5톤 플러스" },
-  { ton: "",        category: "축차/플러스축", bedLength: "7.3~8.5m",  widthRef: "약 2.3~2.4m",   name: "5톤 축" },
-  { ton: "",        category: "초장축/특장", bedLength: "9.0~9.7m",    widthRef: "약 2.4m",       name: "5톤/5.5톤/8.5톤 증톤 등" },
-  { ton: "8톤",    category: "일반/장축",   bedLength: "7.3~8m 전후", widthRef: "약 2.35m",      name: "8톤" },
-  { ton: "",        category: "장축/특장",   bedLength: "8~9m대",      widthRef: "약 2.4m",       name: "8톤" },
-  { ton: "9.5톤",  category: "일반/장축",   bedLength: "8~9.5m 전후", widthRef: "약 2.35~2.4m",  name: "9.5톤" },
-  { ton: "11톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "11톤" },
-  { ton: "",        category: "장축",        bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "11톤 장축" },
-  { ton: "",        category: "초장축/후축", bedLength: "10.0~10.2m", widthRef: "2.4m 전후",     name: "11톤 후축" },
-  { ton: "14톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "14톤" },
-  { ton: "",        category: "장축/후축",   bedLength: "9.6~10.2m",  widthRef: "약 2.4m",       name: "14톤 후축" },
-  { ton: "18톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "18톤" },
-  { ton: "22톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "22톤" },
-  { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤" },
-  { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라" },
-  { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등" },
+  { ton: "1톤",    category: "일반",        bedLength: "2.7~2.85m",   widthRef: "약 1.6m",       name: "1톤",                     l: 278,  w: 160, maxKg: 1000  },
+  { ton: "",        category: "장축",        bedLength: "3.0~3.1m",    widthRef: "약 1.6m",       name: "1톤 장축",               l: 305,  w: 160, maxKg: 1000  },
+  { ton: "1.4톤",  category: "일반",        bedLength: "2.9~3.1m",    widthRef: "약 1.6~1.7m",   name: "1.4톤",                   l: 300,  w: 165, maxKg: 1400  },
+  { ton: "",        category: "장축",        bedLength: "3.4m 전후",   widthRef: "약 1.7m",       name: "1.4톤 장축",             l: 340,  w: 170, maxKg: 1400  },
+  { ton: "2.5톤",  category: "일반",        bedLength: "4.2~4.3m",    widthRef: "약 1.8m",       name: "2.5톤",                   l: 425,  w: 180, maxKg: 2500  },
+  { ton: "3.5톤",  category: "일반",        bedLength: "4.5~4.9m",    widthRef: "약 2.05m",      name: "3.5톤",                   l: 470,  w: 205, maxKg: 3500  },
+  { ton: "",        category: "장축/초장축", bedLength: "5.0~5.5m 전후", widthRef: "약 2.05~2.3m", name: "3.5톤 장축",           l: 525,  w: 218, maxKg: 3500  },
+  { ton: "",        category: "와이드/광폭", bedLength: "5.2~6.2m",    widthRef: "2.3m 전후",     name: "3.5톤 와이드",           l: 570,  w: 230, maxKg: 3500  },
+  { ton: "5톤",    category: "일반",        bedLength: "6.2~6.3m",    widthRef: "2.15~2.3m",     name: "5톤",                     l: 625,  w: 223, maxKg: 5000  },
+  { ton: "",        category: "장축/플러스", bedLength: "6.7~7.3m",    widthRef: "약 2.3m",       name: "5톤 플러스",             l: 700,  w: 230, maxKg: 5000  },
+  { ton: "",        category: "축차/플러스축", bedLength: "7.3~8.5m",  widthRef: "약 2.3~2.4m",   name: "5톤 축",                 l: 790,  w: 235, maxKg: 5000  },
+  { ton: "",        category: "초장축/특장", bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "5톤/5.5톤/8.5톤 증톤 등", l: 960,  w: 240, maxKg: 5000  },
+  { ton: "8톤",    category: "일반/장축",   bedLength: "7.3~8m 전후", widthRef: "약 2.35m",      name: "8톤",                     l: 765,  w: 235, maxKg: 8000  },
+  { ton: "",        category: "장축/특장",   bedLength: "8~9m대",      widthRef: "약 2.4m",       name: "8톤 특장",               l: 850,  w: 240, maxKg: 8000  },
+  { ton: "9.5톤",  category: "일반/장축",   bedLength: "8~9.5m 전후", widthRef: "약 2.35~2.4m",  name: "9.5톤",                   l: 875,  w: 238, maxKg: 9500  },
+  { ton: "11톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "11톤",                    l: 900,  w: 235, maxKg: 11000 },
+  { ton: "",        category: "장축",        bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "11톤 장축",              l: 960,  w: 240, maxKg: 11000 },
+  { ton: "",        category: "초장축/후축", bedLength: "10.2m 전후", widthRef: "2.4m 전후",     name: "11톤 후축",              l: 1020, w: 240, maxKg: 11000 },
+  { ton: "14톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "14톤",                    l: 900,  w: 235, maxKg: 14000 },
+  { ton: "",        category: "장축/후축",   bedLength: "9.6~10.2m",  widthRef: "약 2.4m",       name: "14톤 후축",              l: 990,  w: 240, maxKg: 14000 },
+  { ton: "18톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "18톤",                    l: 1010, w: 240, maxKg: 18000 },
+  { ton: "22톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "22톤",                    l: 1010, w: 240, maxKg: 22000 },
+  { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤",                    l: 1010, w: 240, maxKg: 25000 },
+  { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라",         l: 1200, w: 240, maxKg: 25000 },
+  { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등",           l: 1200, w: 240, maxKg: 25000 },
 ];
+
+// 파렛트가 적재함에 가로/세로 어느 방향으로 놓여야 더 많이 실리는지 계산 — 계산기
+// (FloatingCalculator)와 차량제원표(최대 적재 파렛 자동계산)에서 공용으로 쓴다.
+function calcPalletFit(veh, pw_mm, pd_mm) {
+  const pw = pw_mm / 10; const pd = pd_mm / 10;
+  if (pw <= 0 || pd <= 0) return { cols: 0, rows: 0, rotated: false };
+  const o1c = Math.floor(veh.w / pw); const o1r = Math.floor(veh.l / pd);
+  const o2c = Math.floor(veh.w / pd); const o2r = Math.floor(veh.l / pw);
+  if (o1c * o1r >= o2c * o2r) return { cols: o1c, rows: o1r, rotated: false };
+  return { cols: o2c, rows: o2r, rotated: true };
+}
+// 차량제원표에 "최대 적재 파렛"을 자동 표시할 때 기준으로 삼는 규격 — N11(1100×1100)이
+// 현장에서 가장 흔히 쓰이는 표준 파렛트라 이 규격 기준으로 계산한다.
+function maxN11PalletCount(veh) {
+  if (!veh || !veh.l || !veh.w) return 0;
+  const fit = calcPalletFit(veh, 1100, 1100);
+  return fit.cols * fit.rows;
+}
+// 관리자가 더블클릭으로 수정한 값(override)을 기본 행에 덮어씌워 화면에 보여줄
+// 최종 값을 만든다. 길이/폭이 override되면 표시 텍스트(bedLength/widthRef)도
+// "X.XXm" 형태의 단일 값으로 바뀐다(원본의 범위 표기는 override 전까지만 유지).
+function applySpecOverride(base, ov) {
+  if (!ov) return base;
+  const l = ov.l ?? base.l;
+  const w = ov.w ?? base.w;
+  const maxKg = ov.maxKg ?? base.maxKg;
+  return {
+    ...base,
+    ton: ov.ton ?? base.ton,
+    category: ov.category ?? base.category,
+    name: ov.name ?? base.name,
+    l, w, maxKg,
+    bedLength: ov.l != null ? `${(l / 100).toFixed(2)}m` : base.bedLength,
+    widthRef: ov.w != null ? `${(w / 100).toFixed(2)}m` : base.widthRef,
+  };
+}
+
+// 차량제원표(카고/윙바디) 더블클릭 수정 팝업 — 관리자~최고관리자 전용. 길이/폭/최대중량을
+// 고치면 최대 적재 파렛은 calcPalletFit 기준으로 자동 재계산되어 별도 입력칸이 없다.
+function VehicleSpecEditModal({ initial, onSave, onCancel, onReset, hasOverride }) {
+  const [ton, setTon] = React.useState(initial.ton || "");
+  const [category, setCategory] = React.useState(initial.category || "");
+  const [name, setName] = React.useState(initial.name || "");
+  const [lengthM, setLengthM] = React.useState(initial.l ? (initial.l / 100).toFixed(2) : "");
+  const [widthM, setWidthM] = React.useState(initial.w ? (initial.w / 100).toFixed(2) : "");
+  const [maxT, setMaxT] = React.useState(initial.maxKg ? (initial.maxKg / 1000).toFixed(1) : "");
+
+  const inpSt = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]";
+  const lblSt = "text-[11px] font-bold text-gray-500 mb-1 block";
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-[380px]">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-base font-bold">차량 제원 수정</h3>
+          <button onClick={onCancel} className="text-gray-500 hover:text-black text-lg">✕</button>
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={lblSt}>톤수</label><input className={inpSt} value={ton} onChange={e => setTon(e.target.value)} /></div>
+            <div><label className={lblSt}>구분</label><input className={inpSt} value={category} onChange={e => setCategory(e.target.value)} /></div>
+          </div>
+          <div><label className={lblSt}>실무상 명칭</label><input className={inpSt} value={name} onChange={e => setName(e.target.value)} /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={lblSt}>적재함 길이 (m)</label><input type="number" step="0.01" className={inpSt} value={lengthM} onChange={e => setLengthM(e.target.value)} /></div>
+            <div><label className={lblSt}>폭 (m)</label><input type="number" step="0.01" className={inpSt} value={widthM} onChange={e => setWidthM(e.target.value)} /></div>
+          </div>
+          <div><label className={lblSt}>최대 적재 중량 (t)</label><input type="number" step="0.1" className={inpSt} value={maxT} onChange={e => setMaxT(e.target.value)} /></div>
+          <div className="text-[11px] text-gray-500 leading-relaxed bg-gray-50 rounded-lg px-3 py-2">
+            최대 적재 파렛(N11 1100×1100 기준)은 길이·폭 값으로 자동 계산되어 표시됩니다.
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-5">
+          {hasOverride && (
+            <button onClick={onReset} className="px-3 py-2 rounded-lg text-[12px] font-bold text-rose-600 border border-rose-200 hover:bg-rose-50">원본으로 복원</button>
+          )}
+          <div className="flex-1" />
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">취소</button>
+          <button
+            onClick={() => onSave({
+              ton: ton.trim(), category: category.trim(), name: name.trim(),
+              l: Math.round(parseFloat(lengthM) * 100) || initial.l,
+              w: Math.round(parseFloat(widthM) * 100) || initial.w,
+              maxKg: Math.round(parseFloat(maxT) * 1000) || initial.maxKg,
+            })}
+            className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60]"
+          >저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // 파렛트 종류별 규격·자체무게 — "RUN박성우충괄팀장님의 메시지" 기준표를 그대로 반영.
 // EL14처럼 무게가 범위로 안내된 경우 kg은 계산용 평균값을 쓰고 kgLabel에 원래
@@ -4575,13 +4670,13 @@ const LOAD_VEHICLES = [
   { name: "5톤",          l: 625,  w: 223, h: 200, maxKg: 5000  },
   { name: "5톤 플러스",   l: 700,  w: 230, h: 200, maxKg: 5000  },
   { name: "5톤 축",       l: 790,  w: 235, h: 200, maxKg: 5000  },
-  { name: "5톤 초장축",   l: 935,  w: 240, h: 200, maxKg: 5000  },
+  { name: "5톤 초장축",   l: 960,  w: 240, h: 200, maxKg: 5000  },
   { name: "8톤",          l: 765,  w: 235, h: 210, maxKg: 8000  },
   { name: "8톤 특장",     l: 850,  w: 240, h: 210, maxKg: 8000  },
   { name: "9.5톤",        l: 875,  w: 238, h: 210, maxKg: 9500  },
   { name: "11톤",         l: 900,  w: 235, h: 210, maxKg: 11000 },
   { name: "11톤 장축",    l: 960,  w: 240, h: 210, maxKg: 11000 },
-  { name: "11톤 후축",    l: 1010, w: 240, h: 210, maxKg: 11000 },
+  { name: "11톤 후축",    l: 1020, w: 240, h: 210, maxKg: 11000 },
   { name: "14톤",         l: 900,  w: 235, h: 220, maxKg: 14000 },
   { name: "14톤 후축",    l: 990,  w: 240, h: 220, maxKg: 14000 },
   { name: "18톤",         l: 1010, w: 240, h: 230, maxKg: 18000 },
@@ -5072,7 +5167,17 @@ function FloatingCalculator({ onClose }) {
                       {palTypeResult.fitVeh ? (
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                           <TruckIcon size={22} color="white" />
-                          <span style={{ fontSize: 22, fontWeight: 700, color: "white" }}>{palTypeResult.fitVeh.name}부터 상차 가능</span>
+                          <span style={{ fontSize: 20, fontWeight: 700, color: "white" }}>
+                            {(() => {
+                              // "5톤 초장축" → "5톤(9.6M) 초장축부터 상차 가능" 처럼 톤수 뒤에
+                              // 실측 길이(m)를 끼워 넣어 몇 미터 차량인지 바로 보이게 한다.
+                              const v = palTypeResult.fitVeh;
+                              const m = v.name.match(/^(\S+)(\s+.+)?$/);
+                              const prefix = m ? m[1] : v.name;
+                              const suffix = m && m[2] ? m[2] : "";
+                              return `${prefix}(${(v.l / 100).toFixed(1)}M)${suffix}부터 상차 가능`;
+                            })()}
+                          </span>
                         </div>
                       ) : (
                         <div style={{ fontSize: 14, fontWeight: 700, color: "#fda4af" }}>적재 가능한 차량이 없습니다 (중량 또는 수량 초과)</div>
@@ -7232,6 +7337,45 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
       const [vehicleSpecTab, setVehicleSpecTab] = React.useState("vehicle"); // "vehicle" | "pallet"
+      // 차량제원표 관리자 수정(더블클릭) — 카고/윙바디 표를 회사별로 독립적으로 override.
+      const [specOverrides, setSpecOverrides] = React.useState({ cargo: {}, wing: {} });
+      const [vehicleSpecEdit, setVehicleSpecEdit] = React.useState(null); // { table: "cargo"|"wing", index }
+      React.useEffect(() => {
+        if (!vehicleSpecOpen || !userCompany) return;
+        let alive = true;
+        getDoc(doc(db, "companySettings", userCompany.trim())).then(snap => {
+          if (!alive) return;
+          const data = snap.data()?.차량제원표수정 || {};
+          setSpecOverrides({ cargo: data.cargo || {}, wing: data.wing || {} });
+        }).catch(() => {});
+        return () => { alive = false; };
+      }, [vehicleSpecOpen, userCompany]);
+      const saveVehicleSpecEdit = async (values) => {
+        if (!vehicleSpecEdit) return;
+        const { table, index } = vehicleSpecEdit;
+        const nextOverrides = { ...specOverrides, [table]: { ...specOverrides[table], [index]: values } };
+        setSpecOverrides(nextOverrides);
+        setVehicleSpecEdit(null);
+        try {
+          await setDoc(doc(db, "companySettings", userCompany.trim()), { 차량제원표수정: nextOverrides }, { merge: true });
+        } catch (e) {
+          sflowToast("저장 실패: " + e.message, "cancel");
+        }
+      };
+      const resetVehicleSpecEdit = async () => {
+        if (!vehicleSpecEdit) return;
+        const { table, index } = vehicleSpecEdit;
+        const nextTable = { ...specOverrides[table] };
+        delete nextTable[index];
+        const nextOverrides = { ...specOverrides, [table]: nextTable };
+        setSpecOverrides(nextOverrides);
+        setVehicleSpecEdit(null);
+        try {
+          await setDoc(doc(db, "companySettings", userCompany.trim()), { 차량제원표수정: nextOverrides }, { merge: true });
+        } catch (e) {
+          sflowToast("저장 실패: " + e.message, "cancel");
+        }
+      };
 const [confirmOpen, setConfirmOpen] = React.useState(false);
 const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
@@ -14037,9 +14181,63 @@ className={`
 </div>
 
 {/* ================= 차량 제원표 모달 ================= */}
-{vehicleSpecOpen && (
+{vehicleSpecOpen && (() => {
+  // 관리자 override를 반영한 최종 표시값. 카고/윙바디는 원본 데이터는 같지만
+  // 회사에서 각각 따로 고쳐 쓸 수 있게 override는 테이블별로 독립적으로 관리한다.
+  const cargoRows = CARGO_VEHICLE_SPEC_TABLE.map((v, i) => applySpecOverride(v, specOverrides.cargo[i]));
+  const wingRows = CARGO_VEHICLE_SPEC_TABLE.map((v, i) => applySpecOverride(v, specOverrides.wing[i]));
+  // 차량제원표 더블클릭 수정은 관리자~최고관리자 전용 — 위쪽의 isAdmin은 조회전용(isViewer)도
+  // 함께 true가 되는 별개 용도라 여기서는 role만으로 다시 엄격하게 판별한다.
+  const canEditVehicleSpec = role === "admin" || role === "totalMaster";
+
+  const SpecTable = ({ title, note, rows, tableKey }) => (
+    <div>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="font-semibold text-sm">{title}</h3>
+        <span className="text-xs text-gray-500">{note}{canEditVehicleSpec ? " · 행을 더블클릭하면 수정할 수 있습니다" : ""}</span>
+      </div>
+      <table className="w-full text-sm border border-gray-300">
+        <thead className="bg-blue-50 text-blue-900">
+          <tr>
+            <th className="border px-2 py-1">톤수</th>
+            <th className="border px-2 py-1">구분</th>
+            <th className="border px-2 py-1">적재함 길이</th>
+            <th className="border px-2 py-1">폭 참고</th>
+            <th className="border px-2 py-1">실무상 명칭</th>
+            <th className="border px-2 py-1">최대 적재 중량</th>
+            <th className="border px-2 py-1">최대 적재 파렛</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((v, i) => (
+            <tr
+              key={i}
+              onDoubleClick={() => { if (canEditVehicleSpec) setVehicleSpecEdit({ table: tableKey, index: i }); }}
+              className={canEditVehicleSpec ? "cursor-pointer hover:bg-amber-50 transition" : ""}
+              title={canEditVehicleSpec ? "더블클릭하여 수정" : undefined}
+            >
+              <td className="border px-2 py-1 text-center font-semibold">{v.ton}</td>
+              <td className="border px-2 py-1 text-center">{v.category}</td>
+              <td className="border px-2 py-1 text-center">{v.bedLength}</td>
+              <td className="border px-2 py-1 text-center">{v.widthRef}</td>
+              <td className="border px-2 py-1 text-center">{v.name}</td>
+              <td className="border px-2 py-1 text-center">{(v.maxKg / 1000).toLocaleString()} t</td>
+              <td className="border px-2 py-1 text-center">{maxN11PalletCount(v)}개</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const editingBase = vehicleSpecEdit
+    ? (vehicleSpecEdit.table === "cargo" ? cargoRows : wingRows)[vehicleSpecEdit.index]
+    : null;
+
+  return (
+  <>
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-    <div className="bg-white rounded-xl shadow-xl p-6 w-[900px] max-h-[85vh] overflow-auto">
+    <div className="bg-white rounded-xl shadow-xl p-6 w-[1180px] max-w-[95vw] max-h-[85vh] overflow-auto">
 
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-bold">차량·파렛 제원표</h2>
@@ -14116,69 +14314,13 @@ className={`
       </div>
 
       {/* ================= 카고 차량 ================= */}
+      <div className="mb-8">
+        <SpecTable title="카고 차량 제원표" note="톤수별 적재함 길이·폭 참고 기준" rows={cargoRows} tableKey="cargo" />
+      </div>
+
+      {/* ================= 윙바디 차량 ================= */}
       <div>
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="font-semibold text-sm">카고 차량 제원표</h3>
-          <span className="text-xs text-gray-500">톤수별 적재함 길이·폭 참고 기준</span>
-        </div>
-
-        <table className="w-full text-sm border border-gray-300">
-          <thead className="bg-blue-50 text-blue-900">
-            <tr>
-              <th className="border px-2 py-1">톤수</th>
-              <th className="border px-2 py-1">구분</th>
-              <th className="border px-2 py-1">적재함 길이</th>
-              <th className="border px-2 py-1">폭 참고</th>
-              <th className="border px-2 py-1">실무상 명칭</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {CARGO_VEHICLE_SPEC_TABLE.map((v, i) => (
-              <tr key={i}>
-                <td className="border px-2 py-1 text-center font-semibold">{v.ton}</td>
-                <td className="border px-2 py-1 text-center">{v.category}</td>
-                <td className="border px-2 py-1 text-center">{v.bedLength}</td>
-                <td className="border px-2 py-1 text-center">{v.widthRef}</td>
-                <td className="border px-2 py-1 text-center">{v.name}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {/* ================= 윙바디 차량 ================= */}
-<div className="mt-8">
-  <div className="flex justify-between items-center mb-2">
-    <h3 className="font-semibold text-sm">윙바디 차량 제원표</h3>
-    <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
-  </div>
-
-  <table className="w-full text-sm border border-gray-300">
-    <thead className="bg-blue-50 text-blue-900">
-      <tr>
-        <th className="border px-2 py-1">차량톤수</th>
-        <th className="border px-2 py-1">길이 (mm)</th>
-        <th className="border px-2 py-1">너비 (mm)</th>
-        <th className="border px-2 py-1">높이 (mm)</th>
-        <th className="border px-2 py-1">최대 적재 중량</th>
-        <th className="border px-2 py-1">최대 적재 파렛</th>
-      </tr>
-    </thead>
-
-    <tbody>
-      <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2~3개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3~4개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">6개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">8,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">11톤</td><td className="border px-2 py-1 text-center">9,600</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">11톤축</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">18톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">20 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">25톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-    </tbody>
-  </table>
-</div>
+        <SpecTable title="윙바디 차량 제원표" note="톤수별 적재함 길이·폭 참고 기준" rows={wingRows} tableKey="wing" />
       </div>
       </>)}
 
@@ -14211,7 +14353,19 @@ className={`
 
     </div>
   </div>
-)}
+
+  {vehicleSpecEdit && editingBase && (
+    <VehicleSpecEditModal
+      initial={editingBase}
+      hasOverride={!!(specOverrides[vehicleSpecEdit.table] && specOverrides[vehicleSpecEdit.table][vehicleSpecEdit.index])}
+      onCancel={() => setVehicleSpecEdit(null)}
+      onSave={saveVehicleSpecEdit}
+      onReset={resetVehicleSpecEdit}
+    />
+  )}
+  </>
+  );
+})()}
     {/* 버튼 */}
   <div className="col-span-8 flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
     <button
@@ -19679,7 +19833,10 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
                       {(r.attachCount || 0) > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                        <span
+                          className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none"
+                          style={!r.attachViewed ? { animation: "cancelSlowBlink 1.6s ease-in-out infinite" } : undefined}
+                        >
                           {r.attachCount}
                         </span>
                       )}
@@ -23965,16 +24122,19 @@ const handleCloseFileUpload = async (e) => {
   // true로 넘긴다(emphCls 대신 적용). 그 외 모든 호출은 기존과 동일하게 동작한다.
   const editableInput = (key, val, rowId, redOverride = false) => {
     const emphClsFinal = redOverride ? "font-extrabold text-red-600" : emphCls;
+    // ⭐ 상차일은 바로 옆 등록일(밑줄만 있고 굵기 없음)과 구분이 잘 안 간다는 피드백으로
+    // 다른 emphKeys보다 글씨를 한 단계 더 키운다.
+    const clsFor = (k) => k === "상차일" ? `${emphClsFinal} text-[15.5px]` : emphClsFinal;
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
     //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
-    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
+    if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={clsFor(key)}>{val}</span> : val;
 
     // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
     if (
       !canEdit(key, rowId) &&
       !["차량종류", "지급방식", "배차방식"].includes(key)
     ) {
-      return emphKeys.includes(key) ? <span className={emphClsFinal}>{val}</span> : val;
+      return emphKeys.includes(key) ? <span className={clsFor(key)}>{val}</span> : val;
     }
 
     if (key === "상차일" || key === "하차일") {
@@ -25686,7 +25846,7 @@ checkWarningStatus(c.거래처명, "거래처");
         <option value="냉장탑">냉장탑</option>
         <option value="냉동탑">냉동탑</option>
         <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동</option>
+        <option value="냉동윙">냉동윙</option>
         <option value="냉장/냉동탑">냉장/냉동탑</option>
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="리프트">리프트</option>
@@ -34191,7 +34351,8 @@ return (
   const isMultiWork = rowWorkDates.length > 1;
   return (
     <span className="inline-flex items-center gap-1">
-      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"}`}>{row[key] || ""}</span>
+      {/* ⭐ 상차일은 바로 옆 등록일과 구분이 잘 안 간다는 피드백으로 하차일보다 한 단계 더 키운다. */}
+      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"} ${key === "상차일" ? "text-[15.5px]" : ""}`}>{row[key] || ""}</span>
       {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
           오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. 클릭하면 전체
           근무일 목록을 볼 수 있게 오더정보(우클릭 메뉴)로 유도하는 툴팁을 붙인다. */}
@@ -34368,7 +34529,10 @@ return (
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
                       {(row.attachCount || 0) > 0 && (
-                       <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                       <span
+                         className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none"
+                         style={!row.attachViewed ? { animation: "cancelSlowBlink 1.6s ease-in-out infinite" } : undefined}
+                       >
                           {row.attachCount}
                         </span>
                       )}
@@ -35110,7 +35274,7 @@ return (
         <option value="냉장탑">냉장탑</option>
         <option value="냉동탑">냉동탑</option>
         <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동</option>
+        <option value="냉동윙">냉동윙</option>
         <option value="냉장/냉동탑">냉장/냉동탑</option>
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="리프트">리프트</option>
@@ -36547,7 +36711,7 @@ setCopyPlaceOptions(list);
         <option value="냉장탑">냉장탑</option>
         <option value="냉동탑">냉동탑</option>
         <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동</option>
+        <option value="냉동윙">냉동윙</option>
         <option value="냉장/냉동탑">냉장/냉동탑</option>
         <option value="냉장/냉동윙">냉장/냉동윙</option>
         <option value="리프트">리프트</option>
