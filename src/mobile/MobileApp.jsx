@@ -54,6 +54,22 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const role = localStorage.getItem("role") || "user";
 const collName = "dispatch";
 
+// ⭐ 복수근무일(묶음) 오더의 근무일자목록을 안전하게 배열로 복원 — PC(DispatchApp)의
+// _parseWorkDates와 동일 로직. Firestore 저장 시 배열이 {0:"...",1:"..."} 형태의
+// 객체로 바뀌는 경우가 있어, 근무일자목록을 참조하는 곳은 반드시 이 함수를 거쳐야 한다.
+function _parseWorkDates(v) {
+  if (Array.isArray(v)) return v.filter(Boolean).sort();
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p.filter(Boolean).sort(); } catch {}
+  }
+  if (v && typeof v === "object") {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]).filter(Boolean).sort();
+  }
+  return [];
+}
+
 // 기사전달용 업로드 링크 단축 — PC(DispatchApp)의 buildShortUploadUrl과 동일한 규칙으로
 // /u/{code}를 발급한다(code는 토큰에서 파생되어 재복사해도 항상 같은 링크).
 function buildShortUploadUrlMobile(orderId, token) {
@@ -11538,6 +11554,21 @@ const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
+  // ⭐ 복수근무일(묶음) — PC(DispatchApp)의 toggleWorkDate와 동일 로직. 근무일을
+  // 하나씩 클릭할 때마다 켜고/끄고를 토글하고, 상차일/하차일은 그 목록의
+  // 최솟값/최댓값으로 항상 자동 연동한다.
+  const toggleWorkDate = (dateStr) => {
+    if (!dateStr) return;
+    setForm((p) => {
+      const set = new Set(_parseWorkDates(p.근무일자목록));
+      if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+      const sorted = Array.from(set).sort();
+      return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p.상차일, 하차일: sorted[sorted.length - 1] || p.하차일 };
+    });
+  };
+  const formWorkDates = _parseWorkDates(form.근무일자목록);
+  const isMultiWorkForm = formWorkDates.length > 1 || !!form.복수근무일;
+
   const updateMoney = (key, value) =>
     
     setForm((p) => {
@@ -11940,9 +11971,16 @@ const pickDrop = (c) => {
     <div className="space-y-1.5">
       <div className="flex flex-wrap gap-1.5 min-w-0">
         <CustomDatePicker
-          className="flex-1 min-w-[100px] border rounded px-2 py-1 text-sm"
+          className={`flex-1 min-w-[100px] border rounded px-2 py-1 text-sm ${isMultiWorkForm ? "border-red-600 text-red-600 font-bold" : ""}`}
           value={form.상차일}
           onChange={(e) => update("상차일", e.target.value)}
+          multiSelect
+          multiActive={isMultiWorkForm}
+          onToggleMulti={() => update("복수근무일", !form.복수근무일)}
+          workDates={formWorkDates}
+          onToggleWorkDate={toggleWorkDate}
+          onClearWorkDates={() => update("근무일자목록", [])}
+          displayOverride={isMultiWorkForm && formWorkDates.length > 1 ? `${form.상차일 || ""} 외 ${formWorkDates.length - 1}일` : undefined}
         />
         <select
           className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"

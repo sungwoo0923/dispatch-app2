@@ -548,6 +548,75 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   );
 }
 
+// ⭐ 복수근무일(묶음) 오더 수정 팝업 — 등록할 때 쓰던 OrderCalendarPanel(multiMode)을
+// 그대로 재사용해서, 이미 등록된 오더도 근무일을 다시 골라 수정할 수 있게 한다.
+// 4파트(실시간배차현황)/5파트(배차현황)/모바일에서 공용으로 쓴다. 저장하면
+// 근무일자목록 + 상차일(최솟값)/하차일(최댓값)을 함께 patchDispatch한다.
+function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
+  const [workDates, setWorkDates] = React.useState(() => {
+    const wd = _parseWorkDates(row?.근무일자목록);
+    if (wd.length > 0) return wd;
+    return row?.상차일 ? [row.상차일] : [];
+  });
+  const [saving, setSaving] = React.useState(false);
+
+  const toggleWorkDate = (dateStr) => {
+    if (!dateStr) return;
+    setWorkDates(prev => {
+      const set = new Set(prev);
+      if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+      return Array.from(set).sort();
+    });
+  };
+
+  const handleSave = async () => {
+    if (workDates.length === 0) return;
+    setSaving(true);
+    const sorted = [...workDates].sort();
+    try {
+      await onSave({
+        근무일자목록: sorted,
+        상차일: sorted[0],
+        하차일: sorted[sorted.length - 1],
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]" onClick={onClose}>
+      <div className="w-[380px] flex flex-col gap-2" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-[14px] font-bold text-white">
+            근무일 수정{row?.거래처명 ? ` · ${row.거래처명}` : ""}
+          </h3>
+          <button type="button" onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <OrderCalendarPanel
+          companyName={companyName}
+          multiMode={true}
+          workDates={workDates}
+          onToggleWorkDate={toggleWorkDate}
+          pickupDate={workDates[0] || ""}
+          dropDate={workDates[workDates.length - 1] || ""}
+        />
+        <div className="bg-white rounded-2xl shadow-md border border-gray-200 px-4 py-3 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200">취소</button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || workDates.length === 0}
+            className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] disabled:opacity-40"
+          >
+            {saving ? "저장 중..." : "저장"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 오더에 저장된 특수운임(연휴·성수기) 여부를 판단한다. 이 기능이 추가되기 전에
 // 이미 등록돼있던 오더는 이 필드 자체가 없는데, 그런 오더도 상차일을 공휴일
 // 캘린더에 다시 대조해서 특수일이면 특수운임으로 취급한다(StandardFare.jsx의
@@ -4495,31 +4564,31 @@ export {
 // "최대 적재 중량/최대 적재 파렛"을 표에서 자동 계산할 수 있게 한다(calcPalletFit 참고).
 // 관리자가 더블클릭으로 수정하면 이 값들이 override로 대체된다(specOverrides).
 const CARGO_VEHICLE_SPEC_TABLE = [
-  { ton: "1톤",    category: "일반",        bedLength: "2.7~2.85m",   widthRef: "약 1.6m",       name: "1톤",                     l: 278,  w: 160, maxKg: 1000  },
-  { ton: "",        category: "장축",        bedLength: "3.0~3.1m",    widthRef: "약 1.6m",       name: "1톤 장축",               l: 305,  w: 160, maxKg: 1000  },
-  { ton: "1.4톤",  category: "일반",        bedLength: "2.9~3.1m",    widthRef: "약 1.6~1.7m",   name: "1.4톤",                   l: 300,  w: 165, maxKg: 1400  },
-  { ton: "",        category: "장축",        bedLength: "3.4m 전후",   widthRef: "약 1.7m",       name: "1.4톤 장축",             l: 340,  w: 170, maxKg: 1400  },
-  { ton: "2.5톤",  category: "일반",        bedLength: "4.2~4.3m",    widthRef: "약 1.8m",       name: "2.5톤",                   l: 425,  w: 180, maxKg: 2500  },
-  { ton: "3.5톤",  category: "일반",        bedLength: "4.5~4.9m",    widthRef: "약 2.05m",      name: "3.5톤",                   l: 470,  w: 205, maxKg: 3500  },
-  { ton: "",        category: "장축/초장축", bedLength: "5.0~5.5m 전후", widthRef: "약 2.05~2.3m", name: "3.5톤 장축",           l: 525,  w: 218, maxKg: 3500  },
-  { ton: "",        category: "와이드/광폭", bedLength: "5.2~6.2m",    widthRef: "2.3m 전후",     name: "3.5톤 와이드",           l: 570,  w: 230, maxKg: 3500  },
-  { ton: "5톤",    category: "일반",        bedLength: "6.2~6.3m",    widthRef: "2.15~2.3m",     name: "5톤",                     l: 625,  w: 223, maxKg: 5000  },
-  { ton: "",        category: "장축/플러스", bedLength: "6.7~7.3m",    widthRef: "약 2.3m",       name: "5톤 플러스",             l: 700,  w: 230, maxKg: 5000  },
-  { ton: "",        category: "축차/플러스축", bedLength: "7.3~8.5m",  widthRef: "약 2.3~2.4m",   name: "5톤 축",                 l: 790,  w: 235, maxKg: 5000  },
-  { ton: "",        category: "초장축/특장", bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "5톤/5.5톤/8.5톤 증톤 등", l: 960,  w: 240, maxKg: 5000  },
-  { ton: "8톤",    category: "일반/장축",   bedLength: "7.3~8m 전후", widthRef: "약 2.35m",      name: "8톤",                     l: 765,  w: 235, maxKg: 8000  },
-  { ton: "",        category: "장축/특장",   bedLength: "8~9m대",      widthRef: "약 2.4m",       name: "8톤 특장",               l: 850,  w: 240, maxKg: 8000  },
-  { ton: "9.5톤",  category: "일반/장축",   bedLength: "8~9.5m 전후", widthRef: "약 2.35~2.4m",  name: "9.5톤",                   l: 875,  w: 238, maxKg: 9500  },
-  { ton: "11톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "11톤",                    l: 900,  w: 235, maxKg: 11000 },
-  { ton: "",        category: "장축",        bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "11톤 장축",              l: 960,  w: 240, maxKg: 11000 },
-  { ton: "",        category: "초장축/후축", bedLength: "10.2m 전후", widthRef: "2.4m 전후",     name: "11톤 후축",              l: 1020, w: 240, maxKg: 11000 },
-  { ton: "14톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "14톤",                    l: 900,  w: 235, maxKg: 14000 },
-  { ton: "",        category: "장축/후축",   bedLength: "9.6~10.2m",  widthRef: "약 2.4m",       name: "14톤 후축",              l: 990,  w: 240, maxKg: 14000 },
-  { ton: "18톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "18톤",                    l: 1010, w: 240, maxKg: 18000 },
-  { ton: "22톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "22톤",                    l: 1010, w: 240, maxKg: 22000 },
-  { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤",                    l: 1010, w: 240, maxKg: 25000 },
-  { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라",         l: 1200, w: 240, maxKg: 25000 },
-  { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등",           l: 1200, w: 240, maxKg: 25000 },
+  { ton: "1톤",    category: "일반",        bedLength: "2.7~2.85m",   widthRef: "약 1.6m",       name: "1톤",                     l: 278,  w: 160, maxKg: 1100  },
+  { ton: "",        category: "장축",        bedLength: "3.0~3.1m",    widthRef: "약 1.6m",       name: "1톤 장축",               l: 305,  w: 160, maxKg: 1150  },
+  { ton: "1.4톤",  category: "일반",        bedLength: "2.9~3.1m",    widthRef: "약 1.6~1.7m",   name: "1.4톤",                   l: 300,  w: 165, maxKg: 1550  },
+  { ton: "",        category: "장축",        bedLength: "3.4m 전후",   widthRef: "약 1.7m",       name: "1.4톤 장축",             l: 340,  w: 170, maxKg: 1600  },
+  { ton: "2.5톤",  category: "일반",        bedLength: "4.2~4.3m",    widthRef: "약 1.8m",       name: "2.5톤",                   l: 425,  w: 180, maxKg: 2750  },
+  { ton: "3.5톤",  category: "일반",        bedLength: "4.5~4.9m",    widthRef: "약 2.05m",      name: "3.5톤",                   l: 470,  w: 205, maxKg: 3850  },
+  { ton: "",        category: "장축/초장축", bedLength: "5.0~5.5m 전후", widthRef: "약 2.05~2.3m", name: "3.5톤 장축",           l: 525,  w: 218, maxKg: 4000  },
+  { ton: "",        category: "와이드/광폭", bedLength: "5.2~6.2m",    widthRef: "2.3m 전후",     name: "3.5톤 와이드",           l: 570,  w: 230, maxKg: 4000  },
+  { ton: "5톤",    category: "일반",        bedLength: "6.2~6.3m",    widthRef: "2.15~2.3m",     name: "5톤",                     l: 625,  w: 223, maxKg: 5500  },
+  { ton: "",        category: "장축/플러스", bedLength: "6.7~7.3m",    widthRef: "약 2.3m",       name: "5톤 플러스",             l: 700,  w: 230, maxKg: 5800  },
+  { ton: "",        category: "축차/플러스축", bedLength: "7.3~8.5m",  widthRef: "약 2.3~2.4m",   name: "5톤 축",                 l: 790,  w: 235, maxKg: 7500  },
+  { ton: "",        category: "초장축/특장", bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "5톤/5.5톤/8.5톤 증톤 등", l: 960,  w: 240, maxKg: 8500  },
+  { ton: "8톤",    category: "일반/장축",   bedLength: "7.3~8m 전후", widthRef: "약 2.35m",      name: "8톤",                     l: 765,  w: 235, maxKg: 8800  },
+  { ton: "",        category: "장축/특장",   bedLength: "8~9m대",      widthRef: "약 2.4m",       name: "8톤 특장",               l: 850,  w: 240, maxKg: 9200  },
+  { ton: "9.5톤",  category: "일반/장축",   bedLength: "8~9.5m 전후", widthRef: "약 2.35~2.4m",  name: "9.5톤",                   l: 875,  w: 238, maxKg: 10500 },
+  { ton: "11톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "11톤",                    l: 900,  w: 235, maxKg: 12000 },
+  { ton: "",        category: "장축",        bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "11톤 장축",              l: 960,  w: 240, maxKg: 12700 },
+  { ton: "",        category: "초장축/후축", bedLength: "10.2m 전후", widthRef: "2.4m 전후",     name: "11톤 후축",              l: 1020, w: 240, maxKg: 14500 },
+  { ton: "14톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "14톤",                    l: 900,  w: 235, maxKg: 15400 },
+  { ton: "",        category: "장축/후축",   bedLength: "9.6~10.2m",  widthRef: "약 2.4m",       name: "14톤 후축",              l: 990,  w: 240, maxKg: 18200 },
+  { ton: "18톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "18톤",                    l: 1010, w: 240, maxKg: 19800 },
+  { ton: "22톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "22톤",                    l: 1010, w: 240, maxKg: 24200 },
+  { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤",                    l: 1010, w: 240, maxKg: 27500 },
+  { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라",         l: 1200, w: 240, maxKg: 27500 },
+  { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등",           l: 1200, w: 240, maxKg: 32000 },
 ];
 
 // 파렛트가 적재함에 가로/세로 어느 방향으로 놓여야 더 많이 실리는지 계산 — 계산기
@@ -4656,34 +4725,41 @@ function TruckIcon({ size = 18, color = "currentColor" }) {
 // 안 생긴다. 적재함 길이/폭이 범위로 안내된 값은 중간값을 cm로 환산해서 쓰고,
 // 자체 무게(maxKg)는 원표에 없어 톤수 표기 그대로(1톤=1,000kg 등)를 적용했다.
 // 높이(h)도 원표에 없는 값이라 인접 톤수 실측치를 참고해 추정한 값이다.
+// 최대 적재 중량(maxKg) 산정 기준 — 예전엔 전부 "톤수 그대로"(예: 5톤=5,000kg)였는데
+// 실제로는 (1) 도로교통법상 적재중량의 110%까지는 허용되고(=5톤도 실제 5,500kg까지는
+// 정상 범주), (2) 같은 톤수라도 축이 추가된 축차/후축 차량은 축이 없는 일반 차량보다
+// 훨씬 더 실을 수 있다(적재함이 길어서가 아니라 차량 자체 등록중량이 다름). 그래서
+// 구분(일반/장축/축차 등)별로 아래 배율을 적용해 차등을 뒀다 — 일반 ×1.1, 장축·와이드
+// 처럼 축은 그대로에 적재함만 긴 경우 ×1.15, 축차/후축처럼 축이 추가된 경우 ×1.4~1.5,
+// 5톤 초장축(특장)은 원표(엑셀)에 적힌 "5.5톤/8.5톤 증톤 등"의 상한을 그대로 반영했다.
 const LOAD_VEHICLES = [
   { name: "다마스",       l: 170,  w: 120, h: 110, maxKg: 300   },
   { name: "라보",         l: 200,  w: 145, h: 130, maxKg: 500   },
-  { name: "1톤",          l: 278,  w: 160, h: 170, maxKg: 1000  },
-  { name: "1톤 장축",     l: 305,  w: 160, h: 170, maxKg: 1000  },
-  { name: "1.4톤",        l: 300,  w: 165, h: 180, maxKg: 1400  },
-  { name: "1.4톤 장축",   l: 340,  w: 170, h: 180, maxKg: 1400  },
-  { name: "2.5톤",        l: 425,  w: 180, h: 190, maxKg: 2500  },
-  { name: "3.5톤",        l: 470,  w: 205, h: 190, maxKg: 3500  },
-  { name: "3.5톤 장축",   l: 525,  w: 218, h: 190, maxKg: 3500  },
-  { name: "3.5톤 와이드", l: 570,  w: 230, h: 190, maxKg: 3500  },
-  { name: "5톤",          l: 625,  w: 223, h: 200, maxKg: 5000  },
-  { name: "5톤 플러스",   l: 700,  w: 230, h: 200, maxKg: 5000  },
-  { name: "5톤 축",       l: 790,  w: 235, h: 200, maxKg: 5000  },
-  { name: "5톤 초장축",   l: 960,  w: 240, h: 200, maxKg: 5000  },
-  { name: "8톤",          l: 765,  w: 235, h: 210, maxKg: 8000  },
-  { name: "8톤 특장",     l: 850,  w: 240, h: 210, maxKg: 8000  },
-  { name: "9.5톤",        l: 875,  w: 238, h: 210, maxKg: 9500  },
-  { name: "11톤",         l: 900,  w: 235, h: 210, maxKg: 11000 },
-  { name: "11톤 장축",    l: 960,  w: 240, h: 210, maxKg: 11000 },
-  { name: "11톤 후축",    l: 1020, w: 240, h: 210, maxKg: 11000 },
-  { name: "14톤",         l: 900,  w: 235, h: 220, maxKg: 14000 },
-  { name: "14톤 후축",    l: 990,  w: 240, h: 220, maxKg: 14000 },
-  { name: "18톤",         l: 1010, w: 240, h: 230, maxKg: 18000 },
-  { name: "22톤",         l: 1010, w: 240, h: 230, maxKg: 22000 },
-  { name: "25톤",         l: 1010, w: 240, h: 240, maxKg: 25000 },
-  { name: "추레라",       l: 1200, w: 240, h: 240, maxKg: 25000 },
-  { name: "추레라 특장",  l: 1200, w: 240, h: 240, maxKg: 25000 },
+  { name: "1톤",          l: 278,  w: 160, h: 170, maxKg: 1100  },
+  { name: "1톤 장축",     l: 305,  w: 160, h: 170, maxKg: 1150  },
+  { name: "1.4톤",        l: 300,  w: 165, h: 180, maxKg: 1550  },
+  { name: "1.4톤 장축",   l: 340,  w: 170, h: 180, maxKg: 1600  },
+  { name: "2.5톤",        l: 425,  w: 180, h: 190, maxKg: 2750  },
+  { name: "3.5톤",        l: 470,  w: 205, h: 190, maxKg: 3850  },
+  { name: "3.5톤 장축",   l: 525,  w: 218, h: 190, maxKg: 4000  },
+  { name: "3.5톤 와이드", l: 570,  w: 230, h: 190, maxKg: 4000  },
+  { name: "5톤",          l: 625,  w: 223, h: 200, maxKg: 5500  },
+  { name: "5톤 플러스",   l: 700,  w: 230, h: 200, maxKg: 5800  },
+  { name: "5톤 축",       l: 790,  w: 235, h: 200, maxKg: 7500  },
+  { name: "5톤 초장축",   l: 960,  w: 240, h: 200, maxKg: 8500  },
+  { name: "8톤",          l: 765,  w: 235, h: 210, maxKg: 8800  },
+  { name: "8톤 특장",     l: 850,  w: 240, h: 210, maxKg: 9200  },
+  { name: "9.5톤",        l: 875,  w: 238, h: 210, maxKg: 10500 },
+  { name: "11톤",         l: 900,  w: 235, h: 210, maxKg: 12000 },
+  { name: "11톤 장축",    l: 960,  w: 240, h: 210, maxKg: 12700 },
+  { name: "11톤 후축",    l: 1020, w: 240, h: 210, maxKg: 14500 },
+  { name: "14톤",         l: 900,  w: 235, h: 220, maxKg: 15400 },
+  { name: "14톤 후축",    l: 990,  w: 240, h: 220, maxKg: 18200 },
+  { name: "18톤",         l: 1010, w: 240, h: 230, maxKg: 19800 },
+  { name: "22톤",         l: 1010, w: 240, h: 230, maxKg: 24200 },
+  { name: "25톤",         l: 1010, w: 240, h: 240, maxKg: 27500 },
+  { name: "추레라",       l: 1200, w: 240, h: 240, maxKg: 27500 },
+  { name: "추레라 특장",  l: 1200, w: 240, h: 240, maxKg: 32000 },
 ];
 
 function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
@@ -19434,7 +19510,7 @@ function RealtimeRowBase({
   setRows, setContextMenu, setCopyTarget, setCopyPanelOpen, toggleSelect, handleCarInput,
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
-  flashRow, setAttachViewer, setLiveLocViewer, setDeliveryConfirm,
+  flashRow, setAttachViewer, setLiveLocViewer, setDeliveryConfirm, setWorkDatesEditRow,
 }) {
   const sale = toInt(editedForRow?.청구운임 ?? r.청구운임);
   const drv = toInt(editedForRow?.기사운임 ?? r.기사운임);
@@ -19562,6 +19638,21 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
             >
               묶음 {rWorkDates.length}일
             </span>
+          )}
+          {/* ⭐ 일정 변경 시 묶음(다중근무일)을 다시 골라야 하는데 상차일 칸 하나만
+              바꿀 방법이 없다는 피드백으로, 근무일 전체를 다시 고를 수 있는 달력
+              편집 버튼을 추가한다. */}
+          {canEdit("상차일", r._id) && (
+            <button
+              type="button"
+              title="근무일 수정(다중선택)"
+              onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow?.(r); }}
+              className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+            </button>
           )}
         </>
       );
@@ -21647,6 +21738,7 @@ const [editStopType, setEditStopType] = React.useState("pickup");
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
 // 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
 // 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
 const [copyPanelStyle, setCopyPanelStyle] = React.useState(() => {
@@ -22140,6 +22232,7 @@ const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
   const [liveLocViewer, setLiveLocViewer] = React.useState(null); // 실시간 위치 팝업이 열린 행
   const [orderInfoRow4, setOrderInfoRow4] = React.useState(null);
+  const [workDatesEditRow, setWorkDatesEditRow] = React.useState(null); // 근무일(묶음) 수정 팝업이 열린 행
   // ------------------------
 // Firestore → rows 반영
 // ------------------------
@@ -24124,7 +24217,7 @@ const handleCloseFileUpload = async (e) => {
     const emphClsFinal = redOverride ? "font-extrabold text-red-600" : emphCls;
     // ⭐ 상차일은 바로 옆 등록일(밑줄만 있고 굵기 없음)과 구분이 잘 안 간다는 피드백으로
     // 다른 emphKeys보다 글씨를 한 단계 더 키운다.
-    const clsFor = (k) => k === "상차일" ? `${emphClsFinal} text-[15.5px]` : emphClsFinal;
+    const clsFor = (k) => (k === "상차일" || k === "하차일") ? `${emphClsFinal} text-[15.5px]` : emphClsFinal;
     // 🔒 화주사 오더는 결제정보(청구운임/기사운임/수수료) 외 필드는 수정 불가 (최고관리자 포함)
     //    — 차량종류/지급방식/배차방식의 "항상 드롭다운" 예외보다 우선 적용
     if (isShipperFieldLocked(key, rowId)) return emphKeys.includes(key) ? <span className={clsFor(key)}>{val}</span> : val;
@@ -24391,6 +24484,29 @@ const head = isDark
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
 {orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} lunchByName={lunchByName} />}
+{workDatesEditRow && (
+  <WorkDatesEditModal
+    row={workDatesEditRow}
+    companyName={userCompany}
+    onClose={() => setWorkDatesEditRow(null)}
+    onSave={async (patch) => {
+      await patchDispatch(workDatesEditRow._id, patch);
+      setRows(prev => prev.map(x => x._id === workDatesEditRow._id ? { ...x, ...patch } : x));
+      setWorkDatesEditRow(null);
+    }}
+  />
+)}
+{copyPanelWorkDatesOpen && (
+  <WorkDatesEditModal
+    row={copyTarget}
+    companyName={userCompany}
+    onClose={() => setCopyPanelWorkDatesOpen(false)}
+    onSave={async (patch) => {
+      setCopyTarget(p => ({ ...p, ...patch }));
+      setCopyPanelWorkDatesOpen(false);
+    }}
+  />
+)}
 {addrPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -24916,6 +25032,7 @@ const head = isDark
                 setAttachViewer={setAttachViewer}
                 setLiveLocViewer={setLiveLocViewer}
                 setDeliveryConfirm={setDeliveryConfirm}
+                setWorkDatesEditRow={setWorkDatesEditRow}
               />
             ))}
           </tbody>
@@ -25302,7 +25419,21 @@ checkWarningStatus(c.거래처명, "거래처");
     {/* 상차 */}
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-      <Field label="상차일">
+      <Field label={<>
+        상차일
+        {/* ⭐ 묶음(다중근무일) 오더는 상차일 한 칸만 바꿔서는 일정 전체를 옮길 수 없다는
+            피드백으로, 근무일 전체를 다시 고를 수 있는 달력 편집 버튼을 추가한다. */}
+        <button
+          type="button"
+          title="근무일 수정(다중선택)"
+          onClick={(e) => { e.stopPropagation(); setCopyPanelWorkDatesOpen(true); }}
+          className="w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
+      </>}>
         <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
@@ -30601,6 +30732,7 @@ const [alertMsg, setAlertMsg] = React.useState(null);
 const [attachViewer, setAttachViewer] = React.useState(null);
 const [liveLocViewer, setLiveLocViewer] = React.useState(null);
 const [orderInfoRow5, setOrderInfoRow5] = React.useState(null);
+const [workDatesEditRow, setWorkDatesEditRow] = React.useState(null); // 근무일(묶음) 수정 팝업이 열린 행
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
@@ -31316,6 +31448,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
 // 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
 // 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
 const [copyPanelStyle, setCopyPanelStyle] = React.useState(() => {
@@ -33639,6 +33772,30 @@ return (
 )}
 {liveLocViewer && <LiveLocationPopup row={liveLocViewer} onClose={() => setLiveLocViewer(null)} />}
 {orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} lunchByName={lunchByName} />}
+{workDatesEditRow && (
+  <WorkDatesEditModal
+    row={workDatesEditRow}
+    companyName={userCompany}
+    onClose={() => setWorkDatesEditRow(null)}
+    onSave={async (patch) => {
+      const wid = getId(workDatesEditRow);
+      await patchDispatch(wid, patch);
+      setLocalOverrides(prev => ({ ...prev, [wid]: { ...(prev[wid] || {}), ...patch } }));
+      setWorkDatesEditRow(null);
+    }}
+  />
+)}
+{copyPanelWorkDatesOpen && (
+  <WorkDatesEditModal
+    row={copyTarget}
+    companyName={userCompany}
+    onClose={() => setCopyPanelWorkDatesOpen(false)}
+    onSave={async (patch) => {
+      setCopyTarget(p => ({ ...p, ...patch }));
+      setCopyPanelWorkDatesOpen(false);
+    }}
+  />
+)}
 {attachStatusDSOpen && (
   <AttachStatusPanel
     open={attachStatusDSOpen}
@@ -34352,7 +34509,7 @@ return (
   return (
     <span className="inline-flex items-center gap-1">
       {/* ⭐ 상차일은 바로 옆 등록일과 구분이 잘 안 간다는 피드백으로 하차일보다 한 단계 더 키운다. */}
-      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"} ${key === "상차일" ? "text-[15.5px]" : ""}`}>{row[key] || ""}</span>
+      <span className={`font-extrabold ${isMultiWork ? "text-red-600" : "text-[#1B2B4B]"} text-[15.5px]`}>{row[key] || ""}</span>
       {/* ⭐ 복수근무일(묶음) 오더 — 연속 기간이 아니라 특정 날짜들만 골라 1개의
           오더로 등록된 경우, 상차일 칸을 빨간 글씨 + 검은 뱃지로 표시. 클릭하면 전체
           근무일 목록을 볼 수 있게 오더정보(우클릭 메뉴)로 유도하는 툴팁을 붙인다. */}
@@ -34363,6 +34520,21 @@ return (
         >
           묶음 {rowWorkDates.length}일
         </span>
+      )}
+      {/* ⭐ 일정 변경 시 묶음(다중근무일)을 다시 골라야 하는데 상차일 칸 하나만
+          바꿀 방법이 없다는 피드백으로, 근무일 전체를 다시 고를 수 있는 달력
+          편집 버튼을 추가한다. */}
+      {key === "상차일" && (
+        <button
+          type="button"
+          title="근무일 수정(다중선택)"
+          onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow(row); }}
+          className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
       )}
     </span>
   );
@@ -36194,7 +36366,21 @@ setCopyTarget(prev=>({
     {/* 상차 */}
     <div className="space-y-4">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-      <Field label="상차일">
+      <Field label={<>
+        상차일
+        {/* ⭐ 묶음(다중근무일) 오더는 상차일 한 칸만 바꿔서는 일정 전체를 옮길 수 없다는
+            피드백으로, 근무일 전체를 다시 고를 수 있는 달력 편집 버튼을 추가한다. */}
+        <button
+          type="button"
+          title="근무일 수정(다중선택)"
+          onClick={(e) => { e.stopPropagation(); setCopyPanelWorkDatesOpen(true); }}
+          className="w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
+      </>}>
         <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
@@ -44080,6 +44266,7 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [selectedOrder, setSelectedOrder] = React.useState(null);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
   const [copyTarget, setCopyTarget] = React.useState(null);
+  const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
   const [clientDropdown, setClientDropdown] = React.useState([]);
   const [clientDropdownOpen, setClientDropdownOpen] = React.useState(false);
   const [clientActiveIdx, setClientActiveIdx] = React.useState(0);
@@ -44965,6 +45152,17 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   </div>
 )}
 
+      {copyPanelWorkDatesOpen && (
+        <WorkDatesEditModal
+          row={copyTarget}
+          companyName={localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || ""}
+          onClose={() => setCopyPanelWorkDatesOpen(false)}
+          onSave={async (patch) => {
+            setCopyTarget(p => ({ ...p, ...patch }));
+            setCopyPanelWorkDatesOpen(false);
+          }}
+        />
+      )}
       {/* 오더 복사/수정 패널 */}
       {copyPanelOpen && copyTarget && (
         <div className="fixed inset-0 z-[99999]">
@@ -45083,7 +45281,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     {/* 상차 */}
                     <div className="space-y-4">
                       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-                      <Field label="상차일">
+                      <Field label={<>
+                        상차일
+                        <button
+                          type="button"
+                          title="근무일 수정(다중선택)"
+                          onClick={(e) => { e.stopPropagation(); setCopyPanelWorkDatesOpen(true); }}
+                          className="w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+                          </svg>
+                        </button>
+                      </>}>
                         <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                        <Field label="상차시간">
