@@ -405,7 +405,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
             선택하는 중이라는 안내와 선택 개수/전체해제 버튼을 보여준다. */}
         {multiMode ? (
           <div className="rounded-xl py-2.5 px-3 bg-black text-white text-[12px] font-bold flex items-center justify-between shrink-0">
-            <span>📅 근무일을 클릭해 선택/해제하세요{sortedWorkDates.length ? ` (${sortedWorkDates.length}일 선택됨)` : ""}</span>
+            <span>근무일을 클릭해 선택/해제하세요{sortedWorkDates.length ? ` (${sortedWorkDates.length}일 선택됨)` : ""}</span>
             {sortedWorkDates.length > 0 && (
               <button type="button"
                 onClick={() => sortedWorkDates.forEach(d => onToggleWorkDate?.(d))}
@@ -475,7 +475,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
                 <button key={i} type="button"
                   title={[holidayName, leaveTitle].filter(Boolean).join(" · ") || undefined}
                   onClick={() => handlePick(dateStr)}
-                  className={`min-h-[84px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
+                  className={`min-h-[72px] rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 py-1 ${
                     isMarked ? (multiMode ? "bg-black" : "bg-[#1B2B4B]") :
                     isToday ? "border-2 border-[#1B2B4B]" :
                     "hover:bg-gray-100"
@@ -585,8 +585,8 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]" onClick={onClose}>
-      <div className="w-[380px] flex flex-col gap-2" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[999999]" onClick={onClose}>
+      <div className="w-[620px] max-w-[94vw] flex flex-col gap-2" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-1">
           <h3 className="text-[14px] font-bold text-white">
             근무일 수정{row?.거래처명 ? ` · ${row.거래처명}` : ""}
@@ -3022,6 +3022,12 @@ const addDispatch = async (record) => {
     작성자: auth.currentUser?.email || "",
     // 등록과 동시에 차량번호까지 포함되어 생성되는 경우(기사 정보 포함 등록 등)에도 완료시각을 남긴다
     ...(String(record?.차량번호 || "").trim() && !record?.배차완료일시 ? { 배차완료일시: Date.now() } : {}),
+    // ⭐ "배차한시간"(등록일 hover 툴팁)이 표시하는 필드는 배차완료일시가 아니라
+    // 배차확정일시다. patchDispatch는 배차중→배차완료 전환 때 이걸 찍어주지만,
+    // 처음부터 기사 정보를 포함해 등록되는 오더(오더복사/스마트검색 등으로 즉시
+    // 배차완료 상태로 만들어지는 경우)는 patchDispatch를 거치지 않아 이 필드가
+    // 영영 비어있었다 — "배차한시간이 전부 다 안 나온다"는 신고의 원인.
+    ...(record?.배차상태 === "배차완료" && !record?.배차확정일시 ? { 배차확정일시: serverTimestamp() } : {}),
   });
 
   await setDoc(
@@ -19642,18 +19648,16 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
           {/* ⭐ 일정 변경 시 묶음(다중근무일)을 다시 골라야 하는데 상차일 칸 하나만
               바꿀 방법이 없다는 피드백으로, 근무일 전체를 다시 고를 수 있는 달력
               편집 버튼을 추가한다. */}
-          {canEdit("상차일", r._id) && (
-            <button
-              type="button"
-              title="근무일 수정(다중선택)"
-              onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow?.(r); }}
-              className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
-              </svg>
-            </button>
-          )}
+          <button
+            type="button"
+            title="근무일 수정(다중선택)"
+            onClick={(e) => { e.stopPropagation(); setWorkDatesEditRow?.(r); }}
+            className="shrink-0 w-4 h-4 rounded flex items-center justify-center text-gray-400 hover:text-[#1B2B4B] hover:bg-gray-100"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </button>
         </>
       );
     })()}
@@ -20321,10 +20325,13 @@ const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [c
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
 const [userNameMap, setUserNameMap] = React.useState(new Map());
+// ⚠️ 예전엔 getDocs 1회성 조회였는데, 그 한 번의 조회가 (네트워크 순간 오류 등으로)
+// 실패하면 catch가 조용히 삼켜버려서 등록자 칸이 이후 계속 계정ID로만 표시되는
+// 버그가 있었다("탭 갔다왔더니 이름이 ID로 바뀜" — 메뉴 이동으로 컴포넌트가
+// 재마운트될 때마다 이 조회가 다시 실패할 수 있었음). onSnapshot 실시간 구독으로
+// 바꿔서 최초 실패해도 다음 스냅샷에서 자동 복구되게 한다.
 React.useEffect(() => {
-  let cancelled = false;
-  getDocs(collection(db, "users")).then(snap => {
-    if (cancelled) return;
+  const unsub = onSnapshot(collection(db, "users"), (snap) => {
     const map = new Map();
     snap.docs.forEach(d => {
       const data = d.data() || {};
@@ -20334,8 +20341,8 @@ React.useEffect(() => {
       if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
     });
     setUserNameMap(map);
-  }).catch(() => {});
-  return () => { cancelled = true; };
+  }, () => {});
+  return () => unsub();
 }, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
@@ -25439,6 +25446,21 @@ checkWarningStatus(c.거래처명, "거래처");
           className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
+          multiSelect
+          multiActive={!!copyTarget?.복수근무일 || _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+          onToggleMulti={() => setCopyTarget(p => ({ ...p, 복수근무일: !p?.복수근무일 }))}
+          workDates={_parseWorkDates(copyTarget?.근무일자목록)}
+          onToggleWorkDate={(dateStr) => {
+            if (!dateStr) return;
+            setCopyTarget(p => {
+              const set = new Set(_parseWorkDates(p?.근무일자목록));
+              if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+              const sorted = Array.from(set).sort();
+              return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
+            });
+          }}
+          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [] }))}
+          displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
         />
       </Field>
 
@@ -30489,10 +30511,13 @@ const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [c
 // 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
 // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
 const [userNameMap, setUserNameMap] = React.useState(new Map());
+// ⚠️ 예전엔 getDocs 1회성 조회였는데, 그 한 번의 조회가 (네트워크 순간 오류 등으로)
+// 실패하면 catch가 조용히 삼켜버려서 등록자 칸이 이후 계속 계정ID로만 표시되는
+// 버그가 있었다("탭 갔다왔더니 이름이 ID로 바뀜" — 메뉴 이동으로 컴포넌트가
+// 재마운트될 때마다 이 조회가 다시 실패할 수 있었음). onSnapshot 실시간 구독으로
+// 바꿔서 최초 실패해도 다음 스냅샷에서 자동 복구되게 한다.
 React.useEffect(() => {
-  let cancelled = false;
-  getDocs(collection(db, "users")).then(snap => {
-    if (cancelled) return;
+  const unsub = onSnapshot(collection(db, "users"), (snap) => {
     const map = new Map();
     snap.docs.forEach(d => {
       const data = d.data() || {};
@@ -30502,8 +30527,8 @@ React.useEffect(() => {
       if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
     });
     setUserNameMap(map);
-  }).catch(() => {});
-  return () => { cancelled = true; };
+  }, () => {});
+  return () => unsub();
 }, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
@@ -36386,6 +36411,21 @@ setCopyTarget(prev=>({
           className={inputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
+          multiSelect
+          multiActive={!!copyTarget?.복수근무일 || _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+          onToggleMulti={() => setCopyTarget(p => ({ ...p, 복수근무일: !p?.복수근무일 }))}
+          workDates={_parseWorkDates(copyTarget?.근무일자목록)}
+          onToggleWorkDate={(dateStr) => {
+            if (!dateStr) return;
+            setCopyTarget(p => {
+              const set = new Set(_parseWorkDates(p?.근무일자목록));
+              if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+              const sorted = Array.from(set).sort();
+              return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
+            });
+          }}
+          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [] }))}
+          displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
         />
       </Field>
 
@@ -45294,7 +45334,23 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           </svg>
                         </button>
                       </>}>
-                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
+                          multiSelect
+                          multiActive={!!copyTarget?.복수근무일 || _parseWorkDates(copyTarget?.근무일자목록).length > 1}
+                          onToggleMulti={() => setCopyTarget(p => ({ ...p, 복수근무일: !p?.복수근무일 }))}
+                          workDates={_parseWorkDates(copyTarget?.근무일자목록)}
+                          onToggleWorkDate={(dateStr) => {
+                            if (!dateStr) return;
+                            setCopyTarget(p => {
+                              const set = new Set(_parseWorkDates(p?.근무일자목록));
+                              if (set.has(dateStr)) set.delete(dateStr); else set.add(dateStr);
+                              const sorted = Array.from(set).sort();
+                              return { ...p, 근무일자목록: sorted, 상차일: sorted[0] || p?.상차일, 하차일: sorted[sorted.length - 1] || p?.하차일 };
+                            });
+                          }}
+                          onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [] }))}
+                          displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
+                        />
                       </Field>
                        <Field label="상차시간">
                         <TimeAmPmPicker

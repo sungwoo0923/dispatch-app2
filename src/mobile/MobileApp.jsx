@@ -3204,6 +3204,9 @@ const groupedByDate = useMemo(() => {
           id: "",     // 임시
           등록일: today,
           createdAt: serverTimestamp(),
+          // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
+          // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
+          ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp() } : {}),
         });
 
         // 🔥 Firestore 문서 고유 ID 확정 저장
@@ -3489,6 +3492,10 @@ const deleteSingleOrder = async (order) => {
       상태: "배차완료",
       화주사확인대기: false,
       배차완료일시: serverTimestamp(),
+      // ⭐ PC(DispatchApp) 등록일 hover 툴팁의 "배차한시간"이 읽는 필드는 배차완료일시가
+      // 아니라 배차확정일시다 — 모바일에서 배차를 확정해도 이 필드가 없어 PC에서
+      // "배차한시간"이 항상 "-"로 보이던 버그.
+      배차확정일시: serverTimestamp(),
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
     };
@@ -3744,6 +3751,7 @@ const deleteSingleOrder = async (order) => {
         배차상태: "배차완료",
         상태: "배차완료",
         배차완료일시: serverTimestamp(),
+        배차확정일시: serverTimestamp(),
         updatedAt: serverTimestamp(),
         _lastModified: Date.now(),
       });
@@ -7895,6 +7903,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
           patch.배차상태 = "배차완료";
           patch.상태 = "배차완료";
           patch.배차완료일시 = serverTimestamp();
+          patch.배차확정일시 = serverTimestamp();
         }
       }
       await updateDoc(doc(db, col, id), patch);
@@ -9440,6 +9449,7 @@ const handleAssignClick = () => {
   배차상태: "배차완료",
   상태: "배차완료",
   배차완료일시: serverTimestamp(),
+  배차확정일시: serverTimestamp(),
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
 };
