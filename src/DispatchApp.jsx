@@ -20504,29 +20504,24 @@ const backfilledConfirmRef = React.useRef(new Set());
 const backfillDispatchDataRef = React.useRef(dispatchData);
 React.useEffect(() => { backfillDispatchDataRef.current = dispatchData; }, [dispatchData]);
 React.useEffect(() => {
-  // ⚠️ 예전엔 dispatchData가 바뀔 때마다 최대 200건을 한꺼번에 patchDispatch로
-  // 몰아 쐈다 — 실서비스처럼 과거 데이터가 많은 회사에서는 페이지를 열 때마다
-  // 수백 건짜리 쓰기가 한꺼번에 몰리고, 그 dispatchData 변경이 다시 이 effect를
-  // 재실행시켜(의존성이 dispatchData였음) 다음 배치가 또 몰리는 식으로 계속
-  // 이어지면서, 정작 사용자가 지금 막 배차 확정한 오더의 쓰기까지 뒤로 밀리거나
-  // 유실되는(새로고침하면 배차중으로 되돌아가 보이는) 원인이 될 수 있었다.
-  // → 화면 진입 시 딱 한 번만 시작해서, 아주 소량씩(2건) 여유 간격(5초)으로
-  // 천천히 흘려보내고, 세션당 상한(40건)을 둔다.
-  let cancelled = false;
-  const SESSION_CAP = 40;
-  const tick = () => {
-    if (cancelled) return;
-    if (backfilledConfirmRef.current.size >= SESSION_CAP) return;
+  // ⚠️ 예전엔 dispatchData가 바뀔 때마다(심지어 5초 간격 반복으로 바꿔봐도) 계속
+  // patchDispatch를 실행해 dispatchData를 또 갱신하고, 그게 화면 전체를 다시
+  // 그리게 만들어(검색창 타이핑, 수정창 입력 중에도 배경에서 주기적으로 전체
+  // 테이블이 재계산되며) 체감 끊김의 원인이 됐다 — 과거 데이터가 많은 회사일수록
+  // 소급 보정 대상이 많아 이 배경 재계산이 한참 동안 반복됐다.
+  // → 이제는 화면 진입 10초 후 딱 한 번, 아주 소량(5건)만 조용히 고쳐두고
+  // 완전히 끝낸다(반복 타이머 없음). 표시용 툴팁 필드일 뿐이라 남은 레거시
+  // 오더는 이후 세션에서 나눠서 천천히 채워져도 문제 없다.
+  const timer = setTimeout(() => {
     const candidates = (backfillDispatchDataRef.current || []).filter(r =>
       r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
-    ).slice(0, 2);
+    ).slice(0, 5);
     candidates.forEach(r => {
       backfilledConfirmRef.current.add(r._id);
       patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
     });
-  };
-  const timer = setInterval(tick, 5000);
-  return () => { cancelled = true; clearInterval(timer); };
+  }, 10000);
+  return () => clearTimeout(timer);
 }, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
@@ -21067,6 +21062,12 @@ const checkWarningStatus = (name, type) => {
 
   const [q, setQ] = React.useState("");
   const [qInput, setQInput] = React.useState("");
+  // ⚡ 검색어 입력창 — 예전엔 글자 하나 칠 때마다 setQInput으로 이 거대한
+  // 컴포넌트(실시간배차현황) 전체를 리렌더시켰다. 실제 검색은 Enter/조회를
+  // 눌러야만 적용되므로(q에만 반응), 타이핑 중엔 이 리렌더가 전혀 필요 없다 —
+  // ref로 값만 들고 있다가 Enter/조회 시점에만 읽어서(uncontrolled input)
+  // 타이핑 중 리렌더 자체를 없앤다.
+  const qInputRef = React.useRef(null);
   const [filterType, setFilterType] = React.useState("거래처명");
   // 🔒 실시간 배차 날짜 모드
   const [dayMode, setDayMode] = React.useState("today");
@@ -25041,13 +25042,13 @@ const head = isDark
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
     <input autoComplete="off"
       type="text"
-      value={qInput}
-      onChange={(e) => setQInput(e.target.value)}
-      onKeyDown={(e) => { if (e.key === "Enter") { setQ(qInput); } }}
+      ref={qInputRef}
+      defaultValue={qInput}
+      onKeyDown={(e) => { if (e.key === "Enter") { setQ(qInputRef.current?.value ?? ""); } }}
       placeholder="검색어"
       className="px-2 h-full text-[11px] w-20 outline-none"
     />
-    <button onClick={() => setQ(qInput)} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition">조회</button>
+    <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition">조회</button>
   </div>
   {/* 날짜 버튼 */}
   {["yesterday","today","tomorrow"].map((mode,i)=>{
@@ -30744,29 +30745,24 @@ const backfilledConfirmRef = React.useRef(new Set());
 const backfillDispatchDataRef = React.useRef(dispatchData);
 React.useEffect(() => { backfillDispatchDataRef.current = dispatchData; }, [dispatchData]);
 React.useEffect(() => {
-  // ⚠️ 예전엔 dispatchData가 바뀔 때마다 최대 200건을 한꺼번에 patchDispatch로
-  // 몰아 쐈다 — 실서비스처럼 과거 데이터가 많은 회사에서는 페이지를 열 때마다
-  // 수백 건짜리 쓰기가 한꺼번에 몰리고, 그 dispatchData 변경이 다시 이 effect를
-  // 재실행시켜(의존성이 dispatchData였음) 다음 배치가 또 몰리는 식으로 계속
-  // 이어지면서, 정작 사용자가 지금 막 배차 확정한 오더의 쓰기까지 뒤로 밀리거나
-  // 유실되는(새로고침하면 배차중으로 되돌아가 보이는) 원인이 될 수 있었다.
-  // → 화면 진입 시 딱 한 번만 시작해서, 아주 소량씩(2건) 여유 간격(5초)으로
-  // 천천히 흘려보내고, 세션당 상한(40건)을 둔다.
-  let cancelled = false;
-  const SESSION_CAP = 40;
-  const tick = () => {
-    if (cancelled) return;
-    if (backfilledConfirmRef.current.size >= SESSION_CAP) return;
+  // ⚠️ 예전엔 dispatchData가 바뀔 때마다(심지어 5초 간격 반복으로 바꿔봐도) 계속
+  // patchDispatch를 실행해 dispatchData를 또 갱신하고, 그게 화면 전체를 다시
+  // 그리게 만들어(검색창 타이핑, 수정창 입력 중에도 배경에서 주기적으로 전체
+  // 테이블이 재계산되며) 체감 끊김의 원인이 됐다 — 과거 데이터가 많은 회사일수록
+  // 소급 보정 대상이 많아 이 배경 재계산이 한참 동안 반복됐다.
+  // → 이제는 화면 진입 10초 후 딱 한 번, 아주 소량(5건)만 조용히 고쳐두고
+  // 완전히 끝낸다(반복 타이머 없음). 표시용 툴팁 필드일 뿐이라 남은 레거시
+  // 오더는 이후 세션에서 나눠서 천천히 채워져도 문제 없다.
+  const timer = setTimeout(() => {
     const candidates = (backfillDispatchDataRef.current || []).filter(r =>
       r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
-    ).slice(0, 2);
+    ).slice(0, 5);
     candidates.forEach(r => {
       backfilledConfirmRef.current.add(r._id);
       patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
     });
-  };
-  const timer = setInterval(tick, 5000);
-  return () => { cancelled = true; clearInterval(timer); };
+  }, 10000);
+  return () => clearTimeout(timer);
 }, []);
 
 // ===================== 하차지거래처 스마트 저장 (3파트와 동일 로직) =====================
@@ -31690,6 +31686,10 @@ const [statusFilter, setStatusFilter] = React.useState("ALL");
       return "";
     }
   });
+  // ⚡ 검색어 입력창 — 글자 하나 칠 때마다 이 거대한 컴포넌트(배차현황) 전체를
+  // 리렌더시키지 않도록, ref로 값만 들고 있다가 Enter/조회 시점에만 읽는다
+  // (실제 검색은 q에만 반응 — 타이핑 중엔 리렌더가 전혀 필요 없다).
+  const qInputRef = React.useRef(null);
   const [searchType, setSearchType] = React.useState("all");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -32005,7 +32005,7 @@ localStorage.setItem(
 );
 
 // 조회 버튼을 날짜/검색어 공용으로 합쳐서, 누르는 순간 검색어도 함께 적용한다.
-setQ(qInput);
+setQ(qInputRef.current?.value ?? "");
 setPage(0);
 setLoaded(true);
 };
@@ -34456,7 +34456,7 @@ return (
             <option value="dispatch">배차방식</option>
           </CustomSelect>
           <input autoComplete="off" className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
-            value={loaded?qInput:""} onChange={(e)=>{setQInput(e.target.value);}}
+            ref={qInputRef} defaultValue={qInput}
             onKeyDown={(e)=>{ if(e.key==="Enter"){ handleSearch(); } }} />
           <button
             onClick={handleSearch}
